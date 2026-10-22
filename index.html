@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Grupo DMA-La Bomba</title>
+<meta name="description" content="La Bomba: Soda La Bomba, Pollos La Bomba y Papea. Empresa familiar con 14 años de experiencia en la Ruta 4, Horquetas de Sarapiquí.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Figtree:wght@300;400;600;800&display=swap" rel="stylesheet">
+<style>
+:root{--red:#B81622;--amber:#F3A62C;--black:#171212;--white:#fff}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;-webkit-text-size-adjust:100%}
+body{margin:0;background:#fbf8f2;color:var(--black);font:300 17px/1.6 Figtree,system-ui,-apple-system,"Segoe UI",sans-serif}
+a{color:inherit}
+.wrap{max-width:1080px;margin:0 auto;padding:0 24px}
+.on-amber,.on-red{background:#fbf8f2;color:var(--black);--ln:rgba(23,18,18,.85);--lnsoft:rgba(23,18,18,.35)}
+header.top{border-bottom:1px solid var(--ln)}
+header.top .wrap{display:flex;align-items:center;justify-content:space-between;height:64px}
+.mark{font-weight:800;letter-spacing:.22em;font-size:14px;text-decoration:none}
+header.top .right{display:flex;align-items:center;gap:28px}
+header.top nav{display:flex;gap:26px;font-size:14px}
+header.top .team{display:flex;gap:10px;font-size:13px}
+header.top .team a{text-decoration:none;border:1px solid var(--ln);border-radius:999px;padding:6px 14px;letter-spacing:.04em}
+header.top .team a:hover,header.top .team a:focus-visible{background:var(--black);color:#fbf8f2;border-color:var(--black)}
+@media(max-width:700px){header.top nav{display:none}}
+header.top nav a{text-decoration:none;padding:6px 0;border-bottom:1px solid transparent}
+header.top nav a:hover,header.top nav a:focus-visible{border-color:var(--black)}
+.hero{padding-top:clamp(72px,15vw,150px);padding-bottom:clamp(64px,12vw,120px)}
+.eyebrow{font-weight:400;font-size:13px;letter-spacing:.18em;text-transform:uppercase;display:flex;align-items:center;gap:14px;margin:0 0 28px}
+.eyebrow::before{content:"";width:40px;height:4px;background:var(--amber)}
+h1{font-weight:300;font-size:clamp(42px,9vw,104px);line-height:1.02;letter-spacing:-.03em;margin:0 0 32px;max-width:12ch}
+.nb{white-space:nowrap}
+h1 em{font-style:normal;color:var(--red);font-weight:300}
+.hero p{max-width:46ch;font-size:clamp(17px,2.2vw,20px);margin:0}
+section{border-top:1px solid var(--ln);padding:clamp(52px,8vw,88px) 0}
+.sec{display:grid;grid-template-columns:1fr;gap:26px}
+@media(min-width:860px){.sec{grid-template-columns:240px 1fr;gap:56px}}
+.lab{font-weight:400;font-size:13px;letter-spacing:.18em;text-transform:uppercase}
+.lab span{margin-right:12px;color:var(--red);font-weight:600}
+.bands{border-top:1px solid var(--ln)}
+.band{border-bottom:1px solid var(--ln)}
+.band a{display:grid;grid-template-columns:1fr auto;gap:8px 20px;align-items:center;padding:clamp(34px,6vw,64px) 0;text-decoration:none}
+.band h3{font-weight:300;font-size:clamp(34px,6.4vw,72px);line-height:1.04;letter-spacing:-.03em;margin:0}
+.band h3 small{font-size:.32em;font-weight:300;letter-spacing:0;margin-left:.7em;color:var(--black)}
+.band p{grid-column:1;margin:0;font-size:17px}
+.band .go{grid-column:2;grid-row:1/3;font-size:13px;letter-spacing:.16em;text-transform:uppercase;white-space:nowrap;border:1px solid currentColor;border-radius:999px;padding:9px 18px}
+.band:hover .go,.band a:focus-visible .go{background:var(--black);color:#fbf8f2;border-color:var(--black)}
+.band h3{color:var(--red)}
+.txt{max-width:58ch;font-size:clamp(18px,2.4vw,22px);line-height:1.55;margin:0}
+.two{display:grid;grid-template-columns:1fr;border-top:1px solid var(--ln)}
+@media(min-width:760px){.two{grid-template-columns:1fr 1fr}.two>div+div{border-left:1px solid var(--ln)}}
+.two>div{padding:28px 0}
+@media(min-width:760px){.two>div{padding:32px 32px 32px 0}.two>div+div{padding-left:32px}}
+.two h4{margin:0 0 10px;font-weight:400;font-size:13px;letter-spacing:.18em;text-transform:uppercase}
+.two p{margin:0;font-size:19px;line-height:1.5}
+.pil{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:1fr;border-top:1px solid var(--ln);border-bottom:1px solid var(--ln)}
+@media(min-width:760px){.pil{grid-template-columns:repeat(4,1fr)}.pil li+li{border-left:1px solid var(--ln)}}
+.pil li{padding:22px 20px 22px 0;font-size:19px}
+@media(min-width:760px){.pil li{padding:28px 20px}.pil li:first-child{padding-left:0}}
+.pil li+li{border-top:1px solid var(--ln)}
+@media(min-width:760px){.pil li+li{border-top:0}}
+.pil b{display:block;font-weight:400;font-size:12px;letter-spacing:.18em;margin-bottom:8px;opacity:.85}
+.mail{display:inline-block;font-weight:300;font-size:clamp(26px,5vw,48px);letter-spacing:-.02em;text-decoration:none;border-bottom:1px solid var(--black);padding-bottom:4px}
+.mail:hover,.mail:focus-visible{color:var(--red);border-color:var(--red)}
+footer{padding:36px 0 44px;font-size:14px;border-top:1px solid var(--ln)}
+footer .row{display:flex;flex-wrap:wrap;gap:12px 28px;align-items:center;justify-content:space-between}
+footer .team{display:flex;gap:18px;align-items:center;font-size:13px}
+footer .team span{letter-spacing:.14em;text-transform:uppercase}
+footer a{text-decoration:none;border-bottom:1px solid var(--lnsoft)}
+footer a:hover,footer a:focus-visible{border-color:var(--red)}
+footer .grp{margin-top:28px;padding-top:20px;border-top:1px solid var(--lnsoft);font-size:16px}
+footer .grp b{font-weight:800}
+a:focus-visible{outline:2px solid currentColor;outline-offset:4px}
+@media(max-width:560px){header.top nav{gap:16px}.wrap{padding:0 20px}.band .go{padding:8px 14px}}
+@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+</style>
+</head>
+<body>
+
+<header class="top on-amber">
+  <div class="wrap">
+    <a class="mark" href="#inicio" aria-label="La Bomba, inicio"><i></i>LA BOMBA</a>
+    <div class="right">
+      <nav aria-label="Secciones">
+        <a href="#negocios">Negocios</a>
+        <a href="#nosotros">Nosotros</a>
+        <a href="#contacto">Contacto</a>
+      </nav>
+      <div class="team" aria-label="Acceso del equipo">
+        <a href="https://panel.dmalabomba.com">Panel</a>
+        <a href="https://outlook.office.com/mail/">Correo</a>
+      </div>
+    </div>
+  </div>
+</header>
+
+<main id="inicio">
+  <div class="on-amber"><div class="wrap hero">
+    <p class="eyebrow">Ruta 4 · Horquetas de Sarapiquí</p>
+    <h1>Grupo <span class="nb">DMA-<em>La Bomba</em></span></h1>
+    <p>Empresa familiar con 14 años de experiencia en la Ruta 4, Horquetas de Sarapiquí. Comida de carretera, a toda hora.</p>
+  </div></div>
+
+  <section id="negocios" class="on-amber">
+    <div class="wrap sec">
+      <div class="lab"><span>01</span>Nuestros negocios</div>
+      <div class="bands">
+        <div class="band on-red"><a href="https://www.sodalabomba.com">
+          <h3>Soda La Bomba</h3><span class="go">Visitar</span>
+          <p>Comida de soda, abierta las 24 horas.</p></a></div>
+        <div class="band on-amber"><a href="https://www.polloslabomba.com/pollos/">
+          <h3>Pollos La Bomba</h3><span class="go">Pronto</span>
+          <p>El mejor pollo al mejor precio, de la familia de Soda La Bomba.</p></a></div>
+        <div class="band on-amber"><a href="https://www.polloslabomba.com/papea/">
+          <h3>Papea<small>by Pollos La Bomba</small></h3><span class="go">Pronto</span>
+          <p>Pura papa, pura vida.</p></a></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="nosotros" class="on-amber">
+    <div class="wrap sec">
+      <div class="lab"><span>02</span>Quiénes somos</div>
+      <p class="txt">Soda La Bomba abrió el 30 de septiembre de 2012 con un solo local pequeño. A fuerza de trabajo y visión de familia fue creciendo, y hoy atiende las 24 horas con un equipo de más de 30 personas. Seguimos creciendo.</p>
+    </div>
+  </section>
+
+  <section id="rumbo" class="on-red">
+    <div class="wrap sec">
+      <div class="lab"><span>03</span>Hacia dónde vamos</div>
+      <div>
+        <div class="two">
+          <div><h4>Visión</h4><p>Ser el referente de la comida de carretera en Costa Rica en todos nuestros formatos de restaurante.</p></div>
+          <div><h4>Misión</h4><p>Ofrecer a cada cliente el mejor producto con la mejor experiencia.</p></div>
+        </div>
+        <ul class="pil">
+          <li><b>01</b>Alta calidad</li>
+          <li><b>02</b>Variedad</li>
+          <li><b>03</b>Buenos precios</li>
+          <li><b>04</b>Buena atención</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section id="contacto" class="on-amber">
+    <div class="wrap sec">
+      <div class="lab"><span>04</span>Contacto</div>
+      <div><a class="mail" href="mailto:contacto@dmalabomba.com">contacto@dmalabomba.com</a></div>
+    </div>
+  </section>
+</main>
+
+<footer class="on-red">
+  <div class="wrap">
+    <div class="row">
+      <span>Grupo DMA-La Bomba</span>
+      <a href="#inicio">Volver arriba</a>
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>
