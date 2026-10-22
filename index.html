@@ -17,7 +17,7 @@ a{color:inherit}
 .wrap{max-width:1080px;margin:0 auto;padding:0 24px}
 .on-amber,.on-red{background:#fbf8f2;color:var(--black);--ln:rgba(23,18,18,.85);--lnsoft:rgba(23,18,18,.35)}
 header.top{border-bottom:1px solid var(--ln)}
-header.top .wrap{display:flex;align-items:center;justify-content:space-between;height:64px}
+header.top .wrap{display:flex;align-items:center;justify-content:flex-end;height:64px}
 .mark{font-weight:800;letter-spacing:.22em;font-size:14px;text-decoration:none}
 header.top .right{display:flex;align-items:center;gap:28px}
 header.top nav{display:flex;gap:26px;font-size:14px}
@@ -39,6 +39,10 @@ section{border-top:1px solid var(--ln);padding:clamp(52px,8vw,88px) 0}
 @media(min-width:860px){.sec{grid-template-columns:240px 1fr;gap:56px}}
 .lab{font-weight:400;font-size:13px;letter-spacing:.18em;text-transform:uppercase}
 .lab span{margin-right:12px;color:var(--red);font-weight:600}
+.lbcol{display:flex;flex-direction:column;gap:34px}
+.logos{display:flex;flex-direction:row;gap:22px;align-items:flex-start}
+.logos img{width:96px;height:auto;display:block}
+@media(min-width:860px){.logos{flex-direction:column;gap:36px}.logos img{width:132px}}
 .bands{border-top:1px solid var(--ln)}
 .band{border-bottom:1px solid var(--ln)}
 .band a{display:grid;grid-template-columns:1fr auto;gap:8px 20px;align-items:center;padding:clamp(34px,6vw,64px) 0;text-decoration:none}
@@ -81,7 +85,6 @@ a:focus-visible{outline:2px solid currentColor;outline-offset:4px}
 
 <header class="top on-amber">
   <div class="wrap">
-    <a class="mark" href="#inicio" aria-label="La Bomba, inicio"><i></i>LA BOMBA</a>
     <div class="right">
       <nav aria-label="Secciones">
         <a href="#negocios">Negocios</a>
@@ -105,7 +108,8 @@ a:focus-visible{outline:2px solid currentColor;outline-offset:4px}
 
   <section id="negocios" class="on-amber">
     <div class="wrap sec">
-      <div class="lab"><span>01</span>Nuestros negocios</div>
+      <div class="lbcol"><div class="lab"><span>01</span>Nuestros negocios</div>
+        <div class="logos"><img src="logo-soda.svg" alt="Soda La Bomba" width="264" height="278"><img src="logo-pollos.svg" alt="Pollos La Bomba" width="264" height="264"></div></div>
       <div class="bands">
         <div class="band on-red"><a href="https://www.sodalabomba.com">
           <h3>Soda La Bomba</h3><span class="go">Visitar</span>
@@ -135,19 +139,25 @@ a:focus-visible{outline:2px solid currentColor;outline-offset:4px}
           <div><h4>Visión</h4><p>Ser el referente de la comida de carretera en Costa Rica en todos nuestros formatos de restaurante.</p></div>
           <div><h4>Misión</h4><p>Ofrecer a cada cliente el mejor producto con la mejor experiencia.</p></div>
         </div>
-        <ul class="pil">
-          <li><b>01</b>Alta calidad</li>
-          <li><b>02</b>Variedad</li>
-          <li><b>03</b>Buenos precios</li>
-          <li><b>04</b>Buena atención</li>
-        </ul>
       </div>
+    </div>
+  </section>
+
+  <section id="pilares" class="on-amber">
+    <div class="wrap sec">
+      <div class="lab"><span>04</span>Nuestros pilares</div>
+      <ul class="pil">
+        <li><b>01</b>Alta calidad</li>
+        <li><b>02</b>Variedad</li>
+        <li><b>03</b>Buenos precios</li>
+        <li><b>04</b>Buena atención</li>
+      </ul>
     </div>
   </section>
 
   <section id="contacto" class="on-amber">
     <div class="wrap sec">
-      <div class="lab"><span>04</span>Contacto</div>
+      <div class="lab"><span>05</span>Contacto</div>
       <div><a class="mail" href="mailto:contacto@dmalabomba.com">contacto@dmalabomba.com</a></div>
     </div>
   </section>
