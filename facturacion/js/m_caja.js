@@ -1,8 +1,10 @@
 // Caja: la pantalla que usa el cajero todo el día (abrir caja, cuentas, productos, prefactura y cobro).
 import { abrirSalidas } from './ui_salidas.js';
-import { crearCampoIdentificacion, leerCorreos, errorActividad, limpiarActividad } from './ui_cedula.js';
+import { errorActividad, limpiarActividad } from './ui_cedula.js';
+import { selectorCliente } from './ui_cliente.js';
 import { apiM } from './api_mantenimiento.js';
-import { h, money, money0, num, leerNumero, toast, modal, pedir, conBoton, debounce, TIPOS_SERVICIO, TIPOS_DOC, TIPOS_ID, MEDIOS, ESTADOS } from './util.js';
+import { esTransitorio } from './api.js';
+import { h, money, money0, num, leerNumero, toast, modal, pedir, conBoton, esqueleto, bloqueError, nombreLocal, TIPOS_SERVICIO, TIPOS_DOC, MEDIOS, ESTADOS } from './util.js';
 
 const CSS_URL = new URL('../css/caja.css', import.meta.url).href;
 function cargarCss() {
@@ -24,10 +26,22 @@ const leerCant = (s) => Number(String(s ?? '').trim().replace(',', '.'));
 const r3 = (n) => Math.round((n + Number.EPSILON) * 1000) / 1000;
 const plano = (n) => String(Number(n)); // para campos de texto: sin separador de miles
 const fino = () => window.matchMedia?.('(pointer:fine)').matches ?? true;
+let moduloImp = null;
 const imp = async () => {
-  try { return await import('./imprimir.js'); }
+  try { moduloImp = await import('./imprimir.js'); return moduloImp; }
   catch (e) { console.error(e); throw new Error('La impresión no está disponible por ahora. Recargue la página e intente de nuevo.'); }
 };
+// Ajustes de impresión de ESTE aparato: son los mismos que edita el botón «Impresora» (imprimir.js: leerAjustes).
+// Si el módulo de impresión todavía no cargó, se leen directo de donde él los guarda con los mismos valores por defecto.
+function ajustesImp() {
+  try { if (moduloImp?.leerAjustes) return moduloImp.leerAjustes(); } catch { /* se usa la lectura directa */ }
+  let g = {};
+  try { g = JSON.parse(localStorage.getItem('fx_impresion') || '{}') || {}; } catch { g = {}; }
+  return { papel: Number(g.papel) === 58 ? 58 : 80, copias: Math.min(5, Math.max(1, parseInt(g.copias, 10) || 1)), auto: !!g.auto, formato: g.formato === 'carta' ? 'carta' : 'tiquete', hoja: g.hoja === 'a4' ? 'a4' : 'carta' };
+}
+const textoImpresion = (a) => (a.formato === 'carta' ? 'factura carta' : 'tiquete de ' + a.papel + ' mm') + ', ' + a.copias + (a.copias === 1 ? ' copia' : ' copias');
+// Firma de una cuenta (para saber si un cambio que falló por la red sí llegó al servidor)
+const firmaCuenta = (c) => JSON.stringify([c.venta.total, c.venta.estado, (c.lineas || []).map((l) => [l.id, Number(l.cantidad), cents(l.precio_final), l.nota || '', l.producto_id])]);
 
 const AYUDA_TIPO = {
   buffet: 'Cuenta rápida, sin datos del cliente',
@@ -65,6 +79,7 @@ function calcularPagos(entradas, totalC) {
   const efAplic = Math.min(ef, resto);
   const falta = totalC - noEf - efAplic;
   const vuelto = ef - efAplic;
+  if (ef > 0 && efAplic === 0) return { ok: false, error: 'El total ya está cubierto con los otros medios de pago. Quite el monto en efectivo o baje el otro pago.', falta: 0, vuelto: 0, aplicados: [] };
   let restoEf = resto;
   const aplicados = [];
   for (const e of entradas) {
@@ -74,6 +89,10 @@ function calcularPagos(entradas, totalC) {
       if (a > 0) aplicados.push({ medio: 'efectivo', monto: a / 100, referencia: e.ref || null });
     } else if (c > 0) aplicados.push({ medio: e.medio, monto: c / 100, referencia: e.ref || null });
   }
+  // Cada pago en efectivo lleva lo que entregó el cliente ("recibido"): lo aplicado a la venta, y el vuelto va en el último pago en efectivo.
+  const efectivos = aplicados.filter((a) => a.medio === 'efectivo');
+  efectivos.forEach((a) => { a.recibido = a.monto; });
+  if (efectivos.length && vuelto > 0) { const u = efectivos[efectivos.length - 1]; u.recibido = (Math.round(u.monto * 100) + vuelto) / 100; }
   return { ok: falta === 0 && aplicados.length > 0, error: null, falta, vuelto, aplicados };
 }
 
@@ -89,6 +108,8 @@ export default {
 
     /* ---------- Estado ---------- */
     let catalogo = { cajones: [], productos: [] };
+    let catalogoJson = '';
+    let barraAviso = null, avisoEl = null;
     let productos = [];
     const prodPorId = new Map();
     let abiertas = [];
@@ -102,13 +123,36 @@ export default {
     const tarjetas = new Map(); // producto_id -> {badge}
     const timers = [];
 
-    // Las acciones sobre la cuenta se hacen una tras otra para que dos toques rápidos no se pisen
+    // Las acciones sobre la cuenta se hacen una tras otra para que dos toques rápidos no se pisen.
+    // Si la falla es de red o del servidor (transitoria), la cuenta se queda como estaba en pantalla y sale «Intentar de nuevo».
+    function quitarAviso() { avisoEl?.remove(); avisoEl = null; }
+    function avisoDeRed(e, fn, antes, idCuenta) {
+      quitarAviso();
+      const intentar = h('button.btn.primario', { type: 'button' }, 'Intentar de nuevo');
+      intentar.addEventListener('click', () => conBoton(intentar, async () => {
+        // Antes de repetir se lee la cuenta del servidor: si el cambio sí había llegado, no se vuelve a hacer (así no se duplica un producto)
+        const v = await api.venta(idCuenta);
+        cur = v; guardarActiva();
+        if (firmaCuenta(v) !== antes) { quitarAviso(); repintar(); toast('El cambio sí se había guardado. La cuenta se actualizó con lo que hay en el servidor; revise que esté como esperaba.'); return; }
+        quitarAviso();
+        await accion(fn);
+      }));
+      avisoEl = h('div.aviso-red', { role: 'alert' },
+        h('div.aviso-red-txt', h('strong', 'El último cambio no se guardó. '), (e.message || '') + ' Su cuenta sigue en pantalla.'),
+        h('div.fila', intentar, h('button.btn', { type: 'button', onclick: quitarAviso }, 'Dejar la cuenta como está')));
+      barraAviso?.replaceChildren(avisoEl);
+    }
     function accion(fn) {
       const p = cola.then(async () => {
         if (!vivo) return;
         ocupadas++;
-        try { await fn(); }
-        catch (e) { toast(e.message || String(e), 'error', 7000); if (cur && asideCuenta) pintarCuenta(); }
+        const antes = cur ? firmaCuenta(cur) : null, idCuenta = cur?.venta?.id || null;
+        try { await fn(); if (avisoEl) quitarAviso(); }
+        catch (e) {
+          if (esTransitorio(e) && idCuenta) avisoDeRed(e, fn, antes, idCuenta);
+          else toast(e.message || String(e), 'error', 7000);
+          if (cur && asideCuenta) pintarCuenta();
+        }
         finally { ocupadas--; }
       });
       cola = p;
@@ -116,12 +160,27 @@ export default {
     }
 
     /* ---------- Carga de datos ---------- */
-    async function cargarCatalogo() {
-      catalogo = await api.catalogo(socId);
-      productos = (catalogo.productos || []).slice().sort((a, b) => (a.codigo < b.codigo ? -1 : a.codigo > b.codigo ? 1 : 0));
+    // El catálogo queda en memoria (api.catalogo): al volver a la Caja o cambiar de local no se pide otra vez hasta que alguien edite productos
+    function usarCatalogo(c) {
+      catalogo = c;
+      catalogoJson = JSON.stringify(c);
+      productos = (c.productos || []).map((p) => ({ ...p, _n: norm(p.nombre) })).sort((a, b) => (a.codigo < b.codigo ? -1 : a.codigo > b.codigo ? 1 : 0));
       prodPorId.clear();
-      productos.forEach((p) => { p._n = norm(p.nombre); prodPorId.set(p.id, p); });
-      if (!catalogo.cajones.some((c) => c.id === cajonSel)) cajonSel = catalogo.cajones[0]?.id || null;
+      productos.forEach((p) => prodPorId.set(p.id, p));
+      if (!c.cajones.some((x) => x.id === cajonSel)) cajonSel = c.cajones[0]?.id || null;
+    }
+    async function cargarCatalogo() { usarCatalogo(await api.catalogo(socId)); }
+    // Cada 5 minutos se vuelve a pedir en silencio por si se cambió un precio desde otro aparato
+    async function revisarCatalogo() {
+      if (!vivo || document.hidden || !cajaEl || ocupadas > 0 || document.querySelector('.modal-fondo')) return;
+      try {
+        const nuevo = await api.catalogo(socId, false, { forzar: true });
+        if (!vivo || JSON.stringify(nuevo) === catalogoJson) return;
+        usarCatalogo(nuevo);
+        pintarCajones(); pintarProductos();
+        if (cur) { cur = await api.venta(cur.venta.id); repintar(); }
+        toast('Se actualizaron los productos o precios del menú.');
+      } catch { /* sin conexión: queda el menú que ya está en pantalla */ }
     }
     async function cargarAbiertas() { abiertas = (await api.ventasAbiertas(socId)) || []; }
     async function elegirInicial() {
@@ -170,7 +229,7 @@ export default {
       const atajos = [0, 10000, 20000, 50000].map((n) => h('button.btn', { type: 'button', onclick: () => { fondo.value = String(n); fondo.focus(); } }, n === 0 ? 'Sin fondo (₡0)' : money0(n)));
       root.replaceChildren(h('div.caja-abrir.tarjeta',
         h('h1', 'Abrir caja'),
-        h('p', 'La caja de ' + (app.soc.nombre_comercial || app.soc.nombre) + ' está cerrada. Para empezar a vender, escriba solo el efectivo con que abre la caja.'),
+        h('p', 'La caja de ' + nombreLocal(app.soc) + ' está cerrada. Para empezar a vender, escriba solo el efectivo con que abre la caja.'),
         h('label.etq', 'Efectivo con que abre la caja (₡)', fondo),
         h('div.atajos', atajos),
         err, abrir));
@@ -187,7 +246,9 @@ export default {
       gridProd = h('div.productos');
       asideCuenta = h('aside.caja-cuenta', { 'aria-label': 'Cuenta activa' });
       barraMovil = h('div.barra-movil');
+      barraAviso = h('div.avisos-caja');
       cajaEl = h('div.caja.v-' + vista,
+        barraAviso,
         h('div.caja-cuerpo',
           h('div.caja-izq', barraCuentas, barraExtras, buscadorWrap,
             h('section.caja-catalogo', { 'aria-label': 'Productos' }, tabsCajon, gridProd)),
@@ -540,14 +601,11 @@ export default {
       const totalC = cents(venta.total);
       let cliente = cur.cliente || null;
       let actividadFactura = null; // código de actividad pedido por el cliente solo para esta factura (null = la principal del cliente)
-      let cedActivo = null;
       let pagos = [];
       let medio = 'efectivo';
       let auto = true;
       let cobrando = false;
       let terminado = false;
-      let formato = lsGet('formato') || 'tiquete';
-      if (!['tiquete', 'carta', 'ninguno'].includes(formato)) formato = 'tiquete';
 
       const raiz = h('div');
       let m;
@@ -555,7 +613,9 @@ export default {
 
       /* Vista principal de pago */
       const docTxt = h('span.doc'), cliTxt = h('span.cli');
-      const btnElegir = h('button.btn', { type: 'button', onclick: () => vistaClientes() }, 'Elegir cliente (factura)');
+      // Elegir o crear cliente: la ventana completa de Clientes (ui_cliente.js). Al crear uno nuevo trae los 4 correos, la dirección y la verificación en Hacienda.
+      const elegirCliente = (c) => { cliente = c; actividadFactura = null; pintarCliente(); actualizar(); };
+      const btnElegir = h('button.btn', { type: 'button', onclick: () => selectorCliente(app, { alElegir: elegirCliente }) }, 'Elegir cliente (factura)');
       const btnQuitarCli = h('button.btn.suave', { type: 'button', onclick: () => { cliente = null; actividadFactura = null; pintarCliente(); } }, 'Quitar cliente');
       const actEl = h('div.cobro-act', { hidden: true });
       const mediosBtns = Object.entries(MEDIOS).map(([k, v]) => h('button.medio-btn', { type: 'button', dataset: { medio: k }, onclick: () => { medio = k; auto = true; sugerir(); actualizar(); inpMonto.focus(); inpMonto.select(); } }, v));
@@ -570,8 +630,18 @@ export default {
       const listaPagos = h('div.col');
       const resumen = h('div.cobro-resumen');
       const errEl = h('div.error-caja', { hidden: true });
-      const seg = h('div.seg', { role: 'group', 'aria-label': 'Qué imprimir al cobrar' },
-        [['tiquete', 'Tiquete'], ['carta', 'Factura carta'], ['ninguno', 'No imprimir']].map(([k, t]) => h('button', { type: 'button', dataset: { f: k }, onclick: () => { formato = k; lsSet('formato', k); pintarFormato(); } }, t)));
+      // Impresión: se usan los ajustes de este aparato (botón «Impresora»); aquí solo se muestran y se pueden abrir para cambiarlos
+      const resImp = h('div.cobro-imp');
+      const abrirAjustes = async () => { try { (await imp()).abrirAjustesImpresion(); } catch (e) { toast(e.message, 'error', 6000); } };
+      function pintarImp() {
+        const a = ajustesImp();
+        resImp.replaceChildren(
+          h('div.cobro-imp-txt', h('strong', 'Impresión al cobrar'),
+            h('div.tenue-linea', a.auto ? 'Se imprime sola: ' + textoImpresion(a) + '.' : 'No se imprime sola. Al terminar el cobro aparece el botón «Imprimir tiquete».')),
+          h('button.btn', { type: 'button', onclick: abrirAjustes }, 'Cambiar ajustes de impresión'));
+      }
+      const vigilaAjustes = new MutationObserver(() => pintarImp());
+      vigilaAjustes.observe(document.body, { childList: true });
       const btnVolver = h('button.btn', { type: 'button', onclick: () => m.cerrar() }, 'Volver');
       const btnCobrar = h('button.btn.primario.grande.btn-confirmar-cobro', { type: 'button', onclick: confirmarCobro }, 'Cobrar');
       const vistaPago = h('div.cobro',
@@ -582,7 +652,7 @@ export default {
         h('div.col', h('strong', 'Forma de pago'), h('div.medios', mediosBtns)),
         h('label.etq', lblMonto, inpMonto),
         rapidos, refEtq, btnOtro, listaPagos, errEl,
-        h('div.col', h('strong', 'Al cobrar, imprimir'), seg),
+        resImp,
         h('div.cobro-pie', btnVolver, btnCobrar));
 
       const sinErr = () => { errEl.hidden = true; };
@@ -636,7 +706,6 @@ export default {
           !cliente.correo ? h('div.act-aviso', 'Este cliente no tiene correo. La factura se emite igual, pero no se le podrá enviar por correo.') : null,
         ].filter(Boolean));
       }
-      function pintarFormato() { [...seg.children].forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.f === formato))); }
       function actualizar() {
         mediosBtns.forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.medio === medio)));
         lblMonto.textContent = medio === 'efectivo' ? 'Efectivo que entrega el cliente (₡)' : 'Monto a cobrar con ' + MEDIOS[medio] + ' (₡)';
@@ -672,83 +741,6 @@ export default {
       inpMonto.addEventListener('input', () => { auto = false; actualizar(); });
       inpMonto.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !btnCobrar.disabled) { e.preventDefault(); confirmarCobro(); } });
       inpRef.addEventListener('input', actualizar);
-
-      /* Elegir cliente */
-      function vistaClientes() {
-        const q = h('input.campo', { type: 'text', placeholder: 'Nombre, cédula o correo', autocomplete: 'off', 'aria-label': 'Buscar cliente' });
-        const lista = h('div.lista-clientes');
-        let seq = 0;
-        async function buscar() {
-          const mi = ++seq;
-          lista.replaceChildren(h('p.tenue', 'Buscando…'));
-          try {
-            const r = await api.clientes(socId, q.value.trim());
-            if (mi !== seq) return;
-            if (!r.length) { lista.replaceChildren(h('div.vacio', 'No hay clientes con ese dato. Puede crearlo con el botón «Crear cliente nuevo».')); return; }
-            lista.replaceChildren(...r.map((c) => h('button.cli-item', { type: 'button', onclick: () => { cliente = c; actividadFactura = null; pintarCliente(); actualizar(); mostrar(vistaPago); } },
-              h('b', c.nombre), h('small', (TIPOS_ID[c.tipo_id] || '') + ' ' + c.identificacion + (c.correo ? ' · ' + c.correo : '')))));
-          } catch (e) { if (mi === seq) lista.replaceChildren(h('div.error-caja', e.message || String(e))); }
-        }
-        q.addEventListener('input', debounce(buscar, 300));
-        mostrar(h('div.col',
-          h('h3', 'Elegir cliente'),
-          h('p.tenue-linea', 'Con cliente se emite Factura electrónica. Sin cliente se emite Tiquete electrónico.'),
-          q, lista,
-          h('div.fila', h('button.btn', { type: 'button', onclick: () => mostrar(vistaPago) }, 'Volver al cobro'), h('button.btn.primario', { type: 'button', onclick: () => vistaNuevoCliente() }, 'Crear cliente nuevo'))));
-        q.focus();
-        buscar();
-      }
-
-      function vistaNuevoCliente() {
-        const correo = h('input.campo', { type: 'text', inputmode: 'email', maxlength: 160, autocomplete: 'off', autocapitalize: 'none', 'aria-label': 'Correo electrónico' });
-        const tel = h('input.campo', { type: 'tel', inputmode: 'tel', maxlength: 20, autocomplete: 'off' });
-        const comercial = h('input.campo', { type: 'text', maxlength: 120, autocomplete: 'off' });
-        const avisoCorreo = h('small.tenue');
-        const refrescarCorreo = () => { avisoCorreo.textContent = correo.value.trim() ? '' : 'Sin correo la factura se emite igual, pero no se le puede enviar por correo.'; };
-        correo.addEventListener('input', refrescarCorreo);
-        refrescarCorreo();
-        const err = h('div.error-caja', { hidden: true });
-        const falla = (t, el) => { err.textContent = t; err.hidden = false; el?.focus(); };
-        const guardar = h('button.btn.primario', { type: 'button' }, 'Guardar y usar este cliente');
-        const usar = (c, aviso) => { cliente = c; actividadFactura = null; pintarCliente(); actualizar(); mostrar(vistaPago); if (aviso) toast(aviso); };
-        cedActivo?.destruir();
-        // Número, nombre y actividad: se verifican en Hacienda mientras se escribe (js/ui_cedula.js)
-        const ced = cedActivo = crearCampoIdentificacion({
-          revisarDuplicado: async (id) => (await api.clientes(socId, id)).find((c) => c.identificacion === id) || null,
-          accionDuplicado: { texto: 'Usar este cliente', primario: true, fn: (ya) => usar(ya, 'Se usa el cliente que ya estaba guardado.') },
-          alTerminar: () => correo.focus(),
-        });
-        guardar.addEventListener('click', () => conBoton(guardar, async () => {
-          err.hidden = true;
-          const v = await ced.validar();
-          if (v) return falla(v.mensaje, v.campo);
-          const cr = leerCorreos(correo.value);
-          if (cr.error) return falla(cr.error, correo);
-          const telDig = tel.value.replace(/\D/g, '');
-          if (telDig && (telDig.length < 8 || telDig.length > 20)) return falla('El teléfono debe tener al menos 8 números.', tel);
-          const val = ced.valores();
-          // Si la cédula ya existe, se usa el cliente que ya está guardado para no pisar sus datos
-          const ya = (await api.clientes(socId, val.identificacion)).find((c) => c.identificacion === val.identificacion);
-          if (ya) return usar(ya, 'Ya existía un cliente con esa identificación. Se usa el que estaba guardado.');
-          const c = await api.clienteGuardar({
-            sociedad_id: socId, solo_nuevo: true, tipo_id: val.tipo_id, identificacion: val.identificacion, nombre: val.nombre,
-            nombre_comercial: comercial.value.trim(), correo: cr.lista.join(', '), telefono: telDig, actividad_codigo: val.actividad_codigo,
-            sin_verificar_motivo: val.sin_verificar_motivo,
-          });
-          usar(c, c.verificado ? 'Cliente guardado.' : 'Cliente guardado. Quedó marcado como sin verificar en Hacienda.');
-        }));
-        mostrar(h('div.col',
-          h('h3', 'Crear cliente nuevo'),
-          h('p.tenue-linea', 'Escriba la cédula: el sistema la busca en Hacienda y llena el nombre y la actividad. El correo y lo demás son opcionales.'),
-          ced.el,
-          h('label.etq', 'Correo electrónico (opcional)', correo, avisoCorreo),
-          h('details.mas-datos', h('summary', 'Más datos (opcionales)'), h('div.col', { style: 'margin:.5rem 0' },
-            h('label.etq', 'Teléfono', tel), h('label.etq', 'Nombre comercial', comercial))),
-          err,
-          h('div.fila', h('button.btn', { type: 'button', style: 'flex:1 1 120px', onclick: () => vistaClientes() }, 'Volver'), guardar)));
-        guardar.style.flex = '2 1 200px';
-        ced.enfocar();
-      }
 
       /* Cambiar la actividad que va en ESTA factura (no cambia al cliente salvo que se marque guardarla como principal) */
       function vistaActividad() {
@@ -825,7 +817,7 @@ export default {
         const r = calcularPagos(entradas(), totalC);
         if (b.malo || !r.ok) { conErr(r.error || 'Los pagos todavía no cubren el total.'); return; }
         cobrando = true; actualizar();
-        const aplicados = r.aplicados.map((p) => ({ medio: p.medio, monto: p.monto, referencia: p.referencia }));
+        const aplicados = r.aplicados.map((p) => (p.medio === 'efectivo' ? { medio: p.medio, monto: p.monto, referencia: p.referencia, recibido: p.recibido } : { medio: p.medio, monto: p.monto, referencia: p.referencia }));
         let comp = null, aviso = '';
         try {
           comp = await api.cobrar(ventaId, aplicados, cliente ? cliente.id : null, app.terminal, cliente ? actividadFactura : null);
@@ -842,9 +834,9 @@ export default {
         if (vivo) exito(comp, r.vuelto / 100, aviso, formato);
       }
 
-      m = modal({ titulo: 'Cobrar', contenido: raiz, ancho: 720, alCerrar: () => { cedActivo?.destruir(); if (vivo && !terminado && buscador && fino()) buscador.inp.focus(); } });
+      m = modal({ titulo: 'Cobrar', contenido: raiz, ancho: 720, alCerrar: () => { vigilaAjustes.disconnect(); if (vivo && !terminado && buscador && fino()) buscador.inp.focus(); } });
       mostrar(vistaPago);
-      pintarCliente(); pintarFormato(); sugerir(); actualizar();
+      pintarCliente(); pintarImp(); sugerir(); actualizar();
       inpMonto.focus(); inpMonto.select();
     }
 
@@ -907,12 +899,13 @@ export default {
     async function iniciar() {
       turnoMostrado = app.turno?.id || null;
       if (!turnoMostrado) { cur = null; pintarSinTurno(); return; }
-      root.replaceChildren(h('p.cargando', 'Cargando la caja…'));
+      root.replaceChildren(esqueleto(4, 'Cargando la caja…'));
       try {
         await Promise.all([cargarCatalogo(), cargarAbiertas()]);
         await elegirInicial();
       } catch (e) {
-        root.replaceChildren(h('div.vacio', h('p', 'No se pudo cargar la caja.'), h('p.tenue', e.message || String(e)), h('button.btn', { onclick: () => iniciar() }, 'Intentar de nuevo')));
+        if (!vivo) return;
+        root.replaceChildren(bloqueError({ titulo: 'No se pudo cargar la caja', mensaje: e.message || String(e), alReintentar: () => iniciar() }));
         return;
       }
       armarCaja();
@@ -949,6 +942,8 @@ export default {
       } catch { /* sin conexión: se intenta de nuevo luego */ }
     }
     timers.push(setInterval(refrescoSilencioso, 30000));
+    timers.push(setInterval(revisarCatalogo, 5 * 60 * 1000));
+    imp().catch(() => {}); // deja listo el módulo de impresión para leer sus ajustes al cobrar
     const alVolver = () => { if (!document.hidden) refrescoSilencioso(); };
     document.addEventListener('visibilitychange', alVolver);
 
