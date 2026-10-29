@@ -128,8 +128,13 @@ export function modal({ titulo, contenido, botones = [], ancho = 520, alCerrar }
   document.addEventListener('keydown', teclas);
   pilaModales.push(fondo);
   document.body.append(fondo);
-  const f = caja.querySelector('input,select,textarea'); f?.focus();
-  if (!f) caja.querySelector('.modal-pie .primario, .modal-pie button, .cerrar')?.focus({ preventScroll: true });
+  // Foco inicial: un campo solo si ya se ve completo al abrir (si está más abajo, enfocarlo corre la ventana
+  // y en el celular abre el teclado encima del contenido); si no, el botón principal o «Cerrar».
+  const f = caja.querySelector('input:not([type=hidden]),select,textarea');
+  const cuerpo = caja.querySelector('.modal-cuerpo') || caja;
+  const vis = (el) => { const r = el.getBoundingClientRect(), c = cuerpo.getBoundingClientRect(); return r.height > 0 && r.top >= c.top - 1 && r.bottom <= c.bottom + 1; };
+  if (f && vis(f)) f.focus({ preventScroll: true });
+  else caja.querySelector('.modal-pie .primario, .modal-pie button, .cerrar')?.focus({ preventScroll: true });
   return { cerrar, el: caja };
 }
 

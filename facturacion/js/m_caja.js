@@ -4,6 +4,7 @@ import { errorActividad, limpiarActividad } from './ui_cedula.js';
 import { selectorCliente } from './ui_cliente.js';
 import { apiM } from './api_mantenimiento.js';
 import { esTransitorio } from './api.js';
+import { TARIFAS_IVA, tarifaDeLinea, desgloseIva } from './iva.js';
 import { h, money, money0, num, leerNumero, toast, modal, pedir, conBoton, esqueleto, bloqueError, nombreLocal, TIPOS_SERVICIO, TIPOS_DOC, MEDIOS, ESTADOS } from './util.js';
 
 const CSS_URL = new URL('../css/caja.css', import.meta.url).href;
@@ -25,6 +26,8 @@ const numCuenta = (n) => '#' + String(n || '').split('-').pop();
 const leerCant = (s) => Number(String(s ?? '').trim().replace(',', '.'));
 const r3 = (n) => Math.round((n + Number.EPSILON) * 1000) / 1000;
 const plano = (n) => String(Number(n)); // para campos de texto: sin separador de miles
+// Lo que se muestra en lugar del precio: el genérico pide detalle y precio al agregarlo
+const textoPrecio = (p) => (p.descripcion_libre ? 'Detalle y precio' : p.precio_abierto ? 'Precio abierto' : money(p.precio_final));
 const fino = () => window.matchMedia?.('(pointer:fine)').matches ?? true;
 let moduloImp = null;
 const imp = async () => {
@@ -41,7 +44,7 @@ function ajustesImp() {
 }
 const textoImpresion = (a) => (a.formato === 'carta' ? 'factura carta' : 'tiquete de ' + a.papel + ' mm') + ', ' + a.copias + (a.copias === 1 ? ' copia' : ' copias');
 // Firma de una cuenta (para saber si un cambio que falló por la red sí llegó al servidor)
-const firmaCuenta = (c) => JSON.stringify([c.venta.total, c.venta.estado, (c.lineas || []).map((l) => [l.id, Number(l.cantidad), cents(l.precio_final), l.nota || '', l.producto_id])]);
+const firmaCuenta = (c) => JSON.stringify([c.venta.total, c.venta.estado, (c.lineas || []).map((l) => [l.id, Number(l.cantidad), cents(l.precio_final), l.nota || '', l.producto_id, l.descripcion, l.codigo_tarifa_iva || '', Number(l.tarifa_iva)])]);
 
 const AYUDA_TIPO = {
   buffet: 'Cuenta rápida, sin datos del cliente',
@@ -142,13 +145,15 @@ export default {
         h('div.fila', intentar, h('button.btn', { type: 'button', onclick: quitarAviso }, 'Dejar la cuenta como está')));
       barraAviso?.replaceChildren(avisoEl);
     }
-    function accion(fn) {
+    // estado (opcional): recibe { ok } o { error }, para que una ventana pueda quedarse abierta si el servidor rechazó lo escrito
+    function accion(fn, estado) {
       const p = cola.then(async () => {
         if (!vivo) return;
         ocupadas++;
         const antes = cur ? firmaCuenta(cur) : null, idCuenta = cur?.venta?.id || null;
-        try { await fn(); if (avisoEl) quitarAviso(); }
+        try { await fn(); if (estado) estado.ok = true; if (avisoEl) quitarAviso(); }
         catch (e) {
+          if (estado) estado.error = e;
           if (esTransitorio(e) && idCuenta) avisoDeRed(e, fn, antes, idCuenta);
           else toast(e.message || String(e), 'error', 7000);
           if (cur && asideCuenta) pintarCuenta();
@@ -302,7 +307,7 @@ export default {
         res.slice(0, 50).forEach((p, i) => lista.append(h('button.res-item', {
           type: 'button', role: 'option', 'aria-selected': String(i === 0),
           onmousedown: (e) => e.preventDefault(), onclick: () => elegir(p),
-        }, h('span.res-nom', p.nombre), h('span.res-pre', p.precio_abierto ? 'Precio abierto' : money(p.precio_final)),
+        }, h('span.res-nom', p.nombre), h('span.res-pre' + (p.descripcion_libre || p.precio_abierto ? '.abierto' : ''), textoPrecio(p)),
         h('span.res-cod', p.codigo + ' · ' + (catalogo.cajones.find((c) => c.id === p.cajon_id)?.nombre || '')))));
         if (res.length > 50) lista.append(h('div.res-vacio', 'Hay ' + (res.length - 50) + ' más. Escriba más letras para acotar.'));
       }
@@ -348,10 +353,10 @@ export default {
         grupo = g;
         const badge = h('span.prod-cuenta', { hidden: true, 'aria-hidden': 'true' });
         const btn = h('button.prod', {
-          type: 'button', 'aria-label': 'Agregar ' + p.nombre + ', ' + (p.precio_abierto ? 'precio abierto' : money(p.precio_final)),
+          type: 'button', 'aria-label': 'Agregar ' + p.nombre + ', ' + (p.descripcion_libre ? 'se escribe el detalle y el precio' : p.precio_abierto ? 'precio abierto' : money(p.precio_final)),
           onclick: (e) => { e.currentTarget.classList.add('tocado'); const b = e.currentTarget; setTimeout(() => b.classList.remove('tocado'), 180); agregarProducto(p); },
         }, h('span.prod-nombre', p.nombre),
-        h('span.prod-pie', h('span.prod-precio' + (p.precio_abierto ? '.abierto' : ''), p.precio_abierto ? 'Precio abierto' : money(p.precio_final)), h('span.prod-cod', p.codigo)), badge);
+        h('span.prod-pie', h('span.prod-precio' + (p.precio_abierto || p.descripcion_libre ? '.abierto' : ''), textoPrecio(p)), h('span.prod-cod', p.codigo)), badge);
         tarjetas.set(p.id, badge);
         nodos.push(btn);
       }
@@ -459,6 +464,7 @@ export default {
       cur = ventaVacia(v); guardarActiva();
     }
     async function agregarProducto(p) {
+      if (p.descripcion_libre) { dialogoLinea({ producto: p }); return; }
       let precio = null;
       if (p.precio_abierto) {
         const v = await pedir({ titulo: p.nombre, etiqueta: 'Precio final con IVA incluido (₡)', tipo: 'number', boton: 'Agregar a la cuenta', nota: 'Escriba el monto y toque «Agregar a la cuenta» (o Enter).' });
@@ -473,6 +479,103 @@ export default {
         repintar(cur.lineas.length > antes);
       });
     }
+    /* ---------- Línea libre: detalle, cantidad, precio con IVA y tarifa de IVA ---------- */
+    // Sirve para agregar el producto genérico («Servicio de alimentación») y para editar cualquier línea de la cuenta.
+    // El precio final con IVA se conserva: la base se calcula hacia atrás con la tarifa elegida (el servidor y el XML hacen el cálculo exacto).
+    function dialogoLinea({ producto, linea }) {
+      const nueva = !linea;
+      const prod = producto || prodPorId.get(linea.producto_id) || null;
+      const tarIni = nueva ? tarifaDeLinea({ tarifa_iva: prod?.tarifa_iva ?? 13 }) : tarifaDeLinea(linea);
+      let codigo = tarIni.codigo;
+      const desc = h('textarea.campo.lin-desc', { rows: 3, maxlength: 200, 'aria-label': 'Detalle que sale en la factura', placeholder: 'Ej. 40 sándwiches y 100 refrescos' });
+      desc.value = nueva ? (prod?.descripcion_libre ? '' : prod?.nombre || '') : linea.descripcion;
+      const cuenta = h('small.tenue');
+      const qty = h('input.campo', { type: 'text', inputmode: 'decimal', autocomplete: 'off', 'aria-label': 'Cantidad', value: nueva ? '1' : plano(linea.cantidad) });
+      const precio = h('input.campo', { type: 'text', inputmode: 'decimal', autocomplete: 'off', 'aria-label': 'Precio final de cada uno, con IVA incluido', placeholder: 'Ej. 150000',
+        value: nueva ? (Number(prod?.precio_final) > 0 ? plano(prod.precio_final) : '') : plano(linea.precio_final) });
+      const err = h('div.error-caja', { hidden: true, role: 'alert' });
+      const prev = h('div.lin-prev', { 'aria-live': 'polite' });
+      const botTarifa = new Map();
+      const sinCodigo = !tarIni.codigo; // línea vieja con 0 % y sin código: se muestra tal cual hasta que se elija una tarifa
+      const boton = (t) => {
+        const b = h('button.btn.tarifa-btn', { type: 'button', 'aria-pressed': String(t.codigo === codigo), onclick: () => { codigo = t.codigo; marcar(); pinta(); } }, t.nombre);
+        botTarifa.set(t.codigo, b); return b;
+      };
+      const frecuentes = TARIFAS_IVA.filter((t) => t.frecuente).map(boton);
+      const otras = TARIFAS_IVA.filter((t) => !t.frecuente).map(boton);
+      const otraSel = !!codigo && TARIFAS_IVA.find((t) => t.codigo === codigo && !t.frecuente);
+      function marcar() { for (const [c, b] of botTarifa) b.setAttribute('aria-pressed', String(c === codigo)); }
+      const tarifaActual = () => TARIFAS_IVA.find((t) => t.codigo === codigo) || tarIni;
+      const leer = () => {
+        const d = desc.value.replace(/\s+/g, ' ').trim();
+        const q = leerCant(qty.value), pr = leerNumero(precio.value);
+        if (d.length < 3) return { error: 'Escriba el detalle de lo que se vende (mínimo 3 letras).', foco: desc };
+        if (d.length > 200) return { error: 'El detalle puede tener hasta 200 letras.', foco: desc };
+        if (!(q > 0) || !Number.isFinite(q)) return { error: 'La cantidad tiene que ser mayor que cero.', foco: qty };
+        if (!(pr > 0) || !Number.isFinite(pr)) return { error: 'Escriba el precio final de cada uno, con IVA incluido, mayor que cero.', foco: precio };
+        const qq = r3(q), tot = Math.round(qq * cents(pr));
+        if (tot <= 0) return { error: 'El total de la línea no puede ser cero.', foco: qty };
+        if (tot > 9999999999) return { error: 'El monto es demasiado grande. Revise la cantidad y el precio.', foco: precio };
+        return { d, qq, pr, tot: tot / 100 };
+      };
+      function pinta() {
+        cuenta.textContent = desc.value.length + ' de 200 letras';
+        const r = leer();
+        const q = r3(leerCant(qty.value)), pr = leerNumero(precio.value);
+        const total = r.tot ?? (q > 0 && pr > 0 ? Math.round(q * cents(pr)) / 100 : 0);
+        const t = tarifaActual(), dg = desgloseIva(total, t.pct);
+        prev.replaceChildren(
+          h('div.lin-prev-tit', 'Así saldrá en la factura'),
+          h('div.lin-prev-det', desc.value.replace(/\s+/g, ' ').trim() || 'Escriba arriba el detalle de lo que se vende'),
+          h('div.lin-prev-fila', h('span', (q > 0 ? num(q, 3) : '0') + ' × ' + money(pr > 0 ? pr : 0) + ' con IVA'), h('span', money(total))),
+          h('div.lin-prev-fila.tenue', h('span', 'Base sin IVA (calculada hacia atrás)'), h('span', money(dg.base))),
+          h('div.lin-prev-fila.tenue', h('span', 'IVA ' + t.nombre), h('span', money(dg.iva))),
+          h('div.lin-prev-fila.total', h('span', 'Total de la línea, con IVA'), h('b', money(total))));
+      }
+      [desc, qty, precio].forEach((i) => i.addEventListener('input', pinta));
+      const cancelar = h('button.btn', { type: 'button', onclick: () => m.cerrar() }, 'Cancelar');
+      const guardar = h('button.btn.primario.grande', { type: 'button' }, nueva ? 'Agregar a la cuenta' : 'Guardar cambios');
+      guardar.addEventListener('click', async () => {
+        const r = leer();
+        if (r.error) { err.textContent = r.error; err.hidden = false; r.foco?.focus(); return; }
+        err.hidden = true;
+        const st = {};
+        guardar.disabled = true;
+        const cambioTarifa = codigo && codigo !== tarIni.codigo ? codigo : null;
+        if (nueva) {
+          await accion(async () => {
+            if (!cur) await crearCuentaBuffet();
+            cur = await api.lineaAgregar(cur.venta.id, prod.id, r.qq, r.pr, null, { descripcion: r.d, codigoTarifa: cambioTarifa });
+            repintar(true);
+            toast('Agregado a la cuenta: ' + (r.d.length > 60 ? r.d.slice(0, 60) + '…' : r.d));
+          }, st);
+        } else {
+          const cambios = {};
+          if (r.d !== linea.descripcion) cambios.descripcion = r.d;
+          if (r.qq !== Number(linea.cantidad)) cambios.cantidad = r.qq;
+          if (cents(r.pr) !== cents(linea.precio_final)) cambios.precio = r.pr;
+          if (cambioTarifa) cambios.codigoTarifa = cambioTarifa;
+          if (!Object.keys(cambios).length) { m.cerrar(); toast('No hubo cambios en la línea.'); return; }
+          await accion(async () => { cur = await api.lineaEditar(linea.id, cambios); repintar(); toast('Línea actualizada.'); }, st);
+        }
+        // Si el servidor rechazó lo escrito, la ventana sigue abierta para corregir; si fue la red, el aviso «Intentar de nuevo» se encarga
+        if (st.error && !esTransitorio(st.error)) { guardar.disabled = false; return; }
+        m.cerrar();
+      });
+      const m = modal({ titulo: nueva ? 'Agregar: ' + (prod?.nombre || 'línea') : 'Editar línea', ancho: 640,
+        contenido: h('div.lin-dlg',
+          nueva && prod?.descripcion_libre ? h('p.tenue-linea', 'Escriba lo que se vende y el precio final con IVA incluido. Puede agregar este servicio varias veces en la misma factura.') : h('p.tenue-linea', 'Cambie lo que necesite. El precio final con IVA se conserva: el IVA se calcula hacia atrás.'),
+          h('label.etq', 'Detalle que sale en la factura', desc), cuenta,
+          h('div.lin-nums', h('label.etq', 'Cantidad', qty), h('label.etq', 'Precio final de cada uno, con IVA incluido (₡)', precio)),
+          h('div.etq', 'Tarifa de IVA'),
+          h('div.tarifas', { role: 'group', 'aria-label': 'Tarifa de IVA' }, frecuentes),
+          h('details.otras-tarifas', { open: !!otraSel }, h('summary', 'Otras tarifas'), h('div.tarifas', otras)),
+          sinCodigo ? h('small.tenue', 'Esta línea tiene ' + tarIni.nombre + ' sin tipo definido. Elija una tarifa solo si necesita cambiarla.') : null,
+          prev, err,
+          h('div.lin-pie', cancelar, guardar)) });
+      pinta();
+    }
+
     function cambiarProducto(l) {
       let cerrarM;
       const b = crearBuscador({ enLinea: true, alElegir: async (p) => {
@@ -519,8 +622,12 @@ export default {
       });
       nota.addEventListener('change', () => { if (nota.value.trim() !== (l.nota || '')) editar({ nota: nota.value.trim() }); });
       [qty, precio, nota].forEach((i) => i.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); i.blur(); } }));
-      return h('div.linea' + (editada ? '.editada' : ''), { 'data-linea': l.id },
+      const tar = tarifaDeLinea(l);
+      const detalleCambiado = !!prod && !prod.descripcion_libre && l.descripcion !== prod.nombre;
+      const tarifaCambiada = !!prod && Number(l.tarifa_iva) !== Number(prod.tarifa_iva);
+      return h('div.linea' + (editada ? '.editada' : '') + (detalleCambiado || tarifaCambiada ? '.personalizada' : ''), { 'data-linea': l.id },
         h('div.linea-top', h('span.linea-nombre', l.descripcion), h('span.linea-total', money(l.total_linea))),
+        h('div.linea-iva' + (tarifaCambiada ? '.cambiada' : ''), 'IVA ' + tar.nombre + (detalleCambiado ? ' · Detalle cambiado' : '')),
         h('div.linea-ctrl',
           h('div.cant',
             h('button.mm', { type: 'button', disabled: cantidad - 1 <= 0, 'aria-label': 'Quitar una unidad de ' + l.descripcion, onclick: () => editar({ cantidad: r3(cantidad - 1) }) }, '−'),
@@ -529,6 +636,7 @@ export default {
           h('label.precio-et', 'Precio de cada uno, con IVA', precio)),
         editada ? h('div.etiqueta-cambio', h('span.chip.espera', 'Precio cambiado'), ' El menú dice ' + money(prod.precio_final)) : null,
         h('div.linea-pie', nota,
+          h('button.btn.chico.suave', { type: 'button', onclick: () => dialogoLinea({ linea: l }) }, 'Editar detalle e IVA'),
           h('button.btn.chico.suave', { type: 'button', onclick: () => cambiarProducto(l) }, 'Cambiar producto'),
           h('button.btn.chico.peligro', { type: 'button', 'aria-label': 'Quitar ' + l.descripcion + ' de la cuenta', onclick: () => accion(async () => { cur = await api.lineaQuitar(l.id); repintar(); toast('Quitado: ' + l.descripcion); }) }, 'Quitar')));
     }
