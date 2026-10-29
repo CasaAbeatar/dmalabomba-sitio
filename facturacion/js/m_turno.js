@@ -119,8 +119,8 @@ function bloqueCalculo(d, { alAnularSalida, alAnularEntrada, extra } = {}) {
     d.entradas.length ? h('div.calc-sub', listaSalidas(d.entradas, alAnularEntrada, 'entrada')) : null,
     h('div.calc-fila', h('span', h('span.op', '−'), 'Salidas de efectivo'), h('span.v', money(d.totSal))),
     d.salidas.length || alAnularSalida ? h('div.calc-sub', listaSalidas(d.salidas, alAnularSalida, 'salida')) : null,
-    d.devoluciones != null ? h('div.calc-fila', h('span', h('span.op', '−'), d.parcN > 0 ? 'Efectivo devuelto con notas de crédito' : 'Efectivo de ventas anuladas con nota de crédito',
-      d.devoluciones > 0 ? h('small.calc-nota', d.parcN > 0 ? 'Efectivo de ventas anuladas y de devoluciones o correcciones con nota de crédito en este turno. Se resta porque ese dinero debe haber salido de la caja.' : 'Efectivo de ventas anuladas con nota de crédito en este turno. Se resta porque ese dinero debe haber salido de la caja.') : null), h('span.v', money(d.devoluciones))) : null,
+    d.devoluciones != null ? h('div.calc-fila', h('span', h('span.op', '−'), 'Efectivo devuelto con notas de crédito',
+      d.devoluciones > 0 ? h('small.calc-nota', 'Efectivo de ventas anuladas y de devoluciones o correcciones con nota de crédito hechas en este turno. Se resta porque ese dinero debe haber salido de la caja.') : null), h('span.v', money(d.devoluciones))) : null,
     h('div.calc-fila.total', h('span', h('span.op', '='), 'Debe haber en caja'), h('span.v', money(d.esperado))),
     // Si lo que salió es más que lo que entró, la cifra sale negativa: se explica con palabras (y solo se ofrece anular donde se puede)
     cents(d.esperado) < 0 ? h('p.tenue-linea.calc-negativo', { role: 'note' }, alAnularSalida
@@ -197,7 +197,7 @@ function nodoImpresion(d, soc) {
     d.entradas.map((e) => h('div.f.sal', h('span', '  ' + e.motivo), h('span', money(e.monto)))),
     fila('- Salidas de efectivo', money(d.totSal)),
     d.salidas.map((s) => h('div.f.sal', h('span', '  ' + s.motivo), h('span', money(s.monto)))),
-    d.devoluciones != null ? fila(d.parcN > 0 ? '- Efectivo devuelto con notas de crédito' : '- Ventas anuladas en efectivo', money(d.devoluciones)) : null,
+    d.devoluciones != null ? fila('- Efectivo devuelto con notas de crédito', money(d.devoluciones)) : null,
     fila('= Debe haber en caja', money(d.esperado)),
     d.cerrado ? fila('Efectivo contado', money(d.contado)) : null,
     d.cerrado ? fila('Diferencia', textoDif(d.dif)) : null,
