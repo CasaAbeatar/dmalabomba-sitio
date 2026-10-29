@@ -35,8 +35,25 @@ export async function documentos(soc, desde, hasta) {
   }
 }
 
+// Lista del rango por páginas, la más nueva primero (fx_documentos_pagina, migración fx_23b). Devuelve { documentos, total, hay_mas, siguiente }:
+//   total = cuántos documentos tiene el rango, hay_mas = si faltan más antiguos que los entregados, siguiente = desplazamiento de la página siguiente (o null).
+// Cada fila trae las mismas llaves que documentos(). Si la base todavía no tiene la función, se usa documentos() (que entrega a lo sumo 1 000, los más antiguos) y se avisa con hay_mas.
+export const DOCUMENTOS_POR_PAGINA = 1000; // el máximo que entrega la base por llamada
+export async function documentosPagina(soc, desde, hasta, desplazamiento = 0, limite = DOCUMENTOS_POR_PAGINA) {
+  try {
+    const r = await rpc('fx_documentos_pagina', { p_soc: soc, p_desde: desde, p_hasta: hasta, p_limite: limite, p_desplazamiento: desplazamiento });
+    if (Array.isArray(r)) return { documentos: r, total: r.length, hay_mas: r.length >= limite, siguiente: null }; // una versión sin paginar entregó el arreglo de siempre
+    const docs = Array.isArray(r?.documentos) ? r.documentos : [];
+    return { documentos: docs, total: Number(r?.total) || docs.length, hay_mas: !!r?.hay_mas, siguiente: r?.siguiente_desplazamiento ?? null };
+  } catch (e) {
+    if (!/fx_documentos_pagina|does not exist|schema cache/i.test(e.message)) throw e;
+    const docs = await documentos(soc, desde, hasta);
+    return { documentos: docs, total: docs.length, hay_mas: docs.length >= limite, siguiente: null };
+  }
+}
+
 // Nota de crédito vigente de un comprobante (la más reciente que no fue rechazada, sea del código que sea), o null
-export const ncDe = (id) => rpc('fx_comprobante_nc', { p_id: id });
+export const ncDe =(id) => rpc('fx_comprobante_nc', { p_id: id });
 
 /* ---------- Saldos y notas de una factura o un tiquete (fx_comprobante_saldos) ---------- */
 // Responde, con el texto ya en español, si se puede anular completo (admite_anulacion, motivo_no_anulacion), y trae las notas que ya tiene (notas[], con viva = true
