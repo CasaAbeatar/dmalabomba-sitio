@@ -6,10 +6,15 @@
 //   fx_alerta_atender(p_comprobante, p_nota) -> marca un documento rechazado como atendido: sale del aviso rojo, NO de Anular y reimprimir ni de Informes (contrato 2B)
 //   fx_venta_clonar(p_venta)                -> cuenta nueva abierta con las líneas de una venta anulada o rechazada; misma forma que fx_venta (contrato 2B)
 //   fx_venta_clonar_con_cliente(p_venta, p_cliente) -> lo mismo, pero la cuenta nueva queda con el cliente elegido (un tiquete no guarda cliente); sql/21h
-import { api, rpc, funcion, ErrorApi } from './api.js';
+//   fx_comprobante_saldos(p_id)             -> qué se le puede hacer a una factura o tiquete (admite_anulacion, motivo_no_anulacion), sus notas (notas[], con viva) y sus saldos (CONTRATO_NC_SQL.md, sección 2.1)
+//   fx_venta_reemplazo_info(p_venta)        -> si una cuenta abierta es la copia de un comprobante anulado ({reemplaza, original_id, consecutivo, estado_nota_credito})
+//   fx_cobrar_reemplazo(p_venta, p_original, p_pagos, ...) -> cobra esa copia y deja guardada la referencia 07 «Sustituye al comprobante»
+import { api, rpc, ErrorApi } from './api.js';
 import { hoyCR, sumaDias, numeroDoc, traducirHacienda } from './util.js';
 
-// Lista del rango. Cada fila trae además nc_id, nc_consecutivo, nc_estado (si fue anulada) y ref_consecutivo, ref_tipo (si es una nota de crédito).
+// Lista del rango. Cada fila trae además nc_id, nc_consecutivo, nc_estado (solo si fue anulada por completo: una devolución parcial deja nc_id en null) y ref_consecutivo, ref_tipo (si es una nota).
+// Llaves nuevas por fila (CONTRATO_NC_SQL.md, 8.2), que valen null o 0 en un documento normal: codigo_referencia, codigo_nombre, nombre_simple (el rótulo en palabras simples), reemplaza_a,
+// reemplaza_consecutivo, tarifas (texto como «IVA 13%, IVA 2%» o «Exento»), parciales_n y parciales_total (devoluciones y correcciones), debitos_n y debitos_total (notas de débito por monto).
 export async function documentos(soc, desde, hasta) {
   try {
     return (await rpc('fx_documentos', { p_soc: soc, p_desde: desde, p_hasta: hasta })) || [];
@@ -29,13 +34,63 @@ export async function documentos(soc, desde, hasta) {
   }
 }
 
-// Nota de crédito vigente de un comprobante, o null
+// Nota de crédito vigente de un comprobante (la más reciente que no fue rechazada, sea del código que sea), o null
 export const ncDe = (id) => rpc('fx_comprobante_nc', { p_id: id });
+
+/* ---------- Saldos y notas de una factura o un tiquete (fx_comprobante_saldos) ---------- */
+// Responde, con el texto ya en español, si se puede anular completo (admite_anulacion, motivo_no_anulacion), y trae las notas que ya tiene (notas[], con viva = true
+// también para una nota que quedó en error) y cuánto lleva devuelto o cobrado de más. Si la función no existe todavía, tarda o falla, saldosDe devuelve null y cada pantalla
+// se comporta como antes: no poder preguntar nunca bloquea una anulación; la base igual la rechaza con su propio mensaje si no corresponde.
+const ESPERA_SALDOS_MS = 8000;
+export async function saldosDe(id) {
+  if (!id) return null;
+  let reloj;
+  try {
+    const s = await Promise.race([rpc('fx_comprobante_saldos', { p_id: id }), new Promise((_, no) => { reloj = setTimeout(() => no(new Error('tardó')), ESPERA_SALDOS_MS); })]);
+    return s && typeof s === 'object' && !Array.isArray(s) ? s : null;
+  } catch { return null; } finally { clearTimeout(reloj); }
+}
+// ¿Se puede anular completo? { sabe, permite, motivo }. Sin la llave admite_anulacion (la base todavía no la manda) no se sabe: la pantalla deja intentar, como antes.
+export function permiteAnular(s) {
+  if (!s || typeof s.admite_anulacion !== 'boolean') return { sabe: false, permite: true, motivo: '' };
+  return { sabe: true, permite: s.admite_anulacion, motivo: s.admite_anulacion ? '' : String(s.motivo_no_anulacion || '').trim() || 'Este documento no se puede anular completo.' };
+}
+// Una anulación total es una nota de crédito viva con código 01 (o 13); una nota de crédito sin código guardado se lee como 01 (CONTRATO_NC_SQL.md, sección 1)
+export const esAnulacionTotal = (n) => !!n && n.tipo_doc === '03' && n.viva !== false && n.estado !== 'rechazado' && ['01', '13'].includes(String(n.codigo_referencia || '01'));
+// La nota de anulación total vigente que traen los saldos, o null
+export function anulacionDeSaldos(s) {
+  if (!s || !Array.isArray(s.notas)) return null;
+  return s.notas.filter(esAnulacionTotal).sort((a, b) => new Date(b.fecha_emision) - new Date(a.fecha_emision))[0] || null;
+}
+// Las demás notas vivas del documento: devoluciones y correcciones de crédito (03) y notas de débito (02)
+export const otrasNotas = (s) => (s && Array.isArray(s.notas) ? s.notas.filter((n) => n.viva !== false && n.estado !== 'rechazado' && !esAnulacionTotal(n)) : []);
+// La anulación total de un comprobante: { saldos, nc }. Con saldos, nc es solo una anulación total (una devolución parcial NO es una anulación); sin saldos se usa fx_comprobante_nc, como antes.
+// Si ni siquiera eso se puede leer, lanza el error (quien llama decide qué decir).
+export async function anulacionDe(id) {
+  const saldos = await saldosDe(id);
+  if (saldos && Array.isArray(saldos.notas)) return { saldos, nc: anulacionDeSaldos(saldos) };
+  return { saldos: null, nc: await ncDe(id) };
+}
+
+/* ---------- Reemplazo: «Anular y hacer de nuevo» ---------- */
+// Pregunta si la cuenta abierta es la copia de un comprobante anulado. { ok: true, reemplaza: false } o
+// { ok: true, reemplaza: true, original_id, consecutivo, estado_nota_credito } (pendiente, enviado, aceptado o error). { ok: false } si no se pudo saber (la función no existe o no hubo conexión).
+export async function reemplazoInfo(ventaId) {
+  try {
+    const r = await rpc('fx_venta_reemplazo_info', { p_venta: ventaId });
+    if (!r || typeof r !== 'object') return { ok: false };
+    return r.reemplaza === true && r.original_id ? { ok: true, reemplaza: true, original_id: r.original_id, consecutivo: r.consecutivo || '', estado_nota_credito: r.estado_nota_credito || '' } : { ok: true, reemplaza: false };
+  } catch { return { ok: false }; }
+}
+// Cobra la copia como reemplazo del original: igual que fx_cobrar, y guarda en la misma operación la referencia 07 y el motivo «Reemplaza el comprobante N». Devuelve el comprobante nuevo.
+export const cobrarReemplazo = (ventaId, originalId, pagos, clienteId = null, terminal = 1, actividad = null) =>
+  rpc('fx_cobrar_reemplazo', { p_venta: ventaId, p_original: originalId, p_pagos: pagos, p_cliente: clienteId, p_terminal: terminal, p_actividad_receptor: actividad || null });
 
 // Correo al cliente: el interruptor ya no es una constante fija. Lo trae fx_contexto (llave correo_activo, que lee fact.config) y m_documentos.js lo mira con correoActivo(app).
 // Mientras la base diga que no, el botón «Reenviar al cliente por correo» queda apagado y lo explica.
 export const correoActivo = (app) => app?.ctx?.correo_activo === true;
-export const reenviarCorreo = (id) => funcion('facturador-correo', { id });
+// El reenvío vive en la base: fx_reenviar_correo(p_id) deja la orden y la base llama a facturador-envio con accion 'correo'. No existe una función «facturador-correo».
+export const reenviarCorreo = (id) => rpc('fx_reenviar_correo', { p_id: id });
 
 // Frase para mostrar cuando algo falla. Los errores que vienen de la base ya llegan en español y con qué hacer (api.js los filtra); solo un error del propio navegador
 // o de este código (TypeError, undefined...) no debe verse tal cual.
@@ -85,7 +140,7 @@ async function alertasDeReserva(soc) {
   const pendientes = docs.filter((d) => ['pendiente', 'enviado', 'error'].includes(d.estado) && ahora - new Date(d.fecha_emision).getTime() > MIN_PENDIENTE * 60000);
   const ultimos = [...rechazados, ...pendientes].sort((a, b) => new Date(b.fecha_emision) - new Date(a.fecha_emision)).slice(0, 5).map((d) => ({
     id: d.id, numero: numeroDoc(d.consecutivo), estado: d.estado,
-    mensaje: d.estado === 'rechazado' ? (traducirHacienda(d.mensaje).resumen || 'Hacienda no lo aceptó.') : 'Todavía no llegó a Hacienda. El sistema lo intentará de nuevo solo.',
+    mensaje: d.estado === 'rechazado' ? (traducirHacienda(d.mensaje).resumen || 'Hacienda no lo aceptó.') : (d.estado === 'error' ? 'No se pudo enviar a Hacienda. No se reenvía solo: abra «Anular y reimprimir» y toque «Reenviar a Hacienda».' : 'Todavía no llegó a Hacienda. El sistema lo intentará de nuevo solo.'),
   }));
   return { rechazados: rechazados.length, pendientes: pendientes.length, recepcion_por_responder: null, recepcion_vencen_pronto: null, ultimos, desde, fuente: 'reserva' };
 }

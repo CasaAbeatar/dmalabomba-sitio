@@ -141,7 +141,7 @@ export function crearZonaEfectivo({ turnoId = null, alAbrirCaja, conPie = true, 
   /* --- Sin turno --- */
   const avisoSinTurno = h('div.efz-sin',
     h('p.efz-sin-txt', 'Abra la caja para registrar efectivo'),
-    h('button.btn.primario.grande.efz-abrir', { type: 'button', onclick: () => alAbrirCaja?.() }, 'Abrir la caja'));
+    h('button.btn.primario.grande.efz-abrir', { type: 'button', onclick: () => alAbrirCaja?.() }, 'Escribir el efectivo de apertura'));
 
   const sitioTarjeta = h('div.efz-sitio');
   const el = h('section.efz' + (sinTurno ? '.sin-turno' : '') + (enFlujo ? '.efz-flujo' : ''), { 'aria-label': 'Efectivo de la caja: entradas y salidas de dinero' },
@@ -398,7 +398,7 @@ export function crearZonaEfectivo({ turnoId = null, alAbrirCaja, conPie = true, 
       } catch (e) {
         if (!abierto) return;
         cuerpo.replaceChildren(h('div.error-caja', { role: 'alert' }, conPunto(textoError(e, 'No se pudieron leer los movimientos. Revise la conexión e intente de nuevo.'))),
-          h('button.btn.primario', { type: 'button', onclick: () => { cuerpo.replaceChildren(esqueleto(2, 'Cargando los movimientos…')); cargar(); } }, 'Intentar de nuevo'));
+          h('button.btn.primario', { type: 'button', 'data-reintentar': '1', onclick: () => { cuerpo.replaceChildren(esqueleto(2, 'Cargando los movimientos…')); cargar(); } }, 'Intentar de nuevo'));
       }
     }
     function pintarLista(l) {

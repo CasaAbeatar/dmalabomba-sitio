@@ -427,6 +427,8 @@
 .exito-pagos .ex-fila{display:flex;justify-content:space-between;align-items:baseline;gap:1rem;padding:.3rem 0}
 .exito-pagos .ex-fila b{font-variant-numeric:tabular-nums}
 .exito-pagos .ex-fila.recibido{border-top:1px dashed var(--linea2);margin-top:.15rem;padding-top:.5rem}
+.cobro-reemplazo{border:1px solid var(--linea);border-radius:12px;padding:.7rem 1rem;background:var(--ambar-suave);display:flex;flex-direction:column;gap:.25rem}
+.cobro-reemplazo .rep-nc.mal{color:var(--rojo-osc);font-weight:600}
 .cobro-imp{border:1px solid var(--linea);border-radius:12px;padding:.7rem 1rem;background:#fffdf9;display:flex;gap:.8rem;justify-content:space-between;align-items:center;flex-wrap:wrap}
 .cobro-imp-txt{flex:1 1 240px;min-width:0}
 .avisos-caja:empty{display:none}
@@ -474,3 +476,7 @@
 .aviso-tarifa.lista small{color:#1f6b46}
 .aviso-tarifa.suave{flex-direction:row;align-items:center;justify-content:space-between;flex-wrap:wrap;border:1px dashed var(--borde-ambar,#a87400)}
 .cobro-tarifa .aviso-tarifa{background:var(--ambar-suave)}
+
+/* Encabezado de «Turnos anteriores»: el título y, a la derecha, el botón «Descargar» (en celular baja debajo del título) */
+.hist-cab{display:flex;align-items:center;justify-content:space-between;gap:.6rem 1rem;flex-wrap:wrap}
+.hist-cab h2{margin:0}

@@ -5,6 +5,7 @@ import { errorActividad, limpiarActividad } from './ui_cedula.js';
 import { selectorCliente } from './ui_cliente.js';
 import { apiM } from './api_mantenimiento.js';
 import { esTransitorio } from './api.js';
+import { reemplazoInfo, cobrarReemplazo } from './api_documentos.js';
 import { TARIFAS_IVA, tarifaDeLinea, desgloseIva, tarifaHabitual } from './iva.js';
 import { infoActividad, textoActividad } from './actividades.js';
 import { ordenarMenu } from './orden_menu.js';
@@ -326,13 +327,18 @@ export default {
 
     /* ---------- Sin turno: abrir caja ---------- */
     async function pintarSinTurno() {
-      // Mismo formulario que «Apertura y cierre de caja»: atajos de un toque, lectura «Abrirá la caja con ₡X» y sin abrir en ₡0 por descuido.
-      // La sugerencia es lo contado al cerrar el último turno; solo se escribe si la persona la toca.
+      // Mismo formulario que «Apertura y cierre de caja»: el monto se escribe, se lee «Abrirá la caja con ₡X» y no se abre en ₡0 por descuido.
+      // El dato del último cierre (lo contado) viene del servidor para esta terminal; solo informa, nunca se escribe solo.
       let sugerido = null;
       try {
-        const t = ((await api.turnos(socId, 5)) || []).find((x) => x.cerrado_en && x.contado_efectivo != null);
-        if (t) sugerido = { monto: Number(t.contado_efectivo), cuando: t.cerrado_en };
-      } catch { /* la sugerencia es opcional */ }
+        const s = await api.turnoSugerencia(socId, app.terminal);
+        if (s && s.origen === 'contado' && s.ultimo_cierre?.cerrado_en && s.sugerido != null) sugerido = { monto: Number(s.sugerido), cuando: s.ultimo_cierre.cerrado_en };
+      } catch {
+        try {
+          const t = ((await api.turnos(socId, 5)) || []).find((x) => x.cerrado_en && x.contado_efectivo != null);
+          if (t) sugerido = { monto: Number(t.contado_efectivo), cuando: t.cerrado_en };
+        } catch { /* el dato es opcional */ }
+      }
       if (!vivo) return;
       const form = crearFormularioApertura({ api, socId, terminal: app.terminal, local: nombreLocal(app.soc), sugerido,
         alAbrir: async (res) => {
@@ -1143,6 +1149,27 @@ export default {
       const listaPagos = h('div.col');
       const resumen = h('div.cobro-resumen');
       const errEl = h('div.error-caja', { hidden: true, role: 'alert' });
+      // Si esta cuenta es la copia de un comprobante que se anuló («Anular y hacer de nuevo»), el cobro se hace como reemplazo y queda la referencia al comprobante anterior (código 07).
+      // La base dice si lo es (fx_venta_reemplazo_info); si no se puede saber, se cobra como siempre.
+      let reemplazo = null; // { original_id, consecutivo, estado_nota_credito }
+      const avisoRep = h('div.cobro-reemplazo', { hidden: true, role: 'status' });
+      const numeroDe = (c) => String(c || '').slice(-10).replace(/^0+(?=\d)/, '');
+      function pintarReemplazo() {
+        if (!reemplazo) { avisoRep.hidden = true; avisoRep.replaceChildren(); return; }
+        const num0 = numeroDe(reemplazo.consecutivo);
+        const est = reemplazo.estado_nota_credito;
+        const nota = est === 'aceptado' ? 'La nota de crédito que anuló el comprobante anterior ya fue aceptada por Hacienda.'
+          : est === 'error' ? 'La nota de crédito que anuló el comprobante anterior no se pudo enviar a Hacienda. Esta venta se puede cobrar igual; conviene revisar esa nota en «Anular y reimprimir».'
+            : est === 'enviado' || est === 'pendiente' ? 'La nota de crédito que anuló el comprobante anterior todavía está en camino a Hacienda. Esta venta se puede cobrar igual.' : '';
+        avisoRep.replaceChildren(
+          h('strong', num0 ? `Esta venta reemplaza al comprobante N.° ${num0}` : 'Esta venta reemplaza a un comprobante anulado'),
+          h('div.tenue-linea', 'Al cobrarla, el comprobante nuevo quedará con la referencia al anterior («Sustituye comprobante electrónico»).'),
+          nota ? h('div.tenue-linea.rep-nc' + (est === 'error' ? '.mal' : ''), nota) : null);
+        avisoRep.hidden = false;
+      }
+      const reemplazoListo = Promise.race([reemplazoInfo(ventaId), new Promise((ok) => setTimeout(() => ok({ ok: false }), 5000))])
+        .then((r) => { if (r && r.ok && r.reemplaza) { reemplazo = r; if (!terminado) pintarReemplazo(); } return r || { ok: false }; })
+        .catch(() => ({ ok: false }));
       const btnRevisar = h('button.btn', { type: 'button', hidden: true }, 'Revisar si se cobró');
       // Impresión: se usan los ajustes de este aparato (botón «Impresora»); aquí solo se muestran y se pueden abrir para cambiarlos
       const resImp = h('div.cobro-imp');
@@ -1166,6 +1193,7 @@ export default {
       btnCobrar.addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.repeat) e.preventDefault(); });
       const vistaPago = h('div.cobro',
         h('div.cobro-total', h('div.et', 'Total a cobrar (IVA incluido)'), montoTotal),
+        avisoRep,
         resumen,
         listaPagos,
         h('div.cobro-doc', h('div', h('div', docTxt), h('div', cliTxt)), h('div.fila', btnElegir, btnQuitarCli)),
@@ -1383,7 +1411,11 @@ export default {
         const aplicados = r.aplicados.map((p) => (p.medio === 'efectivo' ? { medio: p.medio, monto: p.monto, referencia: p.referencia, recibido: p.recibido } : { medio: p.medio, monto: p.monto, referencia: p.referencia }));
         let comp = null;
         try {
-          comp = await api.cobrar(ventaId, aplicados, cliente ? cliente.id : null, app.terminal, cliente ? actividadFactura : null);
+          // Si la base dice que es la copia de un comprobante anulado, se cobra como reemplazo; si no se pudo saber (o no lo es), como siempre
+          const rep = (await reemplazoListo).reemplaza ? reemplazo : null;
+          comp = rep
+            ? await cobrarReemplazo(ventaId, rep.original_id, aplicados, cliente ? cliente.id : null, app.terminal, cliente ? actividadFactura : null)
+            : await api.cobrar(ventaId, aplicados, cliente ? cliente.id : null, app.terminal, cliente ? actividadFactura : null);
         } catch (e) {
           const v = await verificarCobro();
           if (v.estado === 'cobrado') {

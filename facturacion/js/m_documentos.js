@@ -1,12 +1,14 @@
 // Anular y reimprimir: una sola ventana con los documentos de Hoy, Este mes, Mes anterior o Cualquier fecha, buscador por número, cliente, cédula, estado o monto,
 // y en cada fila los botones «Reimprimir» y «Anular». La lista se pinta por tandas («Mostrar más»): la búsqueda y los filtros actúan sobre todo lo cargado. Tocar la fila abre el detalle (estado en Hacienda, «Ya lo atendí», archivos, reenvíos).
 // La anulación con nota de crédito es la de m_anular.js; la impresión es la de imprimir.js.
-import { h, money, modal, toast, descargar, hoyCR, sumaDias, fechaHora, horaCorta, debounce, num, r2, nombrePropio, traducirHacienda, campoBusqueda, TIPOS_SERVICIO, MEDIOS, TIPOS_ID } from './util.js';
-import { documentos, ncDe, correoActivo, reenviarCorreo, alertaAtender, hacerVentaDeNuevo, mensajeAmable } from './api_documentos.js';
-import { anularDocumento, cambiarCliente, textoCodigoNota, codigoDeNota, sustituyeSoportado, TEXTO_07 } from './m_anular.js';
+import { h, money, modal, toast, descargar, hoyCR, sumaDias, fechaHora, horaCorta, debounce, num, r2, nombrePropio, nombreLocal, traducirHacienda, campoBusqueda, TIPOS_SERVICIO, MEDIOS, TIPOS_ID } from './util.js';
+import { documentos, anulacionDe, permiteAnular, otrasNotas, correoActivo, reenviarCorreo, alertaAtender, hacerVentaDeNuevo, mensajeAmable } from './api_documentos.js';
+import { anularDocumento, cambiarCliente, textoCodigoNota, codigoDeNota, sustituyeSoportado, listaNotas, TEXTO_07 } from './m_anular.js';
 import { selectorCliente } from './ui_cliente.js';
 import { sumarDocumentos, frasesDeLista, puenteConTurno, docsDelTurno } from './cuadre_turno.js';
 import { imprimirComprobante, reimprimirComprobante, formatoDireccion, formatoCedula, formatoTelefono, numeroCorto, NOMBRES_DOCUMENTO } from './imprimir.js';
+import { crearDescarga, nombrePeriodo } from './descargas.js';
+import { textoRango } from './periodo.js';
 
 if (!document.querySelector('link[data-fx-documentos]')) document.head.append(h('link', { rel: 'stylesheet', href: new URL('../css/documentos.css', import.meta.url).href, 'data-fx-documentos': '1' }));
 
@@ -35,8 +37,10 @@ export const primerDiaMes = (ymd) => ymd.slice(0, 8) + '01';
 // Último día del mes anterior y primer día del mes anterior (sirve en enero y en años bisiestos: Date.UTC con día 0 es el último día del mes anterior)
 export const mesAnterior = (ymd) => { const y = Number(ymd.slice(0, 4)), m = Number(ymd.slice(5, 7)); return [new Date(Date.UTC(y, m - 2, 1)).toISOString().slice(0, 10), new Date(Date.UTC(y, m - 1, 0)).toISOString().slice(0, 10)]; };
 const CLASE_ESTADO = { pendiente: 'espera', enviado: 'espera', aceptado: 'ok', rechazado: 'mal', error: 'mal' };
-const NOMBRE_TIPO = { ...NOMBRES_DOCUMENTO, '01': 'Factura', '03': 'Nota de crédito', '04': 'Tiquete' }; // nombres cortos para la lista
+const NOMBRE_TIPO = { ...NOMBRES_DOCUMENTO, '01': 'Factura', '02': 'Nota de débito', '03': 'Nota de crédito', '04': 'Tiquete' }; // nombres cortos para la lista
 const esVenta = (d) => d.tipo_doc === '01' || d.tipo_doc === '04';
+const MAX_DOCUMENTOS = 1000; // fx_documentos devuelve a lo sumo 1 000 documentos por consulta (los más antiguos del rango)
+const paraArchivo = (t, max = 40) => String(t || '').replace(/[^\p{L}\p{N} .,&'()-]/gu, ' ').replace(/\s+/g, ' ').trim().slice(0, max).trim();
 const mediosTxt = (m) => (m ? m.split(', ').map((x) => MEDIOS[x] || x).join(' y ') : '');
 const signo = (d) => (d.tipo_doc === '03' ? -1 : 1);
 /* ------------------------------------------------------------------ módulo */
@@ -45,7 +49,7 @@ export default {
   id: 'anular',
   titulo: 'Anular y reimprimir',
   async mount(root, app) {
-    const est = { rango: 'hoy', desde: hoyCR(), hasta: hoyCR(), q: '', filtro: 'todos', lista: [], cargando: false, error: null, turnoEstado: null, firma: null, pagina: 1 };
+    const est = { rango: 'hoy', desde: hoyCR(), hasta: hoyCR(), q: '', filtro: 'todos', tarifa: '', lista: [], cargando: false, error: null, turnoEstado: null, firma: null, pagina: 1 };
     let nCarga = 0; // cada carga lleva su número: si llega tarde la respuesta de una anterior (por ejemplo «Este mes» y enseguida «Hoy»), se descarta
     // Con la caja abierta, «Hoy» es el turno: si el turno abrió en un día anterior (cruzó la medianoche), «Hoy» arranca en la hora de apertura,
     // y el cuadre con «Apertura y cierre de caja» sigue saliendo cuando el rango es «Hoy».
@@ -94,7 +98,7 @@ export default {
     const zonaFiltros = h('div.doc-filtros');
     const zonaLista = h('div.doc-lista');
     const zonaCabeza = h('div.doc-lista-cab');                       // «N documentos» y, a la derecha, el hueco de las descargas
-    const zonaDescargas = h('div#doc-descargas.doc-descargas');       // HUECO: aquí se agregan los botones de descarga (Excel, CSV, PDF, XML). Vacío no se ve.
+    const zonaDescargas = h('div#doc-descargas.doc-descargas');       // aquí van los botones de descarga (Excel, CSV, PDF; los XML se agregan cuando exista su entrega)
     const zonaPaginas = h('div.doc-paginas');
 
     root.append(h('div.doc-mod',
@@ -159,6 +163,10 @@ export default {
     };
     // Las tarifas de IVA de las líneas solo se buscan si fx_documentos las trae (campo «tarifas»); si no, no se inventa nada
     const tarifasTxt = (d) => (d.tarifas == null ? '' : [].concat(d.tarifas).map((t) => (Number.isFinite(Number(t)) && String(t).trim() !== '' ? `iva ${t} ${t}%` : `iva ${t}`)).join(' '));
+    // Las tarifas de un documento (fx_documentos.tarifas: «IVA 13%, IVA 2%» o «Exento») como una lista, para el filtro «Tarifa de IVA»
+    const listaTarifas = (d) => (d.tarifas == null ? [] : [].concat(d.tarifas).flatMap((t) => String(t).split(',')).map((t) => t.trim()).filter(Boolean));
+    const conDevolucion = (d) => Number(d.parciales_n) > 0;
+    const conDebito = (d) => Number(d.debitos_n) > 0;
     let consulta = ''; // la búsqueda normalizada, una sola vez por pintura
     let ultimosVisibles = [];
     const visiblesAhora = () => ultimosVisibles;
@@ -176,7 +184,8 @@ export default {
       let texto = cacheTexto.get(d);
       if (texto === undefined) {
         texto = norm([NOMBRE_TIPO[d.tipo_doc], NOMBRES_DOCUMENTO[d.tipo_doc], d.cliente || 'consumidor final', d.cliente_identificacion, d.venta_numero, d.referencia, d.consecutivo, numeroCorto(d.consecutivo), mediosTxt(d.medios), d.ref_consecutivo, d.nc_consecutivo,
-          'contado', d.estado, ETQ_ESTADO[d.estado], d.nc_id ? 'anulado' : '', tarifasTxt(d)].join(' '));
+          'contado', d.estado, ETQ_ESTADO[d.estado], d.nc_id ? 'anulado' : '', tarifasTxt(d), d.nombre_simple, d.codigo_nombre, d.reemplaza_consecutivo, numeroCorto(d.reemplaza_consecutivo),
+          Number(d.parciales_n) > 0 ? 'con devolucion devuelto' : '', Number(d.debitos_n) > 0 ? 'con nota de debito' : ''].join(' '));
         cacheTexto.set(d, texto);
       }
       if (texto.includes(consulta)) return true;
@@ -225,12 +234,26 @@ export default {
       if (est.filtro === 'pendientes' && !pend.length) est.filtro = 'todos';
       if (est.filtro === 'aceptados' && !nAcept) est.filtro = 'todos';
       if (est.filtro === 'rechazados' && !nRech) est.filtro = 'todos';
+      // Documentos con devoluciones o correcciones de crédito, y con notas de débito (llaves nuevas de fx_documentos: parciales_n y debitos_n)
+      const nDev = est.lista.reduce((a, d) => a + (conDevolucion(d) ? 1 : 0), 0), nDeb = est.lista.reduce((a, d) => a + (conDebito(d) ? 1 : 0), 0);
+      if (est.filtro === 'devoluciones' && !nDev) est.filtro = 'todos';
+      if (est.filtro === 'debitos' && !nDeb) est.filtro = 'todos';
+      // Tarifas de IVA que hay en la lista: el filtro solo sale si hay más de una (si todo es IVA 13 %, filtrar no sirve de nada)
+      const porTarifa = new Map();
+      for (const d of est.lista) for (const t of listaTarifas(d)) porTarifa.set(t, (porTarifa.get(t) || 0) + 1);
+      if (est.tarifa && !porTarifa.has(est.tarifa)) est.tarifa = '';
+      const selTarifa = porTarifa.size > 1 ? h('select.campo', { 'aria-label': 'Tarifa de IVA', onchange: (e) => { est.tarifa = e.target.value; est.pagina = 1; pintar(); } },
+        h('option', { value: '' }, 'Todas las tarifas'), [...porTarifa].sort((a, b) => a[0].localeCompare(b[0], 'es', { numeric: true })).map(([t, n]) => h('option', { value: t }, `${t} (${n})`))) : null;
+      if (selTarifa) selTarifa.value = est.tarifa;
       zonaFiltros.replaceChildren(...[['todos', `Todos (${est.lista.length})`], problemas.length ? ['problemas', `Con problemas (${problemas.length})`] : null, pend.length ? ['pendientes', `Esperando a Hacienda (${pend.length})`] : null,
-        nAcept ? ['aceptados', `Aceptados (${nAcept})`] : null, nRech ? ['rechazados', `Rechazados (${nRech})`] : null]
-        .filter(Boolean).map(([k, t]) => h('button.btn' + (k === 'problemas' ? '.alerta' : ''), { type: 'button', 'aria-pressed': String(est.filtro === k), onclick: () => { est.filtro = k; est.pagina = 1; pintar(); } }, t)));
+        nAcept ? ['aceptados', `Aceptados (${nAcept})`] : null, nRech ? ['rechazados', `Rechazados (${nRech})`] : null,
+        nDev ? ['devoluciones', `Con devolución (${nDev})`] : null, nDeb ? ['debitos', `Con nota de débito (${nDeb})`] : null]
+        .filter(Boolean).map(([k, t]) => h('button.btn' + (k === 'problemas' ? '.alerta' : ''), { type: 'button', 'aria-pressed': String(est.filtro === k), onclick: () => { est.filtro = k; est.pagina = 1; pintar(); } }, t)),
+        ...(selTarifa ? [h('label.doc-tarifa', h('span', 'Tarifa de IVA'), selTarifa)] : []));
       consulta = norm(est.q.trim());
-      const pasa = { todos: () => true, problemas: esProblema, pendientes: esPendiente, aceptados: (d) => d.estado === 'aceptado', rechazados: (d) => d.estado === 'rechazado' }[est.filtro] || (() => true);
-      const visibles = est.lista.filter((d) => pasa(d) && coincide(d)); // la búsqueda y los filtros actúan sobre TODO el rango cargado
+      const pasa = { todos: () => true, problemas: esProblema, pendientes: esPendiente, aceptados: (d) => d.estado === 'aceptado', rechazados: (d) => d.estado === 'rechazado', devoluciones: conDevolucion, debitos: conDebito }[est.filtro] || (() => true);
+      const pasaTarifa = (d) => !est.tarifa || listaTarifas(d).includes(est.tarifa);
+      const visibles = est.lista.filter((d) => pasa(d) && pasaTarifa(d) && coincide(d)); // la búsqueda y los filtros actúan sobre TODO el rango cargado
       ultimosVisibles = visibles;
       pintarLista(visibles);
     }
@@ -240,8 +263,11 @@ export default {
       const una = est.desde === est.hasta;
       zonaResumen.replaceChildren(h('div.doc-resumen',
         h('div.doc-neto', h('span.doc-etq', est.rango === 'hoy' ? (turnoDeAyer() ? 'Total de este turno' : 'Total de hoy') : (est.rango === 'mes' || est.rango === 'anterior') ? 'Total del mes' : una ? 'Total del día' : 'Total de las fechas elegidas'), h('b.doc-gran', money(s.neto))),
-        h('span.doc-det-res', `${s.nVentas} ${s.nVentas === 1 ? 'venta' : 'ventas'}`, s.nNC ? `, ${s.nNC} ${s.nNC === 1 ? 'anulación' : 'anulaciones'}` : '', ` · de los cuales ${money(s.iva / 100)} son IVA`)));
+        h('span.doc-det-res', `${s.nVentas} ${s.nVentas === 1 ? 'venta' : 'ventas'}`, s.nAnul ? `, ${s.nAnul} ${s.nAnul === 1 ? 'anulación' : 'anulaciones'}` : '',
+          s.nDev ? `, ${s.nDev} ${s.nDev === 1 ? 'devolución o corrección' : 'devoluciones o correcciones'}` : '', s.nND ? `, ${s.nND} ${s.nND === 1 ? 'nota de débito' : 'notas de débito'}` : '', ` · de los cuales ${money(s.iva / 100)} son IVA`)));
       pintarCuadre(s);
+      // El servidor entrega a lo sumo 1 000 documentos por consulta: si se llegó al tope, el total de arriba no es el de todo el rango, y hay que decirlo
+      if (est.lista.length >= MAX_DOCUMENTOS) zonaCuadre.prepend(h('div.doc-cuadre-caja', h('p.doc-cuadre-frase.alerta', { role: 'note' }, `Estas fechas tienen más de ${num(MAX_DOCUMENTOS)} documentos y aquí se ven solo los primeros ${num(MAX_DOCUMENTOS)} (los más antiguos). El total de arriba es de esos. Para ver los demás, elija un rango de fechas más corto.`)));
     }
 
     // Qué no suma y qué sí suma este total, y cómo cuadra con «Apertura y cierre de caja» (mismas frases y montos que en esa pantalla)
@@ -311,6 +337,70 @@ export default {
       pintarPaginas(paginas);
     }
 
+    // Lo que se descarga: los documentos que se ven ahora (mismas fechas, estado y búsqueda; todas las páginas, no solo la que se ve), del más antiguo al más reciente.
+    // Los datos son los de la pantalla: no se pide nada nuevo al servidor. Los documentos que Hacienda rechazó se muestran en su fila pero no suman.
+    function opcionesDocumentos() {
+      const filas = [...visiblesAhora()].sort((a, b) => new Date(a.fecha_emision) - new Date(b.fecha_emision));
+      const soc = app.soc, q = est.q.trim();
+      const filtroTxt = ({ problemas: 'solo los que tienen problemas', pendientes: 'solo los que esperan a Hacienda', aceptados: 'solo los aceptados por Hacienda', rechazados: 'solo los rechazados por Hacienda', devoluciones: 'solo los que tienen devolución', debitos: 'solo los que tienen nota de débito' }[est.filtro] || '') + (est.tarifa ? (est.filtro !== 'todos' ? ' · ' : '') + 'tarifa ' + est.tarifa : '');
+      const filtroCorto = ({ problemas: 'con problemas', pendientes: 'esperando a Hacienda', aceptados: 'aceptados', rechazados: 'rechazados', devoluciones: 'con devolución', debitos: 'con nota de débito' }[est.filtro] || '') + (est.tarifa ? ((est.filtro !== 'todos' ? ' ' : '') + 'tarifa ' + paraArchivo(est.tarifa, 20)).trimEnd() : '');
+      const tipoDe = (d) => NOMBRE_TIPO[d.tipo_doc] || 'Comprobante';
+      const r2c = (n) => Math.round((Number(n) || 0) * 100) / 100;
+      const notas = [
+        'Ordenado del documento más antiguo al más reciente.',
+        'Las notas de crédito (anulaciones, devoluciones y correcciones de monto) van con signo negativo y restan. Las notas de débito suman. Los documentos que Hacienda no aceptó se muestran, pero no suman: en «Suma al total» valen cero.',
+      ];
+      if (est.rango === 'hoy' && turnoDeAyer()) notas.push('«Hoy» empieza cuando se abrió el turno, el ' + diaCortoTxt(ymdDe(turnoDeAyer().abierto_en)) + ' a las ' + horaCorta(turnoDeAyer().abierto_en) + '.');
+      if (est.lista.length >= MAX_DOCUMENTOS) notas.push(`Estas fechas tienen más de ${num(MAX_DOCUMENTOS)} documentos y el sistema entrega solo los primeros ${num(MAX_DOCUMENTOS)} (los más antiguos). Este archivo no trae los demás: para tenerlos todos, descargue un rango de fechas más corto.`);
+      return {
+        nombre: `Facturas emitidas ${nombrePeriodo(est.desde, est.hasta)}${filtroCorto ? ' ' + filtroCorto : ''}${paraArchivo(q, 30) ? ' búsqueda ' + paraArchivo(q, 30) : ''}`,
+        empresa: nombreLocal(soc), cedula: soc?.cedula || '',
+        titulo: 'Facturas, tiquetes y notas de crédito emitidos',
+        subtitulo: 'Emitidos ' + textoRango(est.desde, est.hasta) + (filtroTxt ? ' · ' + filtroTxt : '') + (q ? ` · búsqueda: «${q}»` : ''),
+        cifras: 'netas', cifrasNota: 'Montos en colones con IVA incluido; las notas de crédito restan, las notas de débito suman y lo que Hacienda rechazó no suma',
+        columnas: [
+          { clave: 'fecha', titulo: 'Fecha y hora de emisión', tipo: 'fechahora' },
+          { clave: 'tipo', titulo: 'Tipo de documento', tipo: 'texto' },
+          { clave: 'num', titulo: 'Número', tipo: 'texto' },
+          { clave: 'cliente', titulo: 'Cliente', tipo: 'texto' },
+          { clave: 'ced', titulo: 'Cédula del cliente', tipo: 'texto', enPdf: false },
+          { clave: 'medio', titulo: 'Medio de pago', tipo: 'texto', enPdf: false },
+          { clave: 'total', titulo: 'Total del documento (₡)', tipo: 'moneda' },
+          { clave: 'iva', titulo: 'IVA del documento (₡)', tipo: 'moneda', enPdf: false },
+          { clave: 'estado', titulo: 'Estado con Hacienda', tipo: 'texto' },
+          { clave: 'nota', titulo: 'Clase de nota', tipo: 'texto', enPdf: false },
+          { clave: 'obs', titulo: 'Anulación, devolución o referencia', tipo: 'texto' },
+          { clave: 'suma', titulo: 'Suma al total (₡)', tipo: 'moneda' },
+          { clave: 'sumaIva', titulo: 'IVA que suma (₡)', tipo: 'moneda', enPdf: false },
+          { clave: 'tarifas', titulo: 'Tarifas de IVA', tipo: 'texto', enPdf: false },
+          { clave: 'detalle', titulo: 'Qué dijo Hacienda', tipo: 'texto', enPdf: false },
+          { clave: 'ambiente', titulo: 'Ambiente', tipo: 'texto', enPdf: false },
+          { clave: 'cons', titulo: 'Consecutivo (20 dígitos)', tipo: 'texto', enPdf: false },
+          { clave: 'clave', titulo: 'Clave numérica (50 dígitos)', tipo: 'texto', enPdf: false }],
+        filas: filas.map((d) => {
+          const sg = signo(d), nc = d.tipo_doc === '03', anulado = !!d.nc_id, cuenta = d.estado !== 'rechazado';
+          const dev = Number(d.parciales_n) || 0, deb = Number(d.debitos_n) || 0;
+          const obs = [anulado ? `Anulado por la nota de crédito N.° ${numeroCorto(d.nc_consecutivo)}` : '',
+            (nc || d.tipo_doc === '02') && d.ref_consecutivo ? `Referencia a ${(NOMBRE_TIPO[d.ref_tipo] || 'documento').toLowerCase()} N.° ${numeroCorto(d.ref_consecutivo)}` : '',
+            d.reemplaza_a ? (d.reemplaza_consecutivo ? `Sustituye al documento N.° ${numeroCorto(d.reemplaza_consecutivo)}` : 'Sustituye a un documento anulado') : '',
+            dev ? `Con devolución: ${money(d.parciales_total)} en ${dev} ${dev === 1 ? 'nota' : 'notas'}` : '', deb ? `Con nota de débito: ${money(d.debitos_total)} en ${deb} ${deb === 1 ? 'nota' : 'notas'}` : ''].filter(Boolean).join('. ');
+          const detalle = d.estado === 'rechazado' || d.estado === 'error' ? (traducirHacienda(d.mensaje).resumen || '') : '';
+          return {
+            fecha: d.fecha_emision, tipo: tipoDe(d), num: numeroCorto(d.consecutivo), cliente: d.cliente ? nombrePropio(d.cliente) : 'Consumidor final',
+            ced: d.cliente_identificacion || '', medio: mediosTxt(d.medios) || (nc ? '' : 'Sin pago'),
+            total: r2c(sg * (Number(d.total) || 0)), iva: r2c(sg * (Number(d.total_iva) || 0)),
+            estado: ETQ_ESTADO[d.estado] || d.estado, nota: d.nombre_simple || '', obs,
+            suma: cuenta ? r2c(sg * (Number(d.total) || 0)) : 0, sumaIva: cuenta ? r2c(sg * (Number(d.total_iva) || 0)) : 0,
+            tarifas: d.tarifas == null ? '' : String(d.tarifas), detalle, ambiente: d.ambiente === 'produccion' ? 'Producción' : 'Pruebas',
+            cons: d.consecutivo || '', clave: d.clave || '',
+          };
+        }),
+        totales: { suma: 'suma', sumaIva: 'suma' },
+        notas,
+      };
+    }
+    zonaDescargas.append(crearDescarga(() => opcionesDocumentos(), { texto: 'Descargar', etiqueta: 'Descargar la lista de documentos que se ve ahora' }));
+
     // Paginación: Primera, Anterior, «Página 3 de 120», Siguiente, Última y un campo para ir a una página. Todos los controles miden 48 px o más.
     function irAPagina(n) {
       const total = Math.max(1, Math.ceil(visiblesAhora().length / porPagina()));
@@ -333,10 +423,12 @@ export default {
 
     // Una fila = la zona que se toca para ver el detalle + los botones «Reimprimir» y «Anular» (o «Ver y atender» si Hacienda no lo aceptó)
     function fila(d) {
-      const anulado = !!d.nc_id;
-      const nc = d.tipo_doc === '03';
+      const anulado = !!d.nc_id; // nc_id es solo la anulación total: una devolución parcial deja nc_id vacío y se lee en parciales_n
+      const nc = d.tipo_doc === '03', nd = d.tipo_doc === '02';
       const tipo = NOMBRE_TIPO[d.tipo_doc] || 'Comprobante';
       const quien = `${tipo.toLowerCase()} número ${numeroCorto(d.consecutivo)} por ${money(d.total)}`;
+      const nDev = Number(d.parciales_n) || 0, nDeb = Number(d.debitos_n) || 0;
+      const notasTxt = (n) => (n > 1 ? ` (${n} notas)` : '');
       const reimprimir = h('button.btn.doc-bot', { type: 'button', 'aria-label': 'Reimprimir ' + quien, onclick: () => reimprimirComprobante(d.id) }, 'Reimprimir');
       let segundo = null;
       if (esVenta(d)) {
@@ -347,15 +439,20 @@ export default {
       // Todavía no hay nada que anular (Hacienda no ha aceptado el documento): se dice a la vista, no solo al pasar el mouse
       const espera = esVenta(d) && !anulado && (d.estado === 'pendiente' || d.estado === 'enviado')
         ? h('div.doc-espera', { role: 'note' }, h('b', 'Esperando a Hacienda. '), 'Todavía no se puede anular: podrá hacerlo cuando Hacienda lo acepte. Toque la fila para ver qué significa y qué hacer.') : null;
-      return h('div.doc-fila' + (nc ? '.nc' : '') + (anulado ? '.anulada' : ''),
-        h('button.doc-ver', { type: 'button', onclick: () => abrirDetalle(d.id), 'aria-label': `${tipo} número ${numeroCorto(d.consecutivo)}, ${money(d.total)}. Toque para ver el detalle` },
+      return h('div.doc-fila' + (nc ? '.nc' : '') + (nd ? '.nd' : '') + (anulado ? '.anulada' : ''),
+        h('button.doc-ver', { type: 'button', onclick: () => abrirDetalle(d.id), 'aria-label': `${tipo} número ${numeroCorto(d.consecutivo)}, ${money(d.total)}${nDev ? ', con devolución' : ''}${nDeb ? ', con nota de débito' : ''}. Toque para ver el detalle` },
           h('span.c-hora', horaCorta(d.fecha_emision)),
           h('span.c-doc', h('span.nw', h('b', tipo), ' N.° ' + numeroCorto(d.consecutivo)),
+            d.nombre_simple ? h('span.sub.rotulo', d.nombre_simple) : null, // Devolución, Corrección de monto, Anulación total, Anulación y sustitución, Deja sin efecto la anulación
             anulado ? h('span.sub.anul', `Anulado por la nota de crédito N.° ${numeroCorto(d.nc_consecutivo)}`) : null,
-            nc && d.ref_consecutivo ? h('span.sub', `Referencia a ${(NOMBRE_TIPO[d.ref_tipo] || 'documento').toLowerCase()} N.° ${numeroCorto(d.ref_consecutivo)}`) : null),
+            (nc || nd) && d.ref_consecutivo ? h('span.sub', `Referencia a ${(NOMBRE_TIPO[d.ref_tipo] || 'documento').toLowerCase()} N.° ${numeroCorto(d.ref_consecutivo)}`) : null,
+            d.reemplaza_a ? h('span.sub', d.reemplaza_consecutivo ? `Sustituye al documento N.° ${numeroCorto(d.reemplaza_consecutivo)}` : 'Sustituye a un documento anulado') : null,
+            nDev ? h('span.sub.nota', `Devuelto: −${money(d.parciales_total)}${notasTxt(nDev)}`) : null,
+            nDeb ? h('span.sub.nota', `Nota de débito: +${money(d.debitos_total)}${notasTxt(nDeb)}`) : null),
           h('span.c-cli', d.cliente ? nombrePropio(d.cliente) : h('span.tenue', 'Consumidor final'), h('span.sub', mediosTxt(d.medios) || (nc ? '' : 'Sin pago'))),
           h('span.c-total.der', (nc ? '−' : '') + money(d.total)),
-          h('span.c-est', h('span.chip.' + (CLASE_ESTADO[d.estado] || ''), ETQ_ESTADO[d.estado] || d.estado), anulado ? h('span.chip.anulado', 'Anulado') : null, d.atendida && d.estado === 'rechazado' ? h('span.chip.anulado', 'Atendido') : null)),
+          h('span.c-est', h('span.chip.' + (CLASE_ESTADO[d.estado] || ''), ETQ_ESTADO[d.estado] || d.estado), anulado ? h('span.chip.anulado', 'Anulado') : null, d.atendida && d.estado === 'rechazado' ? h('span.chip.anulado', 'Atendido') : null,
+            nDev ? h('span.chip.nota', 'Con devolución') : null, nDeb ? h('span.chip.nota', 'Con nota de débito') : null)),
         h('div.doc-fbot' + (segundo ? '' : '.una'), reimprimir, segundo),
         espera);
     }
@@ -380,17 +477,18 @@ export default {
         const mi = ++nCarga;
         try {
           let falloNC = false;
-          const [c, nc] = await Promise.all([app.api.comprobante(id), ncDe(id).catch(() => { falloNC = true; return null; })]);
+          // anulacionDe trae la anulación total (nc: solo la nota de crédito de código 01; una devolución parcial NO anula) y los saldos con las demás notas del documento
+          const [c, { nc, saldos }] = await Promise.all([app.api.comprobante(id), anulacionDe(id).catch(() => { falloNC = true; return { nc: null, saldos: null }; })]);
           if (!vivo || mi !== nCarga) return;
           estadoVisto = c?.estado || null;
           if (silencioso && falloNC) return; // si no se pudo ver la nota de crédito, mejor no cambiar lo que ya se ve
-          const nueva = JSON.stringify([c, nc]);
+          const nueva = JSON.stringify([c, nc, saldos]);
           if (silencioso && nueva === firma) return; // nada cambió: no se toca la pantalla (ni el cursor, ni el teclado del celular)
           firma = nueva;
           // Si había un campo con el cursor adentro, después de pintar vuelve a quedar ahí, en el mismo lugar
           const foco = caja.contains(document.activeElement) && /^(INPUT|TEXTAREA)$/.test(document.activeElement.tagName)
             ? { etiqueta: document.activeElement.getAttribute('aria-label'), ini: document.activeElement.selectionStart, fin: document.activeElement.selectionEnd } : null;
-          caja.replaceChildren(vistaDetalle(c, nc, { repintar: pintarDet, cerrar: m.cerrar, borrador }));
+          caja.replaceChildren(vistaDetalle(c, nc, { repintar: pintarDet, cerrar: m.cerrar, borrador, saldos }));
           if (foco?.etiqueta) {
             const campo = [...caja.querySelectorAll('input,textarea')].find((x) => x.getAttribute('aria-label') === foco.etiqueta);
             if (campo) { campo.focus({ preventScroll: true }); try { campo.setSelectionRange(foco.ini, foco.fin); } catch { /* campo sin cursor */ } }
@@ -403,7 +501,10 @@ export default {
 
     function vistaDetalle(c, nc, ctx) {
       const tipoNombre = NOMBRES_DOCUMENTO[c.tipo_doc] || 'Documento';
-      const esNC = c.tipo_doc === '03';
+      const esNC = c.tipo_doc === '03', esND = c.tipo_doc === '02';
+      const cod = String(c.codigo_referencia || (esNC ? '01' : '')); // una nota de crédito sin código guardado se lee como 01 (anulación total)
+      const nombreNota = c.nombre_simple || ''; // Anulación total, Devolución, Corrección de monto, Deja sin efecto la anulación...
+      const tipoNotaTxt = nombreNota && cod ? `código ${cod} «${nombreNota}»` : textoCodigoNota(cod);
       const hechoHace = (Date.now() - new Date(c.fecha_emision).getTime()) / 60000;
       const cliente = c.cliente_snapshot && (c.cliente_snapshot.nombre || c.cliente_snapshot.identificacion) ? c.cliente_snapshot : null;
       const lineas = (c.lineas_snapshot || []).slice().sort((a, b) => (a.orden || 0) - (b.orden || 0));
@@ -414,17 +515,37 @@ export default {
       if (nc) raiz.append(h('div.doc-aviso.anulado', h('div', h('b', 'Anulado por la nota de crédito N.° ' + numeroCorto(nc.consecutivo) + '. '), 'Este documento ya no vale.' + (nc.estado !== 'aceptado' ? ' La nota de crédito todavía está esperando la respuesta de Hacienda.' : ''),
           textoCodigoNota(codigoDeNota(nc)) ? h('div.doc-motivo', 'Tipo de nota: ' + textoCodigoNota(codigoDeNota(nc)) + '.' + (sustituyeSoportado(c) ? ' Si se hace la venta de nuevo, la venta nueva llevará el ' + TEXTO_07 + '.' : '')) : null),
         h('button.btn', { type: 'button', onclick: () => { ctx.cerrar(); abrirDetalle(nc.id); } }, 'Ver la nota de crédito')));
-      if (esNC && c.original) raiz.append(h('div.doc-aviso.ref', h('div', h('b', `Referencia a ${(NOMBRES_DOCUMENTO[c.original.tipo_doc] || 'documento').toLowerCase()} N.° ${numeroCorto(c.original.consecutivo)}. `), 'Esta nota de crédito anula ese documento.', textoCodigoNota(codigoDeNota(c)) ? h('div.doc-motivo', 'Tipo de nota: ' + textoCodigoNota(codigoDeNota(c)) + '.') : null, c.motivo ? h('div.doc-motivo', 'Motivo: ' + c.motivo) : null),
-        h('button.btn', { type: 'button', onclick: () => { ctx.cerrar(); abrirDetalle(c.original.id); } }, 'Ver el documento original')));
+      if ((esNC || esND) && c.original) {
+        const sobreNota = c.original.tipo_doc === '03'; // una nota de débito que deja sin efecto la anulación se apoya en la nota de crédito
+        const queHace = esNC
+          ? ({ '01': 'Esta nota de crédito anula ese documento.', '06': 'Esta nota de crédito devuelve una parte de ese documento.', '02': 'Esta nota de crédito corrige el monto de ese documento: se había cobrado de más.' }[cod] || 'Esta nota de crédito corrige ese documento.')
+          : sobreNota ? 'Esta nota de débito deja sin efecto la anulación: el documento vuelve a valer.' : 'Esta nota de débito corrige el monto de ese documento: se había cobrado de menos.';
+        raiz.append(h('div.doc-aviso.ref', h('div', h('b', `Referencia a ${(NOMBRES_DOCUMENTO[c.original.tipo_doc] || 'documento').toLowerCase()} N.° ${numeroCorto(c.original.consecutivo)}. `), queHace, tipoNotaTxt ? h('div.doc-motivo', 'Tipo de nota: ' + tipoNotaTxt + '.') : null, c.motivo ? h('div.doc-motivo', 'Motivo: ' + c.motivo) : null),
+          h('button.btn', { type: 'button', onclick: () => { ctx.cerrar(); abrirDetalle(c.original.id); } }, sobreNota ? 'Ver la nota de crédito' : 'Ver el documento original')));
+      }
 
-      // Una venta nueva que sustituye a un documento anulado (solo cuando la base guarda la referencia, código 07)
-      if (c.reemplaza_a) raiz.append(h('div.doc-aviso.ref', h('div', h('b', 'Este documento sustituye a uno que se anuló. '), 'Tipo de referencia: ' + TEXTO_07 + '.'),
-        h('button.btn', { type: 'button', onclick: () => { ctx.cerrar(); abrirDetalle(c.reemplaza_a); } }, 'Ver el documento anulado')));
+      // Una venta nueva que sustituye a un documento anulado (solo cuando la base guarda la referencia, código 07). fx_comprobante trae el número del documento que sustituye en `reemplaza`.
+      if (c.reemplaza_a) {
+        const r = c.reemplaza;
+        raiz.append(h('div.doc-aviso.ref', h('div', h('b', r?.consecutivo ? `Este documento sustituye al ${(NOMBRES_DOCUMENTO[r.tipo_doc] || 'documento').toLowerCase()} N.° ${numeroCorto(r.consecutivo)}, que se anuló. ` : 'Este documento sustituye a uno que se anuló. '), 'Tipo de referencia: ' + TEXTO_07 + '.'),
+          h('button.btn', { type: 'button', onclick: () => { ctx.cerrar(); abrirDetalle(c.reemplaza_a); } }, 'Ver el documento anulado')));
+      }
+
+      // Devoluciones, correcciones de monto y notas de débito de una factura o un tiquete (la anulación total se dice arriba, aparte). Una nota que quedó en error también cuenta y se ve con su estado.
+      const otras = esVenta(c) ? otrasNotas(ctx.saldos) : [];
+      if (otras.length) {
+        const sd = ctx.saldos, dinero = (k) => (sd && Number.isFinite(Number(sd[k])) ? Number(sd[k]) : 0);
+        const partes = [dinero('total_acreditado') > 0 ? `Lleva devuelto ${money(dinero('total_acreditado'))}.` : '', dinero('total_debitado') > 0 ? `Lleva ${money(dinero('total_debitado'))} en notas de débito.` : '',
+          // «Lo que queda» solo se dice cuando no hay notas de débito: con ellas el valor real del documento sube y la base no manda ese número ya calculado
+          sd && sd.saldo_total != null && !(dinero('total_debitado') > 0) ? `Valor que queda del documento: ${money(dinero('saldo_total'))}.` : ''].filter(Boolean).join(' ');
+        raiz.append(h('div.doc-aviso.ref.notas', h('div', h('b', otras.length === 1 ? 'Este documento tiene una nota de ajuste. ' : `Este documento tiene ${otras.length} notas de ajuste. `), partes, listaNotas(sd))));
+      }
 
       // Encabezado y estado
       raiz.append(h('div.doc-encab',
         h('div', h('div.doc-etq', tipoNombre), h('div.doc-num', 'N.° ' + numeroCorto(c.consecutivo)), h('div.tenue', fechaHora(c.fecha_emision))),
-        h('div.doc-chips', h('span.chip.' + (CLASE_ESTADO[c.estado] || ''), ETQ_ESTADO[c.estado] || c.estado), c.ambiente !== 'produccion' ? h('span.chip.espera', 'Prueba, sin validez') : null, nc ? h('span.chip.anulado', 'Anulado') : null)));
+        h('div.doc-chips', h('span.chip.' + (CLASE_ESTADO[c.estado] || ''), ETQ_ESTADO[c.estado] || c.estado), c.ambiente !== 'produccion' ? h('span.chip.espera', 'Prueba, sin validez') : null, nc ? h('span.chip.anulado', 'Anulado') : null,
+          (esNC || esND) && nombreNota ? h('span.chip.nota', nombreNota) : null, otras.length ? h('span.chip.nota', otras.some((n) => n.tipo_doc === '03') ? 'Con devolución' : 'Con nota de débito') : null)));
       raiz.append(textoEstado(c, !!nc));
 
       // Datos
@@ -452,12 +573,12 @@ export default {
           h('thead', h('tr', h('th', 'Cant.'), h('th', 'Descripción'), h('th.der', 'Precio con IVA'), h('th.der', 'Total'))),
           h('tbody', lineas.map((l) => h('tr', h('td.cifra', num(l.cantidad)), h('td', l.descripcion || '', l.nota ? h('div.tenue', l.nota) : null), h('td.der', money(l.precio_final)), h('td.der', money(l.total_linea)))))))));
       raiz.append(h('div.doc-totales',
-        h('div.doc-pagos', h('div.doc-etq', esNC ? 'Pagos del documento original' : 'Pagos'),
+        h('div.doc-pagos', h('div.doc-etq', esNC ? (cod === '01' ? 'Pagos del documento original' : 'Cómo se devuelve el dinero') : esND ? 'Cómo se paga la diferencia' : 'Pagos'),
           (c.pagos_snapshot || []).length ? c.pagos_snapshot.map((p) => h('div.doc-fila-t', h('span', (MEDIOS[p.medio] || p.medio) + (p.referencia ? ` (ref. ${p.referencia})` : '')), h('b', money(p.monto)))) : h('div.tenue', 'Sin pagos registrados')),
         h('div.doc-sumas',
           h('div.doc-fila-t', h('span', 'Subtotal sin IVA'), h('span', money(r2(total - iva)))),
           h('div.doc-fila-t', h('span', 'IVA'), h('span', money(iva))),
-          h('div.doc-fila-t.gran', h('span', esNC ? 'Total que se anula' : 'Total'), h('b', money(total))))));
+          h('div.doc-fila-t.gran', h('span', esNC ? (cod === '06' ? 'Total que se devuelve' : cod === '02' ? 'Total que se corrige' : 'Total que se anula') : esND ? 'Total de la nota de débito' : 'Total'), h('b', money(total))))));
 
       raiz.append(acciones(c, nc, ctx, hechoHace));
       return raiz;
@@ -472,7 +593,7 @@ export default {
         enviado: 'Ya se envió a Hacienda y se espera su respuesta. Esta ventana se actualiza sola.',
         aceptado: (anulado ? 'Hacienda lo aceptó, y después se anuló con una nota de crédito.' : 'Hacienda lo aceptó: el documento es válido.') + (c.ambiente !== 'produccion' ? ' Como estamos en modo de pruebas, no tiene validez tributaria.' : ''),
         rechazado: 'Hacienda no aceptó este documento, así que no es válido.',
-        error: 'Todavía no se pudo enviar a Hacienda (por ejemplo, por falta de internet). El sistema lo intentará de nuevo solo; también puede tocar «Reenviar a Hacienda».',
+        error: 'Todavía no se pudo enviar a Hacienda (por ejemplo, por falta de internet). No se reenvía solo: toque «Reenviar a Hacienda».',
       }[c.estado] || '';
       // Lo que dice Hacienda, en palabras simples. Si el documento fue aceptado, lo que trae es un aviso y no impide nada.
       const motivos = th.items.length
@@ -550,18 +671,22 @@ export default {
       const repintar = async () => { await ctx.repintar(true); await cargar(true); };
       const doc = { ...c, cliente: c.cliente_snapshot?.nombre || '' };
       if (nc) {
-        g.append(h('p.tenue', `Este documento ya fue anulado con la nota de crédito N.° ${numeroCorto(nc.consecutivo)}. No se puede anular dos veces.`),
+        g.append(...[h('p.tenue', `Este documento ya fue anulado con la nota de crédito N.° ${numeroCorto(nc.consecutivo)}. No se puede anular dos veces.`),
           c.venta_id ? h('div.doc-botones',
             accion({ texto: 'Hacer la venta de nuevo en Facturación', hint: 'Copia los productos a una cuenta nueva y abre Facturación.', onclick: async () => { ctx.cerrar(); await hacerVentaDeNuevo(app, c.venta_id, toast); } }),
-            accion({ texto: 'Hacer la venta de nuevo con otro cliente', hint: 'Primero elige al cliente; después abre Facturación.', onclick: async () => { selectorCliente(app, { titulo: 'Elegir el cliente de la venta nueva', alElegir: async (cl) => { ctx.cerrar(); await hacerVentaDeNuevo(app, c.venta_id, toast, cl?.id); } }); } })) : null);
+            accion({ texto: 'Hacer la venta de nuevo con otro cliente', hint: 'Primero elige al cliente; después abre Facturación.', onclick: async () => { selectorCliente(app, { titulo: 'Elegir el cliente de la venta nueva', alElegir: async (cl) => { ctx.cerrar(); await hacerVentaDeNuevo(app, c.venta_id, toast, cl?.id); } }); } })) : null].filter(Boolean));
         return g;
       }
       if (c.estado === 'aceptado') {
         const esTiquete = c.tipo_doc === '04';
-        g.append(h('p.tenue', 'Si la venta se hizo mal, se anula con una nota de crédito (código 01, anulación total). El documento original no se borra: queda guardado y enlazado a la nota.'),
+        // fx_comprobante_saldos dice si se puede anular completo (admite_anulacion). Si no se puede, se muestra su frase tal cual y los dos botones quedan apagados.
+        // Si no se pudo preguntar, los botones funcionan como siempre y es la base la que rechaza lo que no corresponde.
+        const permiso = permiteAnular(ctx.saldos), bloq = permiso.sabe && !permiso.permite;
+        g.append(...[h('p.tenue', 'Si la venta se hizo mal, se anula con una nota de crédito (código 01, anulación total). El documento original no se borra: queda guardado y enlazado a la nota.'),
+          bloq ? h('div.doc-espera-caja', { role: 'note' }, h('p', h('b', 'Este documento no se puede anular completo.')), h('p', permiso.motivo)) : null,
           h('div.doc-botones',
-            accion({ texto: esTiquete ? 'El cliente pide factura' : 'Corregir el cliente de la factura', hint: esTiquete ? 'Elige al cliente, anula el tiquete y deja la factura lista para cobrar.' : 'Elige al cliente correcto, anula y deja la venta lista para cobrar.', clase: 'primario', onclick: async () => { cambiarCliente(app, doc, { alTerminar: repintar }); } }),
-            accion({ texto: 'Anular con nota de crédito', clase: 'peligro', onclick: async () => { abrirAnular(doc, { alTerminar: repintar, alVerNC: (n) => { ctx.cerrar(); abrirDetalle(n.id); } }); } })));
+            accion({ texto: esTiquete ? 'El cliente pide factura' : 'Corregir el cliente de la factura', hint: bloq ? 'No se puede: lea el aviso de arriba' : esTiquete ? 'Elige al cliente, anula el tiquete y deja la factura lista para cobrar.' : 'Elige al cliente correcto, anula y deja la venta lista para cobrar.', clase: 'primario', disabled: bloq, onclick: async () => { cambiarCliente(app, doc, { alTerminar: repintar }); } }),
+            accion({ texto: 'Anular con nota de crédito', hint: bloq ? 'No se puede: lea el aviso de arriba' : null, clase: 'peligro', disabled: bloq, onclick: async () => { abrirAnular(doc, { alTerminar: repintar, alVerNC: (n) => { ctx.cerrar(); abrirDetalle(n.id); } }); } }))].filter(Boolean));
       } else if (c.estado === 'rechazado') {
         g.append(h('p.tenue', 'Hacienda rechazó este comprobante, por eso no vale y no se le hace nota de crédito. Toque «Hacer la venta de nuevo en Facturación» para sacar uno correcto de inmediato.' + (SUSTITUYE_RECHAZADO ? ' El nuevo indicará que sustituye a este.' : '')), bloqueAtender(c, ctx));
       } else {

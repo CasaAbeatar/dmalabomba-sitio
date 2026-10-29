@@ -10,7 +10,7 @@ export default {
   async mount(root, app) {
     const fin = await documentos.mount(root, app);
     root.querySelector('.doc-mod')?.prepend(h('p.doc-ayuda',
-      'Facturas y tiquetes emitidos. Busque por número, cliente, cédula, estado o monto, y vea si Hacienda lo aceptó o lo rechazó. Para anular o volver a imprimir, toque el documento.'));
+      'Facturas y tiquetes emitidos. Busque por número, cliente, cédula, estado o monto, y vea si Hacienda lo aceptó o lo rechazó. Los que tienen una devolución o una nota de débito salen marcados. Para anular o volver a imprimir, toque el documento.'));
     return fin;
   },
 };

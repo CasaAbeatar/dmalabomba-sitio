@@ -1,4 +1,4 @@
-// Cierre de caja: solo se cuenta el EFECTIVO. Debe haber en caja = fondo + ventas en efectivo + entradas de efectivo - salidas - devoluciones en efectivo por notas de crédito.
+// Cierre de caja: solo se cuenta el EFECTIVO. Debe haber en caja = fondo + ventas en efectivo + cobros en efectivo de notas de débito + entradas de efectivo - salidas - devoluciones en efectivo por notas de crédito.
 import { h, money, leerNumero, r2, toast, modal, fechaHora, fechaCorta, horaCorta, esqueleto, bloqueError, nombreLocal, conPistaDesliz, hoyCR, conPunto, TIPOS_SERVICIO, MEDIOS } from './util.js';
 import { esTransitorio } from './api.js';
 import { textoError } from './api_efectivo.js';
@@ -7,6 +7,7 @@ import { crearZonaEfectivo } from './ui_efectivo_rapido.js';
 import { crearFormularioApertura } from './ui_apertura.js';
 import { documentos } from './api_documentos.js';
 import { fraseParaTurno, docsDelTurno } from './cuadre_turno.js';
+import { crearDescarga, nombrePeriodo } from './descargas.js';
 
 const CSS_URL = new URL('../css/caja.css', import.meta.url).href;
 function cargarCss() {
@@ -25,7 +26,7 @@ const OTROS = ['tarjeta', 'sinpe', 'transferencia'];
 const TODOS = ['efectivo', 'tarjeta', 'sinpe', 'transferencia'];
 const cents = (n) => Math.round((Number(n) || 0) * 100);
 const numCuenta = (n) => '#' + String(n || '').split('-').pop();
-// fx_turno_cerrar rechaza el cierre con cuentas abiertas (error P0001, hint «cuentas_abiertas»). api.js todavía no guarda el hint: mientras tanto se lee el texto del servidor.
+// fx_turno_cerrar rechaza el cierre con cuentas abiertas (error P0001, hint «cuentas_abiertas»). api.js guarda el hint en el error; el texto queda solo de respaldo por si el servidor no lo manda.
 const rechazoPorCuentas = (e) => !!e && !esTransitorio(e) && (e.hint === 'cuentas_abiertas' || /cuentas? abiertas?/i.test(e.message || ''));
 
 // Fecha y hora que se pueden partir en dos renglones sin cortar los números (celular)
@@ -51,7 +52,10 @@ function datosResumen(est) {
   const totEnt = Number(est.total_entradas ?? 0);
   // Efectivo devuelto por notas de crédito durante el turno (fx_turno_estado.devoluciones_efectivo). Si el servidor todavía no lo manda, la fila no se muestra.
   const devoluciones = est.devoluciones_efectivo != null ? Number(est.devoluciones_efectivo) : null;
-  const esperado = r2(Number(est.esperado_efectivo ?? (fondo + efVentas + totEnt - totSal - (devoluciones || 0))));
+  // Efectivo que el cliente pagó en notas de débito del turno (cobros_nota_debito_efectivo; notas_debito_efectivo es el mismo número con otro nombre). El servidor ya lo suma en «debe haber»:
+  // aquí solo se muestra como una fila más para que la cuenta se pueda seguir, y nunca se suma otra vez.
+  const ndEfectivo = Math.max(0, Number(est.cobros_nota_debito_efectivo ?? est.notas_debito_efectivo ?? 0) || 0);
+  const esperado = r2(Number(est.esperado_efectivo ?? (fondo + efVentas + ndEfectivo + totEnt - totSal - (devoluciones || 0))));
   const contado = cerrado ? Number(est.contado_efectivo ?? t.contado_efectivo ?? 0) : null;
   const dif = cerrado ? r2(est.diferencia_efectivo != null ? Number(est.diferencia_efectivo) : contado - esperado) : null;
   return {
@@ -62,6 +66,10 @@ function datosResumen(est) {
     ventas: Number(est.ventas || 0), totalVentas: Number(est.total_ventas || 0),
     notasCredito: Number(est.notas_credito || 0), sinAceptar: Number(est.sin_aceptar || 0),
     anuladasN: Number(est.ventas_anuladas_n || 0), anuladasTotal: Number(est.ventas_anuladas_total || 0),
+    // Notas de débito y devoluciones parciales del turno (las anuladas de arriba cuentan solo anulaciones totales). total_ventas_netas ya las incluye.
+    ndEfectivo, ndN: Math.max(0, Math.floor(Number(est.notas_debito_n || 0))), ndTotal: Number(est.notas_debito_total || 0),
+    parcN: Math.max(0, Math.floor(Number(est.devoluciones_parciales_n || 0))), parcTotal: Number(est.devoluciones_parciales_total || 0),
+    totalNetas: est.total_ventas_netas != null && Number.isFinite(Number(est.total_ventas_netas)) ? Number(est.total_ventas_netas) : null,
     // Líneas cobradas con un precio distinto al del catálogo (fx_turno_estado.precios_cambiados). Solo es rastro: la cajera puede cambiar todo y nada se bloquea.
     preciosCambiados: Math.max(0, Math.floor(Number(est.precios_cambiados || 0))),
     // Ventas cobradas cuyo documento Hacienda no aceptó (fx_turno_estado.rechazadas_n y rechazadas_total). Siguen contadas en el total: la plata sí se cobró.
@@ -88,16 +96,31 @@ function textoRechazadas(d) {
 // «Productos cobrados con precio distinto del catálogo: 3» (discreto: es un dato para saber, no una alarma)
 const textoPreciosCambiados = (d) => 'Productos cobrados con precio distinto del catálogo: ' + d.preciosCambiados;
 
-// Filas de la cuenta: abrió + ventas + entradas - salidas - devoluciones = debe haber
+// Qué se le resta o se le suma al total vendido: ventas anuladas, devoluciones o correcciones parciales (notas de crédito) y notas de débito.
+// Con solo ventas anuladas el texto es el de siempre; si hay otros ajustes, los nombra y dice cuánto es lo vendido con todos ellos (total_ventas_netas, que calcula la base).
+function textoAjustes(d) {
+  if (d.anuladasN <= 0 && d.parcN <= 0 && d.ndN <= 0) return null;
+  if (d.parcN <= 0 && d.ndN <= 0) return h('p.tenue-linea', `De ese total, ${d.anuladasN} ${d.anuladasN === 1 ? 'venta se anuló' : 'ventas se anularon'} con nota de crédito (${money(d.anuladasTotal)}). Sin esas ventas anuladas, lo vendido es ${money(d.totalNetas ?? r2(d.totalVentas - d.anuladasTotal))}.`);
+  const partes = [];
+  if (d.anuladasN > 0) partes.push(`${d.anuladasN} ${d.anuladasN === 1 ? 'venta se anuló' : 'ventas se anularon'} con nota de crédito (resta ${money(d.anuladasTotal)})`);
+  if (d.parcN > 0) partes.push(`${d.parcN} ${d.parcN === 1 ? 'devolución o corrección' : 'devoluciones o correcciones'} con nota de crédito (resta ${money(d.parcTotal)})`);
+  if (d.ndN > 0) partes.push(`${d.ndN} ${d.ndN === 1 ? 'nota de débito' : 'notas de débito'} (suma ${money(d.ndTotal)})`);
+  const neto = d.totalNetas ?? r2(d.totalVentas - d.anuladasTotal - d.parcTotal + d.ndTotal);
+  return h('p.tenue-linea.ajustes-turno', `De ese total: ${partes.join('; ')}. Con esos ajustes, lo vendido es ${money(neto)}.`);
+}
+
+// Filas de la cuenta: abrió + ventas + cobros de notas de débito + entradas - salidas - devoluciones = debe haber
 function bloqueCalculo(d, { alAnularSalida, alAnularEntrada, extra } = {}) {
   return h('div.calc',
     h('div.calc-fila', h('span', h('span.op', ''), 'Efectivo con que abrió la caja'), h('span.v', money(d.fondo))),
     h('div.calc-fila', h('span', h('span.op', '+'), 'Ventas en efectivo'), h('span.v', money(d.efVentas))),
+    d.ndEfectivo > 0 ? h('div.calc-fila.cobros-nd', h('span', h('span.op', '+'), 'Cobros en efectivo de notas de débito', h('small.calc-nota', 'Dinero que los clientes pagaron en efectivo por notas de débito en este turno.')), h('span.v', money(d.ndEfectivo))) : null,
     d.totEnt > 0 || d.entradas.length ? h('div.calc-fila.entradas', h('span', h('span.op', '+'), 'Entradas de efectivo', h('small.calc-nota', 'Dinero que entró a la caja y no es una venta.')), h('span.v', money(d.totEnt))) : null,
     d.entradas.length ? h('div.calc-sub', listaSalidas(d.entradas, alAnularEntrada, 'entrada')) : null,
     h('div.calc-fila', h('span', h('span.op', '−'), 'Salidas de efectivo'), h('span.v', money(d.totSal))),
     d.salidas.length || alAnularSalida ? h('div.calc-sub', listaSalidas(d.salidas, alAnularSalida, 'salida')) : null,
-    d.devoluciones != null ? h('div.calc-fila', h('span', h('span.op', '−'), 'Efectivo de ventas anuladas con nota de crédito', d.devoluciones > 0 ? h('small.calc-nota', 'Efectivo de ventas anuladas con nota de crédito en este turno. Se resta porque ese dinero debe haber salido de la caja.') : null), h('span.v', money(d.devoluciones))) : null,
+    d.devoluciones != null ? h('div.calc-fila', h('span', h('span.op', '−'), d.parcN > 0 ? 'Efectivo devuelto con notas de crédito' : 'Efectivo de ventas anuladas con nota de crédito',
+      d.devoluciones > 0 ? h('small.calc-nota', d.parcN > 0 ? 'Efectivo de ventas anuladas y de devoluciones o correcciones con nota de crédito en este turno. Se resta porque ese dinero debe haber salido de la caja.' : 'Efectivo de ventas anuladas con nota de crédito en este turno. Se resta porque ese dinero debe haber salido de la caja.') : null), h('span.v', money(d.devoluciones))) : null,
     h('div.calc-fila.total', h('span', h('span.op', '='), 'Debe haber en caja'), h('span.v', money(d.esperado))),
     // Si lo que salió es más que lo que entró, la cifra sale negativa: se explica con palabras (y solo se ofrece anular donde se puede)
     cents(d.esperado) < 0 ? h('p.tenue-linea.calc-negativo', { role: 'note' }, alAnularSalida
@@ -114,7 +137,7 @@ function bloqueVentas(d, { alVer, nota } = {}) {
       d.porMedio.map((o) => h('div.dato', h('div.et', MEDIOS[o.medio]), h('div.val', money(o.monto)))),
       h('div.dato.total', h('div.et', 'Total vendido'), h('div.val', money(d.totalVentas)), h('div.det', d.ventas + (d.ventas === 1 ? ' venta' : ' ventas') + ', IVA incluido'))),
     d.rechazadasN > 0 ? h('div.aviso-rechazadas', { role: 'note' }, h('span', textoRechazadas(d)), alVer ? h('button.btn.chico', { type: 'button', onclick: alVer }, 'Ver esos documentos') : null) : null,
-    d.anuladasN > 0 ? h('p.tenue-linea', `De ese total, ${d.anuladasN} ${d.anuladasN === 1 ? 'venta se anuló' : 'ventas se anularon'} con nota de crédito (${money(d.anuladasTotal)}). Sin esas ventas anuladas, lo vendido es ${money(r2(d.totalVentas - d.anuladasTotal))}.`) : null,
+    textoAjustes(d),
     nota || null,
     d.preciosCambiados > 0 ? h('p.precios-cambiados', textoPreciosCambiados(d)) : null,
     h('p.tenue-linea', 'Solo el efectivo se cuenta a mano. Tarjeta, SINPE Móvil y transferencia los suma el sistema con cada cobro.'));
@@ -127,7 +150,8 @@ function nodoPantalla(d) {
     h('div.turno-datos',
       h('div.dato', h('div.et', 'Abrió'), h('div.val', fechaPartida(t.abierto_en)), h('div.det', t.abierto_por || '')),
       h('div.dato', h('div.et', 'Cerró'), h('div.val', t.cerrado_en ? fechaPartida(t.cerrado_en) : 'Sigue abierta'), h('div.det', t.cerrado_en ? (t.cerrado_por || '') + ' · duró ' + duracion(t.abierto_en, t.cerrado_en) : 'Lleva ' + duracion(t.abierto_en, new Date()))),
-      h('div.dato', h('div.et', 'Notas de crédito'), h('div.val', money(d.notasCredito)), h('div.det', 'Durante el turno'))),
+      h('div.dato', h('div.et', 'Notas de crédito'), h('div.val', money(d.notasCredito)), h('div.det', 'Durante el turno')),
+      d.ndN > 0 ? h('div.dato', h('div.et', 'Notas de débito'), h('div.val', money(d.ndTotal)), h('div.det', `${d.ndN} ${d.ndN === 1 ? 'nota' : 'notas'} en el turno`)) : null),
     bloqueVentas(d),
     h('div.tarjeta',
       h('h3', 'Efectivo en la caja'),
@@ -161,16 +185,19 @@ function nodoImpresion(d, soc) {
     fila('Ventas', String(d.ventas)),
     d.rechazadasN > 0 ? h('div.c.p', textoRechazadas(d)) : null,
     fila('Notas de crédito', money(d.notasCredito)),
+    d.ndN > 0 ? fila('Notas de débito', money(d.ndTotal)) : null,
+    d.parcN > 0 ? fila('Devoluciones y correcciones', money(d.parcTotal)) : null,
     d.preciosCambiados > 0 ? h('div.c.p', textoPreciosCambiados(d)) : null,
     h('hr'),
     h('div.c', h('b', 'EFECTIVO EN LA CAJA')),
     fila('Efectivo con que abrió', money(d.fondo)),
     fila('+ Ventas en efectivo', money(d.efVentas)),
+    d.ndEfectivo > 0 ? fila('+ Cobros de notas de débito en efectivo', money(d.ndEfectivo)) : null,
     d.totEnt > 0 ? fila('+ Entradas de efectivo', money(d.totEnt)) : null,
     d.entradas.map((e) => h('div.f.sal', h('span', '  ' + e.motivo), h('span', money(e.monto)))),
     fila('- Salidas de efectivo', money(d.totSal)),
     d.salidas.map((s) => h('div.f.sal', h('span', '  ' + s.motivo), h('span', money(s.monto)))),
-    d.devoluciones != null ? fila('- Ventas anuladas en efectivo', money(d.devoluciones)) : null,
+    d.devoluciones != null ? fila(d.parcN > 0 ? '- Efectivo devuelto con notas de crédito' : '- Ventas anuladas en efectivo', money(d.devoluciones)) : null,
     fila('= Debe haber en caja', money(d.esperado)),
     d.cerrado ? fila('Efectivo contado', money(d.contado)) : null,
     d.cerrado ? fila('Diferencia', textoDif(d.dif)) : null,
@@ -225,6 +252,7 @@ export default {
     let finalAviso = null; // frase que acompaña al resumen cuando la caja ya estaba cerrada
     let turnoVisto = null;
     let est = null, abiertas = [], historial = [];
+    let sugerencia = null; // fx_turno_sugerencia_apertura: lo contado al cerrar el último turno de ESTA terminal (null si no se pudo leer)
     let contadoTxt = '';
     let notas = '';
     let zona = null; // zona de efectivo (entradas y salidas), la misma que usa Facturación
@@ -242,12 +270,13 @@ export default {
       turnoVisto = app.turno?.id || null;
       soltarZona();
       contenedor.replaceChildren(esqueleto(4, 'Cargando el cierre de caja…'));
-      let e, ab, hist;
+      let e, ab, hist, sug;
       try {
-        [e, ab, hist] = await Promise.all([
+        [e, ab, hist, sug] = await Promise.all([
           turnoVisto ? api.turnoEstado(turnoVisto) : null,
           turnoVisto ? api.ventasAbiertas(socId) : [],
           api.turnos(socId, 30),
+          turnoVisto ? null : api.turnoSugerencia(socId, app.terminal).catch(() => null), // solo informa: si falla no se detiene la pantalla
         ]);
         if (mi !== nCarga) return;
       } catch (er) {
@@ -262,7 +291,7 @@ export default {
         if (!vivo || mi !== nCarga) return;
         turnoVisto = null; e = null; ab = [];
       }
-      est = e; abiertas = ab || []; historial = hist || [];
+      est = e; abiertas = ab || []; historial = hist || []; sugerencia = sug || null;
       pintar();
     }
 
@@ -308,11 +337,15 @@ export default {
 
     /* ---------- Sin turno: abrir la caja aquí mismo ---------- */
     function seccionSinTurno() {
-      // Lo que se contó al cerrar el último turno se ofrece como botón; nunca se escribe solo
+      // Lo que se contó al cerrar el último turno de esta terminal solo se muestra como dato; nunca se escribe solo.
+      // Viene del servidor (fx_turno_sugerencia_apertura); si no se pudo leer, se usa el historial ya cargado.
+      const uc = sugerencia?.ultimo_cierre;
+      const delServidor = sugerencia && sugerencia.origen === 'contado' && uc?.cerrado_en && sugerencia.sugerido != null
+        ? { monto: Number(sugerencia.sugerido), cuando: uc.cerrado_en } : null;
       const ultimo = historial.find((x) => x.cerrado_en && x.contado_efectivo != null);
       const form = crearFormularioApertura({
         api, socId, terminal: app.terminal, local: nombreLocal(soc),
-        sugerido: ultimo ? { monto: Number(ultimo.contado_efectivo), cuando: ultimo.cerrado_en } : null,
+        sugerido: sugerencia ? delServidor : (ultimo ? { monto: Number(ultimo.contado_efectivo), cuando: ultimo.cerrado_en } : null),
         alAbrir: async (res, monto) => {
           try { await app.refrescar(); } catch { toast('La caja se abrió, pero no se pudo actualizar la pantalla. Revise la conexión y toque «Abrir caja» otra vez: el sistema no abre otra.', 'error', 9000); return; }
           if (res && res.ya_abierto) toast('La caja ya estaba abierta (la abrió ' + (res.abierto_por || 'otra persona') + ') con ' + money(res.fondo_inicial ?? 0) + '. No se cambió el efectivo con que abrió.', 'ok', 9000);
@@ -402,6 +435,7 @@ export default {
         h('div.turno-datos',
           h('div.dato', h('div.et', 'Abrió'), h('div.val', fechaPartida(t.abierto_en)), h('div.det', (t.abierto_por || '') + ' · lleva ' + duracion(t.abierto_en, new Date()))),
           h('div.dato', h('div.et', 'Notas de crédito'), h('div.val', money(d.notasCredito)), h('div.det', 'Durante el turno')),
+          d.ndN > 0 ? h('div.dato', h('div.et', 'Notas de débito'), h('div.val', money(d.ndTotal)), h('div.det', `${d.ndN} ${d.ndN === 1 ? 'nota' : 'notas'} en el turno`)) : null,
           h('div.dato', h('div.et', 'Cuentas abiertas'), h('div.val', String(abiertas.length)), h('div.det', abiertas.length ? 'Sin cobrar' : 'Todo cobrado'))),
         d.sinAceptar ? h('div.aviso-abiertas', h('strong', d.sinAceptar + (d.sinAceptar === 1 ? ' comprobante todavía no aceptado por Hacienda' : ' comprobantes todavía no aceptados por Hacienda')), h('span', 'Esto no impide cerrar la caja. Quedan en «Anular y reimprimir».')) : null,
         avisoAbiertas,
@@ -452,6 +486,7 @@ export default {
       try { await app.refrescar(); } catch { /* la cabecera se actualiza sola luego */ }
       turnoVisto = null; est = null; abiertas = [];
       try { historial = (await api.turnos(socId, 30)) || []; } catch { /* queda el anterior */ }
+      try { sugerencia = await api.turnoSugerencia(socId, app.terminal); } catch { sugerencia = null; }
       pintar();
       window.scrollTo({ top: 0 });
       toast(aviso ? 'Esta caja ya estaba cerrada.' : 'Caja cerrada.');
@@ -583,9 +618,10 @@ export default {
     /* ---------- Historial ---------- */
     // Vendido por medio de un turno cerrado: tarjeta, SINPE y transferencia quedan guardadas al cerrar; el efectivo se deduce de esperado - fondo - entradas + salidas + devoluciones
     // (el «esperado» ya suma las entradas de efectivo, que no son ventas; los turnos de antes no traen entradas_total y cuentan como 0)
+    const efectivoVendido = (t, sinDato) => (sinDato ? null : r2(Number(t.esperado_efectivo) - Number(t.fondo_inicial) - Number(t.entradas_total || 0) + Number(t.salidas_total || 0) + Number(t.devoluciones_efectivo || 0)));
     function ventasFila(t, abierto, sinDato) {
       if (abierto) return [h('td.der', h('span.tenue', 'Al cerrar')), h('td.der', ''), h('td.der', ''), h('td.der', ''), h('td.der', '')];
-      const ef = sinDato ? null : r2(Number(t.esperado_efectivo) - Number(t.fondo_inicial) - Number(t.entradas_total || 0) + Number(t.salidas_total || 0) + Number(t.devoluciones_efectivo || 0));
+      const ef = efectivoVendido(t, sinDato);
       const tj = Number(t.contado_tarjeta || 0), sp = Number(t.contado_sinpe || 0), tr = Number(t.contado_transferencia || 0);
       const sin = () => h('span.tenue', 'Sin dato');
       return [h('td.der', ef == null ? sin() : money(ef)), h('td.der', money(tj)), h('td.der', money(sp)), h('td.der', money(tr)), h('td.der', ef == null ? sin() : h('b', money(r2(ef + tj + sp + tr))))];
@@ -610,11 +646,63 @@ export default {
           h('td', h('button.btn.chico', { type: 'button', 'aria-label': 'Ver resumen del turno del ' + fechaHora(t.abierto_en), onclick: () => verDetalle(t) }, 'Ver resumen')));
       });
       return h('section.col',
-        h('h2', 'Turnos anteriores'),
+        h('div.hist-cab', h('h2', 'Turnos anteriores'), crearDescarga(() => opcionesHistorial(), { texto: 'Descargar', etiqueta: 'Descargar la lista de turnos anteriores' })),
         h('p.tenue', 'Del más reciente al más antiguo. Las horas son de Costa Rica. Lo vendido por cada medio lo registra el sistema; solo el efectivo se cuenta a mano.'),
         conPistaDesliz(h('div.tabla-caja', h('table.tabla.hist',
           h('thead', h('tr', ['Abrió', 'Cerró', 'Abierta por', 'Fondo', 'Debe haber en caja', 'Contado', 'Diferencia', 'Vendido en efectivo', 'Vendido con tarjeta', 'Vendido por SINPE', 'Vendido por transferencia', 'Total vendido', ''].map((x, i) => h('th' + (i === 3 || i === 4 || i === 5 || i >= 7 && i <= 11 ? '.der' : ''), x)))),
           h('tbody', filas))), 'Deslice la tabla hacia los lados para ver más columnas: lo vendido por cada medio, el total y el botón «Ver resumen».'));
+    }
+
+    // Lo que se descarga: los mismos turnos de la tabla (los últimos 30), del más antiguo al más reciente, con las mismas cifras que se ven.
+    function opcionesHistorial() {
+      const lista = historial.slice().sort((a, b) => new Date(a.abierto_en) - new Date(b.abierto_en));
+      if (!lista.length) return { filas: [] };
+      const primero = lista[0], ultimo = lista[lista.length - 1];
+      const ymd = (iso) => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Costa_Rica' }).format(new Date(iso));
+      const desde = ymd(primero.abierto_en), hasta = ymd(ultimo.cerrado_en || ultimo.abierto_en);
+      return {
+        nombre: 'Turnos de caja ' + nombrePeriodo(desde, hasta),
+        empresa: nombreLocal(soc), cedula: soc?.cedula || '',
+        titulo: 'Turnos de caja',
+        subtitulo: `Los últimos ${lista.length} ${lista.length === 1 ? 'turno' : 'turnos'}, del ${fechaHora(primero.abierto_en)} al ${fechaHora(ultimo.cerrado_en || ultimo.abierto_en)}`,
+        cifras: 'brutas', cifrasNota: 'Montos en colones. Es lo cobrado en la caja, sin descontar lo que Hacienda no aceptó; solo el efectivo se cuenta a mano',
+        columnas: [
+          { clave: 'abrio', titulo: 'Abrió (fecha y hora)', tipo: 'fechahora' },
+          { clave: 'cerro', titulo: 'Cerró (fecha y hora)', tipo: 'fechahora' },
+          { clave: 'dura', titulo: 'Duración', tipo: 'texto', enPdf: false },
+          { clave: 'por', titulo: 'Abierta por', tipo: 'texto' },
+          { clave: 'cerroPor', titulo: 'Cerrada por', tipo: 'texto', enPdf: false },
+          { clave: 'fondo', titulo: 'Fondo (₡)', tipo: 'moneda', enPdf: false },
+          { clave: 'entradas', titulo: 'Entradas de efectivo (₡)', tipo: 'moneda', enPdf: false },
+          { clave: 'salidas', titulo: 'Salidas de efectivo (₡)', tipo: 'moneda', enPdf: false },
+          { clave: 'devol', titulo: 'Devoluciones en efectivo (₡)', tipo: 'moneda', enPdf: false },
+          { clave: 'esperado', titulo: 'Debe haber en caja (₡)', tipo: 'moneda' },
+          { clave: 'contado', titulo: 'Contado (₡)', tipo: 'moneda' },
+          { clave: 'dif', titulo: 'Diferencia (₡)', tipo: 'moneda' },
+          { clave: 'ef', titulo: 'Vendido en efectivo (₡)', tipo: 'moneda' },
+          { clave: 'tj', titulo: 'Vendido con tarjeta (₡)', tipo: 'moneda' },
+          { clave: 'sp', titulo: 'Vendido por SINPE (₡)', tipo: 'moneda' },
+          { clave: 'tr', titulo: 'Vendido por transferencia (₡)', tipo: 'moneda' },
+          { clave: 'total', titulo: 'Total vendido (₡)', tipo: 'moneda' },
+          { clave: 'estado', titulo: 'Estado', tipo: 'texto' },
+          { clave: 'notas', titulo: 'Notas del cierre', tipo: 'texto', enPdf: false }],
+        filas: lista.map((t) => {
+          const abierto = !t.cerrado_en, sinDato = !abierto && t.esperado_efectivo == null;
+          const dif = !abierto && !sinDato ? (t.diferencia_efectivo != null ? Number(t.diferencia_efectivo) : r2(Number(t.contado_efectivo) - Number(t.esperado_efectivo))) : null;
+          const ef = abierto ? null : efectivoVendido(t, sinDato);
+          const sinMedios = abierto || sinDato; // un turno viejo sin datos del cierre deja vacíos los medios, no en cero
+          const tj = sinMedios ? null : Number(t.contado_tarjeta || 0), sp = sinMedios ? null : Number(t.contado_sinpe || 0), tr = sinMedios ? null : Number(t.contado_transferencia || 0);
+          return {
+            abrio: t.abierto_en, cerro: t.cerrado_en || '', dura: abierto ? '' : duracion(t.abierto_en, t.cerrado_en), por: t.abierto_por || '', cerroPor: t.cerrado_por || '',
+            fondo: Number(t.fondo_inicial || 0), entradas: abierto ? '' : Number(t.entradas_total || 0), salidas: abierto ? '' : Number(t.salidas_total || 0), devol: abierto ? '' : Number(t.devoluciones_efectivo || 0),
+            esperado: abierto || sinDato ? '' : Number(t.esperado_efectivo), contado: abierto ? '' : (t.contado_efectivo == null ? '' : Number(t.contado_efectivo)), dif: dif == null ? '' : dif,
+            ef: ef == null ? '' : ef, tj: tj ?? '', sp: sp ?? '', tr: tr ?? '', total: ef == null ? '' : r2(ef + tj + sp + tr),
+            estado: abierto ? 'Abierta' : (t.discrepancia || (dif != null && cents(dif) !== 0) ? 'Cerrada con diferencia' : sinDato ? 'Cerrada, sin dato del efectivo' : 'Cerrada'), notas: t.notas || '',
+          };
+        }),
+        totales: { ef: 'suma', tj: 'suma', sp: 'suma', tr: 'suma', total: 'suma', dif: 'suma' },
+        notas: ['Ordenado del turno más antiguo al más reciente. Un turno abierto todavía no tiene cifras de cierre.', 'Una diferencia negativa es efectivo que faltó; positiva, que sobró.'],
+      };
     }
 
     async function verDetalle(t) {

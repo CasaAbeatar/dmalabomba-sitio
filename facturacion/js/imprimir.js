@@ -31,7 +31,7 @@
 
 import { api } from './api.js';
 import { tarifaDeLinea } from './iva.js';
-import { h, esc, money, num, r2, modal, toast, conBoton, fechaCorta, horaCorta, nombrePropio, TIPOS_ID, TIPOS_SERVICIO, MEDIOS } from './util.js';
+import { h, esc, money, num, r2, modal, toast, conBoton, textoDeError, fechaCorta, horaCorta, nombrePropio, TIPOS_ID, TIPOS_SERVICIO, MEDIOS } from './util.js';
 
 /* ------------------------------------------------------------------ constantes */
 
@@ -199,6 +199,22 @@ const UNIDAD_LLANA = { Unid: 'Unidad', Sp: 'Servicio', Spe: 'Servicio', Os: 'Ser
 const unidadDeLinea = (l) => { const u = String(l?.unidad ?? '').trim() || (l?.es_servicio ? 'Sp' : 'Unid'); return UNIDAD_LLANA[u] || u; };
 // Código de referencia de una nota o de un reemplazo, con la descripción oficial (Anexos v4.4, nota 9)
 const DESC_REF = { '01': 'Anula documento de referencia', '02': 'Corrige monto', '04': 'Referencia a otro documento', '06': 'Devolución de mercancía', '07': 'Sustituye comprobante electrónico' };
+// Qué dice el bloque de referencia de una nota de crédito o de débito. Lo que sale de la base manda: codigo_nombre (descripción oficial) y nombre_simple («Devolución», «Corrección de monto», «Anulación total»...).
+// Sin esas llaves queda como antes: una nota de crédito sin código se lee como anulación (código 01).
+function referenciaNota(m) {
+  const cod = m.codigoRef || '';
+  const anula = m.tipo === '03' && (!cod || cod === '01' || cod === '13');
+  const tipoNota = m.tipo === '02' ? 'Nota de débito' : 'Nota de crédito';
+  return {
+    anula, cod,
+    // Frase corta para el tiquete y frase de carta
+    tiquete: anula ? 'Anula el documento' : tipoNota + ' sobre el documento',
+    carta: anula ? 'Esta nota de crédito anula: ' : tipoNota + ' sobre el documento: ',
+    oficial: m.codigoNombre || DESC_REF[cod] || '',
+    simple: anula ? '' : (m.nombreSimple || ''), // en una anulación total el encabezado ya lo dice
+    sustituido: m.original?.codigo_referencia === '07' ? 'Ese documento había sustituido a otro que se anuló antes.' : '',
+  };
+}
 // Lo que se entregó y el vuelto de un pago en efectivo. Una nota de crédito nunca muestra Recibido ni Vuelto (no se recibe dinero).
 function pagoEfectivo(p) {
   const monto = Number(p.monto) || 0, rec = Number(p.recibido) || 0, vue = Number(p.vuelto) || 0;
@@ -237,7 +253,9 @@ export function modeloComprobante(c) {
     tipos: desgloseTipo(lineas),
     // Código de referencia (solo si la base ya lo devuelve; si no, la impresión queda como estaba). En una nota sin código guardado el único que se emite hoy es el 01.
     codigoRef: 'codigo_referencia' in c ? (c.codigo_referencia || (c.tipo_doc === '03' ? '01' : '')) : null,
-    reemplaza: c.reemplaza_a ? { id: c.reemplaza_a, ...(c.reemplazado || {}) } : null,
+    codigoNombre: c.codigo_nombre || '', nombreSimple: c.nombre_simple || '',
+    // Documento al que sustituye (código 07): la base ya trae el objeto `reemplaza` {id, tipo_doc, consecutivo, clave, fecha_emision}; si solo viene reemplaza_a, se usa el número buscado aparte (reemplazado)
+    reemplaza: c.reemplaza && typeof c.reemplaza === 'object' ? { ...c.reemplaza } : c.reemplaza_a ? { id: c.reemplaza_a, ...(c.reemplazado || {}) } : null,
   };
 }
 export function modeloPrefactura(r, soc) {
@@ -289,6 +307,7 @@ function estadoImpreso(m) {
 function nodoTiquete(m, { papel, logo, copia }) {
   const pre = m.clase === 'prefactura';
   const nc = m.tipo === '03';
+  const nota = nc || m.tipo === '02'; // las notas (de crédito y de débito) llevan la referencia al documento original
   const raiz = h('div.fxd.tq' + (papel === 58 ? '.p58' : ''));
   if (m.sandbox && !pre) raiz.append(marcaPrueba());
   if (logo) raiz.append(h('img.logo', { src: logo, alt: m.soc.comercial }));
@@ -315,16 +334,19 @@ function nodoTiquete(m, { papel, logo, copia }) {
   if (m.venta?.tipo_servicio) raiz.append(fila('Servicio', TIPOS_SERVICIO[m.venta.tipo_servicio] || m.venta.tipo_servicio));
   if (m.venta?.referencia) raiz.append(fila('Referencia', m.venta.referencia));
   if (!pre) raiz.append(fila('Condición de venta', 'Contado'), fila('Moneda', 'Colón (CRC)'));
-  if (nc && m.original) {
+  if (nota && m.original) {
+    const rf = referenciaNota(m);
     raiz.append(linea());
-    raiz.append(h('div.etq-chica', 'Anula el documento'), h('div.dato', (NOMBRE_DOC[m.original.tipo_doc] || 'Comprobante') + ' N.° ' + numCorto(m.original.consecutivo)), h('div.mono', m.original.consecutivo));
-    if (m.codigoRef && DESC_REF[m.codigoRef]) raiz.append(h('div.dato', 'Código de referencia ' + m.codigoRef + ': ' + DESC_REF[m.codigoRef]));
+    raiz.append(h('div.etq-chica', rf.tiquete), h('div.dato', (NOMBRE_DOC[m.original.tipo_doc] || 'Comprobante') + ' N.° ' + numCorto(m.original.consecutivo)), h('div.mono', m.original.consecutivo));
+    if (rf.simple) raiz.append(h('div.dato', 'Tipo: ' + rf.simple));
+    if (m.codigoRef && rf.oficial) raiz.append(h('div.dato', 'Código de referencia ' + m.codigoRef + ': ' + rf.oficial));
+    if (rf.sustituido) raiz.append(h('div.dato', rf.sustituido));
     if (m.motivo) raiz.append(h('div.dato', 'Motivo: ' + m.motivo));
-  } else if (!pre && !nc && m.reemplaza) {
+  } else if (!pre && !nota && (m.reemplaza || m.codigoRef === '07')) {
     // Venta hecha de nuevo después de una anulación: dice cuál documento sustituye (código 07)
     raiz.append(linea());
     raiz.append(h('div.etq-chica', 'Sustituye al documento'));
-    if (m.reemplaza.consecutivo) raiz.append(h('div.dato', (NOMBRE_DOC[m.reemplaza.tipo_doc] || 'Comprobante') + ' N.° ' + numCorto(m.reemplaza.consecutivo)), h('div.mono', m.reemplaza.consecutivo));
+    if (m.reemplaza?.consecutivo) raiz.append(h('div.dato', (NOMBRE_DOC[m.reemplaza.tipo_doc] || 'Comprobante') + ' N.° ' + numCorto(m.reemplaza.consecutivo)), h('div.mono', m.reemplaza.consecutivo));
     raiz.append(h('div.dato', 'Código de referencia 07: ' + DESC_REF['07']));
   }
   if (m.cliente) {
@@ -382,6 +404,7 @@ function nodoTiquete(m, { papel, logo, copia }) {
 
 function nodoCarta(m, { logo, copia }) {
   const nc = m.tipo === '03';
+  const nota = nc || m.tipo === '02'; // las notas (de crédito y de débito) llevan la referencia al documento original
   const marca = MARCA[m.soc.codigo] || MARCA.soda;
   const raiz = h('div.fxd.ct');
   if (m.sandbox) raiz.append(h('div.marca-agua', 'PRUEBA'));
@@ -426,17 +449,20 @@ function nodoCarta(m, { logo, copia }) {
   if (m.venta?.referencia) meta.push(['Referencia', m.venta.referencia]);
   raiz.append(h('div.ct-meta', meta.map(([a, b]) => h('div', h('span.ct-etq', a), h('b', b)))));
 
-  if (nc && m.original) {
+  if (nota && m.original) {
+    const rf = referenciaNota(m);
     raiz.append(h('div.ct-ref',
-      h('div', h('b', 'Esta nota de crédito anula: '), (NOMBRE_DOC[m.original.tipo_doc] || 'Comprobante') + ' N.° ' + numCorto(m.original.consecutivo)),
+      h('div', h('b', rf.carta), (NOMBRE_DOC[m.original.tipo_doc] || 'Comprobante') + ' N.° ' + numCorto(m.original.consecutivo)),
       h('div.mono', m.original.consecutivo),
-      m.codigoRef && DESC_REF[m.codigoRef] ? h('div', h('b', 'Código de referencia: '), m.codigoRef + ', ' + DESC_REF[m.codigoRef]) : null,
+      rf.simple ? h('div', h('b', 'Tipo: '), rf.simple) : null,
+      m.codigoRef && rf.oficial ? h('div', h('b', 'Código de referencia: '), m.codigoRef + ', ' + rf.oficial) : null,
+      rf.sustituido ? h('div', rf.sustituido) : null,
       m.motivo ? h('div', h('b', 'Motivo: '), m.motivo) : null));
-  } else if (!nc && m.reemplaza) {
+  } else if (!nota && (m.reemplaza || m.codigoRef === '07')) {
     raiz.append(h('div.ct-ref',
-      h('div', h('b', 'Este documento sustituye a: '), m.reemplaza.consecutivo ? (NOMBRE_DOC[m.reemplaza.tipo_doc] || 'Comprobante') + ' N.° ' + numCorto(m.reemplaza.consecutivo) : 'un documento anulado'),
-      m.reemplaza.consecutivo ? h('div.mono', m.reemplaza.consecutivo) : null,
-      h('div', h('b', 'Código de referencia: '), '07, ' + DESC_REF['07'])));
+      h('div', h('b', 'Este documento sustituye a: '), m.reemplaza?.consecutivo ? (NOMBRE_DOC[m.reemplaza.tipo_doc] || 'Comprobante') + ' N.° ' + numCorto(m.reemplaza.consecutivo) : 'un documento anulado'),
+      m.reemplaza?.consecutivo ? h('div.mono', m.reemplaza.consecutivo) : null,
+      h('div', h('b', 'Código de referencia: '), '07, ' + (m.codigoNombre || DESC_REF['07']))));
   }
 
   // Líneas
@@ -625,7 +651,7 @@ export async function imprimirComprobante(comprobanteId, { formato, copias } = {
   let c = await api.comprobante(comprobanteId);
   if (!c) throw new Error('No se encontró el comprobante.');
   // Una venta hecha de nuevo después de anular dice cuál documento sustituye: se busca su número (si no se puede leer, se imprime sin él)
-  if (c.reemplaza_a) { try { const o = await api.comprobante(c.reemplaza_a); if (o) c = { ...c, reemplazado: { tipo_doc: o.tipo_doc, consecutivo: o.consecutivo } }; } catch { /* se imprime sin el número */ } }
+  if (c.reemplaza_a && !c.reemplaza?.consecutivo) { try { const o = await api.comprobante(c.reemplaza_a); if (o) c = { ...c, reemplazado: { tipo_doc: o.tipo_doc, consecutivo: o.consecutivo } }; } catch { /* se imprime sin el número */ } }
   const m = modeloComprobante(c);
   const logo = await logoDataUri(m.soc.codigo);
   const nodos = [];
@@ -643,7 +669,7 @@ export function reimprimirComprobante(comprobanteId, { copias } = {}) {
   const lanzar = (formato, btn) => conBoton(btn, async () => {
     estado.textContent = '';
     try { await imprimirComprobante(comprobanteId, { formato, copias }); m?.cerrar(); }
-    catch (e) { estado.textContent = 'No se pudo imprimir: ' + (e.message || e) + ' Revise el botón «Impresora» e intente de nuevo.'; }
+    catch (e) { estado.textContent = 'No se pudo imprimir: ' + textoDeError(e) + ' Revise el botón «Impresora» e intente de nuevo.'; }
   });
   const b1 = h('button.btn.primario.grande', { type: 'button', onclick: () => lanzar('tiquete', b1) }, 'Tiquete (rollo de ' + aj.papel + ' mm)');
   const b2 = h('button.btn.grande', { type: 'button', onclick: () => lanzar('carta', b2) }, 'Factura carta (' + (aj.hoja === 'a4' ? 'hoja grande A4' : 'hoja carta') + ')');
