@@ -194,6 +194,10 @@ export default {
     }
     function tablaDias(d) {
       const serie = seriesDias(d), mes = !!(serie[0] && serie[0].mes);
+      const suma = (k) => serie.reduce((a, x) => a + (+x[k] || 0), 0), r = d.resumen || {};
+      const avisos = [];
+      if (Math.abs(suma('netas') - (+r.ventas_netas || 0)) > 0.005) avisos.push(`La suma de las ventas netas de esta tabla (${money(suma('netas'))}) no es igual a las ventas netas del resumen (${money(r.ventas_netas)}): la diferencia viene de notas de crédito de este periodo que anulan ventas de otro periodo.`);
+      if (Math.abs(suma('iva') - (+r.iva_neto || 0)) > 0.005) avisos.push(`La suma del IVA de esta tabla (${money(suma('iva'))}) no es igual al IVA del resumen (${money(r.iva_neto)}).`);
       return {
         titulo: mes ? 'Ventas por mes' : 'Ventas por día', cifras: 'netas',
         cifrasNota: 'Montos con IVA incluido. La columna de ventas netas ya tiene restadas las notas de crédito; la de ventas brutas es antes de restarlas',
@@ -207,7 +211,7 @@ export default {
           { clave: 'iva', titulo: 'IVA dentro de las ventas netas (₡)', tipo: 'moneda' }],
         filas: serie.map((x) => ({ dia: x.dia, sem: mes ? '' : dia(x.dia, { weekday: 'long' }), docs: +x.docs, ventas: +x.ventas, nc: +x.notas_credito, netas: +x.netas, iva: +x.iva })),
         totales: { docs: 'suma', ventas: 'suma', nc: 'suma', netas: 'suma', iva: 'suma' },
-        notas: [`Ordenado ${mes ? 'del mes más antiguo al más reciente' : 'del día más antiguo al más reciente'}. Lo que no tuvo ventas aparece en cero.`],
+        notas: [`Ordenado ${mes ? 'del mes más antiguo al más reciente' : 'del día más antiguo al más reciente'}. Lo que no tuvo ventas aparece en cero.`, ...avisos],
       };
     }
     function seccionDias(d) {
@@ -352,7 +356,7 @@ export default {
       const lista = [...(rech.lista || [])].sort((x, y) => new Date(x.fecha) - new Date(y.fecha)); // en el archivo van del más antiguo al más reciente
       if (!lista.length) return null;
       return {
-        titulo: 'Documentos rechazados por Hacienda', cifras: 'brutas', cifrasNota: 'Hacienda no los aceptó: no son ventas válidas y no suman en ninguna otra tabla',
+        hoja: 'Rechazados por Hacienda', titulo: 'Documentos rechazados por Hacienda', cifras: 'brutas', cifrasNota: 'Hacienda no los aceptó: no son ventas válidas y no suman en ninguna otra tabla',
         columnas: [{ clave: 'fecha', titulo: 'Fecha y hora', tipo: 'fechahora' }, { clave: 'tipo', titulo: 'Tipo de documento', tipo: 'texto' }, { clave: 'num', titulo: 'Número', tipo: 'texto' }, { clave: 'total', titulo: 'Total (₡, con IVA)', tipo: 'moneda' }, { clave: 'msg', titulo: 'Qué dice Hacienda', tipo: 'texto' }],
         filas: lista.map((x) => ({ fecha: x.fecha, tipo: nombreDocRech(x.tipo_doc), num: String(x.numero ?? ''), total: +x.total, msg: x.mensaje || 'Sin detalle' })),
         totales: { total: 'suma' },
@@ -430,7 +434,7 @@ export default {
     function tablaAbiertos(d) {
       const abiertos = (d.productos || []).filter((x) => x.abierto); if (!abiertos.length) return null;
       return {
-        titulo: 'Productos de precio abierto o por peso', cifras: 'netas', cifrasNota: NOTA_NETAS + '. La cantidad no se puede comparar con la de los demás productos',
+        hoja: 'Precio abierto o por peso', titulo: 'Productos de precio abierto o por peso', cifras: 'netas', cifrasNota: NOTA_NETAS + '. La cantidad no se puede comparar con la de los demás productos',
         columnas: [{ clave: 'cod', titulo: 'Código', tipo: 'texto' }, { clave: 'nom', titulo: 'Producto', tipo: 'texto' }, { clave: 'uni', titulo: 'Unidad', tipo: 'texto' }, { clave: 'cant', titulo: 'Cantidad o peso', tipo: 'numero', dec: 3 }, { clave: 'total', titulo: 'Monto con IVA (₡)', tipo: 'moneda' }],
         filas: abiertos.map((x) => ({ cod: x.codigo || '', nom: x.nombre, uni: x.unidad || '', cant: +x.cantidad, total: +x.total })),
         totales: { total: 'suma' }, etiquetaTotal: 'Total de precio abierto',

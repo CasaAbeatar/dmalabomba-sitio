@@ -12,6 +12,8 @@ const nombreTipo = (t) => TIPOS[t] || t || 'Comprobante';
 const limpiarNombre = (n) => String(n || 'Proveedor sin nombre').replace(/\s*\(([^()]*)\)\s*$/, (m, a) => (n.toUpperCase().startsWith(a.toUpperCase()) ? '' : m));
 // Para mostrar: sin mayúsculas sostenidas (el archivo y el CSV conservan el nombre tal como viene en la factura)
 const nomProv = (n) => nombrePropio(limpiarNombre(n));
+// Para el nombre del archivo: solo letras, números y signos comunes, y corto (el nombre del proveedor o lo que se buscó puede traer cualquier cosa)
+const paraArchivo = (t, max = 40) => String(t || '').replace(/[^\p{L}\p{N} .,&'()-]/gu, ' ').replace(/\s+/g, ' ').trim().slice(0, max).trim();
 const diaSemana = (ymd) => new Intl.DateTimeFormat('es-CR', { timeZone: 'UTC', weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric' }).format(new Date(String(ymd).slice(0, 10) + 'T12:00:00Z'));
 const plural = (n, u, p) => `${n} ${Math.abs(n) === 1 ? u : p}`;
 
@@ -169,7 +171,7 @@ export default {
       if (d.truncado) notas.push(`Esta lista trae solo las ${filas.length} facturas más recientes de las ${r.n}. El total de toda la búsqueda es ${money(r.total)} con IVA, ${money(r.iva)} de IVA y ${money(r.neto)} sin IVA. Para ver las demás use un periodo más corto o el buscador.`);
       if (d.otras_cedulas > 0) notas.push(`Además llegaron ${plural(d.otras_cedulas, 'comprobante', 'comprobantes')} a nombre de otra cédula (por ejemplo del otro local o de una persona). No están en esta lista.`);
       return {
-        nombre: pend ? `Facturas de proveedores pendientes ${nombrePeriodo(hoy, hoy)}` : `Facturas de proveedores${venc ? ' con plazo vencido' : ''} ${nombrePeriodo(desde, hasta)}`,
+        nombre: (pend ? `Facturas de proveedores pendientes ${nombrePeriodo(hoy, hoy)}` : `Facturas de proveedores${venc ? ' con plazo vencido' : ''} ${nombrePeriodo(desde, hasta)}`) + (paraArchivo(est.q, 30) ? ` búsqueda ${paraArchivo(est.q, 30)}` : ''),
         empresa: nomLocal, cedula: soc?.cedula || '',
         titulo: pend ? 'Facturas de proveedores pendientes de responder' : venc ? 'Facturas de proveedores con el plazo vencido' : 'Facturas de proveedores',
         subtitulo: (pend ? 'Sin respuesta y dentro del plazo de 8 días hábiles' : (venc ? 'Sin respuesta y con el plazo ya vencido, que llegaron ' : 'Llegaron ') + textoRango(desde, hasta)) + (est.q ? ` · búsqueda: «${est.q}»` : ''),
@@ -244,7 +246,7 @@ export default {
       const f = d.factura, nota = f.tipo === 'NotaCreditoElectronica', sg = nota ? -1 : 1;
       const corto = f.consecutivo ? f.consecutivo.slice(-10).replace(/^0+(?=\d)/, '') : '';
       return {
-        nombre: `${nota ? 'Nota de crédito de proveedor' : 'Factura de proveedor'} ${limpiarNombre(f.emisor_nombre)} ${corto}`.trim(),
+        nombre: `${nota ? 'Nota de crédito de proveedor' : 'Factura de proveedor'} ${paraArchivo(limpiarNombre(f.emisor_nombre))} ${corto}`.replace(/\s+/g, ' ').trim(),
         empresa: nomLocal, cedula: soc?.cedula || '',
         titulo: nota ? 'Nota de crédito de un proveedor' : 'Factura de un proveedor',
         subtitulo: `${limpiarNombre(f.emisor_nombre)} · ${nombreTipo(f.tipo)} · consecutivo ${f.consecutivo || 'sin dato'} · cédula del proveedor ${f.emisor_cedula || 'sin dato'} · emitida ${fechaHora(f.fecha)} · ${e.texto}`,

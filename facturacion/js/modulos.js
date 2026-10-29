@@ -42,6 +42,7 @@ export const MODULOS = [
   // Dentro de Administración
   { id: 'productos', titulo: 'Productos', descripcion: 'Menú, precios, cajones de productos y CABYS', grupo: 'admin', ruta: 'admin/productos', icono: 'producto', orden: 10, cargar: () => import('./m_productos.js') },
   { id: 'listados', titulo: 'Informes', descripcion: 'Ventas por hora y por día, por tarifa de IVA y por medio de pago', grupo: 'admin', ruta: 'admin/informes', icono: 'barras', orden: 20, cargar: () => import('./m_listados.js') },
+  { id: 'emitidas', alias: ['facturas-emitidas'], titulo: 'Facturas emitidas', descripcion: 'Buscar facturas y tiquetes de cualquier fecha y ver si Hacienda los aceptó', grupo: 'admin', ruta: 'admin/facturas-emitidas', icono: 'emitidas', orden: 25, cargar: () => import('./m_facturas_emitidas.js') },
   { id: 'recepcion', titulo: 'Contable', descripcion: 'Facturas de proveedores y respuesta a Hacienda', grupo: 'admin', ruta: 'admin/contable', icono: 'libro', orden: 30, insignia: insigniaContable, cargar: () => import('./m_recepcion.js') },
   { id: 'usuarios', titulo: 'Usuarios', descripcion: 'Usuarios, PIN y quién ingresó', grupo: 'admin', ruta: 'admin/usuarios', icono: 'usuario', orden: 40, soloAdmin: true, cargar: () => import('./m_usuarios.js') },
 ];

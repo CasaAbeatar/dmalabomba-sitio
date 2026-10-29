@@ -117,7 +117,7 @@ export const TIPOS_DOC = { '01': 'Factura electrónica', '02': 'Nota de débito'
 export const TIPOS_SERVICIO = { buffet: 'Buffet', espera: 'En espera', llevar: 'Para llevar', express: 'Express' };
 export const MEDIOS = { efectivo: 'Efectivo', tarjeta: 'Tarjeta', sinpe: 'SINPE Móvil', transferencia: 'Transferencia' };
 export const TIPOS_ID = { '01': 'Cédula física', '02': 'Cédula jurídica', '03': 'DIMEX', '04': 'NITE', '05': 'Extranjero no domiciliado', '06': 'No contribuyente' };
-export const ESTADOS = { pendiente: 'Por enviar a Hacienda', enviado: 'Enviado a Hacienda', aceptado: 'Aceptado', rechazado: 'Rechazado', error: 'No se pudo enviar' };
+export const ESTADOS = { pendiente: 'Por enviar a Hacienda', enviado: 'Enviado a Hacienda', aceptado: 'Aceptado por Hacienda', rechazado: 'Rechazado por Hacienda', error: 'No se pudo enviar' };
 
 // Nombre del local para mostrar: usa el nombre comercial (o la razón social si falta) y, si viene todo en mayúsculas, lo pasa a "Pollos La Bomba".
 const MENORES = new Set(['a', 'al', 'de', 'del', 'la', 'las', 'el', 'los', 'y', 'e', 'en', 'con', 'por', 'para']);
@@ -362,7 +362,7 @@ export function pinDebil(p) {
 
 /* ---------- Respuesta de Hacienda en palabras simples ---------- */
 const CODIGOS_HACIENDA = {
-  '-37': 'La provincia, el cantón o el distrito de la empresa no coinciden con lo que Hacienda tiene registrado. Es solo un aviso y el documento sigue siendo válido. La persona encargada debe actualizar esos datos en Hacienda.',
+  '-37': 'La provincia, el cantón o el distrito de la empresa no coinciden con lo que Hacienda tiene registrado. La persona encargada debe actualizar esos datos en Hacienda.',
   '-60': 'La firma digital del documento no es de esta empresa. Avise a la persona encargada.',
   '-99': 'Hacienda ya tiene un documento con ese mismo número. Avise a la persona encargada.',
   '-410': 'El código de actividad económica del cliente no está registrado en Hacienda. Revise la actividad del cliente.',
@@ -397,8 +397,8 @@ export function describirEstado(estado, mensaje) {
   const ESTADOS_TXT = {
     pendiente: { final: false, clase: 'espera', chip: 'Por enviar a Hacienda', texto: 'Cobro registrado. Se enviará a Hacienda en un momento. Este aviso cambia solo cuando Hacienda responda.' },
     enviado: { final: false, clase: 'espera', chip: 'Enviado a Hacienda', texto: 'Cobro registrado. Se envió a Hacienda y se espera su respuesta. Este aviso cambia solo cuando Hacienda responda.' },
-    aceptado: { final: true, clase: 'ok', chip: 'Aceptado', texto: 'Cobro registrado. Hacienda aceptó el comprobante.' },
-    rechazado: { final: true, clase: 'mal', chip: 'Rechazado', texto: 'Cobro registrado, pero Hacienda no aceptó el comprobante.' + (motivo ? ' Motivo: ' + motivo : '') + ' Avise a la persona encargada; el documento queda en «Anular y reimprimir».' },
+    aceptado: { final: true, clase: 'ok', chip: 'Aceptado por Hacienda', texto: 'Cobro registrado. Hacienda aceptó el comprobante.' },
+    rechazado: { final: true, clase: 'mal', chip: 'Rechazado por Hacienda', texto: 'Cobro registrado, pero Hacienda no aceptó el comprobante.' + (motivo ? ' Motivo: ' + motivo : '') + ' Avise a la persona encargada; el documento queda en «Anular y reimprimir».' },
     error: { final: false, clase: 'mal', chip: 'No se pudo enviar', texto: 'Cobro registrado, pero todavía no se pudo enviar a Hacienda.' + (motivo ? ' Motivo: ' + motivo : '') + ' El sistema lo intentará de nuevo solo. No tiene que repetir el cobro.' },
   };
   return { estado: e, motivo, ...(ESTADOS_TXT[e] || ESTADOS_TXT.pendiente) };

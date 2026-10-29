@@ -98,7 +98,7 @@ function textoErrorAcceso(e, { cambiarEmpresa = true } = {}) {
   if (e && e.motivo === 'sin_acceso_empresa') return 'Ese usuario no tiene acceso a esta empresa.' + (cambiarEmpresa ? ' Si trabaja en otro negocio, toque «Cambiar de empresa».' : ' Avise a la persona encargada.');
   if (e && e.estado === 401) {
     return cambiarEmpresa
-      ? 'El usuario o el PIN no coinciden. Revíselos e intente de nuevo ahora mismo.'
+      ? 'Usuario o PIN incorrecto. Intente de nuevo.' // corto a propósito: de una sola línea el teclado completo cabe en pantallas de 800 px de alto sin deslizar
       : 'El PIN no coincide. Escríbalo otra vez con cuidado; puede intentarlo de nuevo ahora mismo.';
   }
   return conPunto((e && e.message) || 'No se pudo entrar. Revise la conexión e intente de nuevo.');
@@ -490,6 +490,7 @@ function mostrarSesionVencida() {
   // La empresa de la sesión que venció: en este diálogo no se puede cambiar. Si por alguna razón no se conoce, la última que se usó en este aparato; 'pollos' es el respaldo temporal.
   const emp = app.empresa || (empresaRecordada() ? { codigo: empresaRecordada().codigo, nombre: empresaRecordada().nombre } : { codigo: 'pollos', nombre: 'Pollos La Bomba' });
   const previos = [raiz, ...document.querySelectorAll('.modal-fondo')];
+  const focoPrevio = document.activeElement; // al volver a entrar, el foco regresa a donde estaba (el campo o botón que se usaba)
   previos.forEach((x) => { x.inert = true; });
   // El botón Atrás (util.js) le pregunta a la ventana de arriba, con su _bloqueo, si se puede cerrar: mientras «Su sesión venció» esté puesta, ninguna ventana de debajo se cierra
   // con Atrás y lo que la persona tenía escrito se conserva. Al cerrar esta ventana cada una recupera el bloqueo que tenía.
@@ -503,6 +504,7 @@ function mostrarSesionVencida() {
     window.removeEventListener('keydown', alTeclaDeVentana, true);
     fondo.remove();
     previos.forEach((x, i) => { x.inert = false; if (typeof x._cerrar === 'function') x._bloqueo = bloqueosPrevios[i]; });
+    if (focoPrevio && focoPrevio !== document.body && focoPrevio.isConnected) { try { focoPrevio.focus({ preventScroll: true }); } catch { /* nada */ } }
   };
   const paso1 = () => {
     cuerpo.replaceChildren(h('div.col',
