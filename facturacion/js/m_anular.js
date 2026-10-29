@@ -180,6 +180,7 @@ export function anularDocumento(app, d, { alTerminar, alVerNC, alCambiarCliente,
   let original = null; // el comprobante completo (productos y pagos)
   let soporta07 = false;
   let enVuelo = false;
+  let saldosListos = false; // ya se supo (o no se pudo saber) si la base permite anular completo
   let bloqueado = false; // la base dice que este documento no se puede anular completo (fx_comprobante_saldos.admite_anulacion = false)
   const zonaBloqueo = h('div');
   const detalleLineas = h('div.an-lineas', h('small.tenue', 'Cargando el detalle…'));
@@ -251,9 +252,11 @@ export function anularDocumento(app, d, { alTerminar, alVerNC, alCambiarCliente,
     const razon = (elegido === M_OTRO ? det : elegido + (det ? ': ' + det : '')).slice(0, 180);
     error.hidden = true;
     enVuelo = true; seguir.disabled = true;
+    if (!saldosListos) seguir.textContent = 'Revisando si se puede anular…'; // la base puede tardar unos segundos en contestar: el botón dice qué está pasando
     try {
       await cargaSaldos; // si la base ya dijo que no se puede anular completo, se avisa aquí y no se llega a la confirmación
       if (bloqueado) return;
+      seguir.textContent = rotuloSeguir();
       const ok = await confirmarAnulacion(d, razon, soporta07);
       if (!ok) return;
       seguir.textContent = 'Anulando, espere…';
@@ -311,7 +314,7 @@ export function anularDocumento(app, d, { alTerminar, alVerNC, alCambiarCliente,
     seguir.disabled = true; seguir.textContent = rotuloSeguir();
     error.hidden = true;
     if (anulacionDeSaldos(s)) Promise.resolve(alTerminar?.(null)).catch(() => { /* la lista se actualiza sola en unos segundos */ }); // ya estaba anulado: la lista debe ponerse al día
-  }).catch(() => {});
+  }).catch(() => {}).finally(() => { saldosListos = true; });
   return m;
 
   function resultado(nc, { motivo, yaExistia }) {
