@@ -31,16 +31,21 @@ const TIPO_DE_MENSAJE = new Map([[MSG_RED, 'red'], [MSG_RED_ESCRIBIR, 'red'], [M
 const TRANSITORIOS = new Set(['red', 'tiempo', 'ocupado']);
 
 // Error con texto listo para mostrar. motivo = la razón que da el servicio de acceso cuando la hay ('empresa_desconocida', 'empresa_no_habilitada', 'sin_acceso_empresa'...)
+// hint = la pista que manda el servidor cuando la hay (por ejemplo 'pin_actual' o 'cuentas_abiertas'); codigo = el código del error de la base ('P0001', 'PT401'...).
+// Las pantallas deciden por estas dos y por tipo, no por el texto del mensaje.
 export class ErrorApi extends Error {
-  constructor(mensaje, { tipo = '', transitorio = false, estado = 0, sesion = false, motivo = '' } = {}) {
+  constructor(mensaje, { tipo = '', transitorio = false, estado = 0, sesion = false, motivo = '', hint = '', codigo = '' } = {}) {
     super(mensaje);
     this.tipo = tipo || TIPO_DE_MENSAJE.get(mensaje) || (sesion ? 'sesion' : transitorio ? 'ocupado' : 'negocio');
     this.transitorio = TRANSITORIOS.has(this.tipo);
     this.sesion = this.tipo === 'sesion' || sesion === true;
     this.estado = estado; this.motivo = motivo;
+    this.hint = typeof hint === 'string' ? hint : '';
+    this.codigo = typeof codigo === 'string' ? codigo : '';
   }
 }
-export const esSesionVencida = (e) => !!e && (e.sesion === true || e.tipo === 'sesion' || /sesi[oó]n venci/i.test(e.message || ''));
+// Todo error de sesión que fabrica este archivo ya trae su clase (tipo 'sesion'), y un ErrorApi nuevo con el texto exacto de MSG_SESION la recupera: el texto del mensaje no se lee.
+export const esSesionVencida = (e) => !!e && (e.sesion === true || e.tipo === 'sesion');
 // Los textos propios del navegador cuando no hubo red («Failed to fetch», «Load failed») también cuentan como falla de red; los del sistema no se leen
 const NATIVO_DE_RED = /failed to fetch|networkerror|load failed|network request failed/i;
 export const esTransitorio = (e) => !!e && (e.transitorio === true || TRANSITORIOS.has(e.tipo) || (e instanceof TypeError && NATIVO_DE_RED.test(e.message || '')));
@@ -105,7 +110,7 @@ const VIDA_CATALOGO = 5 * 60 * 1000;
 export function invalidarCatalogo(soc) { versionCatalogo++; if (soc) cacheCatalogo.delete(soc); else cacheCatalogo.clear(); }
 const CAMBIA_CATALOGO = /^fx_(producto_guardar|cajon_guardar|precios_lote)$/;
 // Solo las consultas (no cambian datos) se repiten solas una vez si falla la red. Una escritura NUNCA se repite sola.
-const SOLO_LECTURA = /^fx_(contexto|catalogo|clientes|venta|ventas_abiertas|turno_estado|turnos|salidas|comprobante|comprobantes|comprobante_nc|comprobante_xml|listados2?|documentos|alertas|usuarios|recibidas?|respuesta_recibida|producto_historial|cabys_buscar|cabys_verificar)$/;
+const SOLO_LECTURA = /^fx_(contexto|catalogo|clientes|venta|ventas_abiertas|turno_estado|turno_sugerencia_apertura|movimientos_efectivo|turnos|salidas|comprobante|comprobantes|comprobante_nc|comprobante_xml|listados2?|documentos|alertas|usuarios|recibidas?|respuesta_recibida|producto_historial|cabys_buscar|cabys_verificar)$/;
 
 // Todos los módulos llaman a sb.rpc: aquí se les da tiempo máximo, un reintento en las consultas y mensajes claros en las fallas de red.
 const rpcOriginal = sb.rpc.bind(sb);
@@ -152,7 +157,7 @@ export async function rpc(nombre, args = {}) {
   const { data, error, status } = await sb.rpc(nombre, args);
   if (error) {
     if (error.tecnico && typeof console !== 'undefined') console.debug('[' + nombre + ']', error.tecnico);
-    throw new ErrorApi(error.message || MSG_GENERICO, { tipo: error.tipo || '', estado: status || 0, sesion: error.sesion === true });
+    throw new ErrorApi(error.message || MSG_GENERICO, { tipo: error.tipo || '', estado: status || 0, sesion: error.sesion === true, hint: error.hint, codigo: error.code });
   }
   return data;
 }
@@ -206,6 +211,8 @@ export const api = {
   salidaAnular: (id) => rpc('fx_salida_anular', { p_id: id }),
   salidas: (turno) => rpc('fx_salidas', { p_turno: turno }),
   turnos: (soc, limite = 30) => rpc('fx_turnos', { p_soc: soc, p_limite: limite }),
+  // Con cuánto abrir la caja: { sugerido, origen, ultimo_cierre: { cerrado_en, ... } } según el último cierre de ESA terminal. Es una consulta (se repite sola una vez).
+  turnoSugerencia: (soc, terminal = 1) => rpc('fx_turno_sugerencia_apertura', { p_soc: soc, p_terminal: terminal }),
   // Ventas / cuentas
   ventaCrear: (soc, tipo = 'buffet', referencia = null, telefono = null, terminal = 1) => rpc('fx_venta_crear', { p_soc: soc, p_tipo: tipo, p_referencia: referencia, p_telefono: telefono, p_terminal: terminal }),
   venta: (id) => rpc('fx_venta', { p_venta: id }), // {venta, lineas[], pagos[], cliente, comprobante}. Cada pago en efectivo trae recibido y vuelto (nulos en pagos anteriores al 28-oct)
@@ -240,23 +247,41 @@ export const api = {
 
 // Funciones de borde (edge functions) con la sesión del usuario
 // opciones.signal (AbortSignal) permite cancelar la consulta si ya no hace falta (p. ej. la cajera siguió escribiendo).
+// Cada llamada tiene un tiempo máximo, igual que llamar() (25 s lectura, 45 s escritura) para las consultas a la base: si la conexión queda abierta sin respuesta, la pantalla no se queda
+// esperando para siempre con el botón apagado. Pasado el tiempo sale un error de clase 'tiempo' y NO se repite sola: la función pudo haber hecho su trabajo (mandar un correo,
+// responder a Hacienda), así que el texto pide revisar antes de volver a intentarlo. Las consultas puras (la cédula) usan el texto de lectura.
+const TOPE_FUNCION = 60000;
+const TOPE_FUNCION_DE = { 'facturador-cedula': 20000, 'facturas-recibidas': 120000 }; // la cédula espera lo que tarda Hacienda; revisar el correo puede traer muchas facturas
+const FUNCION_DE_LECTURA = new Set(['facturador-cedula']);
+async function pedirFuncion(nombre, cuerpo, opciones, token) {
+  const ctrl = new AbortController();
+  let agotado = false;
+  const reloj = setTimeout(() => { agotado = true; ctrl.abort(); }, TOPE_FUNCION_DE[nombre] || TOPE_FUNCION);
+  const cancelar = () => ctrl.abort();
+  if (opciones.signal) { if (opciones.signal.aborted) ctrl.abort(); else opciones.signal.addEventListener('abort', cancelar, { once: true }); }
+  try {
+    const r = await fetch(`${SUPA_URL}/functions/v1/${nombre}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', apikey: SUPA_KEY, Authorization: 'Bearer ' + (token || SUPA_KEY) },
+      body: JSON.stringify(cuerpo),
+      signal: ctrl.signal,
+    });
+    return { r, t: await r.text() }; // el tiempo máximo cubre también la lectura de la respuesta
+  } catch (e) {
+    if (agotado) throw new ErrorApi(FUNCION_DE_LECTURA.has(nombre) ? MSG_TARDO : MSG_TARDO_ESCRIBIR, { tipo: 'tiempo' });
+    if (e?.name === 'AbortError') throw e; // cancelado a propósito por quien llamó
+    marcarRed(false);
+    throw new ErrorApi(MSG_RED, { tipo: 'red' });
+  } finally {
+    clearTimeout(reloj);
+    opciones.signal?.removeEventListener('abort', cancelar);
+  }
+}
 export async function funcion(nombre, cuerpo = {}, opciones = {}) {
   let renovado = false;
   for (;;) {
     const { data: s } = await sb.auth.getSession();
-    let r;
-    try {
-      r = await fetch(`${SUPA_URL}/functions/v1/${nombre}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', apikey: SUPA_KEY, Authorization: 'Bearer ' + (s.session?.access_token || SUPA_KEY) },
-        body: JSON.stringify(cuerpo),
-        signal: opciones.signal,
-      });
-    } catch (e) {
-      if (e?.name === 'AbortError') throw e; // cancelado a propósito por quien llamó
-      marcarRed(false);
-      throw new ErrorApi(MSG_RED, { tipo: 'red' });
-    }
+    const { r, t } = await pedirFuncion(nombre, cuerpo, opciones, s.session?.access_token);
     marcarRed(true);
     if (r.status === 401 && !renovado) { // el token no sirvió: se renueva una vez y se repite (la función rechazó la llamada sin hacer nada)
       renovado = true;
@@ -265,12 +290,11 @@ export async function funcion(nombre, cuerpo = {}, opciones = {}) {
       if (est === 'vencida') { avisarSesionVencida(); throw new ErrorApi(MSG_SESION, { sesion: true, estado: 401 }); }
       throw new ErrorApi(MSG_RED, { tipo: 'red' });
     }
-    const t = await r.text();
     let j; try { j = JSON.parse(t); } catch { j = null; } // una página de error de la puerta de entrada no es un mensaje para la cajera
     if (!r.ok || j?.error) {
       const tipo = r.status === 504 || r.status === 408 ? 'tiempo' : r.status === 502 || r.status === 503 ? 'ocupado' : 'negocio';
       const propio = j && typeof j.error === 'string' && j.error.trim(); // el texto lo escribió la función de borde, ya en español
-      throw new ErrorApi(propio || (tipo === 'tiempo' ? MSG_TARDO : tipo === 'ocupado' ? MSG_OCUPADO : MSG_ACCION_FALLIDA), { tipo, estado: r.status });
+      throw new ErrorApi(propio || (tipo === 'tiempo' ? MSG_TARDO : tipo === 'ocupado' ? MSG_OCUPADO : MSG_ACCION_FALLIDA), { tipo, estado: r.status, hint: j && typeof j.hint === 'string' ? j.hint : '' });
     }
     return j || {};
   }
@@ -304,7 +328,8 @@ async function conReintento(hacer, alReintentar) {
     try { return await hacer(); }
     catch (e) {
       ultimo = e;
-      if (!(e instanceof ErrorApi) || !e.transitorio || intento === 2) break;
+      // Un 429 es el servicio pidiendo que no se le insista: no se repite solo (un toque del último número no manda el PIN dos veces)
+      if (!(e instanceof ErrorApi) || !e.transitorio || e.estado === 429 || intento === 2) break;
       alReintentar?.();
       await pausa(900);
     }
@@ -315,11 +340,15 @@ async function conReintento(hacer, alReintentar) {
 const ESTADO_DE_MOTIVO = { falta_empresa: 400, empresa_desconocida: 404, empresa_no_habilitada: 403 };
 // El ingreso NUNCA se bloquea (decisión de Emil): no hay «intentos restantes», ni hora de desbloqueo, ni espera. Un PIN o un usuario que no coinciden dicen eso y se puede intentar de inmediato.
 // Un 5xx o un 429 del servicio (saturado) es una falla transitoria; todo lo demás es una respuesta clara del acceso y no se repite sola.
+// Un 429 sigue siendo transitorio (en el primer paso deja usar la empresa de respaldo, así nadie queda sin poder llegar al usuario y al PIN) pero conReintento no lo repite
+// y su texto no promete una espera: dice que hay mucho movimiento y que se puede intentar otra vez.
 const MSG_EMPRESA_DESCONOCIDA = 'No se reconoce ese código de empresa. Revíselo e intente de nuevo.';
+const MSG_ACCESO_MUCHOS = 'Hay mucho movimiento en este momento y no se pudo entrar. Intente de nuevo; si sigue igual, avise a la persona encargada.';
 function errorDeAcceso(r, j) {
   const estado = r.ok ? (ESTADO_DE_MOTIVO[j.motivo] || 400) : r.status;
   const motivo = j.motivo || '';
-  if (r.status >= 500 || r.status === 429) return new ErrorApi(MSG_OCUPADO, { tipo: 'ocupado', estado, motivo });
+  if (r.status === 429) return new ErrorApi(MSG_ACCESO_MUCHOS, { tipo: 'ocupado', estado, motivo });
+  if (r.status >= 500) return new ErrorApi(MSG_OCUPADO, { tipo: 'ocupado', estado, motivo });
   if (motivo === 'empresa_desconocida') return new ErrorApi(MSG_EMPRESA_DESCONOCIDA, { tipo: 'negocio', estado, motivo });
   return new ErrorApi(typeof j.error === 'string' && j.error.trim() ? j.error : 'No se pudo entrar. Intente de nuevo.', { tipo: 'negocio', estado, motivo });
 }
@@ -384,7 +413,9 @@ export async function salir() {
     const res = await Promise.race([sb.auth.signOut({ scope: 'local' }), pausa(4000).then(() => ({ error: true }))]);
     faltoCerrar = !!res?.error; // sin conexión, error del servidor o tiempo agotado; un 401/403/404 no cuenta: esa sesión ya no existe
   } catch { faltoCerrar = true; /* sin conexión: se borra solo aquí */ }
-  if (faltoCerrar && guardada) { guardarSalidas([...leerSalidas().filter((x) => x.a !== guardada.a), { ...guardada, t: Date.now() }]); vigilarSalidas(); }
+  // Solo se anota el código de acceso (y la hora): el código de refresco NO se guarda, porque serviría para pedir sesiones nuevas mientras el cierre no llegue al servidor.
+  // Si el de acceso ya venció cuando vuelva la conexión, esa sesión queda sin nadie que pueda renovarla y se cierra sola por su tope del servidor.
+  if (faltoCerrar && guardada) { guardarSalidas([...leerSalidas().filter((x) => x.a !== guardada.a), { a: guardada.a, t: Date.now() }]); vigilarSalidas(); }
   try { localStorage.removeItem('sb-facturador'); localStorage.removeItem('sb-facturador-code-verifier'); } catch { /* sin almacenamiento */ }
   invalidarCatalogo();
   sesionAvisada = false;
@@ -393,8 +424,10 @@ export async function salir() {
 /* ---------- Cierres de sesión pendientes ---------- */
 // Cuando el cierre de sesión no llega al servidor (sin internet, servidor caído o tiempo agotado), la sesión de ESTE aparato se borra igual, pero la del servidor sigue viva
 // hasta su tope de 16 horas. Para no dejarla abierta, el cierre se anota en una cola corta de este aparato (máximo 3 anotaciones, que se descartan a las 16 horas) y se repite
-// cuando vuelve la conexión, al abrir la página, después de entrar y cada minuto mientras haya algo pendiente. De cada sesión solo se anotan sus dos códigos y la hora;
-// se borran apenas el servidor confirma (o contesta que esa sesión ya no existe). No se hace nada más con ellos: no sirven para entrar, solo para cerrar esa sesión.
+// cuando vuelve la conexión, al abrir la página, después de entrar y cada minuto mientras haya algo pendiente. De cada sesión solo se anota su código de acceso y la hora
+// (nunca el de refresco: ese sí serviría para pedir sesiones nuevas); se borra apenas el servidor confirma (o contesta que esa sesión ya no existe).
+// El código de acceso dura poco y solo sirve para cerrar esa sesión. Una anotación vieja de versiones anteriores puede traer también el de refresco: se usa una vez para
+// renovar y cerrar, y desaparece con el resto.
 const CLAVE_SALIDAS = 'fx_salidas_pendientes', MAX_SALIDAS = 3, VIDA_SALIDA = 16 * 3600 * 1000;
 function sesionGuardada() {
   try { const g = JSON.parse(localStorage.getItem('sb-facturador') || 'null'); return g && typeof g.access_token === 'string' ? { a: g.access_token, r: typeof g.refresh_token === 'string' ? g.refresh_token : '' } : null; } catch { return null; }

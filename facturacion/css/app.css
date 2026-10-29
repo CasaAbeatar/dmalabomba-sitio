@@ -235,7 +235,7 @@ body:has(.modal-fondo) #toasts{bottom:6.2rem}
   .cab-titulo{font-size:1.4rem}
   .cabecera[data-vista=facturar] .cab-fila{grid-template-columns:auto minmax(0,1fr) auto auto;grid-template-areas:'volver titulo anular menu';padding:.3rem .5rem;gap:.25rem}
   .cabecera[data-vista=facturar] .cab-titulo{font-size:.98rem;text-align:center}
-  /* «Anular o reimprimir» se parte en dos renglones para que el título «Facturación» se lea completo */
+  /* «Anular y reimprimir» se parte en dos renglones para que el título «Facturación» se lea completo */
   .cabecera[data-vista=facturar] .btn.cab-anular{white-space:normal;line-height:1.1;width:5.9rem;padding-inline:.3rem}
   .cabecera[data-vista=facturar] .btn{padding-inline:.5rem;font-size:.92rem}
   .alerta-in{padding:.4rem .7rem}

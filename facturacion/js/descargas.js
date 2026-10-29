@@ -245,7 +245,7 @@ export function crearDescarga(opciones, { texto = 'Descargar', etiqueta = '', cl
     if (ocupado) return;
     decir('');
     try { res = await resolverOpciones(opciones); } catch (e) { res = null; decir('No se pudo preparar la lista para descargar. Intente de nuevo.', 'mal', reintentar(abrir)); return; }
-    if (!res.tablas.length || !res.filas && !res.tablas.some((t) => t.filas.length)) { decir('No hay nada para descargar con lo que se ve ahora. Cambie el periodo o el filtro e intente de nuevo.', ''); return; }
+    if (!res.tablas.length || !res.filas) { decir('No hay nada para descargar con lo que se ve ahora. Cambie el periodo o el filtro e intente de nuevo.', ''); return; }
     const fs = ['xlsx', 'csv', 'pdf', ...(res.xml ? ['xml'] : [])];
     menu.replaceChildren(
       h('p.desc-tit', '¿En qué formato lo quiere?'),

@@ -1,10 +1,10 @@
 // Recepción de facturas de proveedores: lo que llega a los correos de contabilidad, y su respuesta a Hacienda (MensajeReceptor 1 aceptar, 2 aceptar parcialmente, 3 rechazar).
 // Plazo: 8 días hábiles desde que la factura llegó al correo. Datos: fx_recibidas / fx_recibida (solo lectura, ver sql/06_recepcion.sql).
-import { h, money, num, fechaHora, debounce, modal, confirmar, pedir, conBoton, toast, nombrePropio, nombreLocal, campoBusqueda } from './util.js';
+import { h, money, num, fechaHora, debounce, modal, confirmar, pedir, conBoton, toast, nombrePropio, nombreLocal, campoBusqueda, hoyCR } from './util.js';
 import { recibidas, recibida, responder, consultarRespuesta, revisarCorreo } from './api_recepcion.js';
 import { mensajeAmable } from './api_documentos.js';
 import { selectorPeriodo, textoRango, fechaDMA } from './periodo.js';
-import { csvBajar } from './csv.js';
+import { crearDescarga, nombrePeriodo } from './descargas.js';
 
 const cssUrl = new URL('../css/recepcion.css', import.meta.url).href;
 const TIPOS = { FacturaElectronica: 'Factura electrónica', TiqueteElectronico: 'Tiquete electrónico', NotaCreditoElectronica: 'Nota de crédito', NotaDebitoElectronica: 'Nota de débito', FacturaElectronicaCompra: 'Factura de compra', FacturaElectronicaExportacion: 'Factura de exportación' };
@@ -137,7 +137,7 @@ export default {
         h('span', 'Total con IVA (notas de crédito restadas): ', h('strong.cifra', money(r.total))),
         h('span', 'IVA pagado a proveedores: ', h('strong.cifra', money(r.iva))),
         h('span', 'Compras sin IVA: ', h('strong.cifra', money(r.neto))),
-        h('button.btn.chico', { type: 'button', onclick: exportar }, 'Descargar en Excel (CSV)')));
+        crearDescarga(() => opcionesLista(), { texto: 'Descargar', etiqueta: 'Descargar la lista de facturas de proveedores que se ve ahora' })));
       lista.replaceChildren(
         h('div.rec-enc', h('span', 'Llegó'), h('span', 'Proveedor y comprobante'), h('span.der', 'Total con IVA'), h('span.der', 'IVA'), h('span', 'Respuesta a Hacienda')),
         ...filas.map(fila));
@@ -157,12 +157,45 @@ export default {
         h('span.rec-estado', h('span.chip' + (e.clase ? '.' + e.clase : ''), e.texto), e.sub ? h('small', e.sub) : null),
         h('span.rec-ver', 'Ver detalle'));
     }
-    function exportar() {
-      const filas = (est.datos?.filas || []);
-      const [d, a] = periodo.rango();
-      const nombre = `Facturas de proveedores ${nomLocal} ${est.vista === 'pendientes' ? 'pendientes ' + new Date().toISOString().slice(0, 10) : d + ' a ' + a}`;
-      csvBajar(nombre, ['Llegó', 'Fecha de emisión', 'Proveedor', 'Cédula proveedor', 'Tipo', 'Consecutivo', 'Total con IVA', 'IVA', 'Sin IVA', 'Respuesta', 'Fecha límite', 'Días hábiles restantes', 'Clave'],
-        filas.map((f) => { const e = estadoFila(f); const s = f.tipo === 'NotaCreditoElectronica' ? -1 : 1; return [fechaHora(f.llego), fechaHora(f.fecha), limpiarNombre(f.emisor_nombre), f.emisor_cedula || '', nombreTipo(f.tipo), f.consecutivo || '', s * +f.total, s * +f.iva, s * +f.neto, e.texto, f.pendiente && f.vence ? f.vence : '', f.pendiente ? +f.dias_restantes : '', f.clave]; }));
+    // Lo que se descarga: la lista que se ve ahora (misma vista, periodo y búsqueda), del más antiguo al más reciente. Los datos son los de la pantalla, no se piden de nuevo.
+    function opcionesLista() {
+      const d = est.datos; if (!d) return { filas: [] };
+      const r = d.resumen || {};
+      const [desde, hasta] = periodo.rango();
+      const pend = est.vista === 'pendientes', venc = est.vista === 'vencidas';
+      const filas = [...(d.filas || [])].sort((a, b) => new Date(a.llego) - new Date(b.llego));
+      const hoy = hoyCR();
+      const notas = ['Ordenado de la factura que llegó primero a la que llegó último.', 'Las notas de crédito van con signo negativo: restan del total.'];
+      if (d.truncado) notas.push(`Esta lista trae solo las ${filas.length} facturas más recientes de las ${r.n}. El total de toda la búsqueda es ${money(r.total)} con IVA, ${money(r.iva)} de IVA y ${money(r.neto)} sin IVA. Para ver las demás use un periodo más corto o el buscador.`);
+      if (d.otras_cedulas > 0) notas.push(`Además llegaron ${plural(d.otras_cedulas, 'comprobante', 'comprobantes')} a nombre de otra cédula (por ejemplo del otro local o de una persona). No están en esta lista.`);
+      return {
+        nombre: pend ? `Facturas de proveedores pendientes ${nombrePeriodo(hoy, hoy)}` : `Facturas de proveedores${venc ? ' con plazo vencido' : ''} ${nombrePeriodo(desde, hasta)}`,
+        empresa: nomLocal, cedula: soc?.cedula || '',
+        titulo: pend ? 'Facturas de proveedores pendientes de responder' : venc ? 'Facturas de proveedores con el plazo vencido' : 'Facturas de proveedores',
+        subtitulo: (pend ? 'Sin respuesta y dentro del plazo de 8 días hábiles' : (venc ? 'Sin respuesta y con el plazo ya vencido, que llegaron ' : 'Llegaron ') + textoRango(desde, hasta)) + (est.q ? ` · búsqueda: «${est.q}»` : ''),
+        cifras: 'netas', cifrasNota: 'Montos en colones con IVA incluido; las notas de crédito ya están restadas (van en negativo)',
+        columnas: [
+          { clave: 'llego', titulo: 'Llegó al correo (fecha y hora)', tipo: 'fechahora' },
+          { clave: 'fecha', titulo: 'Fecha de emisión', tipo: 'fechahora', enPdf: false },
+          { clave: 'prov', titulo: 'Proveedor', tipo: 'texto' },
+          { clave: 'ced', titulo: 'Cédula del proveedor', tipo: 'texto' },
+          { clave: 'tipo', titulo: 'Tipo de comprobante', tipo: 'texto' },
+          { clave: 'cons', titulo: 'Consecutivo', tipo: 'texto' },
+          { clave: 'total', titulo: 'Total con IVA (₡)', tipo: 'moneda' },
+          { clave: 'iva', titulo: 'IVA pagado (₡)', tipo: 'moneda' },
+          { clave: 'neto', titulo: 'Compra sin IVA (₡)', tipo: 'moneda' },
+          { clave: 'resp', titulo: 'Respuesta a Hacienda', tipo: 'texto' },
+          { clave: 'detalle', titulo: 'Detalle de la respuesta', tipo: 'texto', enPdf: false },
+          { clave: 'limite', titulo: 'Fecha límite para responder', tipo: 'fecha' },
+          { clave: 'dias', titulo: 'Días hábiles que quedan', tipo: 'numero', dec: 0, enPdf: false },
+          { clave: 'clave', titulo: 'Clave numérica (50 dígitos)', tipo: 'texto', enPdf: false }],
+        filas: filas.map((f) => {
+          const e = estadoFila(f); const sg = f.tipo === 'NotaCreditoElectronica' ? -1 : 1;
+          return { llego: f.llego, fecha: f.fecha, prov: limpiarNombre(f.emisor_nombre), ced: f.emisor_cedula || '', tipo: nombreTipo(f.tipo), cons: f.consecutivo || '', total: sg * +f.total, iva: sg * +f.iva, neto: sg * +f.neto, resp: e.texto, detalle: e.sub || '', limite: f.pendiente && f.vence ? f.vence : '', dias: f.pendiente ? +f.dias_restantes : '', clave: f.clave || '' };
+        }),
+        totales: { total: 'suma', iva: 'suma', neto: 'suma' },
+        notas,
+      };
     }
 
     /* ---------- detalle ---------- */
@@ -187,7 +220,8 @@ export default {
       cuerpo.replaceChildren(
         ...(aviso ? [h('div.rec-ok', aviso)] : []),
         h('div.rec-detalle-cab', h('div', h('h2', nomProv(f.emisor_nombre)), h('p.tenue', `${nombreTipo(f.tipo)} · consecutivo ${f.consecutivo || 'sin dato'} · cédula del proveedor ${f.emisor_cedula || 'sin dato'}`)),
-          h('span.chip' + (e.clase ? '.' + e.clase : ''), e.texto)),
+          h('div.fila', h('span.chip' + (e.clase ? '.' + e.clase : ''), e.texto),
+            lineas.length ? crearDescarga(() => opcionesFactura(d, e), { texto: 'Descargar esta factura', etiqueta: 'Descargar las líneas de esta factura' }) : null)),
         h('div.rec-datos',
           dato('Emitida', fechaHora(f.fecha)), dato('Llegó al correo', fechaHora(f.llego)), dato('Correo', f.buzon || 'sin dato'),
           dato('Compra para', d.local ? d.local.nombre : (f.receptor_nombre || 'sin dato')), dato('Cédula del receptor', f.receptor_cedula || 'sin dato'), dato('Condición de venta', { '01': 'Contado', '02': 'Crédito' }[f.condicion_venta] || f.condicion_venta || 'sin dato'),
@@ -203,6 +237,26 @@ export default {
           moneda ? h('small.tenue', `Montos convertidos a colones. En ${f.moneda} el total es ${num(f.total_orig, 2)}.`) : null),
         respuesta,
         h('details.rec-tecnico', h('summary', 'Datos técnicos'), h('p.tenue', 'Clave numérica: ', h('code', f.clave)), (d.mensajes || []).map((x) => h('p.tenue', `${x.tipo} · estado ${x.estado || 'sin dato'} · ${x.recibido ? fechaHora(x.recibido) : ''}${x.detalle && x.detalle !== '.' ? ' · ' + x.detalle : ''}`))));
+    }
+
+    // Lo que se descarga de una factura abierta: sus líneas, con los totales que se ven abajo
+    function opcionesFactura(d, e) {
+      const f = d.factura, nota = f.tipo === 'NotaCreditoElectronica', sg = nota ? -1 : 1;
+      const corto = f.consecutivo ? f.consecutivo.slice(-10).replace(/^0+(?=\d)/, '') : '';
+      return {
+        nombre: `${nota ? 'Nota de crédito de proveedor' : 'Factura de proveedor'} ${limpiarNombre(f.emisor_nombre)} ${corto}`.trim(),
+        empresa: nomLocal, cedula: soc?.cedula || '',
+        titulo: nota ? 'Nota de crédito de un proveedor' : 'Factura de un proveedor',
+        subtitulo: `${limpiarNombre(f.emisor_nombre)} · ${nombreTipo(f.tipo)} · consecutivo ${f.consecutivo || 'sin dato'} · cédula del proveedor ${f.emisor_cedula || 'sin dato'} · emitida ${fechaHora(f.fecha)} · ${e.texto}`,
+        cifras: 'brutas', cifrasNota: 'Montos del comprobante tal como vienen, en colones' + (f.moneda !== 'CRC' ? `; la factura está en ${f.moneda} y aquí se muestra convertida` : ''),
+        columnas: [
+          { clave: 'n', titulo: 'Línea', tipo: 'numero', dec: 0 }, { clave: 'det', titulo: 'Detalle', tipo: 'texto' }, { clave: 'cabys', titulo: 'CABYS', tipo: 'texto' },
+          { clave: 'cant', titulo: 'Cantidad', tipo: 'numero', dec: 3 }, { clave: 'pu', titulo: 'Precio unitario (₡)', tipo: 'moneda', decMax: 5 },
+          { clave: 'sub', titulo: 'Sin IVA (₡)', tipo: 'moneda' }, { clave: 'iva', titulo: 'IVA (₡)', tipo: 'moneda' }, { clave: 'tot', titulo: 'Total de la línea (₡)', tipo: 'moneda' }],
+        filas: (d.lineas || []).map((l) => ({ n: l.linea > 999 ? '' : l.linea, det: l.detalle || '', cabys: l.cabys || '', cant: l.cantidad, pu: l.precio_unitario, sub: l.subtotal, iva: l.impuesto, tot: l.total_linea })),
+        totales: { sub: sg * +f.neto, iva: sg * +f.iva, tot: sg * +f.total }, etiquetaTotal: nota ? 'Total de la nota de crédito' : 'Total de la factura',
+        notas: [nota ? 'Los totales de una nota de crédito van en negativo: restan de lo que se debe.' : ''],
+      };
     }
 
     function pintarRespuesta(caja, d, clave, cuerpo, e) {

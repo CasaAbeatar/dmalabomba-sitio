@@ -11,9 +11,19 @@ const pausa = (ms) => new Promise((r) => setTimeout(r, ms));
 
 const guardar = (k, v) => { try { localStorage.setItem('fx_' + k, v); } catch { /* sin almacenamiento */ } };
 const leer = (k) => { try { return localStorage.getItem('fx_' + k); } catch { return null; } };
-// Una sesión que ya no sirve se reconoce por su clase de error (api.js), no por palabras. Única excepción: fx_chk contesta «Sin acceso al facturador» cuando el usuario fue desactivado.
-const esSinAcceso = (e) => !!e && (e.estado === 403 || /sin acceso al facturador/i.test(e.message || ''));
+// Una sesión que ya no sirve se reconoce por su clase de error (api.js), no por palabras. Única excepción: fx_chk contesta «Sin acceso al facturador» (esa frase exacta, con código
+// P0001) cuando el usuario fue desactivado; el día que fx_chk lo diga con el código PT403 basta el código (ErrorApi.codigo). Un 403 por otro motivo (el permiso de una función,
+// una regla de la puerta de entrada) NO cierra la sesión: sale la pantalla de «Intentar de nuevo» con el mensaje que mandó el sistema.
+const esSinAcceso = (e) => !!e && (e.codigo === 'PT403' || /^sin acceso al facturador\.?$/i.test(String(e.message || '').trim()));
 const PIN_FACIL = 'Elija un PIN menos obvio. ';
+
+// El PIN con el que la persona acaba de entrar, SOLO en memoria (nunca en el aparato) y solo para el cambio obligatorio de PIN: ese PIN ya se comprobó al entrar, así que la pantalla no
+// lo vuelve a pedir. El servidor igual lo verifica al cambiarlo. Se olvida al cambiar el PIN, al salir, cuando la sesión no tiene cambio pendiente y a los pocos minutos.
+const VIDA_PIN_DE_ENTRADA = 5 * 60 * 1000;
+let pinDeEntrada = null; // { pin, hasta }
+const recordarPinDeEntrada = (pin) => { pinDeEntrada = /^\d{4}$/.test(String(pin)) ? { pin: String(pin), hasta: Date.now() + VIDA_PIN_DE_ENTRADA } : null; };
+const olvidarPinDeEntrada = () => { pinDeEntrada = null; };
+const pinDeEntradaVigente = () => (pinDeEntrada && Date.now() < pinDeEntrada.hasta ? pinDeEntrada.pin : '');
 
 // Estado compartido con los módulos
 export const app = {
@@ -88,7 +98,7 @@ function textoErrorAcceso(e, { cambiarEmpresa = true } = {}) {
   if (e && e.motivo === 'sin_acceso_empresa') return 'Ese usuario no tiene acceso a esta empresa.' + (cambiarEmpresa ? ' Si trabaja en otro negocio, toque «Cambiar de empresa».' : ' Avise a la persona encargada.');
   if (e && e.estado === 401) {
     return cambiarEmpresa
-      ? 'El usuario o el PIN no coinciden. Revise que el usuario sea el suyo y escriba el PIN otra vez; puede intentarlo de nuevo ahora mismo. Si entra a otro negocio, toque «Cambiar de empresa».'
+      ? 'El usuario o el PIN no coinciden. Revíselos e intente de nuevo ahora mismo.'
       : 'El PIN no coincide. Escríbalo otra vez con cuidado; puede intentarlo de nuevo ahora mismo.';
   }
   return conPunto((e && e.message) || 'No se pudo entrar. Revise la conexión e intente de nuevo.');
@@ -207,6 +217,7 @@ function pantallaUsuario(emp, mensaje) {
     try {
       const u = limpiarUsuario(usuario.value); // «María », «MARIA» y «ma ria» entran como «maria»: un usuario válido nunca lleva mayúsculas, tildes ni espacios
       const j = await entrar(emp.codigo, u, pad.valor(), { alReintentar: () => mostrarEstado('La respuesta tardó. Intentando de nuevo…') });
+      recordarPinDeEntrada(pad.valor()); // solo en memoria: si hay que cambiar el PIN, no se vuelve a pedir el que acaba de comprobarse
       guardar('usuario', u);
       // El servicio de acceso nuevo devuelve la empresa de la sesión. Si todavía no la devuelve, vale la que se reconoció en el paso 1 (respaldo temporal).
       recordarEmpresa(j && j.empresa ? infoEmpresa(j.empresa) : emp);
@@ -258,28 +269,44 @@ function problemaPinNuevo(actual, nuevo, otra) {
   if (otra != null && nuevo !== otra) return 'Los dos PIN nuevos no son iguales.';
   return '';
 }
-function pantallaCambioPin() {
+// pedirActual = true fuerza el campo «PIN actual» (cuando no se recuerda el PIN con el que se entró, o el servidor no lo aceptó). aviso = una frase para arriba de los campos.
+function pantallaCambioPin({ pedirActual = false, aviso = '' } = {}) {
   raiz.replaceChildren();
+  // Si la persona acaba de entrar con su PIN en esta pantalla, ese PIN ya se comprobó: no se le pide otra vez (ahí se equivocaban y el freno de fx_pin_cambiar las dejaba fuera).
+  // Si recargó la página con la sesión abierta no hay nada que recordar y el campo se muestra como siempre.
+  const conocido = !pedirActual && !!pinDeEntradaVigente();
   const campoPin = (etiqueta, auto) => h('input.campo', { type: 'password', inputmode: 'numeric', maxlength: 4, autocomplete: auto, 'aria-label': etiqueta });
-  const actual = campoPin('PIN actual', 'current-password'), nuevo = campoPin('PIN nuevo', 'new-password'), otra = campoPin('Repita el PIN nuevo', 'new-password');
-  [actual, nuevo, otra].forEach((i) => i.addEventListener('input', () => { const v = i.value.replace(/\D/g, '').slice(0, 4); if (v !== i.value) i.value = v; }));
+  const actual = conocido ? null : campoPin('PIN actual', 'current-password'), nuevo = campoPin('PIN nuevo', 'new-password'), otra = campoPin('Repita el PIN nuevo', 'new-password');
+  [actual, nuevo, otra].filter(Boolean).forEach((i) => i.addEventListener('input', () => { const v = i.value.replace(/\D/g, '').slice(0, 4); if (v !== i.value) i.value = v; }));
   const err = h('div.error-caja', { hidden: true, role: 'alert' });
   const mostrar = (m) => { err.textContent = m; err.hidden = !m; };
   const ok = h('button.btn.primario.grande', { type: 'button', onclick: () => conBoton(ok, async () => {
     mostrar('');
-    const p = problemaPinNuevo(actual.value, nuevo.value, otra.value);
+    const pinActual = actual ? actual.value : pinDeEntradaVigente();
+    if (!actual && !pinActual) return pantallaCambioPin({ pedirActual: true, aviso: 'Por seguridad, escriba otra vez el PIN actual, el que le dieron.' }); // pasaron unos minutos desde que entró
+    const p = problemaPinNuevo(pinActual, nuevo.value, otra.value);
     if (p) return mostrar(p);
-    try { await api.pinCambiar(actual.value, nuevo.value); toast('PIN cambiado.'); await arrancar(); } catch (e) { mostrar(conPunto(textoDeError(e))); }
+    try {
+      await api.pinCambiar(pinActual, nuevo.value);
+      olvidarPinDeEntrada();
+      toast('PIN cambiado.');
+      await arrancar();
+    } catch (e) {
+      // El servidor dice por su pista (hint) que el PIN actual no coincide: el que se recordaba ya no vale (por ejemplo, el administrador lo reinició mientras tanto). Se pide el campo.
+      if (!actual && e?.hint === 'pin_actual') { olvidarPinDeEntrada(); return pantallaCambioPin({ pedirActual: true, aviso: 'No se pudo confirmar su PIN actual. Escríbalo otra vez, el que le dieron.' }); }
+      mostrar(conPunto(textoDeError(e)));
+    }
   }) }, 'Guardar mi PIN nuevo');
   raiz.append(h('div.pantalla-centro', h('div.login.tarjeta.col',
     h('h1', 'Elija su PIN'),
     h('p.sub', 'Por seguridad, cambie el PIN que le dieron por uno que solo usted conozca. Tiene que ser de 4 números. Evite repetir el mismo número (1111), números seguidos (1234 o 4321) o parejas (1212).'),
-    h('label.etq', 'PIN actual (el que le dieron)', actual),
+    actual ? h('label.etq', 'PIN actual (el que le dieron)', actual) : null,
     h('label.etq', 'PIN nuevo', nuevo),
     h('label.etq', 'Repita el PIN nuevo', otra),
     err, ok,
     h('button.btn.suave', { type: 'button', onclick: () => cerrarSesion() }, 'Salir'))));
-  actual.focus();
+  if (aviso) mostrar(aviso);
+  (actual || nuevo).focus();
 }
 
 function cambiarPinDialogo() {
@@ -448,7 +475,7 @@ function abrirAyudaSinRed() {
       ]),
       bloque('Cómo saber si ya se cobró', [
         'Cuando vuelva la conexión, vea si la cuenta sigue entre las cuentas abiertas: si sigue ahí, no se cobró.',
-        'Si ya no está, abra «Anular o reimprimir» y busque la venta: si aparece con su número, sí se cobró.',
+        'Si ya no está, abra «Anular y reimprimir» y busque la venta: si aparece con su número, sí se cobró.',
         'Si la cuenta dice que el cobro quedó en duda, toque «Revisar si se cobró» en esa cuenta antes de volver a cobrar.',
       ])),
     botones: [{ texto: 'Entendido', clase: 'primario', onclick: (c) => c() }],
@@ -464,9 +491,19 @@ function mostrarSesionVencida() {
   const emp = app.empresa || (empresaRecordada() ? { codigo: empresaRecordada().codigo, nombre: empresaRecordada().nombre } : { codigo: 'pollos', nombre: 'Pollos La Bomba' });
   const previos = [raiz, ...document.querySelectorAll('.modal-fondo')];
   previos.forEach((x) => { x.inert = true; });
+  // El botón Atrás (util.js) le pregunta a la ventana de arriba, con su _bloqueo, si se puede cerrar: mientras «Su sesión venció» esté puesta, ninguna ventana de debajo se cierra
+  // con Atrás y lo que la persona tenía escrito se conserva. Al cerrar esta ventana cada una recupera el bloqueo que tenía.
+  const bloqueosPrevios = previos.map((x) => x._bloqueo);
+  previos.forEach((x) => { if (typeof x._cerrar === 'function') x._bloqueo = () => 'Primero entre de nuevo con su PIN. Así lo que escribió no se pierde.'; });
   const cuerpo = h('div.modal-cuerpo');
   const fondo = h('div#sesion-vencida.modal-fondo.sesion-fondo', { role: 'alertdialog', 'aria-modal': 'true', 'aria-labelledby': 'sv-tit' }, h('div.modal.sesion-caja', { style: 'max-width:420px' }, cuerpo));
-  const cerrar = () => { document.onkeydown = null; document.removeEventListener('keydown', alTeclear); fondo.remove(); previos.forEach((x) => { x.inert = false; }); };
+  const cerrar = () => {
+    document.onkeydown = null;
+    document.removeEventListener('keydown', alTeclear);
+    window.removeEventListener('keydown', alTeclaDeVentana, true);
+    fondo.remove();
+    previos.forEach((x, i) => { x.inert = false; if (typeof x._cerrar === 'function') x._bloqueo = bloqueosPrevios[i]; });
+  };
   const paso1 = () => {
     cuerpo.replaceChildren(h('div.col',
       h('h2#sv-tit', 'Su sesión venció'),
@@ -490,8 +527,12 @@ function mostrarSesionVencida() {
       toast('Listo, entró de nuevo. Puede seguir donde estaba.');
       try { await app.refrescar(); } catch { /* la cabecera se actualiza sola luego */ }
       actualizarAlertas(true);
-      // Si alguna pantalla se quedó con el aviso «Su sesión venció» y un botón «Intentar de nuevo», se reintenta sola. Lo que ya cargó bien no se toca.
-      if (vista && vista.textContent.includes('Su sesión venció')) vista.querySelectorAll('button').forEach((b) => { if (b.textContent.trim() === 'Intentar de nuevo') b.click(); });
+      // Si alguna pantalla se quedó con un aviso de falla y su botón de «Intentar de nuevo», se reintenta sola. Lo que ya cargó bien no se toca.
+      // El botón se reconoce por su marca data-reintentar (la pone bloqueError en util.js), no por lo que dice.
+      const marcados = vista ? [...vista.querySelectorAll('[data-reintentar]')] : [];
+      if (marcados.length) marcados.forEach((b) => b.click());
+      // RESPALDO hasta que util.js ponga la marca: la lectura por texto de antes. Se quita en cuanto bloqueError traiga data-reintentar.
+      else if (vista && vista.textContent.includes('Su sesión venció')) vista.querySelectorAll('button').forEach((b) => { if (b.textContent.trim() === 'Intentar de nuevo') b.click(); });
     } catch (e) {
       if (!esErrorEsperado(e)) console.error(e);
       pad.limpiar(); mostrarError(textoErrorAcceso(e, { cambiarEmpresa: false })); estado.hidden = true; pad.bloquear(false);
@@ -503,6 +544,7 @@ function mostrarSesionVencida() {
       h('p.sub.sv-quien', h('span', 'Empresa: ', h('strong', emp.nombre || 'Su empresa')), h('span', 'Usuario: ', h('strong', nombre)), h('span', 'El PIN son 4 números.')),
       pad.dots, estado, err, pad.teclado,
       h('button.btn.suave', { type: 'button', onclick: () => { pad.limpiar(); mostrarError(''); paso1(); } }, 'Atrás')));
+    cuerpo.querySelector('.teclado button')?.focus(); // el botón que se tocó desaparece: el foco pasa al teclado y no se pierde en la página
   }
   const alTeclear = (e) => {
     if (!cuerpo.querySelector('.teclado') || e.ctrlKey || e.metaKey || e.altKey) return;
@@ -510,6 +552,20 @@ function mostrarSesionVencida() {
     else if (e.key === 'Backspace') pad.borrar();
   };
   document.addEventListener('keydown', alTeclear);
+  // Escape y Tab se atienden ANTES que la ventana de debajo (escucha en la fase de captura de window): Escape no la cierra y Tab no le mueve el foco a algo que está inerte.
+  // Tab da la vuelta dentro de esta ventana.
+  const alTeclaDeVentana = (e) => {
+    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); return; }
+    if (e.key !== 'Tab') return;
+    e.stopPropagation();
+    const botones = [...cuerpo.querySelectorAll('button:not([disabled])')].filter((b) => b.offsetParent !== null);
+    if (!botones.length) { e.preventDefault(); return; }
+    const primero = botones[0], ultimo = botones[botones.length - 1], en = document.activeElement;
+    if (!fondo.contains(en)) { e.preventDefault(); (e.shiftKey ? ultimo : primero).focus(); }
+    else if (e.shiftKey && en === primero) { e.preventDefault(); ultimo.focus(); }
+    else if (!e.shiftKey && en === ultimo) { e.preventDefault(); primero.focus(); }
+  };
+  window.addEventListener('keydown', alTeclaDeVentana, true);
   document.body.append(fondo);
   paso1();
 }
@@ -667,7 +723,7 @@ function armarApp(reciente = false) {
       h('button.btn.alerta-ver', { type: 'button', 'aria-label': 'Ver cuáles son los documentos con problemas', onclick: verAlertas }, 'Ver cuáles son')));
   redEl = h('div.sin-red', { role: 'status', hidden: true },
     h('div.sin-red-in',
-      h('span.sin-red-txt', h('strong', 'Sin conexión a internet. '), h('span.sin-red-mas', 'Lo que está en pantalla se conserva y el sistema seguirá solo cuando vuelva la conexión. '), 'Si un cobro quedó en duda, no lo repita: primero revise si ya se cobró.'),
+      h('span.sin-red-txt', h('strong', 'Sin conexión a internet. '), h('span.sin-red-mas', 'Cuando vuelva la conexión este aviso se quita solo. Lo último que hizo podría no haberse guardado: revíselo antes de repetirlo. '), 'Si un cobro quedó en duda, no lo repita: primero revise si ya se cobró.'),
       h('div.sin-red-btns',
         h('button.btn.chico', { type: 'button', onclick: abrirAyudaSinRed }, 'Qué hacer y qué no hacer'),
         h('button.btn.chico', { type: 'button', onclick: (e) => conBoton(e.currentTarget, async () => { await app.refrescar(); mostrarRed(false); toast('Conexión recuperada.'); }) }, 'Revisar ahora'))));
@@ -688,7 +744,7 @@ function armarApp(reciente = false) {
       tituloEl,
       h('div.cab-estado', h('span.estado-turno')),
       // Atajo siempre visible: anular una factura no debe esconderse dentro de otra pantalla. Lleva a «Anular y reimprimir» con el cursor en el buscador.
-      h('button.btn.cab-anular', { type: 'button', onclick: irAAnular }, 'Anular o reimprimir'),
+      h('button.btn.cab-anular', { type: 'button', onclick: irAAnular }, 'Anular y reimprimir'),
       menuEl),
     alertaEl, redEl);
   raiz.append(cab, vista);
@@ -721,6 +777,7 @@ async function cerrarSesion() {
     document.getElementById('impresion-resumen')?.remove();
     document.querySelectorAll('#toasts .toast').forEach((t) => t.remove());
     await salir().catch(() => {});
+    olvidarPinDeEntrada();
     app.ctx = null; app.socId = null; app.moduloActual = null; app.pedido = null; app.alertas.datos = null; app.recepcion = null;
     recepcionCache = null; recepcionHora = 0; veniaDe = null;
     cab = vista = alertaEl = redEl = menuEl = tituloEl = volverEl = inicioEl = null;
@@ -754,17 +811,20 @@ async function arrancar(reciente = false) {
     app.ctx = await cargarContexto(reciente);
   } catch (e) {
     if (esSesionVencida(e) || esSinAcceso(e)) {
+      olvidarPinDeEntrada();
       await salir().catch(() => {});
       return pantallaLogin(esSinAcceso(e) && !esSesionVencida(e) ? 'Su usuario ya no tiene acceso al facturador. Hable con la persona encargada.' : 'Su sesión ya no está abierta. Entre de nuevo.');
     }
     // Falla momentánea de red o del servicio: no se cierra la sesión, se ofrece reintentar
     raiz.replaceChildren(h('div.pantalla-centro', h('div.login.tarjeta.col',
-      h('h1', 'Sin conexión por un momento'),
+      h('h1', esTransitorio(e) ? 'Sin conexión por un momento' : 'No se pudo abrir el sistema'),
       h('p.sub', (e && typeof e.tipo === 'string' && e.message ? conPunto(e.message) + ' ' : '') + 'No se cerró su sesión.'),
       h('button.btn.primario.grande', { type: 'button', onclick: (ev) => conBoton(ev.currentTarget, () => arrancar()) }, 'Intentar de nuevo'),
-      h('button.btn.suave', { type: 'button', onclick: async () => { await salir().catch(() => {}); pantallaLogin(); } }, 'Salir'))));
+      h('button.btn.suave', { type: 'button', onclick: async () => { olvidarPinDeEntrada(); await salir().catch(() => {}); pantallaLogin(); } }, 'Salir'))));
     return;
   }
+  // El PIN de entrada solo se guarda en memoria para el cambio obligatorio: si no hay cambio pendiente, se olvida de una vez
+  if (!app.ctx.debe_cambiar_pin) olvidarPinDeEntrada();
   if (app.ctx.debe_cambiar_pin) return pantallaCambioPin();
   // La empresa de la sesión la dice el servidor (empresa_sesion). Mientras una sesión no esté atada a ninguna (servicio de acceso viejo), se usa la que se escogió
   // al entrar en este aparato y, como último respaldo, 'pollos'.
