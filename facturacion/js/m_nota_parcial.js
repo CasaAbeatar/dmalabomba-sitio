@@ -3,7 +3,7 @@
 //   «Corregir un monto»               -> código 02: nota de crédito si se cobró de más (fx_nota_credito_monto), nota de débito si se cobró de menos (fx_nota_debito_monto)
 //   «Dejar sin efecto la anulación»   -> nota de débito código 01 sobre la nota de crédito de anulación total (fx_nota_debito_sin_efecto)
 // Los códigos 13 a 17 no se usan (están apagados). Todos los montos los calcula el servidor: la pantalla manda cantidades o montos por línea y el reparto del dinero,
-// y antes de confirmar pide el total con fx_nota_calcular. Los errores de las funciones vienen en español y se muestran tal cual (mensajeAmable).
+// y antes de confirmar pide el total con fx_nota_calcular. Los errores de las funciones vienen en español y se muestran con sus mismas palabras (mensajeAmable); solo los números se escriben como en el resto de la pantalla (amigableDelServidor).
 // Una nota no se puede deshacer: la pantalla lo dice con calma, avisa del correo y de que Hacienda puede tardar unos minutos.
 import { h, money, modal, toast, nombrePropio, fechaCorta, num, leerNumero, MEDIOS, bloqueError, esqueleto, conBoton } from './util.js';
 import { saldosEstricto, notaCalcular, notaDevolucion, notaCreditoMonto, notaDebitoMonto, notaDebitoSinEfecto, mensajeAmable } from './api_documentos.js';
@@ -45,6 +45,16 @@ export function leerMonto(s) {
   if (v > MAX_ENTRADA) return { error: 'Ese monto es demasiado grande.' };
   return { cent: Math.round(v * 100) };
 }
+
+// Los avisos de la base traen los montos como «₡1000.00» y las cantidades como «1.000» (punto decimal y tres decimales: en Costa Rica «1.000» se lee como mil).
+// Aquí se dicen como en el resto de la pantalla, «₡1 000,00» y «1»; las palabras del aviso no se tocan.
+export function amigableDelServidor(msg) {
+  return String(msg ?? '')
+    .replace(/₡\s?(\d+)\.(\d{2})(?!\d)/g, (_, e, d) => money(Number(e + '.' + d)))
+    .replace(/(solo tiene |se pidió )(\d+)\.(\d{3})(?!\d)/g, (_, pre, e, d) => pre + num(Number(e + '.' + d)))
+    .replace(/(Los pagos \()(\d+)\.(\d{2})(\) no suman el total de la nota \()(\d+)\.(\d{2})(\))/g, (_, a, e1, d1, b, e2, d2, c) => a + money(Number(e1 + '.' + d1)) + b + money(Number(e2 + '.' + d2)) + c);
+}
+const mensajeDe = (e, defecto) => amigableDelServidor(mensajeAmable(e, defecto));
 
 /* ---------- Validaciones (puras, sin pantalla). Las mismas reglas del servidor; el servidor sigue siendo quien manda ---------- */
 // lineas: [{ linea, nombre, saldoMil, saldoCent, pfCent }]; texto: Map(linea -> lo escrito).
@@ -269,7 +279,7 @@ function abrir(app, d, clase, { alTerminar, alVerNota } = {}) {
       if (S.paso === 'editar' && clase !== 'sinefecto' && !lineasSaldo(saldos).length) throw new Fallo('No se pudo leer el detalle de los productos de este documento. Intente de nuevo.');
     } catch (e) {
       if (!S.vivo) return;
-      S.paso = 'error'; S.errorLectura = mensajeAmable(e, 'No se pudo leer el documento. Revise la conexión e intente de nuevo.');
+      S.paso = 'error'; S.errorLectura = mensajeDe(e, 'No se pudo leer el documento. Revise la conexión e intente de nuevo.');
     }
     pintar();
   }
@@ -450,7 +460,7 @@ function abrir(app, d, clase, { alTerminar, alVerNota } = {}) {
       S.calc = calc; S.queda = queda; S.razon = razon; S.payload = payload;
       S.paso = 'revisar'; pintar();
     } catch (e) {
-      const msg = e instanceof Fallo ? e.message : mensajeAmable(e);
+      const msg = e instanceof Fallo ? e.message : mensajeDe(e);
       mostrarError(msg);
       // El servidor dijo que no por los datos (lo más común: otra persona hizo una nota mientras tanto): se leen los saldos de nuevo para que los topes que se ven sean los de ahora
       if (!(e instanceof Fallo) && esRechazo(e)) {
@@ -587,7 +597,7 @@ function abrir(app, d, clase, { alTerminar, alVerNota } = {}) {
       resultado(nota, lec.pagos);
       try { await alTerminar?.(nota); } catch { /* la lista se actualiza sola en unos segundos */ }
     } catch (e) {
-      mostrarError(e instanceof Fallo ? e.message : mensajeAmable(e));
+      mostrarError(e instanceof Fallo ? e.message : mensajeDe(e));
       if (e instanceof Fallo && e.dudoso) { marcarDudoso(); try { Promise.resolve(alTerminar?.(null)).catch(() => {}); } catch { /* nada */ } }
       else if (!(e instanceof Fallo) && esRechazo(e)) refrescar(); // si la persona vuelve al paso 1, ahí ya están los saldos de ahora
     } finally { S.enVuelo = false; }
@@ -601,7 +611,7 @@ function abrir(app, d, clase, { alTerminar, alVerNota } = {}) {
       resultado(nota, S.ultimoReparto || []);
       try { await alTerminar?.(nota); } catch { /* nada */ }
     } catch (e) {
-      mostrarError(e instanceof Fallo ? e.message : mensajeAmable(e));
+      mostrarError(e instanceof Fallo ? e.message : mensajeDe(e));
       if (e instanceof Fallo && !e.dudoso) quitarDudoso();
     } finally { S.enVuelo = false; }
   }
