@@ -265,3 +265,4 @@ table.hist th{min-width:0}
 
 /* Dato discreto de una sola línea (por ejemplo «Líneas con precio distinto del catálogo: 3» en el resumen del turno): línea fina arriba, sin color de alarma */
 .precios-cambiados{margin:.2rem 0 0;padding-top:.6rem;border-top:1px solid var(--linea);color:var(--tinta2);font-size:.95rem}
+.contador-notas{align-self:flex-end;font-weight:400;color:var(--tinta2);font-variant-numeric:tabular-nums}

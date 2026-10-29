@@ -16,6 +16,7 @@ function cargarCss() {
   });
 }
 
+const MAX_NOTAS = 200; // largo máximo de la nota del cierre que acepta el servidor
 const OTROS = ['tarjeta', 'sinpe', 'transferencia'];
 const TODOS = ['efectivo', 'tarjeta', 'sinpe', 'transferencia'];
 const cents = (n) => Math.round((Number(n) || 0) * 100);
@@ -290,8 +291,12 @@ export default {
         else difBox.replaceChildren(chipDif(r2(v - d.esperado)));
       }
       inp.addEventListener('input', () => { contadoTxt = inp.value; recalcular(); });
-      const txtNotas = h('textarea.campo', { rows: 3, placeholder: 'Ej. se pagó al proveedor de hielo', value: notas, 'aria-label': 'Notas del cierre' });
-      txtNotas.addEventListener('input', () => { notas = txtNotas.value; });
+      // El servidor guarda hasta 200 caracteres en la nota del cierre: el campo no deja escribir más y un contador discreto dice cuánto lleva
+      const txtNotas = h('textarea.campo', { rows: 3, maxlength: MAX_NOTAS, placeholder: 'Ej. se pagó al proveedor de hielo', value: notas.slice(0, MAX_NOTAS), 'aria-label': 'Notas del cierre' });
+      const contador = h('small.contador-notas', { 'aria-live': 'off' });
+      const contar = () => { contador.textContent = txtNotas.value.length + ' de ' + MAX_NOTAS; };
+      txtNotas.addEventListener('input', () => { notas = txtNotas.value.slice(0, MAX_NOTAS); contar(); });
+      contar();
       const err = h('div.error-caja', { hidden: true });
       const btn = h('button.btn.primario.grande', { type: 'button' }, 'Cerrar caja');
       btn.addEventListener('click', () => conBoton(btn, async () => {
@@ -299,7 +304,7 @@ export default {
         const v = leer();
         if (v == null) { err.textContent = 'Escriba cuánto efectivo hay en la caja ahora. Si no hay nada, escriba 0.'; err.hidden = false; inp.focus(); return; }
         if (Number.isNaN(v)) { err.textContent = 'Ese monto no es válido. Escriba solo números, por ejemplo 15000.'; err.hidden = false; inp.focus(); return; }
-        await prepararCierre(d, v, notas.trim());
+        await prepararCierre(d, v, notas.trim().slice(0, MAX_NOTAS));
       }));
       const avisoAbiertas = abiertas.length ? h('div.aviso-abiertas',
         h('strong', 'Hay ' + abiertas.length + (abiertas.length === 1 ? ' cuenta abierta sin cobrar' : ' cuentas abiertas sin cobrar')),
@@ -332,7 +337,7 @@ export default {
           h('div.contado-caja',
             h('label.etq', 'Efectivo que hay en la caja ahora (₡)', h('small', 'Cuente los billetes y monedas y escriba el total.'), inp),
             difBox)),
-        h('label.etq', 'Notas del cierre (opcional)', txtNotas),
+        h('label.etq', 'Notas del cierre (opcional)', txtNotas, contador),
         err,
         h('div.fila', btn, h('button.btn', { type: 'button', onclick: cargar }, 'Actualizar cifras')));
       recalcular();

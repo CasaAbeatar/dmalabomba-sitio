@@ -274,12 +274,14 @@ async function conReintento(hacer, alReintentar) {
   }
   throw ultimo instanceof Error && ultimo.message ? ultimo : new ErrorApi('No se pudo entrar. Intente de nuevo.');
 }
-const errorDeAcceso = (r, j) => new ErrorApi(j.error || 'No se pudo entrar. Intente de nuevo.', { transitorio: r.status >= 500, estado: r.status, hasta: j.hasta || null, motivo: j.motivo || '' });
+// El estado que se anota en el error: el del servidor; si contestó 200 con ok:false, el que corresponde al motivo (así un rechazo esperado nunca se toma por una falla)
+const ESTADO_DE_MOTIVO = { falta_empresa: 400, empresa_desconocida: 404, empresa_no_habilitada: 403 };
+const errorDeAcceso = (r, j) => new ErrorApi(j.error || 'No se pudo entrar. Intente de nuevo.', { transitorio: r.status >= 500, estado: r.ok ? (ESTADO_DE_MOTIVO[j.motivo] || 400) : r.status, hasta: j.hasta || null, motivo: j.motivo || '' });
 const sinRespuestaClara = (r, j) => !j || typeof j.ok !== 'boolean';
 const MSG_SIN_RESPUESTA = (r) => new ErrorApi('El servicio de acceso no respondió bien (código ' + r.status + '). Intente de nuevo en unos segundos.', { transitorio: true, estado: r.status });
 
-// RESPALDO TEMPORAL mientras el servicio de acceso todavía no conoce los códigos de empresa (el servicio viejo contesta 400 «Escriba su usuario y su PIN» sin motivo).
-// Cuando facturador-acceso con empresa esté puesto en marcha, este bloque ya no se usa y se puede borrar.
+// RESPALDO: la tabla de empresas conocidas de este aparato. SOLO se usa cuando no hay red o el servicio de acceso no responde (sin respuesta, error del servidor o una respuesta
+// que no se entiende, como la del servicio viejo que no conocía los códigos de empresa). Cuando el servicio contesta con claridad (empresa reconocida, desconocida o no habilitada) manda el servicio.
 const EMPRESAS_RESPALDO = {
   pollos: { codigo: 'pollos', codigo_acceso: 'pollos', nombre_comercial: 'Pollos La Bomba', cedula: '3102111943', cedula_tipo: '02' },
   soda: { codigo: 'soda', codigo_acceso: 'soda', nombre_comercial: 'Soda La Bomba', cedula: '3102765594', cedula_tipo: '02' },
@@ -291,18 +293,23 @@ function empresaDeRespaldo(codigo) {
   return { ...e, respaldo: true };
 }
 
-// Primer paso de la entrada: ¿existe esa empresa y está habilitada? Devuelve { codigo, codigo_acceso, nombre, nombre_comercial, cedula, cedula_tipo }.
-// Si no, lanza un ErrorApi con motivo 'empresa_desconocida' («No reconocemos ese código de empresa.») o 'empresa_no_habilitada' (el texto lo da el servidor).
+// Primer paso de la entrada: ¿existe esa empresa y está habilitada? Se lo pregunta al servicio de acceso ({ accion: 'empresa', empresa }) y devuelve
+// { codigo, codigo_acceso, nombre, nombre_comercial, cedula, cedula_tipo }. Si el servicio dice que no, lanza un ErrorApi con motivo 'empresa_desconocida'
+// («No reconocemos ese código de empresa.») o 'empresa_no_habilitada' (el texto lo da el servidor). Solo si no hay red o el servicio no responde se usa el respaldo.
 export async function consultarEmpresa(escrito, { alReintentar } = {}) {
   const codigo = normalizarEmpresa(escrito);
   if (!codigo) throw new ErrorApi('Escriba el código de su empresa, por ejemplo pollos.', { estado: 400, motivo: 'falta_empresa' });
-  return conReintento(async () => {
-    const { r, j } = await intentoAcceso({ accion: 'empresa', empresa: codigo });
-    if (j && j.ok === true && j.empresa) return { ...j.empresa, codigo_acceso: j.empresa.codigo_acceso || j.empresa.codigo || codigo };
-    if (j && j.ok === false && !j.motivo && r.status === 400) return empresaDeRespaldo(codigo);
-    if (sinRespuestaClara(r, j)) throw MSG_SIN_RESPUESTA(r);
-    throw errorDeAcceso(r, j);
-  }, alReintentar);
+  try {
+    return await conReintento(async () => {
+      const { r, j } = await intentoAcceso({ accion: 'empresa', empresa: codigo });
+      if (j && j.ok === true && j.empresa) return { ...j.empresa, codigo_acceso: j.empresa.codigo_acceso || j.empresa.codigo || codigo };
+      if (j && j.ok === false && j.motivo) throw errorDeAcceso(r, j); // el servicio contestó con claridad: se dice lo que dijo
+      throw MSG_SIN_RESPUESTA(r); // sin cuerpo claro (servicio viejo, error del servidor, otra cosa): cuenta como «no respondió»
+    }, alReintentar);
+  } catch (e) {
+    if (e instanceof ErrorApi && e.transitorio) return empresaDeRespaldo(codigo);
+    throw e;
+  }
 }
 
 // Inicio de sesión con código de empresa, usuario y PIN. La sesión que se abre queda atada a esa empresa en el servidor.
@@ -316,17 +323,89 @@ export async function entrar(empresa, usuario, pin, { alReintentar } = {}) {
     const { error } = await sb.auth.setSession({ access_token: j.access_token, refresh_token: j.refresh_token });
     if (error) throw new ErrorApi(error.message || 'No se pudo abrir la sesión. Intente de nuevo.', { transitorio: true });
     sesionRestaurada();
+    reintentarSalidas(); // si un cierre de sesión anterior no llegó al servidor, se repite ahora que hay conexión
     return j;
   }, alReintentar);
 }
 // Cierre de sesión limpio: UNA sola llamada al servidor, que cierra solo la sesión de ESTE aparato (scope 'local'; el celular y la tableta
 // del mismo usuario siguen abiertos). El servidor además invalida ese token (fx_chk exige una sesión viva), así que el token viejo ya no sirve.
-// Si no hay conexión la llamada falla, y entonces se borra la sesión guardada en este aparato a mano: la pantalla nunca queda "medio abierta".
+// Si no hay conexión la llamada falla: entonces se borra la sesión guardada en este aparato a mano (la pantalla nunca queda "medio abierta") y el cierre
+// que faltó en el servidor se anota en una cola corta para repetirlo apenas haya conexión (ver «Cierres de sesión pendientes»).
 export async function salir() {
-  try { await Promise.race([sb.auth.signOut({ scope: 'local' }), pausa(4000)]); } catch { /* sin conexión: se borra solo aquí */ }
+  const guardada = sesionGuardada();
+  let faltoCerrar = false;
+  try {
+    const res = await Promise.race([sb.auth.signOut({ scope: 'local' }), pausa(4000).then(() => ({ error: true }))]);
+    faltoCerrar = !!res?.error; // sin conexión, error del servidor o tiempo agotado; un 401/403/404 no cuenta: esa sesión ya no existe
+  } catch { faltoCerrar = true; /* sin conexión: se borra solo aquí */ }
+  if (faltoCerrar && guardada) { guardarSalidas([...leerSalidas().filter((x) => x.a !== guardada.a), { ...guardada, t: Date.now() }]); vigilarSalidas(); }
   try { localStorage.removeItem('sb-facturador'); localStorage.removeItem('sb-facturador-code-verifier'); } catch { /* sin almacenamiento */ }
   invalidarCatalogo();
   sesionAvisada = false;
+}
+
+/* ---------- Cierres de sesión pendientes ---------- */
+// Cuando el cierre de sesión no llega al servidor (sin internet, servidor caído o tiempo agotado), la sesión de ESTE aparato se borra igual, pero la del servidor sigue viva
+// hasta su tope de 16 horas. Para no dejarla abierta, el cierre se anota en una cola corta de este aparato (máximo 3 anotaciones, que se descartan a las 16 horas) y se repite
+// cuando vuelve la conexión, al abrir la página, después de entrar y cada minuto mientras haya algo pendiente. De cada sesión solo se anotan sus dos códigos y la hora;
+// se borran apenas el servidor confirma (o contesta que esa sesión ya no existe). No se hace nada más con ellos: no sirven para entrar, solo para cerrar esa sesión.
+const CLAVE_SALIDAS = 'fx_salidas_pendientes', MAX_SALIDAS = 3, VIDA_SALIDA = 16 * 3600 * 1000;
+function sesionGuardada() {
+  try { const g = JSON.parse(localStorage.getItem('sb-facturador') || 'null'); return g && typeof g.access_token === 'string' ? { a: g.access_token, r: typeof g.refresh_token === 'string' ? g.refresh_token : '' } : null; } catch { return null; }
+}
+function leerSalidas() {
+  try {
+    const l = JSON.parse(localStorage.getItem(CLAVE_SALIDAS) || '[]');
+    return (Array.isArray(l) ? l : []).filter((x) => x && typeof x.a === 'string' && typeof x.t === 'number' && Math.abs(Date.now() - x.t) < VIDA_SALIDA).slice(-MAX_SALIDAS);
+  } catch { return []; }
+}
+function guardarSalidas(l) {
+  try { if (l.length) localStorage.setItem(CLAVE_SALIDAS, JSON.stringify(l.slice(-MAX_SALIDAS))); else localStorage.removeItem(CLAVE_SALIDAS); } catch { /* sin almacenamiento: no hay cola */ }
+}
+// true = ya no hay nada que cerrar (el servidor lo cerró o ya no existe esa sesión); false = no se pudo hablar con el servidor, se intenta después
+async function cerrarEnServidor(x) {
+  const ctrl = new AbortController();
+  const reloj = setTimeout(() => ctrl.abort(), 10000);
+  const pedir = (ruta, cab, cuerpo) => fetch(`${SUPA_URL}/auth/v1/${ruta}`, { method: 'POST', headers: { apikey: SUPA_KEY, 'Content-Type': 'application/json', ...cab }, body: cuerpo, signal: ctrl.signal });
+  const sigue = (r) => r.status >= 500 || r.status === 429 || r.status === 408;
+  try {
+    let r = await pedir('logout?scope=local', { Authorization: 'Bearer ' + x.a });
+    if (r.status === 401 && x.r) { // el código de acceso ya venció: se renueva con el de refresco y se cierra esa sesión
+      const t = await pedir('token?grant_type=refresh_token', {}, JSON.stringify({ refresh_token: x.r }));
+      if (!t.ok) return !sigue(t); // 400 o parecido: esa sesión ya no existe
+      const n = await t.json().catch(() => null);
+      if (!n?.access_token) return false;
+      x.a = n.access_token; x.r = n.refresh_token || ''; // el de refresco cambia en cada renovación: se anota el nuevo por si este cierre tampoco llega
+      guardarSalidas(leerSalidas().map((y) => (y.t === x.t ? x : y)));
+      r = await pedir('logout?scope=local', { Authorization: 'Bearer ' + x.a });
+    }
+    return !sigue(r);
+  } catch { return false; } finally { clearTimeout(reloj); }
+}
+let salidasEnCurso = false, relojSalidas = null;
+export async function reintentarSalidas() {
+  if (salidasEnCurso || (typeof navigator !== 'undefined' && navigator.onLine === false)) return;
+  const cola = leerSalidas();
+  if (!cola.length) { guardarSalidas([]); return; }
+  salidasEnCurso = true;
+  try {
+    for (const x of cola) {
+      if (!(await cerrarEnServidor(x))) break; // sin conexión: no vale la pena probar con las demás
+      guardarSalidas(leerSalidas().filter((y) => y.t !== x.t));
+    }
+  } finally { salidasEnCurso = false; }
+}
+function vigilarSalidas() {
+  if (relojSalidas || !leerSalidas().length) return;
+  relojSalidas = setInterval(async () => {
+    await reintentarSalidas();
+    if (!leerSalidas().length) { clearInterval(relojSalidas); relojSalidas = null; }
+  }, 60000);
+}
+if (typeof window !== 'undefined') {
+  window.addEventListener('online', () => reintentarSalidas());
+  document.addEventListener('app:red', (e) => { if (e.detail?.ok) reintentarSalidas(); });
+  setTimeout(() => { reintentarSalidas(); vigilarSalidas(); }, 1500); // al abrir la página
 }
 
 /* ---------- Estado de un comprobante (lo usan Caja, Documentos y Anular) ---------- */
