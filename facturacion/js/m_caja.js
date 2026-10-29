@@ -118,12 +118,14 @@ export default {
     let abiertas = [];
     let cur = null; // respuesta de fx_venta de la cuenta activa
     let cajonSel = null;
+    let grupoSel = null; // nivel 3: clave de 4 dígitos (cajón + producto) cuyos modificadores se están viendo; null = nivel 2
     let vista = 'productos'; // celular: productos | cuenta
     let turnoMostrado = null;
     let ocupadas = 0;
     let cola = Promise.resolve();
     let buscador = null, asideCuenta = null, barraCuentas = null, barraExtras = null, gridProd = null, tabsCajon = null, barraMovil = null, cajaEl = null, buscadorWrap = null;
     const tarjetas = new Map(); // producto_id -> {badge}
+    const tarjetasGrupo = new Map(); // clave de producto con modificadores -> badge con el total de sus modificadores en la cuenta
     const timers = [];
 
     // Las acciones sobre la cuenta se hacen una tras otra para que dos toques rápidos no se pisen.
@@ -338,36 +340,88 @@ export default {
     function pintarCajones() {
       tabsCajon.replaceChildren(...catalogo.cajones.map((c) => h('button.cajon-btn', {
         type: 'button', 'aria-pressed': String(c.id === cajonSel),
-        onclick: () => { cajonSel = c.id; pintarCajones(); pintarProductos(); },
+        onclick: () => { cajonSel = c.id; grupoSel = null; pintarCajones(); pintarProductos(); },
       }, c.nombre)));
     }
+    // Cascada de 3 niveles, igual que Prisma: cajón (nivel 1) → producto (nivel 2) → modificador (nivel 3).
+    // Un artículo con modificador_nombre pertenece a un producto con opciones (código CCPPMM, mismo CCPP).
+    // Los demás se cobran con un toque en el nivel 2. El modificador es el artículo final: lleva su propio precio, CABYS e IVA.
+    function nivelesDelCajon(lista) {
+      const salida = [], grupos = new Map();
+      for (const p of lista) {
+        if (!p.modificador_nombre) { salida.push({ directo: p }); continue; }
+        const clave = p.codigo.slice(0, 4);
+        let g = grupos.get(clave);
+        if (!g) { g = { clave, nombre: p.producto_nombre || p.nombre, opciones: [] }; grupos.set(clave, g); salida.push({ grupo: g }); }
+        g.opciones.push(p);
+      }
+      return salida;
+    }
+    const sonido = (b) => { b.classList.add('tocado'); setTimeout(() => b.classList.remove('tocado'), 180); };
+    function tarjetaArticulo(p, nombre, alAgregar) {
+      const badge = h('span.prod-cuenta', { hidden: true, 'aria-hidden': 'true' });
+      const btn = h('button.prod', {
+        type: 'button', 'aria-label': 'Agregar ' + p.nombre + ', ' + (p.descripcion_libre ? 'se escribe el detalle y el precio' : p.precio_abierto ? 'precio abierto' : money(p.precio_final)),
+        onclick: (e) => { sonido(e.currentTarget); alAgregar?.(); agregarProducto(p); },
+      }, h('span.prod-nombre', nombre),
+      h('span.prod-pie', h('span.prod-precio' + (p.precio_abierto || p.descripcion_libre ? '.abierto' : ''), textoPrecio(p)), h('span.prod-cod', p.codigo)), badge);
+      tarjetas.set(p.id, badge);
+      return btn;
+    }
+    function tarjetaGrupo(g) {
+      const precios = g.opciones.filter((p) => !p.precio_abierto && !p.descripcion_libre && Number(p.precio_final) > 0).map((p) => Number(p.precio_final));
+      const min = precios.length ? Math.min(...precios) : null, max = precios.length ? Math.max(...precios) : null;
+      const n = g.opciones.length;
+      const resumen = min == null ? 'Precio abierto' : min === max ? money(min) : 'desde ' + money(min);
+      const badge = h('span.prod-cuenta', { hidden: true, 'aria-hidden': 'true' });
+      const btn = h('button.prod.prod-grupo', {
+        type: 'button', 'aria-label': 'Abrir ' + g.nombre + ', ' + n + (n === 1 ? ' opción' : ' opciones') + ', ' + resumen,
+        onclick: (e) => { sonido(e.currentTarget); grupoSel = g.clave; pintarProductos(); gridProd.scrollTop = 0; },
+      }, h('span.prod-cab', h('span.prod-nombre', g.nombre), h('span.prod-opciones', n + (n === 1 ? ' opción ›' : ' opciones ›'))),
+      h('span.prod-pie', min != null && min !== max ? h('span.prod-precio', h('small.prod-desde', 'desde '), money(min)) : h('span.prod-precio' + (min == null ? '.abierto' : ''), resumen)), badge);
+      tarjetasGrupo.set(g.clave, badge);
+      return btn;
+    }
     function pintarProductos() {
-      tarjetas.clear();
+      tarjetas.clear(); tarjetasGrupo.clear();
+      tabsCajon.hidden = false;
       const lista = productos.filter((p) => p.cajon_id === cajonSel);
       if (!lista.length) { gridProd.replaceChildren(h('div.vacio', { style: 'grid-column:1/-1' }, 'Este cajón no tiene productos activos.')); return; }
-      const nodos = [];
-      let grupo = null;
-      for (const p of lista) {
-        const g = p.codigo.slice(2, 4); // mismo producto o tamaño: dígitos 3 y 4 del código
-        if (grupo !== null && g !== grupo) nodos.push(h('div.grupo-sep'));
-        grupo = g;
-        const badge = h('span.prod-cuenta', { hidden: true, 'aria-hidden': 'true' });
-        const btn = h('button.prod', {
-          type: 'button', 'aria-label': 'Agregar ' + p.nombre + ', ' + (p.descripcion_libre ? 'se escribe el detalle y el precio' : p.precio_abierto ? 'precio abierto' : money(p.precio_final)),
-          onclick: (e) => { e.currentTarget.classList.add('tocado'); const b = e.currentTarget; setTimeout(() => b.classList.remove('tocado'), 180); agregarProducto(p); },
-        }, h('span.prod-nombre', p.nombre),
-        h('span.prod-pie', h('span.prod-precio' + (p.precio_abierto || p.descripcion_libre ? '.abierto' : ''), textoPrecio(p)), h('span.prod-cod', p.codigo)), badge);
-        tarjetas.set(p.id, badge);
-        nodos.push(btn);
+      const niveles = nivelesDelCajon(lista);
+      const abierto = grupoSel && niveles.map((x) => x.grupo).find((g) => g && g.clave === grupoSel);
+      if (grupoSel && !abierto) grupoSel = null; // el catálogo cambió y ese producto ya no existe
+      tabsCajon.hidden = !!abierto; // en el nivel 3 solo se ven las opciones; «Volver» regresa al nivel 2
+      if (abierto) {
+        // Nivel 3: modificadores del producto elegido, cada uno con su precio final. Al tocar uno se agrega y se vuelve al nivel 2.
+        const cajon = catalogo.cajones.find((c) => c.id === cajonSel);
+        const volver = () => { grupoSel = null; pintarProductos(); gridProd.scrollTop = 0; };
+        gridProd.replaceChildren(
+          h('div.nivel3-cab',
+            h('button.btn.volver', { type: 'button', onclick: volver, 'aria-label': 'Volver a ' + (cajon?.nombre || 'los productos') }, '‹ Volver'),
+            h('div.nivel3-tit', h('strong', abierto.nombre), h('small', 'Toque la opción que desea agregar a la cuenta'))),
+          ...abierto.opciones.map((p) => tarjetaArticulo(p, p.modificador_nombre, volver)));
+        actualizarInsignias();
+        gridProd.querySelector('.nivel3-cab')?.scrollIntoView({ block: 'nearest' });
+        return;
       }
-      gridProd.replaceChildren(...nodos);
+      gridProd.replaceChildren(...niveles.map((x) => (x.grupo ? tarjetaGrupo(x.grupo) : tarjetaArticulo(x.directo, x.directo.nombre))));
       actualizarInsignias();
     }
     function actualizarInsignias() {
-      const cuenta = new Map();
-      (cur?.lineas || []).forEach((l) => cuenta.set(l.producto_id, (cuenta.get(l.producto_id) || 0) + Number(l.cantidad)));
+      const cuenta = new Map(), porGrupo = new Map();
+      (cur?.lineas || []).forEach((l) => {
+        const n = Number(l.cantidad);
+        cuenta.set(l.producto_id, (cuenta.get(l.producto_id) || 0) + n);
+        const p = prodPorId.get(l.producto_id);
+        if (p?.modificador_nombre) { const k = p.codigo.slice(0, 4); porGrupo.set(k, (porGrupo.get(k) || 0) + n); }
+      });
       for (const [id, badge] of tarjetas) {
         const n = cuenta.get(id);
+        badge.hidden = !n;
+        if (n) badge.textContent = num(n, 3);
+      }
+      for (const [clave, badge] of tarjetasGrupo) {
+        const n = porGrupo.get(clave);
         badge.hidden = !n;
         if (n) badge.textContent = num(n, 3);
       }
