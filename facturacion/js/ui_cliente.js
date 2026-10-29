@@ -16,7 +16,7 @@
 //     El correo principal y la dirección son obligatorios; hay 3 correos más opcionales. Ver js/ui_cedula.js para las reglas de la cédula.
 //     También se elige la «Tarifa de IVA habitual de este cliente» (llave tarifa_habitual_codigo de fx_cliente_guardar): solo avisa en la
 //     Caja y ofrece aplicarla; nunca se aplica sola.
-import { h, modal, conBoton, debounce, TIPOS_ID, toast } from './util.js';
+import { h, modal, conBoton, debounce, TIPOS_ID, toast, nombrePropio } from './util.js';
 import { api } from './api.js';
 import { clientesTodos, clienteActivar } from './api_clientes.js';
 import { UBICACIONES } from './data_ubicaciones.js';
@@ -194,7 +194,7 @@ export function abrirFormCliente(app, cliente, { alGuardar, alCambiarEstado, tit
     !esNuevo && c.creado_en ? h('small.tenue', 'Cliente agregado el ' + new Intl.DateTimeFormat('es-CR', { timeZone: 'America/Costa_Rica', dateStyle: 'long' }).format(new Date(c.creado_en)) + '.') : null);
 
   const m = modal({
-    titulo: titulo || (esNuevo ? 'Agregar cliente' : 'Cliente: ' + (c.nombre || '')), contenido: cuerpo, ancho: 760, alCerrar: () => ced.destruir(),
+    titulo: titulo || (esNuevo ? 'Agregar cliente' : 'Cliente: ' + nombrePropio(c.nombre)), contenido: cuerpo, ancho: 760, alCerrar: () => ced.destruir(),
     botones: [{ texto: 'Cancelar', clase: 'suave', onclick: (x) => x() }, { texto: esNuevo ? 'Guardar cliente' : 'Guardar cambios', clase: 'primario', onclick: (x) => guardar(x) }],
   });
   if (esNuevo) ced.enfocar();
@@ -214,7 +214,7 @@ export function selectorCliente(app, { alElegir, titulo = 'Elegir cliente' } = {
       const r = await api.clientes(soc.id, q.value.trim());
       if (mi !== n) return;
       lista.replaceChildren(...(r.length ? r.map((cl) => h('div.mt-item',
-        h('div.mt-datos', h('span.mt-nombre', cl.nombre || ''), h('span.mt-sub', (TIPOS_ID[cl.tipo_id] || '') + ' ' + (cl.identificacion || '') + (cl.correo ? ' · ' + cl.correo : '')),
+        h('div.mt-datos', h('span.mt-nombre', nombrePropio(cl.nombre)), h('span.mt-sub', (TIPOS_ID[cl.tipo_id] || '') + ' ' + (cl.identificacion || '') + (cl.correo ? ' · ' + cl.correo : '')),
           tarifaHabitual(cl) ? h('span.mt-sub', h('span.chip.espera', 'Paga ' + tarifaHabitual(cl).texto)) : null),
         h('div.mt-btns', h('button.btn.primario', { type: 'button', onclick: () => elegir(cl) }, 'Elegir')))) : [h('div.vacio', q.value ? 'No hay clientes con eso. Puede agregarlo con el botón de abajo.' : 'Todavía no hay clientes guardados.')]));
     } catch (e) { if (mi === n) lista.replaceChildren(h('div.error-caja', e.message)); }

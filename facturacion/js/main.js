@@ -1,22 +1,11 @@
-// Arranque del facturador: inicio de sesión (usuario + PIN), cabecera, pestañas, avisos y módulos.
-import { sb, api, entrar, salir, esTransitorio, esSesionVencida } from './api.js';
+// Arranque del facturador: inicio de sesión (código de empresa, usuario y PIN), cabecera, inicio con módulos, navegación por dirección (#) y avisos.
+import { sb, api, entrar, salir, consultarEmpresa, normalizarEmpresa, esTransitorio, esSesionVencida } from './api.js';
 import { h, toast, modal, conBoton, esqueleto, bloqueError, nombreLocal, cerrarVentanas, conPunto, pinDebil, tiempoFalta, horaCorta } from './util.js';
+import { buscar, padreDe } from './modulos.js';
+import { pantallaInicio, pantallaAdmin, pintarInsignias } from './ui_inicio.js';
 
 const raiz = document.getElementById('app');
 const pausa = (ms) => new Promise((r) => setTimeout(r, ms));
-
-// Módulos en el orden en que aparecen. Cada archivo exporta por defecto { id, titulo, mount(root, app) -> (opcional) función de limpieza }
-const MODULOS = [
-  { id: 'caja', titulo: 'Caja', archivo: './m_caja.js' },
-  { id: 'anular', titulo: 'Anular factura', archivo: './m_anular.js' },
-  { id: 'documentos', titulo: 'Documentos del día', archivo: './m_documentos.js' },
-  { id: 'turno', titulo: 'Cierre de caja', archivo: './m_turno.js' },
-  { id: 'clientes', titulo: 'Clientes', archivo: './m_clientes.js' },
-  { id: 'productos', titulo: 'Productos', archivo: './m_productos.js' },
-  { id: 'listados', titulo: 'Listados', archivo: './m_listados.js' },
-  { id: 'recepcion', titulo: 'Recepción', archivo: './m_recepcion.js' },
-  { id: 'usuarios', titulo: 'Usuarios', archivo: './m_usuarios.js', soloAdmin: true },
-];
 
 const guardar = (k, v) => { try { localStorage.setItem('fx_' + k, v); } catch { /* sin almacenamiento */ } };
 const leer = (k) => { try { return localStorage.getItem('fx_' + k); } catch { return null; } };
@@ -33,7 +22,10 @@ export const app = {
   get turno() { return this.soc?.turno || null; },
   get usuario() { return this.ctx?.usuario; },
   get admin() { return !!this.ctx?.admin; },
-  moduloActual: null,
+  // La empresa de esta sesión: sale de la sociedad que devuelve el servidor, no de lo que haya en el aparato. codigo = el que se escribe para entrar.
+  get empresa() { const s = this.soc; return s ? { id: s.id, codigo: String(s.codigo_acceso || s.codigo || '').toLowerCase(), nombre: nombreLocal(s), cedula: s.cedula || null } : null; },
+  moduloActual: null, // el módulo (o pantalla) que se ve: una entrada de modulos.js o INICIO
+  recepcion: null, // { pendientes_en_plazo, vencen_pronto } de las facturas recibidas; alimenta las insignias de Contable y Administración
   pedido: null, // lo que una pantalla le pide a la otra al abrirla (por ejemplo { filtro: 'problemas' }); el módulo lo lee al empezar
   // Avisos del encabezado. datos = { rechazados, pendientes, recepcion_por_responder, ultimos, desde }. refrescar() vuelve a preguntar de inmediato.
   alertas: { datos: null, refrescar: () => actualizarAlertas(true), fijarRecepcion: (c) => { if (c) { recepcionCache = { pendientes_en_plazo: Number(c.pendientes_en_plazo ?? 0), vencen_pronto: Number(c.vencen_pronto ?? 0) }; recepcionHora = Date.now(); } fijarRecepcion(c); } },
@@ -43,7 +35,8 @@ export const app = {
     document.dispatchEvent(new CustomEvent('app:cambio'));
     return this.ctx;
   },
-  ir(id, pedido) { this.pedido = pedido || null; irA(id, !!pedido); },
+  // Abre un módulo por su id, su alias o su dirección (app.ir('caja'), app.ir('anular', { foco: 'buscar' }), app.ir('inicio')). Cambia la dirección (#) y el historial.
+  ir(id, pedido) { this.pedido = pedido || null; ir(id); },
 };
 window.fx = app;
 
@@ -91,16 +84,89 @@ function textoErrorAcceso(e) {
   if (e && e.estado === 429 && hasta && !Number.isNaN(+hasta)) {
     const falta = tiempoFalta(hasta);
     if (!falta) return 'Ya puede intentar de nuevo.';
-    const porConexion = /conexi[oó]n/i.test(m);
-    return (porConexion ? 'Demasiados intentos desde esta conexión.' : 'Demasiados intentos. Por seguridad este usuario queda bloqueado.') + ' Podrá intentar de nuevo a las ' + horaCorta(hasta) + ' (faltan ' + falta + ').' + (porConexion ? '' : ' Si no quiere esperar, pida a un administrador que le reinicie el PIN.');
+    const quien = e.motivo === 'empresa' ? 'Demasiados intentos para esta empresa.'
+      : e.motivo === 'empresa_desconocida' ? 'Demasiados intentos con un código de empresa que no existe.'
+      : (e.motivo === 'ip' || /conexi[oó]n/i.test(m)) ? 'Demasiados intentos desde esta conexión.'
+      : 'Demasiados intentos. Por seguridad este usuario queda bloqueado.';
+    const deUsuario = quien.includes('este usuario');
+    return quien + ' Podrá intentar de nuevo a las ' + horaCorta(hasta) + ' (faltan ' + falta + ').' + (deUsuario ? ' Si no quiere esperar, pida a un administrador que le reinicie el PIN.' : '');
   }
   return conPunto(m);
 }
 // Los errores esperados del acceso (PIN incorrecto, bloqueo) no son fallas: no se anotan en la consola
-const esErrorEsperado = (e) => !!e && [400, 401, 429].includes(e.estado);
+const esErrorEsperado = (e) => !!e && [400, 401, 403, 404, 429].includes(e.estado);
 
-/* ---------- Inicio de sesión ---------- */
+/* ---------- Inicio de sesión: código de empresa, usuario y PIN ---------- */
+// Paso 1: «Código de su empresa». Paso 2: la empresa reconocida en grande, usuario y PIN. La empresa queda recordada en este aparato (solo es comodidad:
+// la que manda es la de la sesión, que ata el servidor), así que al volver a entrar, y después de cerrar sesión, se pasa directo al paso 2 con «Cambiar de empresa».
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+function empresaRecordada() {
+  try {
+    const v = JSON.parse(leer('empresa') || 'null');
+    if (!v || !/^[a-z0-9._-]{1,30}$/.test(String(v.codigo || ''))) return null;
+    return { codigo: v.codigo, nombre: String(v.nombre || '').slice(0, 80), cedula: v.cedula ? String(v.cedula).slice(0, 20) : null, id: UUID.test(String(v.id || '')) ? v.id : null };
+  } catch { return null; }
+}
+function recordarEmpresa(e) {
+  if (!e?.codigo) return;
+  guardar('empresa', JSON.stringify({ codigo: String(e.codigo).toLowerCase(), nombre: e.nombre || '', cedula: e.cedula || null, id: e.id || null }));
+}
+// La respuesta del servicio de acceso (o un registro de sociedad) a lo que se guarda y se muestra
+const infoEmpresa = (e) => ({ id: e.id || null, codigo: String(e.codigo_acceso || e.codigo || '').toLowerCase(), nombre: nombreLocal(e) || 'Su empresa', cedula: e.cedula || null });
+// 3102111943 -> 3-102-111943 (cédula jurídica)
+const cedulaJuridica = (c) => { const d = String(c ?? '').replace(/\D/g, ''); return d.length === 10 ? d[0] + '-' + d.slice(1, 4) + '-' + d.slice(4) : d; };
+const logoDe = (codigo) => 'img/logo-' + (codigo === 'soda' ? 'soda' : 'pollos') + '.svg';
+
 function pantallaLogin(mensaje) {
+  const emp = empresaRecordada();
+  if (emp) pantallaUsuario(emp, mensaje); else pantallaCodigo({ mensaje });
+}
+
+// Paso 1
+function pantallaCodigo({ mensaje = '', error = '', aviso: avisoInicial = '', codigo = '' } = {}) {
+  raiz.replaceChildren();
+  document.onkeydown = null;
+  const campo = h('input.campo.grande', { type: 'text', autocomplete: 'off', autocapitalize: 'none', autocorrect: 'off', spellcheck: 'false', maxlength: 60, placeholder: 'pollos', 'aria-label': 'Código de su empresa', 'aria-describedby': 'emp-ayuda', value: codigo });
+  const err = h('div.error-caja', { hidden: true, role: 'alert' });
+  const aviso = h('div.emp-aviso', { hidden: true, role: 'alert' });
+  const mostrar = (m, suave = false) => { err.hidden = suave || !m; aviso.hidden = !suave || !m; (suave ? aviso : err).textContent = m || ''; };
+  const seguir = h('button.btn.primario.grande.emp-seguir', { type: 'button', onclick: () => continuar() }, 'Continuar');
+  let ocupado = false;
+  async function continuar() {
+    if (ocupado) return;
+    if (!normalizarEmpresa(campo.value)) { mostrar('Escriba el código de su empresa, por ejemplo pollos.'); campo.focus(); return; }
+    mostrar('');
+    ocupado = true; seguir.disabled = true; campo.disabled = true; seguir.textContent = 'Buscando su empresa…';
+    try {
+      const e = await consultarEmpresa(campo.value, { alReintentar: () => { seguir.textContent = 'El servidor tardó. Reintentando…'; } });
+      const info = infoEmpresa(e);
+      recordarEmpresa(info);
+      pantallaUsuario(info);
+    } catch (e) {
+      if (!esErrorEsperado(e)) console.error(e);
+      // «No está habilitada» no es un error de quien escribe: se dice con calma, en ámbar
+      mostrar(textoErrorAcceso(e), e.motivo === 'empresa_no_habilitada');
+      ocupado = false; seguir.disabled = false; campo.disabled = false; seguir.textContent = 'Continuar';
+      campo.focus(); campo.select();
+    }
+  }
+  campo.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') { ev.preventDefault(); continuar(); } });
+  campo.addEventListener('input', () => mostrar(''));
+  raiz.append(h('div.pantalla-centro', h('div.login.tarjeta',
+    h('div.logos', h('img', { src: 'img/logo-soda.svg', alt: 'Soda La Bomba' }), h('img', { src: 'img/logo-pollos.svg', alt: 'Pollos La Bomba' })),
+    h('h1', 'Facturación'),
+    h('p.sub', 'Primero escriba el código de su empresa'),
+    mensaje ? h('div.error-caja', { role: 'alert' }, mensaje) : null,
+    h('label.etq.emp-etq', 'Código de su empresa', campo),
+    h('p#emp-ayuda.emp-ayuda', 'Es el código de su negocio, por ejemplo pollos'),
+    err, aviso, seguir)));
+  if (error) mostrar(error); else if (avisoInicial) mostrar(avisoInicial, true);
+  campo.focus();
+  if (campo.value) campo.select();
+}
+
+// Paso 2
+function pantallaUsuario(emp, mensaje) {
   raiz.replaceChildren();
   const usuario = h('input.campo', { type: 'text', autocomplete: 'username', autocapitalize: 'none', autocorrect: 'off', spellcheck: 'false', placeholder: 'Su usuario', 'aria-label': 'Usuario', value: leer('usuario') || '' });
   const err = h('div.error-caja', { hidden: true, role: 'alert' });
@@ -119,7 +185,8 @@ function pantallaLogin(mensaje) {
     antes: () => { if (usuario.value.trim()) return true; mostrarError('Primero escriba su usuario.'); usuario.focus(); return false; },
     alCompletar: () => intentar(),
   });
-  const bloquear = (si) => { ocupado = si; pad.bloquear(si); usuario.disabled = si; };
+  const cambiar = h('button.btn.emp-cambiar', { type: 'button', onclick: () => { if (!ocupado) { clearInterval(reloj); pantallaCodigo({}); } } }, 'Cambiar de empresa');
+  const bloquear = (si) => { ocupado = si; pad.bloquear(si); usuario.disabled = si; cambiar.disabled = si; };
   async function intentar() {
     if (ocupado) return;
     if (!usuario.value.trim()) { pad.limpiar(); mostrarError('Escriba su usuario.'); usuario.focus(); return; }
@@ -128,12 +195,16 @@ function pantallaLogin(mensaje) {
     bloquear(true); mostrarEstado('Entrando…');
     try {
       const u = usuario.value.trim().toLowerCase();
-      await entrar(u, pad.valor(), { alReintentar: () => mostrarEstado('El servidor tardó en responder. Reintentando…') });
+      const j = await entrar(emp.codigo, u, pad.valor(), { alReintentar: () => mostrarEstado('El servidor tardó en responder. Reintentando…') });
       guardar('usuario', u);
+      // El servicio de acceso nuevo devuelve la empresa de la sesión. Si todavía no la devuelve, vale la que se reconoció en el paso 1 (respaldo temporal).
+      recordarEmpresa(j && j.empresa ? infoEmpresa(j.empresa) : emp);
       mostrarEstado('Cargando su caja…');
       await arrancar(true);
     } catch (e) {
       if (!esErrorEsperado(e)) console.error(e);
+      // La empresa dejó de existir o de estar habilitada entre el paso 1 y ahora: se vuelve al código con el mensaje
+      if (e && (e.motivo === 'empresa_desconocida' || e.motivo === 'empresa_no_habilitada')) { pantallaCodigo({ codigo: emp.codigo, [e.motivo === 'empresa_no_habilitada' ? 'aviso' : 'error']: textoErrorAcceso(e) }); return; }
       pad.limpiar();
       alertar(e);
       mostrarEstado('');
@@ -148,9 +219,15 @@ function pantallaLogin(mensaje) {
     else if (e.key === 'Backspace') pad.borrar();
     else if (e.key === 'Enter' && document.activeElement?.tagName !== 'BUTTON') intentar();
   };
-  raiz.append(h('div.pantalla-centro', h('div.login.tarjeta',
-    h('div.logos', h('img', { src: 'img/logo-soda.svg', alt: 'Soda La Bomba' }), h('img', { src: 'img/logo-pollos.svg', alt: 'Pollos La Bomba' })),
-    h('h1', 'Facturación'),
+  const ced = cedulaJuridica(emp.cedula);
+  raiz.append(h('div.pantalla-centro', h('div.login.tarjeta.login-usuario',
+    h('div.emp-reconocida', { role: 'status', 'data-emp': emp.codigo === 'soda' ? 'soda' : 'pollos' },
+      h('img.emp-logo', { src: logoDe(emp.codigo), alt: '' }),
+      h('div.emp-texto',
+        h('span.emp-et', 'Entrando a:'),
+        h('strong.emp-nombre', emp.nombre || 'Su empresa'),
+        ced ? h('span.emp-ced', 'Cédula jurídica ' + ced) : null),
+      cambiar),
     h('p.sub', 'Escriba su usuario y su PIN de 4 números'),
     mensaje ? h('div.error-caja', { role: 'alert' }, mensaje) : null,
     h('label.etq', 'Usuario', usuario),
@@ -208,36 +285,32 @@ function cambiarPinDialogo() {
     } }] });
 }
 
-/* ---------- Cabecera y navegación ---------- */
-let cab, vista, tabs, pestCaja, alertaEl, redEl, menuEl, resizeRegistrado = false;
+/* ---------- Cabecera ---------- */
+// Una sola cabecera para todo el sistema, sin pestañas. Lo que muestra depende de la vista (cab.dataset.vista):
+//   inicio    logo, «Anular factura» y el menú de la sesión
+//   ventana   «‹ Inicio» + título del módulo
+//   admin     igual que ventana (la pantalla de Administración)
+//   sub       «‹ Administración» + «Inicio» + título (los módulos que viven dentro de Administración)
+//   facturar  una sola fila delgada: «‹ Inicio», título, caja y «Anular factura» (deja el máximo de espacio a la caja)
+// Arriba va siempre una franja con el nombre del negocio y, si aplica, MODO DE PRUEBAS.
+let cab, vista, alertaEl, redEl, menuEl, tituloEl, volverEl, inicioEl;
+const EMPRESAS_CON_COLOR = ['pollos', 'soda'];
+// Código corto de la empresa de la sesión ('pollos' | 'soda'); decide el color de la franja
+const codigoEmpresa = (s) => { const c = String(s?.codigo ?? '').toLowerCase(); return EMPRESAS_CON_COLOR.includes(c) ? c : 'pollos'; };
 function pintarCabecera() {
   if (!cab || !app.ctx || !app.soc) return;
-  const s = app.soc, t = app.turno;
-  const sel = cab.querySelector('.soc-sel');
-  const varios = app.ctx.sociedades.length > 1;
-  sel.classList.toggle('uno', !varios);
-  // Un solo local: solo su nombre. Varios: un botón por local, con el mismo formato de nombre (nombreLocal)
-  sel.replaceChildren(...(varios
-    ? app.ctx.sociedades.map((x) => h('button', { type: 'button', 'aria-pressed': String(x.id === app.socId), onclick: () => cambiarSoc(x.id) }, nombreLocal(x)))
-    : [h('span.soc-nombre', nombreLocal(s))]));
-  cab.querySelector('.marca img').src = 'img/logo-' + (String(s.codigo ?? '').toLowerCase() === 'pollos' ? 'pollos' : 'soda') + '.svg';
-  cab.querySelector('.marca img').alt = nombreLocal(s);
+  const s = app.soc, t = app.turno, emp = codigoEmpresa(s);
+  cab.dataset.emp = emp;
+  cab.querySelector('.cab-emp').textContent = nombreLocal(s);
+  const logo = cab.querySelector('.marca img');
+  logo.src = 'img/logo-' + (emp === 'pollos' ? 'pollos' : 'soda') + '.svg';
+  logo.alt = nombreLocal(s);
   const et = cab.querySelector('.estado-turno');
   et.className = 'estado-turno ' + (t ? 'abierto' : 'cerrado');
-  et.textContent = t ? 'Caja abierta desde las ' + new Date(t.abierto_en).toLocaleTimeString('es-CR', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Costa_Rica' }) : 'Caja cerrada: falta abrir turno';
+  et.textContent = t ? 'Caja abierta desde las ' + new Date(t.abierto_en).toLocaleTimeString('es-CR', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Costa_Rica' }) : 'Caja cerrada';
   const amb = cab.querySelector('.amb');
   amb.textContent = s.ambiente === 'produccion' ? 'Facturas reales' : 'Modo de pruebas';
-  amb.className = 'amb amb-prueba' + (s.ambiente === 'produccion' ? ' amb-prod' : '');
-}
-
-function cambiarSoc(id) {
-  if (id === app.socId) return;
-  app.socId = id; guardar('soc', id);
-  pintarCabecera();
-  api.catalogo(id).catch(() => {}); // calienta el catálogo del otro local mientras se abre la pantalla
-  aplicarAlertas(null); fijarRecepcion(null); recepcionCache = null;
-  actualizarAlertas(true);
-  irA(app.moduloActual?.id || 'caja', true);
+  amb.className = 'amb ' + (s.ambiente === 'produccion' ? 'amb-prod' : 'amb-prueba');
 }
 
 // El encabezado puede cambiar de alto (aparece o desaparece un aviso): las pantallas que se pegan debajo de él lo necesitan
@@ -258,35 +331,29 @@ function abrirMenu(si) {
 document.addEventListener('pointerdown', (e) => { if (menuEl?.classList.contains('abierto') && !menuEl.contains(e.target)) abrirMenu(false); });
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && menuEl?.classList.contains('abierto')) { abrirMenu(false); menuEl.querySelector('.cab-menu')?.focus(); } });
 
-/* Pista de que las pestañas se deslizan: degradado en los bordes, botón «Más» y la pestaña activa siempre a la vista */
-function actualizarPista() {
-  if (!tabs || !pestCaja) return;
-  const resto = tabs.scrollWidth - tabs.clientWidth - tabs.scrollLeft;
-  pestCaja.classList.toggle('hay-mas', resto > 6);
-  pestCaja.classList.toggle('hay-antes', tabs.scrollLeft > 6);
-}
-function verPestanaActiva(suave = true) {
-  const b = tabs?.querySelector('button[aria-selected=true]');
-  if (!b) return;
-  const izq = b.offsetLeft - (tabs.clientWidth - b.offsetWidth) / 2;
-  tabs.scrollTo({ left: Math.max(0, izq), behavior: suave ? 'smooth' : 'auto' });
-}
 
 /* ---------- Avisos del encabezado: documentos con problema y facturas por responder ---------- */
 // Fuente: fx_alertas (contrato 3). Mientras no exista, api_documentos.js usa un valor de reserva sacado de fx_documentos.
 // Se actualiza cada 60 segundos, al volver a la pestaña del navegador y cuando una pantalla lo pide con el evento 'app:alertas'.
 let alSeq = 0, alTimer = null, alUltimo = 0, recepcionCache = null, recepcionHora = 0;
+// Pantalla baja (menos de 900 px de alto): el aviso es UNA línea compacta, «Hacienda no aceptó 1 documento. Ver». En pantallas altas va completo, con el motivo.
+const pantallaBaja = window.matchMedia ? window.matchMedia('(max-height:899px)') : { matches: false };
+pantallaBaja.addEventListener?.('change', () => { if (alertaEl && app.alertas.datos) aplicarAlertas(app.alertas.datos); });
+// «La ubicación del emisor no coincide con Hacienda (es solo un aviso)» (código -37) no es el motivo del rechazo: no se mezcla en el aviso rojo
+const sinAvisoUbicacion = (t) => String(t || '').replace(/\s*La ubicaci[oó]n del emisor no coincide con Hacienda[^.]*\.?/i, '').replace(/\s+/g, ' ').trim();
 function aplicarAlertas(a) {
   app.alertas.datos = a;
   if (!alertaEl) return;
   const r = a ? a.rechazados : 0, p = a ? a.pendientes : 0;
   if (!r && !p) { alertaEl.hidden = true; sincronizarAlturas(); document.dispatchEvent(new CustomEvent('app:alertas-cambio', { detail: a })); return; }
-  const titulo = [
-    r ? (r === 1 ? 'Hacienda no aceptó 1 documento.' : 'Hacienda no aceptó ' + r + ' documentos.') : '',
-    p ? (p === 1 ? '1 documento todavía no llegó a Hacienda.' : p + ' documentos todavía no llegaron a Hacienda.') : '',
-  ].filter(Boolean).join(' ');
+  const docs = (n) => (n === 1 ? '1 documento' : n + ' documentos');
+  const titulo = pantallaBaja.matches
+    ? (r && p ? 'Hacienda no aceptó ' + docs(r) + ' y ' + p + (p === 1 ? ' no ha llegado.' : ' no han llegado.')
+      : r ? 'Hacienda no aceptó ' + docs(r) + '.' : docs(p) + (p === 1 ? ' no ha llegado a Hacienda.' : ' no han llegado a Hacienda.'))
+    : [r ? 'Hacienda no aceptó ' + docs(r) + '.' : '', p ? (p === 1 ? '1 documento todavía no llegó a Hacienda.' : p + ' documentos todavía no llegaron a Hacienda.') : ''].filter(Boolean).join(' ');
   const u = a.ultimos && a.ultimos[0];
-  const detalle = u && u.mensaje ? (u.numero ? 'N.° ' + u.numero + ': ' : '') + conPunto(u.mensaje) : 'Toque «Ver» para revisar qué pasó y qué hay que hacer.';
+  const motivo = u ? sinAvisoUbicacion(u.mensaje) : '';
+  const detalle = motivo ? (u.numero ? 'N.° ' + u.numero + ': ' : '') + conPunto(motivo) : 'Toque «Ver» para revisar qué pasó y qué hay que hacer.';
   alertaEl.querySelector('strong').textContent = titulo;
   alertaEl.querySelector('.alerta-detalle').textContent = detalle;
   alertaEl.hidden = false;
@@ -295,20 +362,14 @@ function aplicarAlertas(a) {
 }
 function verAlertas() {
   const a = app.alertas.datos;
-  app.ir('documentos', { filtro: 'problemas', desde: a?.desde || null });
+  app.ir('anular', { filtro: 'problemas', desde: a?.desde || null });
 }
-// Insignia de la pestaña Recepción: una sola, con la misma cifra que muestra la pantalla de Recepción
+// Cifra de facturas recibidas por responder: la misma que muestra Contable. Alimenta las insignias de las tarjetas de Contable y de Administración.
 function fijarRecepcion(c) {
-  const b = tabs?.querySelector('button[data-id=recepcion]');
-  if (!b) return;
-  b.querySelector('.pend')?.remove();
-  b.removeAttribute('aria-label');
   const n = Number(c?.pendientes_en_plazo ?? 0);
-  if (!c || !(n > 0)) return;
-  const urge = Number(c.vencen_pronto ?? 0) > 0;
-  b.append(' ', h('span.pend' + (urge ? '.urge' : ''), n + ' por responder'));
-  b.setAttribute('aria-label', 'Recepción: ' + n + (n === 1 ? ' factura recibida por responder' : ' facturas recibidas por responder') + (urge ? ', algunas vencen pronto' : ''));
-  actualizarPista();
+  // Ámbar: hay facturas por responder dentro del plazo. Rojo: algunas vencen pronto (en 2 días hábiles o menos).
+  app.recepcion = c && n > 0 ? { pendientes_en_plazo: n, vencen_pronto: Math.max(0, Number(c.vencen_pronto ?? 0)) } : null;
+  if (cab && vista && (app.moduloActual === INICIO || app.moduloActual?.pantalla === 'admin')) pintarInsignias(vista, app);
 }
 async function actualizarAlertas(forzar = false) {
   if (!app.ctx || !app.soc || !cab) return;
@@ -321,9 +382,9 @@ async function actualizarAlertas(forzar = false) {
     if (mi !== alSeq || soc !== app.socId || !app.ctx) return;
     aplicarAlertas(a);
     if (a.recepcion_por_responder != null) {
-      // fx_alertas no dice cuántas vencen pronto: se conserva lo que Recepción haya visto si la cifra no cambió
+      // fx_alertas trae recepcion_vencen_pronto. Si una versión vieja de la función no lo manda, se conserva lo que Recepción haya visto si la cifra no cambió
       const antes = recepcionCache && recepcionCache.pendientes_en_plazo === a.recepcion_por_responder ? recepcionCache.vencen_pronto : 0;
-      recepcionCache = { pendientes_en_plazo: a.recepcion_por_responder, vencen_pronto: a.recepcion_vencen_pronto || antes };
+      recepcionCache = { pendientes_en_plazo: a.recepcion_por_responder, vencen_pronto: a.recepcion_vencen_pronto != null ? a.recepcion_vencen_pronto : antes };
     } else if (!recepcionCache || Date.now() - recepcionHora > 5 * 60 * 1000) {
       // Sin fx_alertas, la cifra sale de Recepción (cada 5 minutos, porque trae toda la lista)
       try { const { contarPendientes } = await import('./api_recepcion.js'); recepcionCache = await contarPendientes(soc); recepcionHora = Date.now(); } catch { /* queda la anterior */ }
@@ -355,6 +416,8 @@ document.addEventListener('app:sesion-vencida', () => mostrarSesionVencida());
 function mostrarSesionVencida() {
   if (!app.ctx || document.getElementById('sesion-vencida')) return;
   const codigo = app.ctx.usuario, nombre = app.ctx.nombre || codigo;
+  // La empresa de la sesión que venció: en este diálogo no se puede cambiar. Si por alguna razón no se conoce, la última que se usó en este aparato; 'pollos' es el respaldo temporal.
+  const emp = app.empresa || (empresaRecordada() ? { codigo: empresaRecordada().codigo, nombre: empresaRecordada().nombre } : { codigo: 'pollos', nombre: 'Pollos La Bomba' });
   const previos = [raiz, ...document.querySelectorAll('.modal-fondo')];
   previos.forEach((x) => { x.inert = true; });
   const cuerpo = h('div.modal-cuerpo');
@@ -378,7 +441,7 @@ function mostrarSesionVencida() {
     clearInterval(reloj); mostrarError('');
     pad.bloquear(true); estado.textContent = 'Entrando…'; estado.hidden = false;
     try {
-      await entrar(codigo, pad.valor());
+      await entrar(emp.codigo, codigo, pad.valor());
       cerrar();
       toast('Listo, entró de nuevo. Puede seguir donde estaba.');
       try { await app.refrescar(); } catch { /* la cabecera se actualiza sola luego */ }
@@ -394,7 +457,7 @@ function mostrarSesionVencida() {
   function paso2() {
     cuerpo.replaceChildren(h('div.col',
       h('h2#sv-tit', 'Escriba su PIN'),
-      h('p.sub', 'Usuario: ', h('strong', nombre), '. Son 4 números.'),
+      h('p.sub.sv-quien', h('span', 'Empresa: ', h('strong', emp.nombre || 'Su empresa')), h('span', 'Usuario: ', h('strong', nombre)), h('span', 'El PIN son 4 números.')),
       pad.dots, estado, err, pad.teclado,
       h('button.btn.suave', { type: 'button', onclick: () => { pad.limpiar(); mostrarError(''); paso1(); } }, 'Atrás')));
   }
@@ -408,49 +471,145 @@ function mostrarSesionVencida() {
   paso1();
 }
 
-/* ---------- Pantallas ---------- */
+/* ---------- Navegación: dirección (#), historial y pantallas ---------- */
+// Cada pantalla tiene su dirección: #inicio, #facturar, #anular, #clientes, #turno, #admin, #admin/productos, #admin/informes, #admin/contable, #admin/usuarios.
+// La lista de módulos sale de modulos.js. El botón Atrás del navegador o del celular regresa a la pantalla anterior y recargar deja en el mismo lugar.
+// «#admin/cierre» es el nombre viejo del cierre de caja: se corrige solo a #turno.
+const INICIO = { id: 'inicio', titulo: 'Inicio', ruta: 'inicio', grupo: 'principal' };
+const tipoDe = (d) => (d === INICIO ? 'inicio' : d.pantalla === 'admin' ? 'admin' : d.id === 'caja' ? 'facturar' : d.grupo === 'admin' ? 'sub' : 'ventana');
+// De cualquier forma de nombrar una pantalla (id, alias, dirección con o sin #) al destino. Lo desconocido, o lo que no le toca a esta persona, va al inicio.
+function destinoDe(clave) {
+  let k = '';
+  try { k = decodeURIComponent(String(clave ?? '')); } catch { k = String(clave ?? ''); }
+  k = k.replace(/^#\/?/, '').trim().toLowerCase();
+  if (!k || k === 'inicio') return INICIO;
+  const m = buscar(k);
+  if (!m || (m.soloAdmin && !app.admin)) return INICIO;
+  return m;
+}
+// Cada entrada del historial guarda de dónde se vino ({ de: 'admin' }): así «‹ Administración» e «‹ Inicio» usan el botón Atrás en lugar de apilar entradas repetidas
+const rutaActual = () => location.hash.replace(/^#/, '').toLowerCase();
+function ir(clave) {
+  if (!cab) return;
+  const dest = destinoDe(clave);
+  if (rutaActual() === dest.ruta) {
+    // Ya está en esa dirección: solo se vuelve a mostrar si traía un pedido o si la pantalla no es la que se ve
+    if (app.pedido || app.moduloActual?.id !== dest.id) mostrar(dest, true);
+    return;
+  }
+  try { history.pushState({ de: rutaActual() }, '', '#' + dest.ruta); } catch { location.hash = dest.ruta; return; } // sin historial: el cambio de dirección dispara hashchange
+  mostrar(dest);
+}
+// Subir un nivel («‹ Inicio», «‹ Administración», Escape): si la pantalla anterior es justo esa, se retrocede en el historial; si no (se recargó la página, o se llegó por un aviso), se va a ella
+function subir(clave) {
+  const dest = destinoDe(clave);
+  if (history.state && history.state.de === dest.ruta) { history.back(); return; }
+  ir(clave);
+}
+const alCambiarDireccion = () => { if (cab && app.ctx) mostrar(destinoDe(location.hash)); };
+window.addEventListener('popstate', alCambiarDireccion);
+window.addEventListener('hashchange', alCambiarDireccion);
+
+// Qué tarjeta lleva el foco al volver al inicio o a Administración: la del módulo del que se viene
+let veniaDe = null;
+function pintarVista(dest) {
+  const tipo = tipoDe(dest);
+  cab.dataset.vista = tipo;
+  tituloEl.textContent = dest.titulo;
+  const aAdmin = tipo === 'sub';
+  volverEl.replaceChildren(h('span', { 'aria-hidden': 'true' }, '‹'), ' ', aAdmin ? 'Administración' : 'Inicio');
+  volverEl.setAttribute('aria-label', aAdmin ? 'Volver a Administración' : 'Volver al inicio');
+  volverEl.onclick = () => subir(aAdmin ? 'admin' : 'inicio');
+  document.title = (dest === INICIO ? 'Facturación' : dest.titulo) + ' · La Bomba';
+}
+
+// Foco inicial: la tarjeta del inicio (o la del módulo del que se viene) y, en una ventana, su primer control útil, salvo que el módulo ya haya puesto el foco
+function primerControl(raizV) {
+  const tactil = window.matchMedia?.('(pointer:coarse)').matches; // en tableta o celular un campo de texto abriría el teclado sin que se pida
+  const lista = [...raizV.querySelectorAll('button:not([disabled]), a[href], select:not([disabled]), summary' + (tactil ? '' : ', input:not([type=hidden]):not([disabled]), textarea:not([disabled])'))];
+  return lista.find((el) => el.offsetParent !== null && !el.closest('[hidden], [inert]')) || null;
+}
+function enfocarInicial(dest) {
+  const tipo = tipoDe(dest);
+  const hacer = () => {
+    if (!vista || app.moduloActual !== dest) return;
+    const act = document.activeElement;
+    if (act && act !== document.body && vista.contains(act)) return;
+    if (document.querySelector('.modal-fondo')) return;
+    let el = null;
+    if (tipo === 'inicio' || tipo === 'admin') el = (veniaDe && vista.querySelector('.mod-tarjeta[data-mod="' + veniaDe + '"]')) || vista.querySelector('.mod-tarjeta');
+    else if (tipo === 'ventana' || tipo === 'sub') el = primerControl(vista);
+    el?.focus({ preventScroll: true });
+  };
+  if (tipo === 'inicio' || tipo === 'admin') hacer(); else setTimeout(hacer, 350);
+}
+
 let limpieza = null;
 let irSeq = 0;
-async function irA(id, forzar) {
-  const def = MODULOS.find((m) => m.id === id) || MODULOS[0];
-  if (!forzar && app.moduloActual?.id === def.id) return;
+// Muestra una pantalla. forzar = volver a armarla aunque ya sea la que se ve. opciones.sinFoco = no mover el foco (cuando solo se repinta).
+async function mostrar(dest, forzar = false, { sinFoco = false } = {}) {
+  if (!cab) return;
+  if (!forzar && app.moduloActual?.id === dest.id) return;
   const mi = ++irSeq;
-  app.moduloActual = def; guardar('mod', def.id);
-  tabs.querySelectorAll('button').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.id === def.id)));
-  verPestanaActiva();
+  if (app.moduloActual && app.moduloActual.id !== dest.id) veniaDe = app.moduloActual.id;
+  app.moduloActual = dest;
+  if (location.hash.toLowerCase() !== '#' + dest.ruta) { try { history.replaceState(history.state, '', '#' + dest.ruta); } catch { /* sin historial */ } } // corrige alias y direcciones desconocidas
+  pintarVista(dest);
   abrirMenu(false);
   try { limpieza?.(); } catch { /* nada */ }
   limpieza = null;
+  if (!sinFoco) window.scrollTo(0, 0);
+  const tipo = tipoDe(dest);
+  if (tipo === 'inicio' || tipo === 'admin') {
+    const alAbrir = (m) => ir(m.id);
+    vista.replaceChildren(tipo === 'inicio'
+      ? pantallaInicio(app, { alAbrir, alCerrarCaja: () => ir('turno'), alAbrirCaja: () => ir('caja') })
+      : pantallaAdmin(app, { alAbrir }));
+    app.pedido = null;
+    if (!sinFoco) enfocarInicial(dest);
+    if (tipo === 'inicio') diferir(() => { import('./m_caja.js').catch(() => {}); }); // la caja es lo que más se usa: queda lista antes del primer toque
+    return;
+  }
   vista.replaceChildren(esqueleto(4));
   try {
-    const mod = (await import(def.archivo)).default;
-    if (mi !== irSeq) return; // la persona ya cambió de pestaña
+    const mod = (await dest.cargar()).default;
+    if (mi !== irSeq) return; // la persona ya cambió de pantalla
     const caja = h('div');
     vista.replaceChildren(caja);
     const fin = (await mod.mount(caja, app)) || null;
     if (mi !== irSeq) { try { fin?.(); } catch { /* nada */ } return; }
     limpieza = fin;
+    if (!sinFoco) enfocarInicial(dest);
   } catch (e) {
     if (mi !== irSeq) return;
     if (!esSesionVencida(e)) console.error(e);
     vista.replaceChildren(bloqueError({
-      titulo: 'Esta sección no se pudo abrir',
+      titulo: 'Esta ventana no se pudo abrir',
       mensaje: esTransitorio(e) || esSesionVencida(e) ? (e.message || '') : ((e && e.message) || String(e)),
-      alReintentar: () => irA(def.id, true),
+      alReintentar: () => mostrar(dest, true),
     }));
   } finally {
     if (mi === irSeq) app.pedido = null;
   }
 }
+const diferir = (f) => (window.requestIdleCallback ? window.requestIdleCallback(f, { timeout: 3000 }) : setTimeout(f, 1200));
 
-function armarApp() {
+// Escape regresa un nivel: de un módulo de Administración a Administración, y de ahí (o de cualquier otra ventana) al inicio.
+// No actúa en el inicio ni en Facturación, ni con una ventana abierta, ni escribiendo en un campo.
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape' || e.defaultPrevented || !cab || !app.moduloActual) return;
+  if (document.querySelector('.modal-fondo') || menuEl?.classList.contains('abierto')) return;
+  const t = e.target;
+  if (t && (/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) || t.isContentEditable)) return;
+  const d = app.moduloActual, tipo = tipoDe(d);
+  if (tipo === 'inicio' || tipo === 'facturar') return;
+  e.preventDefault();
+  subir(tipo === 'sub' ? 'admin' : 'inicio');
+});
+
+function armarApp(reciente = false) {
   document.onkeydown = null;
   raiz.replaceChildren();
-  const disponibles = MODULOS.filter((m) => !m.soloAdmin || app.admin);
-  tabs = h('nav.pestanas', { role: 'tablist', 'aria-label': 'Secciones' }, disponibles.map((m) => h('button', { type: 'button', role: 'tab', 'data-id': m.id, 'aria-selected': 'false', onclick: () => irA(m.id) }, m.titulo)));
-  tabs.addEventListener('scroll', actualizarPista, { passive: true });
-  pestCaja = h('div.pest-caja', tabs,
-    h('button.pest-mas', { type: 'button', 'aria-hidden': 'true', tabindex: '-1', onclick: () => tabs.scrollBy({ left: Math.max(160, tabs.clientWidth * 0.7), behavior: 'smooth' }) }, 'Más ›'));
   vista = h('main#vista');
   alertaEl = h('div.alerta-cab', { role: 'alert', hidden: true },
     h('div.alerta-in', h('div.alerta-texto', h('strong'), h('span.alerta-detalle')),
@@ -464,24 +623,35 @@ function armarApp() {
       h('span.cab-sesion', 'Sesión de ', h('strong', app.ctx.nombre || app.usuario)),
       h('button.btn.chico', { type: 'button', onclick: () => { abrirMenu(false); cambiarPinDialogo(); } }, 'Cambiar mi PIN'),
       h('button.btn.chico', { type: 'button', onclick: () => { abrirMenu(false); cerrarSesion(); } }, 'Cerrar sesión')));
-  cab = h('header.cabecera',
+  volverEl = h('button.btn.cab-volver', { type: 'button' });
+  inicioEl = h('button.btn.cab-inicio', { type: 'button', onclick: () => subir('inicio') }, 'Inicio');
+  tituloEl = h('h1.cab-titulo');
+  cab = h('header.cabecera', { 'data-vista': 'inicio' },
+    h('div.cab-franja', h('div.cab-franja-in', h('span.cab-emp'), h('span.amb'))),
     h('div.cab-fila',
+      volverEl, inicioEl,
       h('div.marca', h('img', { alt: 'La Bomba' })),
-      h('div.cab-estado', h('div.soc-sel', { role: 'group', 'aria-label': 'Local' }), h('span.amb'), h('span.estado-turno')),
-      // Atajo siempre visible: anular una factura no debe esconderse dentro de otra pantalla
-      h('button.btn.cab-anular', { type: 'button', onclick: () => irA('anular') }, 'Anular factura'),
+      tituloEl,
+      h('div.cab-estado', h('span.estado-turno')),
+      // Atajo siempre visible: anular una factura no debe esconderse dentro de otra pantalla. Lleva a «Anular y reimprimir» con el cursor en el buscador.
+      h('button.btn.cab-anular', { type: 'button', onclick: irAAnular }, 'Anular factura'),
       menuEl),
-    alertaEl, redEl, pestCaja);
+    alertaEl, redEl);
   raiz.append(cab, vista);
-  if (window.ResizeObserver) new ResizeObserver(() => { sincronizarAlturas(); actualizarPista(); }).observe(cab);
-  if (!resizeRegistrado) { resizeRegistrado = true; window.addEventListener('resize', () => { actualizarPista(); verPestanaActiva(false); }); }
+  if (window.ResizeObserver) new ResizeObserver(() => sincronizarAlturas()).observe(cab);
   pintarCabecera();
-  const ultimo = leer('mod');
-  irA(disponibles.some((m) => m.id === ultimo) ? ultimo : 'caja', true);
-  verPestanaActiva(false);
-  actualizarPista();
+  // Recién entró: al inicio. Si recargó la página, o regresó tras un fallo, se queda en la dirección que tenía.
+  mostrar(reciente ? INICIO : destinoDe(location.hash), true);
   programarAlertas(); // después de pintar: no retrasa la carga inicial
 }
+function irAAnular() {
+  // Si ya está en «Anular y reimprimir», basta con llevar el cursor al buscador y no se pierde lo que se ve
+  const b = app.moduloActual?.id === 'anular' ? document.getElementById('anular-buscar') : null;
+  if (b) { b.focus(); b.select?.(); return; }
+  app.ir('anular', { foco: 'buscar' });
+}
+// Cuando cambian los datos de la caja (turno abierto o cerrado) el inicio se repinta sin mover el foco
+document.addEventListener('app:cambio', () => { if (cab && app.moduloActual === INICIO) mostrar(INICIO, true, { sinFoco: true }); });
 
 // Cierre de sesión limpio: detiene los avisos, cierra ventanas, borra la sesión de este aparato y deja la pantalla de entrada como nueva
 let cerrando = false;
@@ -497,16 +667,19 @@ async function cerrarSesion() {
     document.getElementById('impresion-resumen')?.remove();
     document.querySelectorAll('#toasts .toast').forEach((t) => t.remove());
     await salir().catch(() => {});
-    app.ctx = null; app.socId = null; app.moduloActual = null; app.pedido = null; app.alertas.datos = null;
-    recepcionCache = null; recepcionHora = 0;
-    cab = vista = tabs = pestCaja = alertaEl = redEl = menuEl = null;
+    app.ctx = null; app.socId = null; app.moduloActual = null; app.pedido = null; app.alertas.datos = null; app.recepcion = null;
+    recepcionCache = null; recepcionHora = 0; veniaDe = null;
+    cab = vista = alertaEl = redEl = menuEl = tituloEl = volverEl = inicioEl = null;
     document.body.classList.remove('fx-caja');
     const st = document.documentElement.style;
     ['--cab-h', '--bus-h', '--alto-cab', '--cab-alto'].forEach((v) => st.removeProperty(v));
+    try { history.replaceState(null, '', location.pathname + location.search); } catch { /* sin historial */ } // la próxima persona no hereda la dirección
+    document.title = 'Facturación · La Bomba';
     raiz.inert = false;
     pantallaLogin();
   } finally { cerrando = false; }
 }
+
 
 /* ---------- Arranque ---------- */
 // reciente = true cuando se acaba de iniciar sesión: si la primera consulta cae por sesión, se repite una vez antes de rendirse
@@ -518,12 +691,10 @@ async function cargarContexto(reciente) {
   }
 }
 async function arrancar(reciente = false) {
-  // Todo lo que se puede pedir a la vez se pide a la vez: contexto, catálogo del último local (queda en memoria) y el código de la última pestaña
-  const guardada = leer('soc');
-  const ultimo = leer('mod');
-  if (guardada) api.catalogo(guardada).catch(() => {});
-  const def = MODULOS.find((m) => m.id === ultimo) || MODULOS[0];
-  import(def.archivo).catch(() => {});
+  // Todo lo que se puede pedir a la vez se pide a la vez: contexto, catálogo del último local (queda en memoria) y el módulo de la dirección (#) si recargó la página
+  const recordada = empresaRecordada();
+  if (recordada?.id) api.catalogo(recordada.id).catch(() => {}); // si la sesión es de otra empresa el servidor lo rechaza y no pasa nada
+  if (!reciente && location.hash) { const m = buscar(location.hash); m?.cargar?.().catch(() => {}); }
   try {
     app.ctx = await cargarContexto(reciente);
   } catch (e) {
@@ -540,8 +711,14 @@ async function arrancar(reciente = false) {
     return;
   }
   if (app.ctx.debe_cambiar_pin) return pantallaCambioPin();
-  app.socId = app.ctx.sociedades.some((s) => s.id === guardada) ? guardada : app.ctx.sociedades.find((s) => String(s.codigo ?? '').toLowerCase() === 'pollos')?.id || app.ctx.sociedades[0]?.id;
-  armarApp();
+  // La empresa de la sesión la dice el servidor (empresa_sesion). Mientras una sesión no esté atada a ninguna (servicio de acceso viejo), se usa la que se escogió
+  // al entrar en este aparato y, como último respaldo, 'pollos'.
+  const sociedades = app.ctx.sociedades;
+  const codigoDe = (s) => String(s.codigo_acceso || s.codigo || '').toLowerCase();
+  const delServidor = app.ctx.empresa_sesion && sociedades.find((s) => s.id === app.ctx.empresa_sesion);
+  app.socId = (delServidor || sociedades.find((s) => codigoDe(s) === recordada?.codigo) || sociedades.find((s) => codigoDe(s) === 'pollos') || sociedades[0])?.id;
+  if (app.soc) recordarEmpresa(infoEmpresa(app.soc)); // lo que se recuerda para la próxima entrada es lo que dice la sesión
+  armarApp(reciente);
 }
 
 (async () => {

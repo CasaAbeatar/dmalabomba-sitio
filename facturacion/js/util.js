@@ -2,6 +2,24 @@
 export const $ = (s, r = document) => r.querySelector(s);
 export const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 
+// Atributos seguros para h() y para los gráficos SVG. Nunca se crea un atributo on* con texto (solo funciones con addEventListener),
+// ni srcdoc, ni una dirección que ejecute código (javascript:, vbscript:). Un src de imagen puede ser data:image/(png, jpeg, gif, webp o svg);
+// un href o src de otro elemento solo puede ser data:image/(png, jpeg, gif, webp) o una dirección normal (https:, blob:, relativa).
+const NOMBRE_ATRIBUTO = /^[a-zA-Z_:][-a-zA-Z0-9_:.]*$/;
+const ATRIBUTOS_URL = /^(href|src|action|formaction|xlink:href|poster|background|ping)$/i;
+export function atributoSeguro(nombre, valor, etiqueta = '') {
+  const k = String(nombre);
+  if (!NOMBRE_ATRIBUTO.test(k) || /^on/i.test(k) || /^srcdoc$/i.test(k)) return false;
+  if (!ATRIBUTOS_URL.test(k)) return true;
+  const t = String(valor).replace(/[\u0000- \u007f-\u009f]/g, ''); // el navegador ignora espacios y saltos dentro del esquema
+  if (/^(javascript|vbscript):/i.test(t)) return false;
+  if (/^data:/i.test(t)) {
+    if (/^data:image\/(png|jpe?g|gif|webp)[;,]/i.test(t)) return true;
+    return /^src$/i.test(k) && String(etiqueta).toUpperCase() === 'IMG' && /^data:image\/svg\+xml[;,]/i.test(t);
+  }
+  return true;
+}
+
 // h('div.clase#id', {atributos, onclick}, ...hijos)  -> elemento
 export function h(sel, attrs, ...hijos) {
   const m = sel.match(/^([a-z0-9]+)?((?:[.#][\w-]+)*)$/i) || [];
@@ -10,12 +28,12 @@ export function h(sel, attrs, ...hijos) {
   if (attrs && (typeof attrs !== 'object' || attrs instanceof Node || Array.isArray(attrs))) { hijos.unshift(attrs); attrs = null; }
   for (const [k, v] of Object.entries(attrs || {})) {
     if (v == null || v === false) continue;
-    if (k.startsWith('on') && typeof v === 'function') el.addEventListener(k.slice(2), v);
-    else if (k === 'class') el.className += ' ' + v;
+    if (k.startsWith('on')) { if (typeof v === 'function') el.addEventListener(k.slice(2), v); continue; } // on* solo con funciones
+    if (k === 'class') el.className += ' ' + v;
     else if (k === 'dataset') Object.assign(el.dataset, v);
     else if (k === 'value') el.value = v;
     else if (k === 'checked' || k === 'disabled' || k === 'selected' || k === 'hidden') el[k] = !!v;
-    else el.setAttribute(k, v === true ? '' : v);
+    else if (atributoSeguro(k, v === true ? '' : v, el.tagName)) el.setAttribute(k, v === true ? '' : v);
   }
   const add = (x) => { if (x == null || x === false) return; if (Array.isArray(x)) x.forEach(add); else el.append(x.nodeType ? x : document.createTextNode(String(x))); };
   hijos.forEach(add);
@@ -273,12 +291,15 @@ export function traducirHacienda(crudo) {
 // Devuelve { estado, final, clase:'ok'|'espera'|'mal', chip, texto, motivo }
 export function describirEstado(estado, mensaje) {
   const e = estado || 'pendiente';
-  const motivo = mensaje ? traducirHacienda(mensaje).resumen : '';
+  // El aviso -37 («la ubicación del emisor no coincide con Hacienda») es solo un aviso y no es el motivo de un rechazo: si viene junto con la causa real, no se mezcla; el texto completo queda en el detalle técnico
+  const items = mensaje ? traducirHacienda(mensaje).items : [];
+  const causas = items.filter((i) => i.codigo !== '-37');
+  const motivo = (causas.length ? causas : items).map((i) => i.texto).join(' ');
   const ESTADOS_TXT = {
     pendiente: { final: false, clase: 'espera', chip: 'En cola', texto: 'Cobro registrado. Se está enviando a Hacienda. Este aviso cambia solo cuando Hacienda responda.' },
     enviado: { final: false, clase: 'espera', chip: 'Enviado a Hacienda', texto: 'Cobro registrado. Ya se envió a Hacienda y se espera su respuesta. Este aviso cambia solo.' },
     aceptado: { final: true, clase: 'ok', chip: 'Aceptado', texto: 'Cobro registrado. Hacienda aceptó el comprobante.' },
-    rechazado: { final: true, clase: 'mal', chip: 'Rechazado', texto: 'Cobro registrado, pero Hacienda no aceptó el comprobante.' + (motivo ? ' Motivo: ' + motivo : '') + ' Avise a la persona encargada; el documento queda en «Documentos del día».' },
+    rechazado: { final: true, clase: 'mal', chip: 'Rechazado', texto: 'Cobro registrado, pero Hacienda no aceptó el comprobante.' + (motivo ? ' Motivo: ' + motivo : '') + ' Avise a la persona encargada; el documento queda en «Anular y reimprimir».' },
     error: { final: false, clase: 'mal', chip: 'Con error', texto: 'Cobro registrado, pero todavía no se pudo enviar a Hacienda.' + (motivo ? ' Motivo: ' + motivo : '') + ' El sistema vuelve a intentarlo solo.' },
   };
   return { estado: e, motivo, ...(ESTADOS_TXT[e] || ESTADOS_TXT.pendiente) };
@@ -292,4 +313,21 @@ export function campoBusqueda(input, alBorrar) {
   const borrar = h('button.btn', { type: 'button', hidden: true, onclick: () => { input.value = ''; borrar.hidden = true; alBorrar?.(); input.focus(); } }, 'Borrar búsqueda');
   input.addEventListener('input', () => { borrar.hidden = !input.value; });
   return h('div.buscar-fila', input, borrar);
+}
+
+// Tabla (o cualquier bloque) que se desliza hacia los lados: pone un degradado en el borde y dice con palabras que hay más columnas.
+// Devuelve el envoltorio; el aviso solo se ve cuando de verdad hay algo oculto.
+export function conPistaDesliz(cont, texto = 'Deslice hacia los lados para ver más columnas.') {
+  const pista = h('p.desliza-pista', { hidden: true, 'aria-hidden': 'true' }, texto);
+  const env = h('div.desliza', cont, pista);
+  const revisar = () => {
+    const resto = cont.scrollWidth - cont.clientWidth - cont.scrollLeft;
+    env.classList.toggle('hay-mas', resto > 4);
+    env.classList.toggle('hay-antes', cont.scrollLeft > 4);
+    pista.hidden = !(cont.scrollWidth - cont.clientWidth > 4);
+  };
+  cont.addEventListener('scroll', revisar, { passive: true });
+  if (window.ResizeObserver) { const ro = new ResizeObserver(revisar); ro.observe(cont); const t = cont.querySelector('table'); if (t) ro.observe(t); }
+  setTimeout(revisar, 0);
+  return env;
 }

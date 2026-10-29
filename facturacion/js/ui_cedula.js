@@ -15,7 +15,7 @@
 // Reglas: el número es siempre texto de solo dígitos (se quitan guiones y espacios al pegar; nunca se pierden ceros ni se corta el primer número);
 // el tipo se detecta por el largo; se consulta a Hacienda mientras se escribe (espera 0,5 s sin teclear y cancela la consulta vieja).
 // De Hacienda solo se usan el nombre, el tipo y las actividades económicas (que se muestran en palabras, no como código crudo).
-import { h, TIPOS_ID, fechaCorta } from './util.js';
+import { h, TIPOS_ID, fechaCorta, nombrePropio } from './util.js';
 import { apiM } from './api_mantenimiento.js';
 import { infoActividad, textoActividad } from './actividades.js';
 
@@ -284,7 +284,7 @@ export function crearCampoIdentificacion(opts = {}) {
   function pintarDup() {
     if (!dup) { dupEl.replaceChildren(); return; }
     const ac = opts.accionDuplicado;
-    dupEl.replaceChildren(caja('rojo', '!', 'Este cliente ya existe', dup.nombre + '. No se pueden guardar dos clientes con el mismo número.',
+    dupEl.replaceChildren(caja('rojo', '!', 'Este cliente ya existe', nombrePropio(dup.nombre) + '. No se pueden guardar dos clientes con el mismo número.',
       ac ? h('button.btn' + (ac.primario ? '.primario' : ''), { type: 'button', onclick: () => ac.fn(dup) }, ac.texto) : null));
   }
 
@@ -356,7 +356,7 @@ export function crearCampoIdentificacion(opts = {}) {
     else if (fase === 'encontrada' && r) {
       const via = r.estado === 'padron';
       nodo = caja('verde', '✓', via ? 'Existe en el padrón de personas' : 'Existe en Hacienda',
-        (r.nombre || '') + (TIPOS_ID[r.tipo] ? ' · ' + TIPOS_ID[r.tipo] : ''),
+        nombrePropio(r.nombre) + (TIPOS_ID[r.tipo] ? ' · ' + TIPOS_ID[r.tipo] : ''),
         via ? h('span', 'Hacienda no muestra actividad económica para este número.') : null,
         r.desactualizado ? h('span', 'Hacienda no respondió ahora. Estos datos son de la consulta del ' + fechaCorta(r.consultado_en) + '.') : null);
     } else if (fase === 'no_encontrada') {
@@ -366,10 +366,10 @@ export function crearCampoIdentificacion(opts = {}) {
           : 'Revise que no falte, sobre ni se haya cambiado ningún número. Compárelo número por número con la cédula.',
         Array.isArray(r?.sugerencias) && r.sugerencias.length ? null : btnVolver());
     } else if (fase === 'formato') nodo = caja('rojo', '✕', 'El número no tiene un largo válido', r?.mensaje || 'La cédula debe tener entre 9 y 12 números.');
-    else if (fase === 'servicio') nodo = caja('gris', '–', 'Hacienda no responde en este momento',
+    else if (fase === 'servicio') nodo = caja('gris', '-', 'Hacienda no responde en este momento',
       'Puede seguir: el cliente se guarda marcado como «sin verificar» y se confirma después.' + (r?.mensaje ? ' ' + r.mensaje : ''), btnVolver());
     else if (fase === 'sesion') nodo = caja('rojo', '✕', 'Su sesión venció', 'Entre de nuevo con su usuario y PIN para poder consultar a Hacienda.');
-    else if (fase === 'otro') nodo = caja('gris', '–', 'Este tipo de documento no se consulta en Hacienda', 'Escriba el nombre completo a mano.');
+    else if (fase === 'otro') nodo = caja('gris', '-', 'Este tipo de documento no se consulta en Hacienda', 'Escriba el nombre completo a mano.');
     estado._k = claveEstado;
     estado.replaceChildren(...(nodo ? [nodo] : []));
     }
@@ -378,7 +378,7 @@ export function crearCampoIdentificacion(opts = {}) {
     const lista = fase === 'no_encontrada' && Array.isArray(r?.sugerencias) ? r.sugerencias : [];
     pon(sugs, JSON.stringify(lista), () => lista.map((s) => h('button.ced-sug', { type: 'button', onclick: () => aceptarSugerencia(s) },
       h('span.pre', '¿Quiso decir ', h('span.num', s.cedula), '?'),
-      h('span.nom', s.nombre),
+      h('span.nom', nombrePropio(s.nombre)),
       h('span.mot', (MOTIVOS[s.motivo] || '') + (TIPOS_ID[s.tipo] ? ' ' + TIPOS_ID[s.tipo] + '.' : '')),
       h('span.acc', 'Sí, usar este número'))));
 
@@ -404,7 +404,7 @@ export function crearCampoIdentificacion(opts = {}) {
       const igual = m === 'hacienda';
       pon(datos, [m, r.nombre, deHacienda()[0]?.codigo].join('|'), () => [
         h('div.txt', igual ? h('strong', 'Nombre y actividad iguales a los de Hacienda. ') : h('strong', 'Datos escritos por usted. '),
-          igual ? 'Puede cambiarlos si hace falta.' : 'Hacienda tiene: ' + (r.nombre || '') + (deHacienda()[0] ? ' · ' + textoActividad(deHacienda()[0].codigo, acts) : '') + '.'),
+          igual ? 'Puede cambiarlos si hace falta.' : 'Hacienda tiene: ' + nombrePropio(r.nombre) + (deHacienda()[0] ? ' · ' + textoActividad(deHacienda()[0].codigo, acts) : '') + '.'),
         igual ? h('button.btn', { type: 'button', onclick: noUsarHacienda }, 'No usar, escribirlos yo')
           : h('button.btn.primario', { type: 'button', onclick: usarHacienda }, 'Usar los datos de Hacienda')]);
     }

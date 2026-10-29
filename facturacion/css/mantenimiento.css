@@ -7,7 +7,7 @@
 .mt-herr .rotulo{font-size:.82rem;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--tinta2);margin-right:.2rem}
 
 /* Buscador grande */
-.mt-buscar{min-height:58px;font-size:1.1rem;padding:.7rem 1rem;border-radius:12px;border:1px solid var(--linea2);background:#fff;width:100%;font:inherit;font-size:1.1rem}
+.mt-buscar{min-height:58px;font-size:1.1rem;padding:.7rem 1rem;border-radius:12px;border:1px solid var(--borde-control,#8f8672);background:#fff;width:100%;font:inherit;font-size:1.1rem}
 .mt-buscar:focus{outline:none;border-color:var(--rojo);box-shadow:0 0 0 3px rgba(184,22,34,.12)}
 .mt-filtros{display:grid;gap:.7rem;grid-template-columns:2fr 1fr 1fr;margin-bottom:.8rem}
 @media(max-width:820px){.mt-filtros{grid-template-columns:1fr}}
@@ -17,9 +17,9 @@
 
 /* Avisos dentro de pantallas y ventanas */
 .mt-aviso{padding:.7rem .9rem;border-radius:var(--r);border:1px solid var(--linea2);background:#fff;font-size:.94rem;line-height:1.4}
-.mt-aviso.ambar{background:var(--ambar-suave);border-color:#efd08f;color:#6b4500}
-.mt-aviso.rojo{background:var(--rojo-suave);border-color:#e9b3b7;color:var(--rojo-osc)}
-.mt-aviso.verde{background:var(--verde-suave);border-color:#a8d5bd;color:#14583a}
+.mt-aviso.ambar{background:var(--ambar-suave);border-color:var(--borde-ambar);color:#6b4500}
+.mt-aviso.rojo{background:var(--rojo-suave);border-color:var(--borde-mal);color:var(--rojo-osc)}
+.mt-aviso.verde{background:var(--verde-suave);border-color:var(--borde-ok);color:#14583a}
 .mt-aviso.info{background:#f4f1ea}
 .mt-aviso .fila{margin-top:.5rem}
 .mt-aviso strong{font-weight:700}
@@ -32,7 +32,12 @@
 .mt-item .mt-nombre{font-size:1.02rem;font-weight:700;overflow-wrap:anywhere}
 .mt-item .mt-sub{color:var(--tinta2);font-size:.9rem;overflow-wrap:anywhere}
 .mt-item .mt-btns{display:flex;gap:.5rem;flex-wrap:wrap;justify-content:flex-end}
-.mt-item.apagado{opacity:.62;background:#f7f3ea}
+/* Fila apagada (desactivada): sin opacity, con colores explícitos que se pueden leer (texto 5,2:1, chip rojo 5,9:1, chip ámbar 6,4:1) */
+.mt-item.apagado{background:#f7f3ea}
+.mt-item.apagado .mt-nombre,.mt-item.apagado .mt-sub,.mt-item.apagado .mt-codigo{color:#6b6558}
+.mt-item.apagado .chip.mal,.mt-fila.apagado .chip.mal{color:#a3343c;background:#fbeceb;border-color:#bf4a54}
+.mt-item.apagado .chip.espera,.mt-fila.apagado .chip.espera{color:#7a4f00;background:#fdf2dc;border-color:#a87400}
+.mt-item.apagado .chip.gris,.mt-fila.apagado .chip.gris{color:#6b6558;background:#efe9dd}
 .mt-seccion{margin:1.2rem 0 .5rem;font-size:.82rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--tinta2)}
 @media(max-width:640px){.mt-item{flex-direction:column;align-items:stretch}.mt-item .mt-btns{justify-content:stretch}.mt-item .mt-btns .btn{flex:1 1 auto}}
 .mt-codigo{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.95rem}
@@ -46,10 +51,11 @@
 .mt-form .contador.ok{color:var(--verde)}
 .mt-form .contador.mal{color:var(--rojo)}
 .mt-radios{display:grid;grid-template-columns:1fr 1fr;gap:.6rem}
-.mt-radios label{display:flex;align-items:center;gap:.6rem;min-height:52px;padding:.5rem .8rem;border:1px solid var(--linea2);border-radius:var(--r);cursor:pointer;font-weight:600;background:#fff}
+.mt-radios label{display:flex;align-items:center;gap:.6rem;min-height:52px;padding:.5rem .8rem;border:1px solid var(--borde-control,#8f8672);border-radius:var(--r);cursor:pointer;font-weight:600;background:#fff}
 .mt-radios label:has(input:checked){border-color:var(--rojo);background:var(--rojo-suave)}
 .mt-radios input{width:22px;height:22px;accent-color:var(--rojo)}
-.mt-interruptor{display:flex;align-items:center;gap:.7rem;min-height:52px;padding:.5rem .8rem;border:1px solid var(--linea2);border-radius:var(--r);cursor:pointer;background:#fff;font-weight:600}
+.mt-radios.una{grid-template-columns:1fr}
+.mt-interruptor{display:flex;align-items:center;gap:.7rem;min-height:52px;padding:.5rem .8rem;border:1px solid var(--borde-control,#8f8672);border-radius:var(--r);cursor:pointer;background:#fff;font-weight:600}
 .mt-interruptor input{width:28px;height:28px;accent-color:var(--rojo);flex:0 0 auto}
 .mt-interruptor small{font-weight:400;color:var(--tinta2);display:block}
 .mt-interruptor:has(input:checked){border-color:var(--rojo)}
@@ -57,7 +63,7 @@
 
 /* Buscador CABYS */
 .mt-resultados{display:flex;flex-direction:column;gap:.35rem;max-height:260px;overflow:auto;margin-top:.5rem}
-.mt-res{display:flex;gap:.7rem;align-items:flex-start;text-align:left;width:100%;min-height:52px;padding:.55rem .8rem;border:1px solid var(--linea);border-radius:var(--r);background:#fff;cursor:pointer}
+.mt-res{display:flex;gap:.7rem;align-items:flex-start;text-align:left;width:100%;min-height:52px;padding:.55rem .8rem;border:1px solid var(--borde-control,#8f8672);border-radius:var(--r);background:#fff;cursor:pointer}
 .mt-res:hover{border-color:var(--rojo);background:var(--rojo-suave)}
 .mt-res .cod{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-weight:700;white-space:nowrap}
 .mt-res .desc{flex:1 1 auto;min-width:0;overflow-wrap:anywhere}
@@ -75,15 +81,16 @@
 .mt-grupo-cab .tit strong{overflow-wrap:anywhere}
 .mt-fila{display:grid;grid-template-columns:52px 84px minmax(0,1fr) 230px auto;gap:.4rem .7rem;align-items:center;padding:.45rem .8rem;border-bottom:1px solid var(--linea)}
 .mt-fila:last-child{border-bottom:0}
-.mt-fila.apagado{opacity:.6;background:#f7f3ea}
+.mt-fila.apagado{background:#f7f3ea}
+.mt-fila.apagado .nom,.mt-fila.apagado .cod,.mt-fila.apagado .nom .sub,.mt-fila.apagado .precio .pref,.mt-fila.apagado .abierto{color:#6b6558}
 .mt-fila .cod{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.95rem}
 .mt-fila .nom{min-width:0;overflow-wrap:anywhere}
 .mt-fila .nom .sub{display:flex;flex-wrap:wrap;gap:.35rem;align-items:center;margin-top:.15rem;font-size:.82rem;color:var(--tinta2)}
 .mt-fila .precio{display:flex;gap:.4rem;align-items:center}
 .mt-fila .precio .pref{font-weight:600;color:var(--tinta2)}
-.mt-fila .precio input{min-height:48px;width:100%;min-width:90px;padding:.4rem .6rem;border:1px solid var(--linea2);border-radius:var(--r);font:inherit;text-align:right;font-variant-numeric:tabular-nums;background:#fff}
+.mt-fila .precio input{min-height:48px;width:100%;min-width:90px;padding:.4rem .6rem;border:1px solid var(--borde-control,#8f8672);border-radius:var(--r);font:inherit;text-align:right;font-variant-numeric:tabular-nums;background:#fff}
 .mt-fila .precio input:focus{outline:none;border-color:var(--rojo);box-shadow:0 0 0 3px rgba(184,22,34,.12)}
-.mt-fila .precio input.sucio{border-color:var(--ambar);background:var(--ambar-suave)}
+.mt-fila .precio input.sucio{border-color:var(--borde-ambar);background:var(--ambar-suave)}
 .mt-fila .precio .btn{padding:.4rem .8rem}
 .mt-fila .acc{display:flex;gap:.4rem;flex-wrap:wrap;justify-content:flex-end}
 .mt-fila .abierto{font-weight:600;color:var(--tinta2)}
@@ -99,14 +106,16 @@
 /* Casilla de selección: el control real mide 48x48 (transparente, encima) y la casilla que se ve se dibuja al centro */
 .mt-chk{position:relative;display:inline-flex;align-items:center;justify-content:center;width:48px;height:48px;cursor:pointer;flex:0 0 auto}
 .mt-chk input{position:absolute;inset:0;width:100%;height:100%;margin:0;opacity:0;cursor:pointer;z-index:1}
-.mt-chk::before{content:'';width:26px;height:26px;border:2px solid var(--linea2);border-radius:6px;background:#fff}
+.mt-chk::before{content:'';width:26px;height:26px;border:2px solid var(--borde-control,#8f8672);border-radius:6px;background:#fff}
 .mt-chk:hover::before{border-color:var(--tinta)}
 .mt-chk:has(input:checked)::before,.mt-chk:has(input:indeterminate)::before{background:var(--rojo);border-color:var(--rojo)}
 .mt-chk:has(input:checked)::after{content:'';position:absolute;left:50%;top:50%;width:7px;height:13px;border:solid #fff;border-width:0 3px 3px 0;transform:translate(-50%,-60%) rotate(45deg)}
 .mt-chk:has(input:indeterminate)::after{content:'';position:absolute;left:50%;top:50%;width:12px;height:3px;background:#fff;transform:translate(-50%,-50%)}
 .mt-chk:has(input:focus-visible)::before{outline:3px solid var(--rojo);outline-offset:2px}
 .chip.gris{color:var(--tinta2);background:#f1ece1}
-.chip.rojo{color:var(--rojo);border-color:#e9b3b7;background:var(--rojo-suave)}
+/* Etiqueta larga (por ejemplo «Opción «Queso amarillo» de «Adicional de hamburguesa»»): se parte en renglones en vez de cortarse */
+.chip.largo{white-space:normal;overflow-wrap:anywhere;text-align:left;line-height:1.3;border-radius:12px;max-width:100%}
+.chip.rojo{color:var(--rojo);border-color:var(--borde-mal);background:var(--rojo-suave)}
 
 /* Barra de selección (cambio de precios en lote) */
 .mt-barra-sel{position:sticky;bottom:.6rem;z-index:30;margin-top:1rem;display:flex;flex-wrap:wrap;gap:.6rem;align-items:center;justify-content:space-between;padding:.7rem .9rem;background:var(--tinta);color:#fff;border-radius:14px;box-shadow:0 10px 30px rgba(0,0,0,.28)}
@@ -134,15 +143,15 @@
 
 @media(max-width:560px){.mt-radios{grid-template-columns:1fr}.modal-cuerpo .rejilla.dos{grid-template-columns:1fr}}
 @media(max-width:900px){.mt-cajon-cab{position:static}}
-.mt-casilla{display:flex;align-items:center;gap:.7rem;min-height:56px;padding:.4rem .9rem;font-weight:600;margin:.4rem 0;cursor:pointer;border:1px solid var(--linea2);border-radius:var(--r);background:#fff;width:fit-content;max-width:100%}
+.mt-casilla{display:flex;align-items:center;gap:.7rem;min-height:56px;padding:.4rem .9rem;font-weight:600;margin:.4rem 0;cursor:pointer;border:1px solid var(--borde-control,#8f8672);border-radius:var(--r);background:#fff;width:fit-content;max-width:100%}
 .mt-casilla input{width:32px;height:32px;margin:0}
 .mt-casilla:has(input:checked){border-color:var(--rojo)}
 .mt-estado-txt{margin:0 0 .5rem}
 
 /* Tarifa de IVA habitual del cliente */
 .mt-tarifas{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:.5rem}
-.mt-tarifa-btn{min-height:56px;padding:.5rem .8rem;border:1px solid var(--linea2);border-radius:var(--r);background:#fff;text-align:left;cursor:pointer;font-weight:600;line-height:1.25}
+.mt-tarifa-btn{min-height:56px;padding:.5rem .8rem;border:1px solid var(--borde-control,#8f8672);border-radius:var(--r);background:#fff;text-align:left;cursor:pointer;font-weight:600;line-height:1.25}
 .mt-tarifa-btn:hover:not([disabled]){border-color:var(--tinta)}
 .mt-tarifa-btn[aria-pressed=true]{background:var(--rojo);border-color:var(--rojo);color:#fff}
-.mt-tarifa-btn[disabled]{opacity:.55;cursor:not-allowed}
+.mt-tarifa-btn[disabled]{color:#6b6558;background:#f4f1ea;border-color:#b8b09f;cursor:not-allowed}
 .mt-tar-ayuda{margin:0;color:var(--tinta2);font-size:.92rem;line-height:1.4}

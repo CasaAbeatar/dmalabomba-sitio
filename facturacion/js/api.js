@@ -8,8 +8,9 @@ import { describirEstado } from './util.js';
 export const sb = createClient(SUPA_URL, SUPA_KEY, { auth: { storageKey: 'sb-facturador', persistSession: true, autoRefreshToken: true, detectSessionInUrl: false } });
 
 // Error con texto listo para mostrar. transitorio = falla de red, tiempo agotado o servidor ocupado (vale la pena intentar de nuevo).
+// motivo = la razón que da el servicio de acceso cuando la hay ('empresa_desconocida', 'empresa_no_habilitada', 'sin_acceso_empresa', 'ip', 'empresa'...)
 export class ErrorApi extends Error {
-  constructor(mensaje, { transitorio = false, estado = 0, hasta = null, sesion = false } = {}) { super(mensaje); this.transitorio = transitorio; this.estado = estado; this.hasta = hasta; this.sesion = sesion; }
+  constructor(mensaje, { transitorio = false, estado = 0, hasta = null, sesion = false, motivo = '' } = {}) { super(mensaje); this.transitorio = transitorio; this.estado = estado; this.hasta = hasta; this.sesion = sesion; this.motivo = motivo; }
 }
 export const esSesionVencida = (e) => !!e && (e.sesion === true || /sesi[oó]n venci/i.test(e.message || ''));
 export const esTransitorio = (e) => !!e && (e.transitorio === true || /no se pudo conectar|servidor est[aá] ocupado|tard[oó] demasiado|no respondi[oó]/i.test(e.message || ''));
@@ -99,6 +100,8 @@ async function llamar(nombre, args, opciones) {
         marcarRed(false);
         return { ...r, error: { ...r.error, message: MSG_RED, transitorio: true } };
       }
+      // El token ya se renovó y el servidor lo sigue rechazando (por ejemplo una sesión vieja que no está atada a una empresa): no sirve más, hay que entrar de nuevo
+      if (renovado && esErrorSesion(r)) { avisarSesionVencida(); return { ...r, error: { ...r.error, message: MSG_SESION, sesion: true } }; }
       const texto = fallaTransitoria(r.error, r.status);
       if (!texto) return r;
       if (texto === MSG_RED) marcarRed(false);
@@ -132,18 +135,19 @@ function catalogoDe(soc, forzar) {
   return entrada.promesa;
 }
 
-// Locales que participan en esta etapa de pruebas. Por ahora solo Pollos La Bomba: Soda no aparece ni puede emitir desde
-// la pantalla. Para sumar a Soda más adelante basta agregar 'soda' a esta lista.
+// RESPALDO TEMPORAL. Desde el acceso por empresa, la empresa sale de la sesión: el servidor (fx_contexto) devuelve solo la empresa a la que está atada la sesión
+// y `empresa_sesion` trae su id. Mientras el servicio de acceso nuevo no esté puesto en marcha, las sesiones no tienen empresa y fx_contexto devuelve todas;
+// en ese caso (y solo en ese caso) se deja únicamente a los locales de esta lista. Cuando el servidor ya ate todas las sesiones, esta lista deja de usarse.
 export const LOCALES_EN_PRUEBA = ['pollos'];
 const soloLocalesEnPrueba = (c) => {
-  if (!c || !Array.isArray(c.sociedades)) return c;
+  if (!c || !Array.isArray(c.sociedades) || c.empresa_sesion) return c; // con empresa de sesión el servidor ya filtró
   const sociedades = c.sociedades.filter((s) => LOCALES_EN_PRUEBA.includes(String(s.codigo ?? '').toLowerCase()));
   return sociedades.length ? { ...c, sociedades } : c;
 };
 
 export const api = {
   // Inicio
-  contexto: () => rpc('fx_contexto').then(soloLocalesEnPrueba), // {usuario,nombre,admin,debe_cambiar_pin,sociedades:[{id,codigo,nombre,nombre_comercial,cedula,ambiente,correo,telefono,provincia,canton,distrito,otras_senas,terminales:[{sucursal,terminal,nombre}],turno|null}]}
+  contexto: () => rpc('fx_contexto').then(soloLocalesEnPrueba), // {usuario,nombre,admin,debe_cambiar_pin,empresa_sesion (id de la empresa de la sesión, o null),sociedades:[{id,codigo,nombre,nombre_comercial,cedula,ambiente,correo,telefono,provincia,canton,distrito,otras_senas,terminales:[{sucursal,terminal,nombre}],turno|null}]}
   // Usuarios (PIN de 4 dígitos)
   usuarios: () => rpc('fx_usuarios'),
   usuarioGuardar: (p) => rpc('fx_usuario_guardar', { p }), // {id?, usuario, nombre, admin, activo, pin?}
@@ -235,43 +239,92 @@ export async function funcion(nombre, cuerpo = {}, opciones = {}) {
   }
 }
 
-// Inicio de sesión con usuario y PIN.
-// Cada intento espera como máximo 20 segundos. Si el servicio de acceso no responde (red, arranque en frío, 5xx) se repite UNA vez solo.
-// Un PIN equivocado (401) o un bloqueo (429) NO se repiten: así no se gastan los 5 intentos del PIN.
+/* ---------- Acceso por empresa ---------- */
+// Código de empresa como lo escribe la persona: sin importar mayúsculas, tildes ni espacios ("Pollós", " POLLOS " y "po llos" son "pollos"). Igual que en el servidor.
+export const normalizarEmpresa = (v) => String(v ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, '').slice(0, 60);
+
+// Un intento al servicio de acceso (facturador-acceso): máximo 20 segundos. Devuelve la respuesta y su cuerpo ya leído (j es null si no era JSON).
+async function intentoAcceso(cuerpo) {
+  const ctrl = new AbortController();
+  const reloj = setTimeout(() => ctrl.abort(), 20000);
+  try {
+    let r;
+    try {
+      r = await fetch(`${SUPA_URL}/functions/v1/facturador-acceso`, { method: 'POST', headers: { 'Content-Type': 'application/json', apikey: SUPA_KEY }, body: JSON.stringify(cuerpo), signal: ctrl.signal });
+    } catch (e) {
+      throw new ErrorApi(e?.name === 'AbortError' ? 'El acceso tardó demasiado en responder. Intente de nuevo.' : MSG_RED, { transitorio: true });
+    }
+    let j = null;
+    try { j = JSON.parse(await r.text()); } catch { j = null; }
+    return { r, j };
+  } finally { clearTimeout(reloj); }
+}
+// Si el servicio no respondió (red, arranque en frío, 5xx) se repite UNA vez solo. Un PIN equivocado (401) o un bloqueo (429) NO se repiten: así no se gastan los 5 intentos del PIN.
 // alReintentar() avisa a la pantalla para mostrar "Reintentando…".
-export async function entrar(usuario, pin, { alReintentar } = {}) {
+async function conReintento(hacer, alReintentar) {
   let ultimo;
   for (let intento = 1; intento <= 2; intento++) {
-    const ctrl = new AbortController();
-    const reloj = setTimeout(() => ctrl.abort(), 20000);
-    try {
-      let r;
-      try {
-        r = await fetch(`${SUPA_URL}/functions/v1/facturador-acceso`, { method: 'POST', headers: { 'Content-Type': 'application/json', apikey: SUPA_KEY }, body: JSON.stringify({ usuario, pin }), signal: ctrl.signal });
-      } catch (e) {
-        throw new ErrorApi(e?.name === 'AbortError' ? 'El acceso tardó demasiado en responder. Intente de nuevo.' : MSG_RED, { transitorio: true });
-      }
-      let j = null;
-      try { j = JSON.parse(await r.text()); } catch { j = null; }
-      if (!j || typeof j.ok !== 'boolean') throw new ErrorApi('El servicio de acceso no respondió bien (código ' + r.status + '). Intente de nuevo en unos segundos.', { transitorio: true, estado: r.status });
-      if (!j.ok) throw new ErrorApi(j.error || 'No se pudo entrar. Intente de nuevo.', { transitorio: r.status >= 500, estado: r.status, hasta: j.hasta || null });
-      const { error } = await sb.auth.setSession({ access_token: j.access_token, refresh_token: j.refresh_token });
-      if (error) throw new ErrorApi(error.message || 'No se pudo abrir la sesión. Intente de nuevo.', { transitorio: true });
-      sesionRestaurada();
-      return j;
-    } catch (e) {
+    try { return await hacer(); }
+    catch (e) {
       ultimo = e;
       if (!(e instanceof ErrorApi) || !e.transitorio || intento === 2) break;
       alReintentar?.();
       await pausa(900);
-    } finally { clearTimeout(reloj); }
+    }
   }
   throw ultimo instanceof Error && ultimo.message ? ultimo : new ErrorApi('No se pudo entrar. Intente de nuevo.');
 }
-// Cierre de sesión limpio: avisa al servidor (si hay conexión) y SIEMPRE borra la sesión de este aparato y el catálogo en memoria
+const errorDeAcceso = (r, j) => new ErrorApi(j.error || 'No se pudo entrar. Intente de nuevo.', { transitorio: r.status >= 500, estado: r.status, hasta: j.hasta || null, motivo: j.motivo || '' });
+const sinRespuestaClara = (r, j) => !j || typeof j.ok !== 'boolean';
+const MSG_SIN_RESPUESTA = (r) => new ErrorApi('El servicio de acceso no respondió bien (código ' + r.status + '). Intente de nuevo en unos segundos.', { transitorio: true, estado: r.status });
+
+// RESPALDO TEMPORAL mientras el servicio de acceso todavía no conoce los códigos de empresa (el servicio viejo contesta 400 «Escriba su usuario y su PIN» sin motivo).
+// Cuando facturador-acceso con empresa esté puesto en marcha, este bloque ya no se usa y se puede borrar.
+const EMPRESAS_RESPALDO = {
+  pollos: { codigo: 'pollos', codigo_acceso: 'pollos', nombre_comercial: 'Pollos La Bomba', cedula: '3102111943', cedula_tipo: '02' },
+  soda: { codigo: 'soda', codigo_acceso: 'soda', nombre_comercial: 'Soda La Bomba', cedula: '3102765594', cedula_tipo: '02' },
+};
+function empresaDeRespaldo(codigo) {
+  const e = EMPRESAS_RESPALDO[codigo];
+  if (!e) throw new ErrorApi('No reconocemos ese código de empresa.', { estado: 404, motivo: 'empresa_desconocida' });
+  if (!LOCALES_EN_PRUEBA.includes(e.codigo)) throw new ErrorApi(`${e.nombre_comercial} todavía no está habilitada en este facturador. Por ahora sigue con Prisma.`, { estado: 403, motivo: 'empresa_no_habilitada' });
+  return { ...e, respaldo: true };
+}
+
+// Primer paso de la entrada: ¿existe esa empresa y está habilitada? Devuelve { codigo, codigo_acceso, nombre, nombre_comercial, cedula, cedula_tipo }.
+// Si no, lanza un ErrorApi con motivo 'empresa_desconocida' («No reconocemos ese código de empresa.») o 'empresa_no_habilitada' (el texto lo da el servidor).
+export async function consultarEmpresa(escrito, { alReintentar } = {}) {
+  const codigo = normalizarEmpresa(escrito);
+  if (!codigo) throw new ErrorApi('Escriba el código de su empresa, por ejemplo pollos.', { estado: 400, motivo: 'falta_empresa' });
+  return conReintento(async () => {
+    const { r, j } = await intentoAcceso({ accion: 'empresa', empresa: codigo });
+    if (j && j.ok === true && j.empresa) return { ...j.empresa, codigo_acceso: j.empresa.codigo_acceso || j.empresa.codigo || codigo };
+    if (j && j.ok === false && !j.motivo && r.status === 400) return empresaDeRespaldo(codigo);
+    if (sinRespuestaClara(r, j)) throw MSG_SIN_RESPUESTA(r);
+    throw errorDeAcceso(r, j);
+  }, alReintentar);
+}
+
+// Inicio de sesión con código de empresa, usuario y PIN. La sesión que se abre queda atada a esa empresa en el servidor.
+// Devuelve la respuesta del servicio: { ok, nombre, debe_cambiar_pin, empresa?: { id, codigo, codigo_acceso, nombre, nombre_comercial, cedula, ambiente } }.
+// `empresa` puede faltar mientras el servicio de acceso nuevo no esté en marcha: quien llama usa la empresa que ya reconoció en el primer paso.
+export async function entrar(empresa, usuario, pin, { alReintentar } = {}) {
+  return conReintento(async () => {
+    const { r, j } = await intentoAcceso({ empresa: normalizarEmpresa(empresa), usuario, pin });
+    if (sinRespuestaClara(r, j)) throw MSG_SIN_RESPUESTA(r);
+    if (!j.ok) throw errorDeAcceso(r, j);
+    const { error } = await sb.auth.setSession({ access_token: j.access_token, refresh_token: j.refresh_token });
+    if (error) throw new ErrorApi(error.message || 'No se pudo abrir la sesión. Intente de nuevo.', { transitorio: true });
+    sesionRestaurada();
+    return j;
+  }, alReintentar);
+}
+// Cierre de sesión limpio: UNA sola llamada al servidor, que cierra solo la sesión de ESTE aparato (scope 'local'; el celular y la tableta
+// del mismo usuario siguen abiertos). El servidor además invalida ese token (fx_chk exige una sesión viva), así que el token viejo ya no sirve.
+// Si no hay conexión la llamada falla, y entonces se borra la sesión guardada en este aparato a mano: la pantalla nunca queda "medio abierta".
 export async function salir() {
-  try { await Promise.race([sb.auth.signOut(), pausa(4000)]); } catch { /* sin conexión: se borra solo aquí */ }
-  try { await sb.auth.signOut({ scope: 'local' }); } catch { /* ya estaba cerrada */ }
+  try { await Promise.race([sb.auth.signOut({ scope: 'local' }), pausa(4000)]); } catch { /* sin conexión: se borra solo aquí */ }
+  try { localStorage.removeItem('sb-facturador'); localStorage.removeItem('sb-facturador-code-verifier'); } catch { /* sin almacenamiento */ }
   invalidarCatalogo();
   sesionAvisada = false;
 }

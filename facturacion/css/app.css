@@ -1,6 +1,7 @@
 :root{--fondo:#fbf8f2;--papel:#fff;--tinta:#1d1a17;--tinta2:#6b645b;--linea:#e2dacb;--linea2:#cfc5b2;--borde-control:#8f8672;--borde-ok:#3f8f66;--borde-mal:#bf4a54;--borde-ambar:#a87400;--rojo:#b81622;--rojo-osc:#8f101a;--rojo-suave:#fbeceb;--ambar:#f3a62c;--ambar-suave:#fdf2dc;--verde:#1f7a4d;--verde-suave:#e6f4ec;--azul:#2a5fa8;--r:10px;--sombra:0 1px 0 rgba(29,26,23,.04),0 6px 24px rgba(29,26,23,.06)}
 *{box-sizing:border-box}
 [hidden]{display:none!important}
+.solo-lectores{position:absolute;width:1px;height:1px;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0;padding:0}
 html{-webkit-text-size-adjust:100%}
 body{margin:0;background:var(--fondo);color:var(--tinta);font:16px/1.45 Figtree,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;-webkit-tap-highlight-color:transparent}
 h1,h2,h3{margin:0;font-weight:600;letter-spacing:-.01em}
@@ -73,24 +74,41 @@ table.tabla{width:100%;border-collapse:collapse;font-size:.95rem}
 
 /* Estructura general */
 .pantalla-centro{min-height:100vh;display:grid;place-items:center;padding:1.2rem}
-.cabecera{position:sticky;top:0;z-index:20;background:rgba(251,248,242,.96);backdrop-filter:blur(8px);border-bottom:1px solid var(--linea)}
-.cab-fila{display:flex;align-items:center;gap:.5rem .8rem;padding:.5rem 1rem;max-width:1400px;margin:0 auto;flex-wrap:wrap}
+.cabecera{position:sticky;top:0;z-index:20;background:rgba(251,248,242,.97);backdrop-filter:blur(8px);border-bottom:1px solid var(--linea)}
+/* Franja del negocio: siempre visible, con el color propio de cada empresa (Pollos rojo, Soda ámbar) y el aviso de modo de pruebas */
+.cabecera{--acento:var(--rojo);--acento-texto:#fff}
+.cabecera[data-emp=soda]{--acento:var(--ambar);--acento-texto:#1d1a17}
+.cab-franja{background:var(--acento);color:var(--acento-texto)}
+.cab-franja-in{max-width:1400px;margin:0 auto;padding:.1rem 1rem;min-height:26px;display:flex;align-items:center;justify-content:space-between;gap:.6rem}
+.cab-emp{font-size:.88rem;font-weight:700;letter-spacing:.04em;text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cab-franja .amb{flex:0 0 auto;font-size:.74rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;border-radius:6px;padding:.05rem .5rem;white-space:nowrap}
+.cab-franja .amb-prueba{background:#1d1a17;color:#f3a62c;border:1px solid #1d1a17}
+.cab-franja .amb-prod{background:#fff;color:var(--rojo-osc);border:1px solid #fff}
+/* Fila principal: una cuadrícula cuyas áreas cambian según la vista */
+.cab-fila{display:grid;align-items:center;gap:.4rem .7rem;padding:.45rem 1rem;max-width:1400px;margin:0 auto;grid-template-columns:auto 1fr auto auto;grid-template-areas:'marca estado anular menu'}
+.cab-volver{grid-area:volver}.cab-inicio{grid-area:inicio}.marca{grid-area:marca}.cab-titulo{grid-area:titulo}.cab-estado{grid-area:estado}.btn.cab-anular{grid-area:anular}.cab-usuario{grid-area:menu}
+.cab-volver,.cab-inicio,.cab-titulo{display:none}
+.cabecera:not([data-vista=inicio]) .marca{display:none}
+.cabecera:not([data-vista=inicio]) .cab-volver{display:inline-flex}
+.cabecera:not([data-vista=inicio]) .cab-titulo{display:block}
+.cabecera[data-vista=sub] .cab-inicio{display:inline-flex}
+.cabecera:not([data-vista=inicio]) .cab-fila{grid-template-columns:auto auto 1fr auto auto;grid-template-areas:'volver titulo estado anular menu'}
+.cabecera[data-vista=sub] .cab-fila{grid-template-columns:auto auto auto 1fr auto auto;grid-template-areas:'volver inicio titulo estado anular menu'}
+.cabecera[data-vista=inicio] .estado-turno{display:none} /* el inicio ya dice si la caja está abierta */
 .marca{display:flex;align-items:center;gap:.6rem;font-weight:700}
-.marca img{height:34px;width:auto;display:block}
-.cab-estado{display:contents}
-.soc-sel{display:flex;border:1px solid var(--borde-control,#8f8672);border-radius:var(--r);overflow:hidden;background:#fff}
-.soc-sel button{min-height:48px;padding:.4rem 1rem;border:0;background:transparent;cursor:pointer;font-weight:600}
-.soc-sel button+button{border-left:1px solid var(--borde-control,#8f8672)}
-.soc-sel button[aria-pressed=true]{background:var(--rojo);color:#fff}
-.soc-sel.uno{border:0;background:transparent;overflow:visible}
-.soc-nombre{font-weight:700;font-size:1.08rem;padding:0 .2rem;white-space:nowrap}
-.estado-turno{font-size:.88rem;padding:.3rem .7rem;border-radius:99px;border:1px solid var(--borde-control,#8f8672);background:#fff}
+.marca img{height:36px;width:auto;display:block}
+.cab-titulo{margin:0;font-size:1.5rem;font-weight:700;letter-spacing:-.01em;line-height:1.1;white-space:nowrap;min-width:0;overflow:hidden;text-overflow:ellipsis}
+.cab-volver,.cab-inicio{white-space:nowrap}
+.cab-estado{display:flex;align-items:center;gap:.4rem;min-width:0;padding-left:.2rem}
+.estado-turno{font-size:.88rem;padding:.3rem .7rem;border-radius:99px;border:1px solid var(--borde-control,#8f8672);background:#fff;white-space:nowrap}
 .estado-turno.abierto{border-color:var(--borde-ok);background:var(--verde-suave);color:var(--verde)}
-.estado-turno.cerrado{border-color:var(--borde-ambar);background:var(--ambar-suave);color:#8a5a00}
-.amb-prueba{font-size:.78rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#8a5a00;background:var(--ambar-suave);border:1px solid var(--borde-ambar);border-radius:6px;padding:.1rem .45rem}
-.amb-prod{color:#fff;background:var(--rojo);border-color:var(--rojo)}
-.btn.cab-anular{min-height:48px;border-color:var(--rojo);color:var(--rojo);font-weight:700;background:#fff}
+.estado-turno.cerrado{border-color:var(--borde-ambar);background:var(--ambar-suave);color:#7a4f00}
+.btn.cab-anular{min-height:48px;border-color:var(--rojo);color:var(--rojo);font-weight:700;background:#fff;white-space:nowrap}
 .btn.cab-anular:hover{background:var(--rojo);color:#fff}
+/* Facturación: la barra más delgada posible para dejarle el espacio a la caja */
+.cabecera[data-vista=facturar] .cab-fila{padding-block:.3rem}
+.cabecera[data-vista=facturar] .cab-titulo{font-size:1.25rem}
+.cabecera[data-vista=facturar] .btn{min-height:48px}
 
 /* Sesión: en pantalla ancha va a la vista; en angosta se junta en el botón «Menú» */
 .cab-usuario{margin-left:auto;position:relative;display:flex;align-items:center}
@@ -119,17 +137,13 @@ table.tabla{width:100%;border-collapse:collapse;font-size:.95rem}
 .sin-red-in{max-width:1400px;margin:0 auto;padding:.35rem 1rem;display:flex;align-items:center;gap:.4rem 1rem;flex-wrap:wrap;font-size:.92rem}
 .sin-red-in span{flex:1 1 16rem}
 
-/* Pestañas: se deslizan; el degradado y «Más» avisan que hay más a un lado */
-.pest-caja{position:relative;max-width:1400px;margin:0 auto}
-.pestanas{display:flex;gap:.25rem;padding:0 1rem;overflow-x:auto;scrollbar-width:none;overscroll-behavior-x:contain}
-.pestanas::-webkit-scrollbar{display:none}
-.pestanas button{flex:0 0 auto;min-height:48px;padding:.5rem 1rem;border:0;border-bottom:3px solid transparent;background:transparent;cursor:pointer;font-weight:600;color:var(--tinta2)}
-.pestanas button[aria-selected=true]{color:var(--rojo);border-bottom-color:var(--rojo)}
-.pestanas button .pend{display:inline-block;margin-left:.45rem;padding:.05rem .55rem;border-radius:99px;border:1px solid var(--borde-ambar);background:var(--ambar-suave);color:#8a5a00;font-size:.8rem;font-weight:700;vertical-align:1px}
-.pestanas button .pend.urge{border-color:var(--rojo);background:var(--rojo);color:#fff}
-.pest-mas{display:none;position:absolute;right:0;top:0;bottom:0;z-index:2;min-width:88px;padding:0 .9rem 0 2.4rem;border:0;background:linear-gradient(90deg,rgba(251,248,242,0),#fbf8f2 58%);color:var(--rojo);font-weight:700;cursor:pointer}
-.pest-caja.hay-mas .pest-mas{display:block}
-.pest-caja.hay-antes::before{content:'';position:absolute;left:0;top:0;bottom:0;width:26px;z-index:2;pointer-events:none;background:linear-gradient(270deg,rgba(251,248,242,0),#fbf8f2)}
+/* Pantalla baja (menos de 900 px de alto): el aviso rojo es UNA línea, «Hacienda no aceptó 1 documento. Ver». La versión completa (motivo y qué hacer) queda para pantallas altas. */
+@media(max-height:899px){
+  .alerta-in{padding:.2rem 1rem}
+  .alerta-detalle{display:none}
+  .alerta-texto strong{font-size:.98rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+}
+
 main#vista{max-width:1400px;margin:0 auto;padding:1rem}
 
 /* En Caja (pantalla ancha) el panel de la cuenta se pega justo debajo del encabezado, sea cual sea su alto */
@@ -149,6 +163,22 @@ main#vista{max-width:1400px;margin:0 auto;padding:1rem}
 .teclado button:active{background:var(--rojo-suave)}
 .teclado button.texto{font-size:.95rem}
 .login .entrando{margin:.4rem 0;text-align:center;color:var(--tinta2);font-weight:600}
+/* Entrada por empresa: paso del código y empresa reconocida */
+.campo.grande{min-height:64px;font-size:1.5rem;font-weight:600;text-align:center;letter-spacing:.03em}
+.login .emp-etq{font-size:1.05rem;text-align:center}
+.emp-ayuda{margin:.5rem 0 0;color:var(--tinta2);text-align:center;font-size:.95rem}
+.emp-seguir{width:100%;margin-top:.9rem}
+.emp-aviso{margin:.7rem 0 0;padding:.75rem .9rem;border:1px solid var(--borde-ambar);background:var(--ambar-suave);border-radius:var(--r);color:#5c3b00;font-weight:600}
+.login.login-usuario{max-width:420px}
+.emp-reconocida{display:grid;grid-template-columns:auto 1fr;gap:.6rem .9rem;align-items:center;padding:.9rem 1rem;margin-bottom:1rem;border:1.5px solid var(--borde-control,#8f8672);border-left:7px solid var(--rojo);border-radius:var(--r);background:#fff}
+.emp-reconocida[data-emp=soda]{border-left-color:var(--ambar)}
+.emp-logo{height:56px;width:auto;display:block}
+.emp-texto{display:flex;flex-direction:column;gap:.1rem;min-width:0}
+.emp-et{font-size:.85rem;font-weight:600;color:var(--tinta2)}
+.emp-nombre{font-size:1.5rem;line-height:1.15}
+.emp-ced{font-size:.9rem;color:var(--tinta2)}
+.emp-cambiar{grid-column:1 / -1;width:100%;min-height:52px}
+.sv-quien{display:grid;gap:.15rem;margin:0 0 .5rem;color:var(--tinta2)}
 .teclado button:disabled{opacity:.5;cursor:wait}
 .error-caja{margin:.6rem 0;padding:.7rem .9rem;border:1px solid #e9b3b7;background:var(--rojo-suave);border-radius:var(--r);color:var(--rojo-osc);font-weight:500}
 
@@ -176,19 +206,33 @@ body:has(.modal-fondo) #toasts{bottom:6.2rem}
 
 @media(max-width:700px){
   main#vista{padding:.7rem}
-  /* Celular: una fila con logo, «Anular factura» y «Menú»; debajo, una línea de estado; y las pestañas */
-  .cab-fila{padding:.4rem .7rem;gap:.3rem .5rem}
-  .marca img{height:36px}
-  .btn.cab-anular{order:2;flex:1 1 auto}
-  .cab-usuario{order:3;margin-left:0}
-  .cab-estado{display:flex;order:4;flex:1 1 100%;flex-wrap:wrap;align-items:center;gap:.3rem .45rem}
-  .soc-sel.uno{display:none}
-  .estado-turno{font-size:.82rem;padding:.15rem .6rem}
-  .amb-prueba{font-size:.7rem}
+  .cab-franja-in{padding:.1rem .7rem;min-height:24px}
+  .cab-emp{font-size:.8rem}
+  .cab-franja .amb{font-size:.68rem;padding:.05rem .4rem}
+  /* Celular: la fila se parte en dos (botones arriba, título abajo); en Facturación va todo en una sola fila */
+  .cab-fila{padding:.4rem .7rem;gap:.3rem .5rem;grid-template-columns:1fr auto auto;grid-template-areas:'marca anular menu'}
+  .cab-estado{display:none}
+  .marca img{height:34px}
+  .cabecera:not([data-vista=inicio]) .cab-fila{grid-template-columns:auto 1fr auto;grid-template-areas:'volver anular menu' 'titulo titulo titulo'}
+  .cabecera[data-vista=sub] .cab-fila{grid-template-columns:auto auto 1fr;grid-template-areas:'volver inicio menu' 'titulo anular anular'}
+  .cabecera[data-vista=sub] .cab-usuario{justify-self:end}
+  .cabecera[data-vista=sub] .btn.cab-anular{justify-self:end}
+  .cab-titulo{font-size:1.4rem}
+  .cabecera[data-vista=facturar] .cab-fila{grid-template-columns:auto minmax(0,1fr) auto auto;grid-template-areas:'volver titulo anular menu';padding:.3rem .5rem;gap:.25rem}
+  .cabecera[data-vista=facturar] .cab-titulo{font-size:.98rem;text-align:center}
+  .cabecera[data-vista=facturar] .btn{padding-inline:.5rem;font-size:.92rem}
   .alerta-in{padding:.4rem .7rem}
   .alerta-texto strong{font-size:.95rem}
   .alerta-detalle{-webkit-line-clamp:1}
-  .pestanas{padding:0 .5rem}
+}
+/* Celulares muy angostos (320 a 380 px): botones de la cabecera un poco más compactos para que nada se corte */
+@media(max-width:380px){
+  .cab-fila{padding-inline:.5rem;gap:.25rem .35rem}
+  .cab-fila .btn{padding-inline:.55rem;font-size:.9rem}
+  .cab-titulo{font-size:1.25rem}
+  .cabecera[data-vista=facturar] .cab-titulo{font-size:.92rem}
+  .cabecera[data-vista=facturar] .btn{padding-inline:.4rem;font-size:.86rem}
+  .cabecera[data-vista=facturar] .cab-fila{padding-inline:.35rem}
 }
 /* Ventana «Su sesión venció» */
 .sesion-fondo{z-index:150;background:rgba(29,26,23,.62)}
@@ -202,7 +246,19 @@ body:has(.modal-fondo) #toasts{bottom:6.2rem}
 /* Cierre de caja: nota pequeña bajo una fila de la cuenta */
 .calc-nota{display:block;margin:.1rem 0 0 1.4rem;font-size:.82rem;font-weight:400;color:var(--tinta2)}
 /* Cierre de caja en celular: el total vendido ocupa todo el ancho y no parte la cifra */
-@media(max-width:640px){.ventas-medios .dato.total{grid-column:1/-1}.dato .val{overflow-wrap:normal;white-space:nowrap}}
+@media(max-width:640px){.ventas-medios .dato.total{grid-column:1/-1}.ventas-medios .dato .val{overflow-wrap:normal;white-space:nowrap}}
+.nw{white-space:nowrap}
+/* Aviso de ventas cuyo documento Hacienda no aceptó, bajo el total vendido */
+.aviso-rechazadas{display:flex;flex-wrap:wrap;gap:.5rem 1rem;align-items:center;justify-content:space-between;padding:.6rem .85rem;border:1px solid var(--borde-mal);background:var(--rojo-suave);border-radius:var(--r);color:var(--rojo-osc);font-size:.95rem}
+.aviso-rechazadas span{flex:1 1 18rem}
+.aviso-rechazadas .btn{background:#fff}
+/* Tablas que se deslizan hacia los lados: degradado en el borde y un texto que lo dice */
+.desliza{position:relative}
+.desliza.hay-mas::after{content:'';position:absolute;top:0;right:1px;bottom:2.1rem;width:34px;border-radius:0 14px 14px 0;pointer-events:none;background:linear-gradient(90deg,rgba(251,248,242,0),rgba(143,134,114,.38))}
+.desliza.hay-antes::before{content:'';position:absolute;top:0;left:1px;bottom:2.1rem;width:26px;z-index:1;border-radius:14px 0 0 14px;pointer-events:none;background:linear-gradient(270deg,rgba(251,248,242,0),rgba(143,134,114,.3))}
+.desliza-pista{margin:.35rem 0 0;font-size:.9rem;font-weight:600;color:var(--tinta2);text-align:center}
+.desliza-pista[hidden]{display:none}
+.desliza-pista::before{content:'↔ '}
 /* Tabla «Turnos anteriores»: más compacta para que el botón «Ver resumen» se vea sin deslizar en escritorio */
 table.hist th,table.hist td{padding:.55rem .4rem;font-size:.9rem}
 table.hist th{min-width:0}

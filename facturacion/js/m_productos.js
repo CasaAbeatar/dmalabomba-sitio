@@ -292,7 +292,7 @@ export default {
       if (esUnToque(p.codigo)) sub.push(h('span.chip', 'Un toque'));
       else if (faltaNivel(p)) sub.push(h('span.chip.mal', 'Falta el nombre ' + (!String(p.producto_nombre || '').trim() ? 'del producto' : 'de la opción')));
       else if (!String(p.producto_nombre || '').trim() || !String(p.modificador_nombre || '').trim()) sub.push(h('span.chip.gris', 'Sin nombre de producto u opción'));
-      else sub.push(h('span.chip', 'Opción «' + String(p.modificador_nombre).trim() + '» de «' + String(p.producto_nombre).trim() + '»'));
+      else sub.push(h('span.chip.largo', 'Opción «' + String(p.modificador_nombre).trim() + '» de «' + String(p.producto_nombre).trim() + '»'));
       if (p.descripcion_libre) sub.push(h('span.chip', 'Descripción libre'));
       if (esProvisional(p)) sub.push(h('span.chip.espera', 'Confirmar CABYS'));
       if (p.precio_abierto) sub.push(h('span.chip', 'Precio abierto'));

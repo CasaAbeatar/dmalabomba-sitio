@@ -1,5 +1,7 @@
 // Usuarios del facturador (solo administradores): crear, cambiar nombre, reiniciar PIN, activar o desactivar. Nunca se elimina.
-import { h, modal, confirmar, pedir, conBoton, toast, fechaHora, horaCorta, pinDebil, conPunto, nombrePropio } from './util.js';
+// Cada empresa tiene sus usuarios: el servidor (fx_usuarios) entrega solo los de la empresa de la sesión y un usuario nuevo queda en esa empresa.
+// fx_usuarios trae por usuario `empresas: [{ id, codigo, nombre_comercial }]`; de la fila del propio administrador salen las OTRAS empresas a las que él tiene acceso (casilla «También puede entrar a …»).
+import { h, modal, confirmar, pedir, conBoton, toast, fechaHora, horaCorta, pinDebil, conPunto, nombrePropio, nombreLocal } from './util.js';
 import { api } from './api.js';
 import { cargarCss, aviso, campo, soloDigitos, diaCR } from './ui_mant.js';
 
@@ -17,13 +19,16 @@ export default {
   async mount(root, app) {
     await cargarCss();
     if (!app.admin) {
-      root.append(h('div.vacio', h('p', 'Esta pantalla es solo para administradores.'), h('button.btn', { type: 'button', onclick: () => app.ir('caja') }, 'Volver a Caja')));
+      root.append(h('div.vacio', h('p', 'Esta pantalla es solo para administradores.'), h('button.btn', { type: 'button', onclick: () => app.ir('inicio') }, 'Volver al inicio')));
       return;
     }
     const lista = h('div');
     const resumen = h('p.mt-nota');
     let usuarios = [];
     const esYo = (u) => String(u.usuario).toLowerCase() === String(app.usuario || '').toLowerCase();
+    const miEmpresa = app.empresa?.nombre || 'esta empresa';
+    const otrasEmpresas = (u) => (u?.empresas || []).filter((e) => e.id !== app.socId);
+    const otrasMias = () => otrasEmpresas(usuarios.find(esYo)); // empresas a las que el administrador también puede dar acceso
     const adminsActivos = () => usuarios.filter((u) => u.admin && u.activo).length;
 
     async function cargar() {
@@ -61,6 +66,7 @@ export default {
             yo ? h('span.chip.ok', 'Es usted') : null,
             h('span.chip' + (u.admin ? '.ok' : '.gris'), u.admin ? 'Administrador' : 'Usuario normal'),
             u.activo ? null : h('span.chip.mal', 'Desactivado: no puede entrar'),
+            otrasEmpresas(u).map((e) => h('span.chip.gris', 'También entra a ' + nombreLocal(e))),
             bloqueado ? h('span.chip.mal', 'Bloqueado hasta las ' + horaCorta(u.bloqueado_hasta)) : null,
             u.debe_cambiar_pin ? h('span.chip.espera', 'Debe cambiar su PIN al entrar') : null)),
         h('div.mt-btns', btnNombre, btnPin, btnAdmin, btnActivo));
@@ -111,9 +117,15 @@ export default {
       let admin = false;
       const rNo = h('input', { type: 'radio', name: 'adm', checked: true, onchange: () => { admin = false; } });
       const rSi = h('input', { type: 'radio', name: 'adm', onchange: () => { admin = true; } });
+      // Otras empresas a las que este administrador también tiene acceso: una casilla por cada una
+      const extras = otrasMias().map((e) => ({ id: e.id, nombre: nombreLocal(e), cb: h('input', { type: 'checkbox' }) }));
       const m = modal({
         titulo: 'Agregar usuario', ancho: 560,
         contenido: h('div.mt-form', err,
+          h('div.col', { style: 'gap:.3rem' }, h('span.etq', 'Empresa'),
+            h('div.fila', h('span.chip.ok', miEmpresa)),
+            extras.length ? h('div.mt-radios.una', extras.map((x) => h('label', x.cb, 'También puede entrar a ' + x.nombre))) : null,
+            h('small.tenue', extras.length ? 'La persona queda en ' + miEmpresa + '. Marque la otra empresa solo si también trabaja allá.' : 'La persona queda en ' + miEmpresa + ' y solo entra a esta empresa.')),
           campo('Usuario para entrar', usr, 'Letras minúsculas sin tilde ni espacios; puede llevar números, punto o guion. Entre 2 y 30 caracteres. Ejemplo: maria'),
           campo('Nombre de la persona', nom, 'Ejemplo: María Rodríguez'),
           h('div.col', { style: 'gap:.3rem' }, campo('PIN temporal (4 números)', pin, 'La persona tendrá que cambiarlo la primera vez que entre.'),
@@ -131,7 +143,8 @@ export default {
           if (pinDebil(pin.value)) return mostrar(conPunto(pinDebil(pin.value)) + ' Use el botón «Generar un PIN al azar» o escriba otro.', pin);
           const btn = m.el.querySelector('.modal-pie .primario');
           await conBoton(btn, async () => {
-            await api.usuarioGuardar({ usuario: u, nombre: nom.value.trim(), admin, pin: pin.value });
+            const ids = extras.filter((x) => x.cb.checked).map((x) => x.id);
+            await api.usuarioGuardar({ usuario: u, nombre: nom.value.trim(), admin, pin: pin.value, sociedad_id: app.socId, ...(ids.length ? { empresas: ids } : {}) });
             toast('Usuario creado. Al entrar por primera vez tendrá que cambiar su PIN.');
             c(); await cargar();
           });
@@ -142,16 +155,17 @@ export default {
 
     root.append(
       h('div.mt-cab',
-        h('div', h('h1', 'Usuarios'), h('p', 'Las personas que pueden entrar al facturador. Nunca se elimina a nadie: se desactiva.')),
+        h('div', h('p', 'Las personas que pueden entrar al facturador de ', h('strong', miEmpresa), '. Nunca se elimina a nadie: se desactiva.')),
         h('div.mt-acciones', h('button.btn.primario.grande', { type: 'button', onclick: agregar }, 'Agregar usuario'))),
       h('div.tarjeta', { style: 'margin-bottom:1rem' },
         h('h3', 'Cómo funciona el PIN'),
         h('ul', { style: 'margin:.4rem 0 0;padding-left:1.2rem;display:grid;gap:.3rem' },
-          h('li', 'El PIN son 4 números que solo conoce cada persona. Se usa junto con el usuario para entrar.'),
+          h('li', 'El PIN son 4 números que solo conoce cada persona. Se usa junto con el código de la empresa y el usuario para entrar.'),
           h('li', 'Si alguien se equivoca 5 veces seguidas, el usuario se bloquea durante 15 minutos. Después puede intentar de nuevo.'),
           h('li', 'Si alguien olvida su PIN, use "Reiniciar PIN": se le da uno temporal que tendrá que cambiar apenas entre. Eso también quita el bloqueo.'),
           h('li', 'Nadie puede ver el PIN de otra persona, ni siquiera un administrador.'),
-          h('li', 'Por ahora todos los usuarios tienen acceso a todo el facturador. Solo esta pantalla de Usuarios es exclusiva de los administradores.'))),
+          h('li', 'Cada persona entra solo a la empresa que se le dio. Aquí se ven y se crean los usuarios de ' + miEmpresa + '.'),
+          h('li', 'Dentro de la empresa todos los usuarios tienen acceso a todo. Solo esta pantalla de Usuarios es exclusiva de los administradores.'))),
       resumen, lista);
     await cargar();
   },

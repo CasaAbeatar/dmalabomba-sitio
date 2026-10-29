@@ -43,7 +43,7 @@
 .rec-et{display:none!important}
 .rec-estado{display:flex;flex-direction:column;gap:.2rem;align-items:flex-start}
 .rec-estado .chip{white-space:normal}
-.rec-ver{justify-self:end;font-size:.85rem;font-weight:600;color:var(--rojo);border:1px solid var(--linea2);border-radius:var(--r);padding:.35rem .6rem;background:#fff;text-align:center}
+.rec-ver{justify-self:end;font-size:.85rem;font-weight:600;color:var(--rojo);border:1px solid var(--borde-control,#8f8672);border-radius:var(--r);padding:.35rem .6rem;background:#fff;text-align:center}
 .rec-otras{padding:.7rem 1rem;margin:0;border-top:1px solid var(--linea)}
 .rec-lista>.lis-aviso{margin:.6rem 1rem}
 
