@@ -1,11 +1,10 @@
-// Formulario para abrir la caja: efectivo con que empieza el turno, con montos de un toque.
+// Formulario para abrir la caja: el efectivo con que empieza el turno se escribe siempre; no hay montos predeterminados ni botones de un toque.
 // Lo usa «Apertura y cierre de caja». Facturación puede usar el mismo (crearFormularioApertura) para que las dos pantallas sean idénticas.
 // El servidor (fx_turno_abrir) no abre dos veces: si otra persona ya abrió la caja devuelve esa y marca ya_abierto, y aquí se le dice a la cajera.
 import { h, money, money0, leerNumero, fechaCorta, horaCorta, conPunto, confirmar } from './util.js';
 import { esTransitorio } from './api.js';
 import { textoError } from './api_efectivo.js';
 
-const ATAJOS = [0, 10000, 20000, 50000];
 const TOPE = 99999999.99;
 const cents = (n) => Math.round((Number(n) || 0) * 100);
 const colones = (n) => (cents(n) % 100 === 0 ? money0(n) : money(n));
@@ -24,31 +23,20 @@ export function crearFormularioApertura({ api, socId, terminal = 1, local = '', 
   const err = h('div.error-caja', { hidden: true, role: 'alert' });
   const abrir = h('button.btn.primario.grande.apertura-abrir', { type: 'button' }, 'Abrir caja');
 
-  const botones = ATAJOS.map((m) => h('button.btn.apertura-atajo', { type: 'button', 'aria-pressed': 'false', dataset: { monto: String(m) },
-    onclick: () => { poner(m); } }, m === 0 ? 'Sin fondo (₡0)' : money0(m)));
+  // Solo informa lo que se contó al cerrar el último turno; no se escribe solo ni es un botón: el monto siempre lo escribe la persona.
   const ultimo = sugerido && Number.isFinite(Number(sugerido.monto)) && Number(sugerido.monto) >= 0 && Number(sugerido.monto) <= TOPE
-    ? h('div.apertura-ultimo',
-      h('button.btn.apertura-atajo', { type: 'button', 'aria-pressed': 'false', dataset: { monto: String(Number(sugerido.monto)) }, onclick: () => poner(Number(sugerido.monto)) },
-        'Usar ' + colones(sugerido.monto) + ' del último cierre'),
-      h('small', 'Es lo que se contó al cerrar la caja el ' + fechaCorta(sugerido.cuando) + ' a las ' + horaCorta(sugerido.cuando) + '. Revise que sea lo que hay en la caja ahora.'))
+    ? h('p.apertura-ultimo', 'Al cerrar la caja el ' + fechaCorta(sugerido.cuando) + ' a las ' + horaCorta(sugerido.cuando) + ' se contaron ' + colones(sugerido.monto) + '.')
     : null;
 
-  function poner(m) { fondo.value = String(m); mostrarLectura(); try { fondo.focus({ preventScroll: true }); } catch { /* nada */ } }
-  function marcarBotones(v) {
-    for (const b of [...botones, ...(ultimo ? ultimo.querySelectorAll('button') : [])]) {
-      b.setAttribute('aria-pressed', String(Number.isFinite(v) && cents(v) === cents(b.dataset.monto)));
-    }
-  }
   // Dice con palabras y en grande con cuánto se va a abrir, para que un cero de más o de menos se vea antes de tocar «Abrir caja»
   function mostrarLectura() {
     err.hidden = true;
     const txt = fondo.value.trim();
-    if (!txt) { lectura.textContent = 'Escriba cuánto efectivo hay en la caja al empezar, o toque uno de los montos de abajo.'; lectura.className = 'apertura-lectura'; marcarBotones(NaN); return; }
+    if (!txt) { lectura.textContent = 'Escriba cuánto efectivo hay en la caja al empezar. Si no hay efectivo, escriba 0.'; lectura.className = 'apertura-lectura'; return; }
     const v = leerNumero(txt);
-    if (!Number.isFinite(v) || v < 0 || v > TOPE) { lectura.textContent = 'Ese monto no es válido. Escriba solo números, por ejemplo 20000.'; lectura.className = 'apertura-lectura mal'; marcarBotones(NaN); return; }
+    if (!Number.isFinite(v) || v < 0 || v > TOPE) { lectura.textContent = 'Ese monto no es válido. Escriba solo números, por ejemplo 20000.'; lectura.className = 'apertura-lectura mal'; return; }
     lectura.textContent = 'Abrirá la caja con ' + colones(v) + '.';
     lectura.className = 'apertura-lectura ok';
-    marcarBotones(v);
   }
   function fallo(texto) { err.textContent = texto; err.hidden = false; fondo.focus(); }
 
@@ -56,9 +44,9 @@ export function crearFormularioApertura({ api, socId, terminal = 1, local = '', 
     if (enviando) return;
     err.hidden = true;
     const txt = fondo.value.trim();
-    if (!txt) { fallo('Escriba cuánto efectivo hay en la caja al empezar. Si no hay, toque «Sin fondo (₡0)».'); return; }
+    if (!txt) { fallo('Escriba cuánto efectivo hay en la caja al empezar. Si no hay efectivo, escriba 0.'); return; }
     const v = leerNumero(txt);
-    if (!Number.isFinite(v) || v < 0) { fallo('Ese monto no es válido. Escriba solo números, por ejemplo 20000. Si no hay efectivo, toque «Sin fondo (₡0)».'); return; }
+    if (!Number.isFinite(v) || v < 0) { fallo('Ese monto no es válido. Escriba solo números, por ejemplo 20000. Si no hay efectivo, escriba 0.'); return; }
     if (v > TOPE) { fallo('El monto es demasiado grande. El máximo es ' + money(TOPE) + '.'); return; }
     enviando = true; // también mientras se espera la respuesta de la ventana de abajo: un segundo toque no abre otra
     // Abrir en ₡0 cuando el último cierre contó dinero suele ser un descuido: ese efectivo sigue en el cajón y al cerrar saldría como sobrante. Se pregunta una vez, con una ventana de dos botones.
@@ -87,7 +75,6 @@ export function crearFormularioApertura({ api, socId, terminal = 1, local = '', 
   const el = h('div.apertura', { role: 'group', 'aria-label': 'Abrir la caja' },
     h('label.etq', 'Efectivo con que abre la caja (₡)', h('small', 'Cuente los billetes y monedas que hay en la caja y escriba el total.'), fondo),
     lectura,
-    h('div.apertura-atajos', { role: 'group', 'aria-label': 'Montos de un toque' }, botones),
     ultimo,
     err, abrir);
   mostrarLectura();

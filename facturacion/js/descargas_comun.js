@@ -198,8 +198,8 @@ export async function resolverOpciones(opc) {
     const x = typeof h === 'function' ? await h() : h;
     if (!x) continue;
     const filas = typeof x.filas === 'function' ? await x.filas() : x.filas;
-    // en un informe de varias tablas, las notas y la cifra de arriba valen para todas; en una sola tabla no se repiten
-    tablas.push(normalizarTabla({ ...x, filas }, origen.length > 1 ? { ...base, notas: [] } : base));
+    // lo de arriba (título, rango, cifras) sirve de valor por omisión para cada tabla; las notas de arriba no se repiten en cada una (el PDF las pone una vez)
+    tablas.push(normalizarTabla({ ...x, filas }, { ...base, notas: [] }));
   }
   return { base, tablas, xml: typeof o.xml === 'function' ? o.xml : null, nombre: o.nombre || base.titulo || 'Informe', varias: tablas.length > 1, filas: tablas.reduce((a, t) => a + t.filas.length, 0) };
 }

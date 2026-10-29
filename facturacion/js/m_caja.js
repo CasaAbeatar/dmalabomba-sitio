@@ -86,14 +86,14 @@ function describirCobro(estado, mensaje) {
   if (d.estado === 'aceptado') {
     const avisos = items.filter((i) => i.codigo);
     if (!avisos.length) return d;
-    return { ...d, chip: 'Aceptado con aviso', clase: 'espera',
+    return { ...d, chip: 'Aceptado por Hacienda con aviso', clase: 'espera',
       texto: 'Cobro registrado. Hacienda aceptó el comprobante, pero dejó un aviso: ' + avisos.map((i) => i.texto).join(' ') + ' No hace falta repetir el cobro.' };
   }
   if (d.estado === 'rechazado') {
     // El código -37 (provincia, cantón o distrito del emisor) es solo un aviso: no es la causa del rechazo, así que no se mezcla con el motivo real
     const causas = items.filter((i) => i.codigo !== '-37');
     if (causas.length && causas.length < items.length) {
-      return { ...d, texto: 'Cobro registrado, pero Hacienda no aceptó el comprobante. Motivo: ' + causas.map((i) => i.texto).join(' ') + ' Avise a la persona encargada; el documento queda en «Documentos del día».' };
+      return { ...d, texto: 'Cobro registrado, pero Hacienda no aceptó el comprobante. Motivo: ' + causas.map((i) => i.texto).join(' ') + ' Avise a la persona encargada; el documento queda en «Anular y reimprimir».' };
     }
   }
   return d;
