@@ -60,9 +60,11 @@ export const ESTADOS = { pendiente: 'En cola', enviado: 'Enviado a Hacienda', ac
 // Nombre del local para mostrar: usa el nombre comercial (o la razón social si falta) y, si viene todo en mayúsculas, lo pasa a "Pollos La Bomba".
 const MENORES = new Set(['a', 'al', 'de', 'del', 'la', 'las', 'el', 'los', 'y', 'e', 'en', 'con', 'por', 'para']);
 export function nombreLocal(s) {
-  const t = String((s && (s.nombre_comercial || s.nombre)) ?? '').trim();
+  const comercial = String((s && s.nombre_comercial) ?? '').trim();
+  const t = comercial || String((s && s.nombre) ?? '').trim();
   if (!t || t !== t.toUpperCase()) return t;
-  return t.toLowerCase().split(/\s+/).map((w, i) => (i > 0 && MENORES.has(w)) ? w : w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+  // Nombre comercial (marca): todas las palabras con mayúscula inicial. Razón social: las palabras de enlace quedan en minúscula.
+  return t.toLowerCase().split(/\s+/).map((w, i) => (i > 0 && !comercial && MENORES.has(w)) ? w : w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
 }
 
 // Esqueleto de carga: rectángulos grises con brillo suave y la palabra "Cargando…" (la hoja de estilos está en app.css)

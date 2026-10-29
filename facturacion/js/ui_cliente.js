@@ -16,6 +16,7 @@
 //     El correo principal y la dirección son obligatorios; hay 3 correos más opcionales. Ver js/ui_cedula.js para las reglas de la cédula.
 import { h, modal, conBoton, debounce, TIPOS_ID, toast } from './util.js';
 import { api } from './api.js';
+import { clientesTodos, clienteActivar } from './api_clientes.js';
 import { UBICACIONES } from './data_ubicaciones.js';
 import { cargarCss, campo } from './ui_mant.js';
 import { crearCampoIdentificacion, leerCorreos } from './ui_cedula.js';
@@ -25,11 +26,12 @@ export { leerCorreos };
 const pad2 = (x) => String(x ?? '').replace(/\D/g, '').padStart(2, '0').slice(-2);
 const nombresOrdenados = (obj, i) => Object.entries(obj || {}).sort((a, b) => String(i ? a[1][0] : a[1]).localeCompare(String(i ? b[1][0] : b[1]), 'es'));
 
-export function abrirFormCliente(app, cliente, { alGuardar, titulo } = {}) {
+export function abrirFormCliente(app, cliente, { alGuardar, alCambiarEstado, titulo } = {}) {
   cargarCss();
   const soc = app.soc;
   const c = cliente || {};
   const esNuevo = !c.id;
+  let activo = c.activo !== false; // un cliente desactivado no aparece al buscar cliente para facturar
   const err = h('div.error-caja', { hidden: true, role: 'alert' });
   const mostrarError = (m, campoEl) => { err.textContent = m; err.hidden = !m; if (m) { err.scrollIntoView({ block: 'nearest' }); campoEl?.focus(); } };
 
@@ -77,8 +79,8 @@ export function abrirFormCliente(app, cliente, { alGuardar, titulo } = {}) {
   // Número de identificación, nombre y actividad: se verifican en Hacienda (js/ui_cedula.js)
   const ced = crearCampoIdentificacion({
     cliente: esNuevo ? null : c,
-    revisarDuplicado: async (id) => (await api.clientes(soc.id, id)).find((x) => x.identificacion === id && x.id !== c.id) || null,
-    accionDuplicado: { texto: 'Abrir el cliente que ya existe', fn: (otro) => { m.cerrar(); abrirFormCliente(app, otro, { alGuardar, titulo }); } },
+    revisarDuplicado: async (id) => (await clientesTodos(soc.id, id)).find((x) => x.identificacion === id && x.id !== c.id) || null,
+    accionDuplicado: { texto: 'Abrir el cliente que ya existe', fn: (otro) => { m.cerrar(); abrirFormCliente(app, otro, { alGuardar, alCambiarEstado, titulo }); } },
     alTerminar: () => { [correos[0], telefono].find((x) => !x.value.trim())?.focus(); },
   });
 
@@ -112,7 +114,7 @@ export function abrirFormCliente(app, cliente, { alGuardar, titulo } = {}) {
         id: c.id || undefined, solo_nuevo: esNuevo, sociedad_id: soc.id, tipo_id: val.tipo_id, identificacion: val.identificacion,
         nombre: val.nombre, nombre_comercial: comercial.value.trim(), correo: listaCorreos.join(', '), telefono: tel,
         provincia: prov.value, canton: cant.value, distrito: dist.value, barrio: c.barrio || '', otras_senas: senas.value.trim(),
-        actividad_codigo: val.actividad_codigo, notas: notas.value.trim(), sin_verificar_motivo: val.sin_verificar_motivo,
+        actividad_codigo: val.actividad_codigo, notas: notas.value.trim(), activo, sin_verificar_motivo: val.sin_verificar_motivo,
       });
       toast((esNuevo ? 'Cliente agregado.' : 'Cliente guardado.') + (r.verificado ? '' : ' Quedó marcado como sin verificar en Hacienda.'));
       cerrar();
@@ -120,8 +122,27 @@ export function abrirFormCliente(app, cliente, { alGuardar, titulo } = {}) {
     });
   }
 
+  // Estado del cliente: activo o desactivado (solo en clientes ya guardados)
+  const estadoTexto = h('p.mt-estado-txt');
+  const estadoBtn = h('button.btn', { type: 'button' });
+  const pintarEstado = () => {
+    estadoTexto.replaceChildren(activo ? h('b', 'Activo. ') : h('b', 'Desactivado. '), activo ? 'Aparece al buscar cliente para facturar.' : 'No aparece al buscar cliente para facturar. Sus facturas anteriores no cambian.');
+    estadoBtn.textContent = activo ? 'Desactivar cliente' : 'Activar cliente';
+    estadoBtn.className = 'btn' + (activo ? '' : ' primario');
+  };
+  estadoBtn.addEventListener('click', () => conBoton(estadoBtn, async () => {
+    const nuevo = !activo;
+    const r = await clienteActivar(c.id, nuevo);
+    activo = r.activo !== false;
+    pintarEstado();
+    toast(activo ? 'Cliente activado. Ya aparece al buscar cliente.' : 'Cliente desactivado. Ya no aparece al buscar cliente.');
+    alCambiarEstado?.(r);
+  }));
+  pintarEstado();
+
   const cuerpo = h('div.mt-form',
     err,
+    esNuevo ? null : h('fieldset', h('legend', 'Estado del cliente'), h('div.col', estadoTexto, estadoBtn)),
     h('fieldset', h('legend', 'Identificación'), ced.el),
     h('fieldset', h('legend', 'Correos para enviar la factura'),
       h('div.col',

@@ -70,7 +70,7 @@
 .precio-et .campo{font-size:1rem;font-weight:600;text-align:right;font-variant-numeric:tabular-nums}
 .linea.editada .precio-inp{border-color:var(--ambar);background:var(--ambar-suave)}
 .linea-pie{display:flex;gap:.5rem;align-items:center;flex-wrap:wrap}
-.linea-pie .nota-inp{flex:1 1 150px;min-height:44px;font-size:.92rem}
+.linea-pie .nota-inp{flex:1 1 150px;min-height:48px;font-size:.92rem}
 .etiqueta-cambio{font-size:.8rem;color:#8a5a00}
 .cuenta-pie{border-top:1px solid var(--linea);padding:.8rem 1rem 1rem;background:#fffdf9;display:flex;flex-direction:column;gap:.6rem}
 .total-fila{display:flex;justify-content:space-between;align-items:baseline;gap:.6rem}
@@ -146,7 +146,7 @@
 .cli-item:hover{border-color:var(--tinta)}
 .cli-item b{overflow-wrap:anywhere}
 .mas-datos{border:1px solid var(--linea);border-radius:var(--r);padding:.5rem .8rem}
-.mas-datos summary{cursor:pointer;min-height:44px;display:flex;align-items:center;font-weight:600}
+.mas-datos summary{cursor:pointer;min-height:48px;display:flex;align-items:center;font-weight:600}
 .exito{text-align:center;display:flex;flex-direction:column;gap:.9rem;align-items:stretch}
 .exito .gran{font-size:1.5rem;font-weight:700}
 .exito .vuelto-caja{border:2px solid var(--ambar);background:var(--ambar-suave);border-radius:14px;padding:.8rem}
@@ -290,3 +290,16 @@
 .cobro-chk{display:flex;gap:.7rem;align-items:flex-start;min-height:56px;padding:.6rem .8rem;border:1px solid var(--linea2);border-radius:var(--r);background:#fff;cursor:pointer}
 .cobro-chk input{width:26px;height:26px;margin-top:.1rem;accent-color:var(--rojo);flex:0 0 auto}
 .cobro-chk small{display:block;color:var(--tinta2);font-weight:400;line-height:1.35}
+
+/* ---------- Pagos y vuelto en «Cobro listo», ajustes de impresión y avisos de red ---------- */
+.exito-pagos{display:flex;flex-direction:column;gap:.15rem;border:1px solid var(--linea);border-radius:12px;padding:.5rem .9rem;background:#fffdf9;text-align:left}
+.exito-pagos .ex-fila{display:flex;justify-content:space-between;align-items:baseline;gap:1rem;padding:.3rem 0}
+.exito-pagos .ex-fila b{font-variant-numeric:tabular-nums}
+.exito-pagos .ex-fila.recibido{border-top:1px dashed var(--linea2);margin-top:.15rem;padding-top:.5rem}
+.cobro-imp{border:1px solid var(--linea);border-radius:12px;padding:.7rem 1rem;background:#fffdf9;display:flex;gap:.8rem;justify-content:space-between;align-items:center;flex-wrap:wrap}
+.cobro-imp-txt{flex:1 1 240px;min-width:0}
+.avisos-caja:empty{display:none}
+.aviso-red{border:2px solid var(--rojo);background:var(--rojo-suave);color:var(--rojo-osc);border-radius:12px;padding:.8rem 1rem;display:flex;gap:.8rem 1.2rem;justify-content:space-between;align-items:center;flex-wrap:wrap}
+.aviso-red-txt{flex:1 1 260px;min-width:0}
+.aviso-red .fila{flex:0 0 auto}
+

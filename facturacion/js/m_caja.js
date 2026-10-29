@@ -629,12 +629,17 @@ export default {
       const btnOtro = h('button.btn', { type: 'button', onclick: agregarOtro }, 'Agregar otro pago (pago mixto)');
       const listaPagos = h('div.col');
       const resumen = h('div.cobro-resumen');
-      const errEl = h('div.error-caja', { hidden: true });
+      const errEl = h('div.error-caja', { hidden: true, role: 'alert' });
+      const btnRevisar = h('button.btn', { type: 'button', hidden: true }, 'Revisar si se cobró');
       // Impresión: se usan los ajustes de este aparato (botón «Impresora»); aquí solo se muestran y se pueden abrir para cambiarlos
       const resImp = h('div.cobro-imp');
       const abrirAjustes = async () => { try { (await imp()).abrirAjustesImpresion(); } catch (e) { toast(e.message, 'error', 6000); } };
+      let claveImp = '';
       function pintarImp() {
         const a = ajustesImp();
+        const clave = JSON.stringify([a.auto, a.formato, a.papel, a.copias]);
+        if (clave === claveImp) return;
+        claveImp = clave;
         resImp.replaceChildren(
           h('div.cobro-imp-txt', h('strong', 'Impresión al cobrar'),
             h('div.tenue-linea', a.auto ? 'Se imprime sola: ' + textoImpresion(a) + '.' : 'No se imprime sola. Al terminar el cobro aparece el botón «Imprimir tiquete».')),
@@ -651,7 +656,7 @@ export default {
         actEl,
         h('div.col', h('strong', 'Forma de pago'), h('div.medios', mediosBtns)),
         h('label.etq', lblMonto, inpMonto),
-        rapidos, refEtq, btnOtro, listaPagos, errEl,
+        rapidos, refEtq, btnOtro, listaPagos, errEl, btnRevisar,
         resImp,
         h('div.cobro-pie', btnVolver, btnCobrar));
 
@@ -811,28 +816,49 @@ export default {
       }
 
       /* Confirmar el cobro: un solo intento a la vez; si falla la red se revisa si igual quedó cobrado */
+      // Pregunta al servidor qué pasó con esta cuenta: 'cobrado' (trae el comprobante), 'no' (sigue abierta) o 'desconocido' (sin conexión)
+      async function verificarCobro() {
+        try {
+          const v = await api.venta(ventaId);
+          if (v.venta.estado === 'facturada' && v.comprobante) return { estado: 'cobrado', comp: await api.comprobante(v.comprobante.id) };
+          return { estado: 'no' };
+        } catch { return { estado: 'desconocido' }; }
+      }
+      async function terminar(comp, aviso, vueltoLocal) {
+        terminado = true;
+        m.cerrar();
+        try { sacarDeLista(ventaId); cur = null; await pasarALaSiguiente(); if (vivo) repintar(); } catch { /* la barra se refresca sola */ }
+        if (vivo) exito(comp, vueltoLocal, aviso);
+      }
       async function confirmarCobro() {
         if (cobrando || terminado) return;
         const b = borrador();
         const r = calcularPagos(entradas(), totalC);
         if (b.malo || !r.ok) { conErr(r.error || 'Los pagos todavía no cubren el total.'); return; }
-        cobrando = true; actualizar();
+        cobrando = true; btnRevisar.hidden = true; actualizar();
+        // En efectivo se manda también "recibido" (lo que entregó el cliente): el servidor guarda el vuelto y lo imprime en el tiquete
         const aplicados = r.aplicados.map((p) => (p.medio === 'efectivo' ? { medio: p.medio, monto: p.monto, referencia: p.referencia, recibido: p.recibido } : { medio: p.medio, monto: p.monto, referencia: p.referencia }));
-        let comp = null, aviso = '';
+        let comp = null;
         try {
           comp = await api.cobrar(ventaId, aplicados, cliente ? cliente.id : null, app.terminal, cliente ? actividadFactura : null);
         } catch (e) {
-          try {
-            const v = await api.venta(ventaId);
-            if (v.venta.estado === 'facturada' && v.comprobante) { comp = await api.comprobante(v.comprobante.id); aviso = 'Hubo un problema de conexión, pero el cobro SÍ quedó registrado. No lo repita.'; }
-          } catch { /* sin conexión: se muestra el error original */ }
-          if (!comp) { cobrando = false; if (vivo && m) { actualizar(); conErr('No se pudo cobrar: ' + (e.message || e) + ' Revise e intente de nuevo; no se cobró nada.'); } return; }
+          const v = await verificarCobro();
+          if (v.estado === 'cobrado') { await terminar(v.comp, 'Hubo un problema de conexión, pero el cobro SÍ quedó registrado. No lo repita.', r.vuelto / 100); return; }
+          cobrando = false;
+          if (!vivo || !m) return;
+          actualizar();
+          if (v.estado === 'no') conErr('No se pudo cobrar: ' + (e.message || e) + ' No se cobró nada. Revise e intente de nuevo.');
+          else { conErr('No se pudo confirmar si el cobro quedó registrado (' + (e.message || e) + '). No lo repita todavía: cuando vuelva la conexión toque «Revisar si se cobró».'); btnRevisar.hidden = false; }
+          return;
         }
-        terminado = true;
-        m.cerrar();
-        try { sacarDeLista(ventaId); cur = null; await pasarALaSiguiente(); if (vivo) repintar(); } catch { /* la barra se refresca sola */ }
-        if (vivo) exito(comp, r.vuelto / 100, aviso, formato);
+        await terminar(comp, '', r.vuelto / 100);
       }
+      btnRevisar.addEventListener('click', () => conBoton(btnRevisar, async () => {
+        const v = await verificarCobro();
+        if (v.estado === 'cobrado') await terminar(v.comp, 'El cobro SÍ quedó registrado. No lo repita.', 0);
+        else if (v.estado === 'no') { btnRevisar.hidden = true; conErr('Confirmado: no se cobró nada. Puede tocar «Cobrar» de nuevo.'); }
+        else conErr('Todavía no hay conexión con el servidor. Espere unos segundos y toque «Revisar si se cobró» otra vez.');
+      }));
 
       m = modal({ titulo: 'Cobrar', contenido: raiz, ancho: 720, alCerrar: () => { vigilaAjustes.disconnect(); if (vivo && !terminado && buscador && fino()) buscador.inp.focus(); } });
       mostrar(vistaPago);
@@ -841,12 +867,14 @@ export default {
     }
 
     /* ---------- Pantalla de éxito ---------- */
-    function exito(comp, vuelto, aviso, formato) {
+    // comp = comprobante que devolvió el servidor (con pagos_snapshot: en efectivo trae recibido y vuelto). vueltoLocal solo sirve si el servidor no lo trajo.
+    function exito(comp, vueltoLocal, aviso) {
+      const aj = ajustesImp();
       const compId = comp.id;
       let abierto = true;
       const chip = h('span.chip');
       const msgEstado = h('p.tenue-linea');
-      const impEstado = h('p.tenue-linea');
+      const impEstado = h('p.tenue-linea', { role: 'status' });
       const pintarEstado = (c) => {
         const e = c.estado || 'pendiente';
         chip.textContent = ESTADOS[e] || e;
@@ -869,29 +897,39 @@ export default {
       async function imprimir(fmt) {
         impEstado.className = 'tenue-linea'; impEstado.textContent = 'Enviando a la impresora…';
         try {
-          await (await imp()).imprimirComprobante(compId, { formato: fmt, copias: 1 });
-          impEstado.textContent = fmt === 'carta' ? 'Comprobante en formato carta enviado a imprimir.' : 'Comprobante en formato tiquete (80 mm) enviado a imprimir.';
+          await (await imp()).imprimirComprobante(compId, { formato: fmt, copias: aj.copias });
+          impEstado.textContent = fmt === 'carta' ? 'Factura en formato carta enviada a imprimir.' : 'Tiquete de ' + aj.papel + ' mm enviado a imprimir (' + aj.copias + (aj.copias === 1 ? ' copia).' : ' copias).');
         } catch (e) {
           impEstado.className = 'tenue-linea msg-mal';
-          impEstado.textContent = 'No se pudo imprimir: ' + (e.message || e) + ' Toque «Imprimir otra vez» o revise el botón «Impresora».';
+          impEstado.textContent = 'No se pudo imprimir: ' + (e.message || e) + ' Toque el botón de imprimir otra vez o revise el botón «Impresora».';
         }
       }
+      // Pagos, efectivo recibido y vuelto: salen de lo que guardó el servidor
+      const pagos = Array.isArray(comp.pagos_snapshot) ? comp.pagos_snapshot : [];
+      const recibido = pagos.filter((p) => p.medio === 'efectivo' && p.recibido != null).reduce((t, p) => t + Number(p.recibido), 0);
+      const vuelto = comp.vuelto != null && Number.isFinite(Number(comp.vuelto)) ? Number(comp.vuelto) : vueltoLocal;
+      const pagosEl = pagos.length ? h('div.exito-pagos', { 'aria-label': 'Cómo pagó el cliente', role: 'group' },
+        pagos.map((p) => h('div.ex-fila', h('span', MEDIOS[p.medio] || p.medio), h('b', money(p.monto)))),
+        recibido > 0 ? h('div.ex-fila.recibido', h('span', 'Efectivo que entregó el cliente'), h('b', money(recibido))) : null) : null;
       let cerrarM;
-      const fmtPrincipal = formato === 'carta' ? 'carta' : 'tiquete';
+      const fmtPrincipal = aj.formato === 'carta' ? 'carta' : 'tiquete';
+      const nombrePrincipal = fmtPrincipal === 'carta' ? 'factura carta' : 'tiquete';
       const contenido = h('div.exito',
         h('div.gran', '✓ Cobro registrado'),
         aviso ? h('div.error-caja', aviso) : null,
         h('div', h('div', (TIPOS_DOC[comp.tipo_doc] || 'Comprobante') + (comp.consecutivo ? ' N° ' + comp.consecutivo : '')), h('div.gran', money(comp.total))),
+        pagosEl,
         vuelto > 0 ? h('div.vuelto-caja', h('div', 'Entregue de vuelto'), h('div.monto', money(vuelto))) : h('p.tenue-linea', 'Sin vuelto.'),
         h('div.estado-caja', chip), msgEstado, impEstado,
         h('div.botones',
           h('button.btn.primario.grande', { type: 'button', onclick: () => { cerrarM(); nuevaCuenta(); } }, 'Nueva cuenta'),
-          h('button.btn', { type: 'button', onclick: () => imprimir(fmtPrincipal) }, 'Imprimir otra vez'),
-          h('button.btn', { type: 'button', onclick: () => imprimir('carta') }, 'Imprimir factura carta'),
+          h('button.btn', { type: 'button', onclick: () => imprimir(fmtPrincipal) }, aj.auto ? 'Imprimir otra vez' : 'Imprimir ' + nombrePrincipal),
+          h('button.btn', { type: 'button', onclick: () => imprimir(fmtPrincipal === 'carta' ? 'tiquete' : 'carta') }, fmtPrincipal === 'carta' ? 'Imprimir tiquete' : 'Imprimir factura carta'),
           h('button.btn.suave', { type: 'button', onclick: () => cerrarM() }, 'Listo, cerrar')));
       const mo = modal({ titulo: 'Cobro listo', contenido, ancho: 520, alCerrar: () => { abierto = false; if (vivo && buscador && fino()) buscador.inp.focus(); } });
       cerrarM = mo.cerrar;
-      if (formato !== 'ninguno') imprimir(fmtPrincipal); else impEstado.textContent = 'No se imprimió (usted eligió no imprimir).';
+      if (aj.auto) imprimir(fmtPrincipal);
+      else impEstado.textContent = 'No se imprimió sola (la impresión automática está apagada en «Impresora»). Toque «Imprimir ' + nombrePrincipal + '» si el cliente lo quiere.';
       vigilar();
     }
 

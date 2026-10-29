@@ -120,6 +120,8 @@ main#vista{max-width:1400px;margin:0 auto;padding:1rem}
 .modal-pie{display:flex;gap:.6rem;justify-content:flex-end;flex-wrap:wrap;padding:.9rem 1.2rem;border-top:1px solid var(--linea)}
 .conf{margin:0;font-size:1.05rem}
 #toasts{position:fixed;left:50%;bottom:1rem;transform:translateX(-50%);z-index:200;display:flex;flex-direction:column;gap:.5rem;width:min(92vw,460px)}
+/* Los avisos breves no tapan los botones de abajo de una ventana abierta */
+body:has(.modal-fondo) #toasts{bottom:6.2rem}
 .toast{padding:.8rem 1rem;border-radius:var(--r);background:var(--tinta);color:#fff;box-shadow:var(--sombra);transition:opacity .3s}
 .toast.error{background:var(--rojo)}.toast.fuera{opacity:0}
 
