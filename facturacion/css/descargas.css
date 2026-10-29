@@ -12,6 +12,7 @@
 .desc-menu[hidden]{display:none}
 .desc-menu.der{right:0}
 .desc-menu.izq{left:0}
+.desc-menu.arriba{top:auto;bottom:calc(100% + 6px)}
 .desc-tit{margin:.1rem .2rem .15rem;font-weight:600;font-size:.95rem;color:var(--tinta)}
 .desc-opc{display:flex;align-items:center;gap:.8rem;width:100%;min-height:64px;padding:.6rem .8rem;border:1px solid var(--linea2);border-radius:12px;background:#fff;text-align:left;cursor:pointer;color:inherit;transition:background .12s,border-color .12s}
 .desc-opc:hover,.desc-opc:focus-visible{border-color:var(--teal);background:var(--teal-suave)}
@@ -38,6 +39,8 @@
   .desc-velo[hidden]{display:none}
   .desc-menu{position:fixed;left:0;right:0;top:auto;bottom:0;width:auto;max-height:88vh;overflow:auto;border-radius:16px 16px 0 0;padding:.9rem 16px calc(.9rem + env(safe-area-inset-bottom,0px))}
   .desc-menu.der,.desc-menu.izq{left:0;right:0}
+  .desc-menu.arriba{top:auto;bottom:0}
 }
 @media(prefers-reduced-motion:reduce){.desc-flecha,.desc-opc{transition:none}}
 @media print{.desc{display:none!important}}
+.desc-nota{margin:.3rem .2rem .1rem;font-size:.85rem;line-height:1.35;color:var(--tinta2)}

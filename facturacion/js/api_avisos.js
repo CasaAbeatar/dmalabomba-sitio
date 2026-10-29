@@ -1,16 +1,9 @@
 // Acceso a datos de Avisos por WhatsApp y de las entradas de efectivo. Todo pasa por funciones fx_* de Supabase (api.js no se toca).
-// Las consultas se repiten UNA vez sola si falla la red; las escrituras nunca se repiten solas.
-import { rpc, esTransitorio } from './api.js';
+// Las consultas las repite UNA vez sola api.js si falla la red; las escrituras nunca se repiten solas.
+import { rpc } from './api.js';
 
-const pausa = (ms) => new Promise((r) => setTimeout(r, ms));
-async function leer(nombre, args) {
-  try { return await rpc(nombre, args); }
-  catch (e) {
-    if (!esTransitorio(e)) throw e;
-    await pausa(700);
-    return rpc(nombre, args);
-  }
-}
+// api.js ya repite una vez las lecturas que fallan por la red; aquí no se repite de nuevo.
+const leer = (nombre, args) => rpc(nombre, args);
 
 // Entradas y salidas de efectivo de la caja
 export const efectivo = {

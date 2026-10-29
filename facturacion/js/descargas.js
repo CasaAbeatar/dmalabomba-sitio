@@ -19,16 +19,21 @@
 //   Varias tablas en un informe: en lugar de columnas/filas se pasa hojas:[{nombre, titulo, subtitulo, cifras, columnas, filas, totales, notas}, …].
 //   Excel trae una hoja por tabla, el PDF todas las tablas una tras otra y el CSV un .zip con un archivo por tabla.
 //
+// XML: la función xml recibe { alAvanzar(0..1) } y devuelve [{ nombre, contenido }] (contenido: texto o Uint8Array). Si falla, el componente avisa con palabras y ofrece «Intentar de nuevo».
+// PDF: hasta MAX_FILAS_PDF filas (5 000, medido). Con más, el menú solo ofrece Excel y CSV y lo explica en una línea. Excel y CSV aguantan 100 000 filas.
+//
 // TIPOS DE COLUMNA: texto | numero | moneda | fecha | fechahora | porcentaje (ver descargas_comun.js).
 // El Excel real (números como números, fechas como fechas, ₡#,##0.00, encabezado fijo) lo arma descargas_xlsx.js; el CSV (UTF-8 con BOM, comas,
 // punto decimal, fechas AAAA-MM-DD, una sola fila de encabezado) y el PDF (impresión del navegador en un iframe oculto) se arman aquí.
-import { h } from './util.js';
+import { h, num } from './util.js';
 import { resolverOpciones, ahoraCR, nombreArchivo, nombrePeriodo, reloj, crearCsv, valorXlsx, valorFila, calcularTotales, textoCifras, decimalesDe, dmaDeSerie, mesDeSerie, nombreHoja } from './descargas_comun.js';
 
 export { nombrePeriodo, nombreArchivo, ahoraCR };
 
 const cssUrl = new URL('../css/descargas.css', import.meta.url).href;
 const FUENTES_URL = 'https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&display=swap';
+// El PDF sale de la impresión del navegador. Medido en Chromium: 5 000 filas son 152 páginas y se imprimen en 8 s; con 20 000 filas la impresión falla. Más de esto solo se ofrece Excel y CSV.
+export const MAX_FILAS_PDF = 5000;
 const esperar = (ms) => new Promise((r) => setTimeout(r, ms));
 let contador = 0;
 
@@ -64,6 +69,8 @@ const CSS_PDF = `
 .fxp th{padding:4px 5px;text-align:left;font-size:8.5px;font-weight:700;background:#fdf2dc;border-top:1px solid #1d1a17;border-bottom:1px solid #1d1a17;vertical-align:bottom}
 .fxp td{padding:3px 5px;border-bottom:.5px solid #cfc5b2;vertical-align:top;overflow-wrap:anywhere}
 .fxp th.d,.fxp td.d{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
+.fxp th.d{white-space:normal}
+.fxp td.cod{white-space:nowrap;font-variant-numeric:tabular-nums}
 .fxp tr.tot td{font-weight:700;background:#fbf8f2;border-top:1px solid #1d1a17;border-bottom:2px double #1d1a17}
 .fxp ul{margin:8px 0 0;padding-left:14px;font-size:9px;color:#6b645b}
 .fxp .vacia{margin-top:8px;font-style:italic;color:#6b645b}
@@ -114,11 +121,13 @@ async function construirPdf(D, raiz, res, doc, pausar) {
     const tb = el('tbody'); tabla.append(tb);
     raiz.append(tabla);
     const n = t.filas.length, lote = 400;
+    // Los códigos largos (consecutivo, cédula, clave) no se parten en dos renglones: se ven en una línea y se pueden copiar
+    const codigo = new Set(visibles.filter(({ c, i }) => c.tipo === 'texto' && t.filas.slice(0, 300).some((f) => /^\d{10,}$/.test(String(valorFila(f, c, i) ?? ''))) && t.filas.slice(0, 300).every((f) => /^(\d{10,})?$/.test(String(valorFila(f, c, i) ?? '')))).map(({ i }) => i));
     for (let i = 0; i < n; i += lote) {
       const frag = D.createDocumentFragment();
       for (let k = i; k < Math.min(n, i + lote); k++) {
         const tr = D.createElement('tr'); const f = t.filas[k];
-        for (const { c, i: j } of visibles) { const td = D.createElement('td'); if (c.tipo !== 'texto') td.className = 'd'; td.textContent = textoPdf(c, valorFila(f, c, j)); tr.append(td); }
+        for (const { c, i: j } of visibles) { const td = D.createElement('td'); if (c.tipo !== 'texto') td.className = 'd'; else if (codigo.has(j)) td.className = 'cod'; td.textContent = textoPdf(c, valorFila(f, c, j)); tr.append(td); }
         frag.append(tr);
       }
       tb.append(frag);
@@ -246,17 +255,25 @@ export function crearDescarga(opciones, { texto = 'Descargar', etiqueta = '', cl
     decir('');
     try { res = await resolverOpciones(opciones); } catch (e) { res = null; decir('No se pudo preparar la lista para descargar. Intente de nuevo.', 'mal', reintentar(abrir)); return; }
     if (!res.tablas.length || !res.filas) { decir('No hay nada para descargar con lo que se ve ahora. Cambie el periodo o el filtro e intente de nuevo.', ''); return; }
-    const fs = ['xlsx', 'csv', 'pdf', ...(res.xml ? ['xml'] : [])];
+    const pdfSi = res.filas <= MAX_FILAS_PDF;
+    const fs = ['xlsx', 'csv', ...(pdfSi ? ['pdf'] : []), ...(res.xml ? ['xml'] : [])];
     menu.replaceChildren(
       h('p.desc-tit', '¿En qué formato lo quiere?'),
       ...fs.map((f) => h('button.desc-opc', { type: 'button', role: 'menuitem', 'data-formato': f, onclick: () => ejecutar(f) },
         h('span.desc-sello', { 'aria-hidden': 'true' }, FORMATOS[f].sello),
         h('span.desc-opc-txt', h('strong', FORMATOS[f].titulo), h('small', FORMATOS[f].info(res))))),
+      ...(pdfSi ? [] : [h('p.desc-nota', `El PDF no se ofrece con tantas filas (son ${num(res.filas, 0)} y el máximo es ${num(MAX_FILAS_PDF, 0)}). Para una lista así use Excel o CSV.`)]),
       h('button.btn.desc-cerrar', { type: 'button', onclick: () => cerrar(true) }, 'Cerrar sin descargar'));
     abierto = true; menu.hidden = false; velo.hidden = false; boton.setAttribute('aria-expanded', 'true');
     // en pantallas anchas el menú se abre hacia el lado donde cabe
     const r = boton.getBoundingClientRect(), ancho = Math.min(380, innerWidth - 32);
     menu.classList.toggle('der', r.right - ancho >= 8); menu.classList.toggle('izq', !(r.right - ancho >= 8));
+    // si abajo no cabe, se abre hacia arriba; si tampoco cabe arriba, se baja la pantalla lo justo para verlo completo
+    menu.classList.remove('arriba');
+    if (innerWidth > 640) {
+      const alto = menu.getBoundingClientRect().height;
+      if (r.bottom + 6 + alto > innerHeight - 8) { if (r.top - 6 - alto >= 8) menu.classList.add('arriba'); else menu.scrollIntoView({ block: 'nearest' }); }
+    }
     document.addEventListener('pointerdown', fuera, true); menu.addEventListener('keydown', teclas);
     menu.querySelector('button')?.focus({ preventScroll: true });
   }

@@ -531,10 +531,8 @@ function mostrarSesionVencida() {
       actualizarAlertas(true);
       // Si alguna pantalla se quedó con un aviso de falla y su botón de «Intentar de nuevo», se reintenta sola. Lo que ya cargó bien no se toca.
       // El botón se reconoce por su marca data-reintentar (la pone bloqueError en util.js), no por lo que dice.
-      const marcados = vista ? [...vista.querySelectorAll('[data-reintentar]')] : [];
-      if (marcados.length) marcados.forEach((b) => b.click());
-      // RESPALDO hasta que util.js ponga la marca: la lectura por texto de antes. Se quita en cuanto bloqueError traiga data-reintentar.
-      else if (vista && vista.textContent.includes('Su sesión venció')) vista.querySelectorAll('button').forEach((b) => { if (b.textContent.trim() === 'Intentar de nuevo') b.click(); });
+      // Solo llevan la marca los botones que repiten una LECTURA; los que repiten un cambio (cobrar, agregar una línea) no la llevan y nunca se tocan solos.
+      if (vista) vista.querySelectorAll('[data-reintentar]').forEach((b) => b.click());
     } catch (e) {
       if (!esErrorEsperado(e)) console.error(e);
       pad.limpiar(); mostrarError(textoErrorAcceso(e, { cambiarEmpresa: false })); estado.hidden = true; pad.bloquear(false);

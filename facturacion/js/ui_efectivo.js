@@ -1,7 +1,7 @@
 // Entradas y salidas de efectivo de la caja: formulario, lista mezclada y anulación con motivo.
 // Reemplaza a ui_salidas.js en las pantallas que quieran las dos cosas juntas (Apertura y cierre de caja y Facturación).
 // Regla de caja: debe haber en caja = fondo + ventas en efectivo + ENTRADAS - salidas - devoluciones en efectivo.
-import { h, money, leerNumero, toast, modal, conBoton, horaCorta, esqueleto } from './util.js';
+import { h, money, leerNumero, toast, modal, conBoton, textoDeError, horaCorta, esqueleto } from './util.js';
 import { efectivo } from './api_avisos.js';
 
 /* ---------- Hoja de estilos (css/avisos.css), una sola vez ---------- */
@@ -21,7 +21,7 @@ export function cargarCssAvisos() {
 }
 
 export const MOTIVOS = {
-  salida: ['Pago a proveedor', 'Compra de hielo', 'Devolución a cliente', 'Otro'],
+  salida: ['Pago a proveedor', 'Compra de hielo', 'Devolución de dinero (la venta ya está anulada)', 'Otro'],
   entrada: ['Refuerzo de cambio', 'Aporte de gerencia', 'Otro'],
 };
 // Esta línea va después de guardar: la página no puede saber si el aviso salió, por eso va en futuro
@@ -90,7 +90,7 @@ export function anularMovimiento(mov) {
           try {
             await (entrada ? efectivo.entradaAnular(mov.id, t) : efectivo.salidaAnular(mov.id, t));
             hecho = true; m.cerrar(); toast(entrada ? 'Entrada anulada.' : 'Salida anulada.'); fin(true);
-          } catch (e) { err.textContent = e.message || String(e); err.hidden = false; }
+          } catch (e) { err.textContent = textoDeError(e); err.hidden = false; }
         } },
       ],
     });
@@ -146,7 +146,7 @@ export async function abrirEfectivo({ turnoId, tipo = 'salida', alCambiar } = {}
       const t = totales(l);
       resumen.textContent = l.some((m) => !m.anulada) ? `Entradas del turno: + ${money(t.entradas)}. Salidas del turno: - ${money(t.salidas)}.` : '';
       zona.replaceChildren(listaMovimientos(l, { alAnular: async (m) => { if (await anularMovimiento(m)) { await refrescar(); alCambiar?.(); } } }));
-    } catch (e) { if (vivo) zona.replaceChildren(h('div.error-caja', e.message || String(e))); }
+    } catch (e) { if (vivo) zona.replaceChildren(h('div.error-caja', textoDeError(e))); }
   }
 
   const hacer = () => conBoton(guardar, async () => {

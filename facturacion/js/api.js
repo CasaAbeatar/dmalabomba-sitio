@@ -1,8 +1,11 @@
 // Capa de acceso a datos del facturador. Todo pasa por funciones fx_* de Supabase (revisan que el usuario tenga acceso al panel).
 export const SUPA_URL = 'https://dwlbcbtwdungyrykgahm.supabase.co';
 export const SUPA_KEY = 'sb_publishable_gUoYvCNka0je2rbNeWPpUA_l26vgQbO'; // clave pública; el acceso real lo controlan sesión y funciones
-import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm';
+// supabase-js 2.45.4 viaja con el propio sitio (vendor/LEEME.txt dice de dónde salió y su SHA-256); la página no carga código de ningún CDN.
+// El archivo es el paquete UMD de npm tal cual: al importarlo deja el objeto globalThis.supabase, de donde se toma createClient.
+import '../vendor/supabase-js-2.45.4.umd.js';
 import { describirEstado, MSG_SIN_INTERNET, MSG_GENERICO } from './util.js';
+const { createClient } = globalThis.supabase;
 
 // Sesión propia del facturador (usuario + PIN), separada de la del panel
 export const sb = createClient(SUPA_URL, SUPA_KEY, { auth: { storageKey: 'sb-facturador', persistSession: true, autoRefreshToken: true, detectSessionInUrl: false } });

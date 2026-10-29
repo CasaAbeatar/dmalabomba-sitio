@@ -117,7 +117,6 @@ export const TIPOS_DOC = { '01': 'Factura electrónica', '02': 'Nota de débito'
 export const TIPOS_SERVICIO = { buffet: 'Buffet', espera: 'En espera', llevar: 'Para llevar', express: 'Express' };
 export const MEDIOS = { efectivo: 'Efectivo', tarjeta: 'Tarjeta', sinpe: 'SINPE Móvil', transferencia: 'Transferencia' };
 export const TIPOS_ID = { '01': 'Cédula física', '02': 'Cédula jurídica', '03': 'DIMEX', '04': 'NITE', '05': 'Extranjero no domiciliado', '06': 'No contribuyente' };
-export const ESTADOS = { pendiente: 'Por enviar a Hacienda', enviado: 'Enviado a Hacienda', aceptado: 'Aceptado por Hacienda', rechazado: 'Rechazado por Hacienda', error: 'No se pudo enviar' };
 
 // Nombre del local para mostrar: usa el nombre comercial (o la razón social si falta) y, si viene todo en mayúsculas, lo pasa a "Pollos La Bomba".
 const MENORES = new Set(['a', 'al', 'de', 'del', 'la', 'las', 'el', 'los', 'y', 'e', 'en', 'con', 'por', 'para']);
@@ -141,7 +140,7 @@ export function bloqueError({ titulo = 'No se pudo cargar', mensaje = '', alRein
   return h('div.vacio.bloque-error', { role: 'alert' },
     h('p.bloque-error-tit', titulo),
     mensaje ? h('p.tenue', mensaje) : null,
-    alReintentar ? h('button.btn.primario', { type: 'button', onclick: (e) => alReintentar(e.currentTarget) }, texto) : null);
+    alReintentar ? h('button.btn.primario', { type: 'button', 'data-reintentar': '1', onclick: (e) => alReintentar(e.currentTarget) }, texto) : null);
 }
 
 // Avisos breves
@@ -399,7 +398,7 @@ export function describirEstado(estado, mensaje) {
     enviado: { final: false, clase: 'espera', chip: 'Enviado a Hacienda', texto: 'Cobro registrado. Se envió a Hacienda y se espera su respuesta. Este aviso cambia solo cuando Hacienda responda.' },
     aceptado: { final: true, clase: 'ok', chip: 'Aceptado por Hacienda', texto: 'Cobro registrado. Hacienda aceptó el comprobante.' },
     rechazado: { final: true, clase: 'mal', chip: 'Rechazado por Hacienda', texto: 'Cobro registrado, pero Hacienda no aceptó el comprobante.' + (motivo ? ' Motivo: ' + motivo : '') + ' Avise a la persona encargada; el documento queda en «Anular y reimprimir».' },
-    error: { final: false, clase: 'mal', chip: 'No se pudo enviar', texto: 'Cobro registrado, pero todavía no se pudo enviar a Hacienda.' + (motivo ? ' Motivo: ' + motivo : '') + ' El sistema lo intentará de nuevo solo. No tiene que repetir el cobro.' },
+    error: { final: false, clase: 'mal', chip: 'No se pudo enviar', texto: 'Cobro registrado, pero todavía no se pudo enviar a Hacienda.' + (motivo ? ' Motivo: ' + motivo : '') + ' No repita el cobro. Para mandarlo otra vez a Hacienda abra «Anular y reimprimir» y toque «Reenviar a Hacienda», o avise a la persona encargada.' },
   };
   return { estado: e, motivo, ...(ESTADOS_TXT[e] || ESTADOS_TXT.pendiente) };
 }

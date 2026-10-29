@@ -12,6 +12,13 @@
 .an-motivos{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.5rem}
 .an-motivos .btn{min-height:52px;text-align:left;justify-content:flex-start}
 .an-motivos .btn[aria-pressed=true]{background:var(--rojo);border-color:var(--rojo);color:#fff}
+/* La base dice que el documento no se puede anular completo (fx_comprobante_saldos.admite_anulacion = false): su frase se muestra tal cual */
+.an-bloqueo{border:1px solid #e9b3b7;border-left:4px solid var(--rojo);background:var(--rojo-suave);border-radius:12px;padding:.8rem 1rem;display:flex;flex-direction:column;gap:.45rem}
+.an-bloqueo p{margin:0}
+.an-bloqueo-tit{font-weight:700;font-size:1.08rem;color:var(--rojo-osc)}
+.an-notas-caja{display:flex;flex-direction:column;gap:.3rem;margin-top:.2rem}
+.an-notas{margin:0;padding-left:1.2rem;display:flex;flex-direction:column;gap:.3rem}
+.an-aviso .an-notas{margin-top:.1rem}
 .an-pie{display:flex;flex-wrap:wrap;gap:.6rem;justify-content:flex-end}
 .an-pie .error-caja{flex:1 0 100%;margin:0}
 .an-pie .btn{min-height:56px}

@@ -18,20 +18,24 @@ export function docsDelTurno(lista, abiertoEn) {
 }
 
 // Lo que suma una lista de documentos (montos en céntimos para que no haya errores de redondeo). Un documento rechazado no existe para Hacienda: no suma.
+// Las notas de crédito restan (anulaciones, devoluciones y correcciones de monto) y las notas de débito suman: así el total coincide con total_ventas_netas de «Apertura y cierre de caja».
+// nAnul y nDev separan las anulaciones totales (código 01, o sin código) de las devoluciones y correcciones; si la lista no trae el código, todas cuentan como anulaciones, como antes.
+const esAnulacion = (d) => ['01', '13'].includes(String(d.codigo_referencia || '01'));
 export function sumarDocumentos(lista) {
-  const s = { ventas: 0, anul: 0, iva: 0, nVentas: 0, nNC: 0, rechN: 0, rech: 0, ncRechN: 0, ncRech: 0, sinN: 0, sin: 0 };
+  const s = { ventas: 0, anul: 0, deb: 0, iva: 0, nVentas: 0, nNC: 0, nAnul: 0, nDev: 0, nND: 0, rechN: 0, rech: 0, ncRechN: 0, ncRech: 0, ndRechN: 0, ndRech: 0, sinN: 0, sin: 0 };
   for (const d of lista || []) {
     if (d.estado === 'rechazado') {
-      if (d.tipo_doc === '03') { s.ncRechN++; s.ncRech += centimos(d.total); } else if (esVenta(d)) { s.rechN++; s.rech += centimos(d.total); }
+      if (d.tipo_doc === '03') { s.ncRechN++; s.ncRech += centimos(d.total); } else if (d.tipo_doc === '02') { s.ndRechN++; s.ndRech += centimos(d.total); } else if (esVenta(d)) { s.rechN++; s.rech += centimos(d.total); }
       continue;
     }
-    if (d.tipo_doc === '03') { s.anul += centimos(d.total); s.iva -= centimos(d.total_iva); s.nNC++; }
+    if (d.tipo_doc === '03') { s.anul += centimos(d.total); s.iva -= centimos(d.total_iva); s.nNC++; if (esAnulacion(d)) s.nAnul++; else s.nDev++; }
+    else if (d.tipo_doc === '02') { s.deb += centimos(d.total); s.iva += centimos(d.total_iva); s.nND++; }
     else if (esVenta(d)) {
       s.ventas += centimos(d.total); s.iva += centimos(d.total_iva); s.nVentas++;
       if (!d.venta_id) { s.sinN++; s.sin += centimos(d.total); } // no salió de una cuenta cobrada en la caja
     }
   }
-  s.neto = (s.ventas - s.anul) / 100;
+  s.neto = (s.ventas - s.anul + s.deb) / 100;
   return s;
 }
 
@@ -40,6 +44,7 @@ export function frasesDeLista(s) {
   const f = [];
   if (s.rechN) f.push(`No suma ${plural(s.rechN, 'documento que Hacienda no aceptó', 'documentos que Hacienda no aceptó')} (${money(s.rech / 100)}).`);
   if (s.ncRechN) f.push(`No resta ${plural(s.ncRechN, 'nota de crédito que Hacienda no aceptó', 'notas de crédito que Hacienda no aceptó')} (${money(s.ncRech / 100)}): esa venta sigue valiendo.`);
+  if (s.ndRechN) f.push(`No suma ${plural(s.ndRechN, 'nota de débito que Hacienda no aceptó', 'notas de débito que Hacienda no aceptó')} (${money(s.ndRech / 100)}).`);
   if (s.sinN) f.push(`Sí suma ${s.sinN === 1 ? '1 documento que no salió' : s.sinN + ' documentos que no salieron'} de una cuenta cobrada en Facturación (${money(s.sin / 100)}).`);
   return f;
 }
