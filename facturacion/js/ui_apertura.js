@@ -1,7 +1,7 @@
 // Formulario para abrir la caja: efectivo con que empieza el turno, con montos de un toque.
 // Lo usa «Apertura y cierre de caja». Facturación puede usar el mismo (crearFormularioApertura) para que las dos pantallas sean idénticas.
 // El servidor (fx_turno_abrir) no abre dos veces: si otra persona ya abrió la caja devuelve esa y marca ya_abierto, y aquí se le dice a la cajera.
-import { h, money, money0, leerNumero, fechaCorta, horaCorta, conPunto } from './util.js';
+import { h, money, money0, leerNumero, fechaCorta, horaCorta, conPunto, confirmar } from './util.js';
 import { esTransitorio } from './api.js';
 import { textoError } from './api_efectivo.js';
 
@@ -60,7 +60,14 @@ export function crearFormularioApertura({ api, socId, terminal = 1, local = '', 
     const v = leerNumero(txt);
     if (!Number.isFinite(v) || v < 0) { fallo('Ese monto no es válido. Escriba solo números, por ejemplo 20000. Si no hay efectivo, toque «Sin fondo (₡0)».'); return; }
     if (v > TOPE) { fallo('El monto es demasiado grande. El máximo es ' + money(TOPE) + '.'); return; }
-    enviando = true; abrir.disabled = true; abrir.setAttribute('aria-busy', 'true'); abrir.textContent = 'Abriendo la caja…';
+    enviando = true; // también mientras se espera la respuesta de la ventana de abajo: un segundo toque no abre otra
+    // Abrir en ₡0 cuando el último cierre contó dinero suele ser un descuido: ese efectivo sigue en el cajón y al cerrar saldría como sobrante. Se pregunta una vez, con una ventana de dos botones.
+    if (cents(v) === 0 && ultimo && cents(sugerido.monto) > 0) {
+      const sigue = await confirmar('El último cierre contó ' + colones(sugerido.monto) + ' y se va a abrir la caja con ₡0. Si ese efectivo sigue en la caja, al cerrar aparecerá como sobrante. ¿La caja empieza sin efectivo?',
+        { si: 'Sí, abrir con ₡0', no: 'No, revisar el monto' });
+      if (!sigue) { enviando = false; try { fondo.focus(); } catch { /* nada */ } return; }
+    }
+    abrir.disabled = true; abrir.setAttribute('aria-busy', 'true'); abrir.textContent = 'Abriendo la caja…';
     try {
       const res = await api.turnoAbrir(socId, terminal, Math.round(v * 100) / 100);
       await alAbrir?.(res, v);

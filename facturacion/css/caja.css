@@ -124,7 +124,7 @@
   .cajones{position:sticky;top:var(--bus-h,92px);z-index:14;box-shadow:0 6px 10px -8px rgba(29,26,23,.35)}
   /* Las opciones quedan fijas arriba de la barra de abajo; su alto (--opc-h, lo mide m_caja.js) se reserva al final de la lista y
      los productos se traen a la franja libre entre la tira de cajones y el panel, así la lista completa siempre se puede ver. */
-  .opciones{position:fixed;left:.7rem;right:.7rem;bottom:calc(84px + env(safe-area-inset-bottom));z-index:12;max-height:42vh;max-height:42dvh;box-shadow:0 -8px 22px rgba(29,26,23,.2)}
+  .opciones{position:fixed;left:.7rem;right:.7rem;bottom:calc(var(--barra-h,84px) + 8px);z-index:12;max-height:42vh;max-height:42dvh;box-shadow:0 -8px 22px rgba(29,26,23,.2)}
   .catalogo-medio.con-opciones{padding-bottom:calc(var(--opc-h,0px) + .6rem)}
   .caja.bus-activo .opciones{display:none}
   .caja-catalogo .productos{scroll-margin-top:calc(var(--bus-h,92px) + var(--cajones-h,70px) + 8px)}
@@ -132,6 +132,12 @@
 }
 @media(min-width:701px) and (max-width:979px){
   .opciones{left:1rem;right:1rem}
+}
+/* Celular acostado (poca altura): ni la tira de cajones ni el panel de opciones se fijan; todo corre con la página y nada queda tapado */
+@media(max-width:979px) and (max-height:520px){
+  .opciones{position:static;max-height:none;margin-top:.5rem;box-shadow:none}
+  .buscador,.cajones{position:static}
+  .catalogo-medio.con-opciones{padding-bottom:0}
 }
 
 /* ---------- Cuenta activa ---------- */
@@ -289,6 +295,14 @@
 .resumen-final{border:2px solid var(--verde);border-radius:14px;padding:1rem;background:#fff;display:flex;flex-direction:column;gap:.8rem}
 .hist td,.hist th{vertical-align:middle}
 .hist .noche{font-size:.74rem}
+/* Un motivo largo de entrada o salida ocupa todo el ancho de su renglón en el celular; el monto y «Anular» van debajo (sin esto el texto queda en una columna de ~100 px, una palabra por línea).
+   «.calc-sub» sube la especificidad sobre las reglas de «.salida-item» que están más abajo en este archivo; así también vale dentro de la ventana «Resumen del turno». */
+@media(max-width:560px){
+  .calc-sub .salida-item{flex-wrap:wrap}
+  .calc-sub .salida-item>div:first-child{flex:1 1 100%}
+  .calc-sub .salida-item .s-monto{margin-right:auto}
+}
+.calc-negativo{padding:.5rem 0 0}
 
 /* ---------- Ajustes generales de la caja ---------- */
 /* El pie fijo con «Volver» y «Cobrar» no debe tapar el campo que se está escribiendo (referencia del pago con el teclado abierto) */

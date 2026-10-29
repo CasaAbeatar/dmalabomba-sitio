@@ -217,6 +217,10 @@ export default {
     let turnoMostrado = null;
     let ocupadas = 0;
     let cola = Promise.resolve();
+    let cambios = 0; // cuenta los cambios hechos aquí: una lectura que empezó antes de un cambio no puede pisarlo
+    let zonaCambioEn = 0; // cuándo se movió lo que hay bajo el dedo (panel de opciones, cajón)
+    const recienMovida = () => performance.now() - zonaCambioEn < 450; // un segundo toque casi simultáneo no agrega nada
+    let roCajones = null; // observador del tamaño de la tira de cajones (se desconecta al salir)
     let zonaEfectivo = null; // las cajitas de entrada y salida de efectivo (arriba a la derecha); se actualizan solas, sin tocar la cuenta
     let buscador = null, asideCuenta = null, barraCuentas = null, gridProd = null, tabsCajon = null, panelOpc = null, medioCat = null, barraMovil = null, cajaEl = null, buscadorWrap = null;
     const tarjetas = new Map(); // producto_id -> badge (productos que se cobran con un toque)
@@ -228,7 +232,7 @@ export default {
 
     // Las acciones sobre la cuenta se hacen una tras otra para que dos toques rápidos no se pisen.
     // Si la falla es de red o del servidor (transitoria), la cuenta se queda como estaba en pantalla y sale «Intentar de nuevo».
-    function quitarAviso() { avisoEl?.remove(); avisoEl = null; }
+    function quitarAviso() { avisoEl?.remove(); avisoEl = null; requestAnimationFrame(midePegajosos); }
     function avisoDeRed(e, fn, antes, idCuenta) {
       quitarAviso();
       const intentar = h('button.btn.primario', { type: 'button' }, 'Intentar de nuevo');
@@ -244,6 +248,7 @@ export default {
         h('div.aviso-red-txt', h('strong', 'El último cambio no se guardó. '), textoDeError(e) + ' Su cuenta sigue en pantalla.'),
         h('div.fila', intentar, h('button.btn', { type: 'button', onclick: quitarAviso }, 'Dejar la cuenta como está')));
       barraAviso?.replaceChildren(avisoEl);
+      requestAnimationFrame(midePegajosos);
     }
     // estado (opcional): recibe { ok } o { error }, para que una ventana pueda quedarse abierta si el servidor rechazó lo escrito
     function accion(fn, estado) {
@@ -260,7 +265,7 @@ export default {
           if (/desactivado y no se puede vender/i.test(e?.message || '')) setTimeout(revisarCatalogo, 500);
           if (cur && asideCuenta) pintarCuenta();
         }
-        finally { ocupadas--; }
+        finally { ocupadas--; cambios++; }
       });
       cola = p;
       return p;
@@ -328,7 +333,11 @@ export default {
       } catch { /* la sugerencia es opcional */ }
       if (!vivo) return;
       const form = crearFormularioApertura({ api, socId, terminal: app.terminal, local: nombreLocal(app.soc), sugerido,
-        alAbrir: async () => { await app.refrescar(); if ((app.turno?.id || null) !== turnoMostrado) await iniciar(); } });
+        alAbrir: async (res) => {
+          await app.refrescar();
+          if (res && res.ya_abierto) toast('La caja ya estaba abierta (la abrió ' + (res.abierto_por || 'otra persona') + ') con ' + money(res.fondo_inicial ?? 0) + '. No se cambió el efectivo con que abrió.', 'ok', 9000);
+          if ((app.turno?.id || null) !== turnoMostrado) await iniciar();
+        } });
       zonaEfectivo?.destruir();
       zonaEfectivo = crearZonaEfectivo({ turnoId: null, alAbrirCaja: () => form.enfocar(), motivos: { entrada: app.ctx?.motivos_entrada_efectivo, salida: app.ctx?.motivos_salida_efectivo } });
       root.replaceChildren(h('div.caja-sin-turno', zonaEfectivo.el), h('div.caja-abrir.tarjeta',
@@ -344,9 +353,10 @@ export default {
       buscador = crearBuscador({ alElegir: (p) => agregarProducto(p), enLinea: false });
       buscadorWrap = h('div.buscador', buscador.el);
       tabsCajon = h('div.cajones', { role: 'group', 'aria-label': 'Cajones de productos', onscroll: bordeCajones });
-      if (typeof ResizeObserver === 'function') new ResizeObserver(bordeCajones).observe(tabsCajon);
+      roCajones?.disconnect();
+      if (typeof ResizeObserver === 'function') { roCajones = new ResizeObserver(bordeCajones); roCajones.observe(tabsCajon); }
       gridProd = h('div.productos', { role: 'group', 'aria-label': 'Productos del cajón' });
-      panelOpc = h('aside.opciones', { 'aria-label': 'Opciones del producto elegido', hidden: true });
+      panelOpc = h('aside.opciones#panel-opciones', { 'aria-label': 'Opciones del producto elegido', hidden: true });
       medioCat = h('div.catalogo-medio', gridProd, panelOpc);
       asideCuenta = h('aside.caja-cuenta', { 'aria-label': 'Cuenta activa' });
       barraMovil = h('div.barra-movil');
@@ -371,7 +381,10 @@ export default {
     }
     function midePegajosos() {
       const cab = document.querySelector('.cabecera');
-      if (cab) document.documentElement.style.setProperty('--cab-h', (window.matchMedia('(max-width:979px)').matches ? 0 : cab.offsetHeight) + 'px');
+      const movil = window.matchMedia('(max-width:979px)').matches, bajo = window.matchMedia('(max-height:520px)').matches;
+      if (cab) document.documentElement.style.setProperty('--cab-h', (movil ? 0 : cab.offsetHeight) + 'px');
+      // Alto real de la barra de abajo (ya incluye el área segura del aparato): el panel de opciones se apoya justo encima
+      document.documentElement.style.setProperty('--barra-h', (barraMovil && movil ? barraMovil.offsetHeight : 76) + 'px');
       if (buscadorWrap) document.documentElement.style.setProperty('--bus-h', buscadorWrap.offsetHeight + 'px');
       // En pantalla grande la parte izquierda mide justo lo que queda de pantalla: los cajones siempre arriba y solo se desplazan los productos y las opciones por dentro
       const izq = cajaEl?.querySelector('.caja-izq');
@@ -383,7 +396,8 @@ export default {
       }
       if (tabsCajon) document.documentElement.style.setProperty('--cajones-h', tabsCajon.offsetHeight + 'px');
       // Celular: el panel de opciones queda fijo sobre la barra de abajo; su alto se reserva al final de la lista para que ningún producto quede tapado
-      document.documentElement.style.setProperty('--opc-h', (panelOpc && !panelOpc.hidden && window.matchMedia('(max-width:979px)').matches ? panelOpc.offsetHeight : 0) + 'px');
+      // (en celular acostado, de poca altura, el panel no se fija: queda en el flujo de la página y no se reserva espacio)
+      document.documentElement.style.setProperty('--opc-h', (panelOpc && !panelOpc.hidden && movil && !bajo ? panelOpc.offsetHeight : 0) + 'px');
     }
     // En celular deja el buscador arriba de la pantalla (la cabecera de la app sube y se va)
     function irAlBuscador() {
@@ -467,6 +481,7 @@ export default {
         type: 'button', title: c.nombre, 'aria-pressed': String(c.id === cajonSel),
         'aria-label': 'Cajón ' + c.codigo + ', ' + c.nombre,
         onclick: () => {
+          zonaCambioEn = performance.now();
           cajonSel = c.id; grupoSel = null; pintarCajones(); pintarProductos();
           // Celular: si la página estaba bajada, la lista nueva se muestra desde su primer producto (sin tocar nada si ya se ve)
           if (window.matchMedia?.('(max-width:979px)').matches) requestAnimationFrame(() => {
@@ -506,7 +521,7 @@ export default {
       const badge = h('span.prod-cuenta', { hidden: true, 'aria-hidden': 'true' });
       const btn = h('button.prod.mos.mos-' + nivel, {
         type: 'button', title: nombre + ' · código ' + p.codigo, 'aria-label': 'Agregar ' + p.nombre + ', ' + (p.descripcion_libre ? 'se escribe el detalle y el precio' : p.precio_abierto ? 'precio abierto' : money(p.precio_final)),
-        onclick: (e) => { sonido(e.currentTarget); alAgregar?.(); agregarProducto(p); },
+        onclick: (e) => { if (recienMovida()) return; sonido(e.currentTarget); alAgregar?.(); agregarProducto(p); },
       }, h('span.prod-nombre.mos-nombre', h('span.mos-num', { 'aria-hidden': 'true' }, String(numero ?? '')), nombre),
       h('span.prod-pie', h('span.prod-cod', p.codigo), h('span.prod-precio' + (p.precio_abierto || p.descripcion_libre ? '.abierto' : ''), textoPrecioCorto(p))), badge);
       registro.set(p.id, badge);
@@ -520,7 +535,7 @@ export default {
       const resumen = min == null ? 'Precio abierto' : min === max ? precioCorto(min) : 'desde ' + precioCorto(min);
       const badge = h('span.prod-cuenta', { hidden: true, 'aria-hidden': 'true' });
       const btn = h('button.prod.prod-grupo.mos.mos-2', {
-        type: 'button', title: g.nombre + ' · ' + n + (n === 1 ? ' opción' : ' opciones'), 'aria-pressed': String(g.clave === grupoSel),
+        type: 'button', title: g.nombre + ' · ' + n + (n === 1 ? ' opción' : ' opciones'), 'aria-pressed': String(g.clave === grupoSel), 'aria-expanded': String(g.clave === grupoSel), 'aria-controls': 'panel-opciones',
         'aria-label': 'Ver las ' + n + (n === 1 ? ' opción' : ' opciones') + ' de ' + g.nombre + ', ' + (min == null ? 'precio abierto' : min === max ? money(min) : 'desde ' + money(min)),
         onclick: (e) => { sonido(e.currentTarget); abrirGrupo(g); },
       }, h('span.prod-nombre.mos-nombre', h('span.mos-num', { 'aria-hidden': 'true' }, String(numero ?? '')), g.nombre),
@@ -530,9 +545,10 @@ export default {
       return btn;
     }
     function marcarGrupo() {
-      for (const [clave, b] of btnsGrupo) b.setAttribute('aria-pressed', String(clave === grupoSel));
+      for (const [clave, b] of btnsGrupo) { b.setAttribute('aria-pressed', String(clave === grupoSel)); b.setAttribute('aria-expanded', String(clave === grupoSel)); }
     }
     function abrirGrupo(g) {
+      zonaCambioEn = performance.now();
       grupoSel = g.clave;
       marcarGrupo();
       pintarPanel(g);
@@ -550,6 +566,7 @@ export default {
       });
     }
     function cerrarPanel() {
+      zonaCambioEn = performance.now();
       grupoSel = null;
       marcarGrupo();
       pintarPanel(null);
@@ -606,6 +623,16 @@ export default {
         const n = porGrupo.get(clave);
         badge.hidden = !n;
         if (n) badge.textContent = num(n, 3);
+      }
+      // Para quien usa lector de pantalla: la cantidad que ya lleva la cuenta se agrega al nombre del botón
+      for (const registro of [tarjetas, tarjetasMod, tarjetasGrupo]) {
+        for (const [id, badge] of registro) {
+          const b = badge.parentElement;
+          if (!b) continue;
+          if (b.dataset.etq == null) b.dataset.etq = b.getAttribute('aria-label') || '';
+          const n = registro === tarjetasGrupo ? porGrupo.get(id) : cuenta.get(id);
+          b.setAttribute('aria-label', b.dataset.etq + (n ? ', ' + num(n, 3) + ' en la cuenta' : ''));
+        }
       }
     }
 
@@ -1032,6 +1059,7 @@ export default {
           h('button.btn.bm-ver', { type: 'button', onmousedown: sinQuitarFoco, onclick: () => cambiarVista('productos') }, 'Agregar productos'),
           puede ? cobrar : h('button.btn.primario.bm-cobrar', { type: 'button', disabled: true }, 'Cobrar'));
       }
+      requestAnimationFrame(midePegajosos); // el alto de la barra cambia con el total (puede partirse en dos líneas)
     }
 
     /* ---------- Prefactura ---------- */
@@ -1063,6 +1091,10 @@ export default {
     async function abrirCobroVentana(avisarCreada) {
       await cola;
       if (!cur || !cur.lineas.length || !(Number(cur.venta.total) > 0)) { toast('La cuenta está vacía. Agregue productos antes de cobrar.', 'error'); return; }
+      // Antes de mostrar el total se lee la cuenta del servidor: una lectura vieja del refresco no puede dejar un total distinto del real
+      try { cur = await api.venta(cur.venta.id); cambios++; sincronizarBarra(); pintarCuenta(); pintarMovil(); }
+      catch (e) { toast(textoDeError(e), 'error', 6000); return; }
+      if (!cur.lineas.length || !(Number(cur.venta.total) > 0)) { toast('La cuenta está vacía. Agregue productos antes de cobrar.', 'error'); return; }
       let venta = cur.venta;
       const ventaId = venta.id;
       if (ventasEnCobro.has(ventaId)) { toast('Esta cuenta tiene un cobro en camino. Espere unos segundos a que termine.', 'error'); return; }
@@ -1485,9 +1517,10 @@ export default {
       const a = avisoApertura; avisoApertura = null;
       if (!a || !barraAviso) return;
       if (a.ok) { toast(a.texto, 'ok', 8000); return; }
-      const cerrar = h('button.btn', { type: 'button', onclick: () => { n.remove(); } }, 'Entendido');
+      const cerrar = h('button.btn', { type: 'button', onclick: () => { n.remove(); requestAnimationFrame(midePegajosos); } }, 'Entendido');
       const n = h('div.aviso-red', { role: 'alert' }, h('div.aviso-red-txt', h('strong', 'No se pudo abrir la cuenta de la corrección. '), a.texto), h('div.fila', cerrar));
       barraAviso.prepend(n);
+      requestAnimationFrame(midePegajosos);
     }
     async function iniciar() {
       zonaEfectivo?.destruir(); zonaEfectivo = null;
@@ -1517,6 +1550,13 @@ export default {
       buscador.inp.focus();
     }
     document.addEventListener('keydown', teclaGlobal);
+    // Escape cierra el panel de opciones y devuelve el foco al producto que lo abrió (si el buscador tiene texto, Escape primero lo borra)
+    function alEscape(e) {
+      if (e.key !== 'Escape' || !grupoSel || document.querySelector('.modal-fondo')) return;
+      if (buscador && document.activeElement === buscador.inp && buscador.inp.value) return;
+      const b = btnsGrupo.get(grupoSel); cerrarPanel(); b?.focus({ preventScroll: true });
+    }
+    document.addEventListener('keydown', alEscape);
 
     const alCambio = () => { if (vivo && (app.turno?.id || null) !== turnoMostrado) iniciar(); };
     document.addEventListener('app:cambio', alCambio);
@@ -1527,21 +1567,33 @@ export default {
     if (vvTeclado) { vvTeclado.addEventListener('resize', alTeclado); vvTeclado.addEventListener('scroll', alTeclado); }
 
     // Refresco silencioso por si otro equipo (tableta, celular) cambia las cuentas
+    // Reglas: no se toca la pantalla mientras la cajera escribe en un campo de la cuenta, y una lectura que empezó antes de un cambio
+    // hecho aquí (producto agregado, cuenta creada, cobro) se descarta: lo que ella acaba de hacer manda sobre una lectura vieja.
     async function refrescoSilencioso() {
-      if (!vivo || document.hidden || !cajaEl || ocupadas > 0 || document.querySelector('.modal-fondo')) return;
+      const escribiendo = () => { const a = document.activeElement; return !!a && !!asideCuenta?.contains(a) && /^(INPUT|TEXTAREA)$/.test(a.tagName); };
+      if (!vivo || document.hidden || !cajaEl || ocupadas > 0 || document.querySelector('.modal-fondo') || escribiendo()) return;
+      const gen = cambios, previo = { abiertas, cur };
+      const vencido = () => ocupadas > 0 || !vivo || gen !== cambios || escribiendo() || !!document.querySelector('.modal-fondo');
       try {
         const huella = (l) => JSON.stringify(l.map((a) => [a.id, a.total, a.estado, a.lineas, a.referencia, a.prefactura_vigente, a.prefactura_revision]));
         const antes = huella(abiertas);
         const nuevas = (await api.ventasAbiertas(socId)) || [];
-        if (ocupadas > 0 || !vivo) return;
-        if (huella(nuevas) === antes) return;
+        if (vencido() || huella(nuevas) === antes) return;
         abiertas = nuevas;
-        const enUso = document.activeElement && asideCuenta?.contains(document.activeElement) && /INPUT|TEXTAREA/.test(document.activeElement.tagName);
         const mia = cur && abiertas.find((a) => a.id === cur.venta.id);
-        if (cur && !mia) { cur = null; await elegirInicial(); }
-        else if (mia && !enUso && (Number(mia.total) !== Number(cur.venta.total) || Number(mia.lineas) !== cur.lineas.length)) cur = await api.venta(cur.venta.id);
+        let aviso = '';
+        if (cur && !mia) {
+          aviso = 'La cuenta ' + ((TIPOS_SERVICIO[cur.venta.tipo_servicio] || '') + ' ' + (cur.venta.referencia || numCuenta(cur.venta.numero))).trim() + ' ya no está abierta: se cobró o se anuló en otro aparato.';
+          cur = null; await elegirInicial();
+          if (vencido()) { abiertas = previo.abiertas; cur = previo.cur; return; }
+        } else if (mia && (Number(mia.total) !== Number(cur.venta.total) || Number(mia.lineas) !== cur.lineas.length)) {
+          const v = await api.venta(cur.venta.id);
+          if (vencido()) { abiertas = previo.abiertas; return; }
+          cur = v;
+        }
         pintarBarra(); pintarCuenta(); pintarMovil(); actualizarInsignias();
-      } catch { /* sin conexión: se intenta de nuevo luego */ }
+        if (aviso) toast(aviso, 'error', 8000);
+      } catch { abiertas = previo.abiertas; cur = previo.cur; /* sin conexión: se intenta de nuevo en el siguiente ciclo */ }
     }
     // Cada 10 s con la pantalla visible: un pedido tomado en otro aparato (celular, otra caja) aparece pronto en la barra de cuentas
     timers.push(setInterval(refrescoSilencioso, 10000));
@@ -1555,6 +1607,10 @@ export default {
     return () => {
       vivo = false;
       timers.forEach(clearInterval);
+      roCajones?.disconnect(); roCajones = null;
+      ['--cab-h', '--bus-h', '--cajones-h', '--opc-h', '--barra-h'].forEach((v) => document.documentElement.style.removeProperty(v));
+      document.removeEventListener('keydown', alEscape);
+      cajaEl = null;
       zonaEfectivo?.destruir(); zonaEfectivo = null;
       document.removeEventListener('keydown', teclaGlobal);
       document.removeEventListener('app:cambio', alCambio);

@@ -192,9 +192,11 @@ function desgloseTipo(lineas) {
   const nombres = [['mg', 'Mercancías gravadas'], ['me', 'Mercancías exentas'], ['mn', 'Mercancías no sujetas'], ['sg', 'Servicios gravados'], ['se', 'Servicios exentos'], ['sn', 'Servicios no sujetos']];
   return nombres.filter(([k]) => t[k] > 0).map(([k, etq]) => ({ etq, monto: t[k] }));
 }
-// Unidad de medida (Reg. 13 inc. 10): el XML usa el código de la línea si lo trae y, si no, «Sp» para servicios y «Unid» para mercancías. Aquí se imprime con su descripción oficial (Anexos v4.4, nota 7).
-const UNIDADES_TXT = { Unid: 'Unidad', Sp: 'Servicios Profesionales', Os: 'Otro tipo de servicio', Spe: 'Servicios Profesionales de medicina', Kg: 'Kilogramo', G: 'Gramo', L: 'Litro', mL: 'Mililitro', Oz: 'Onza', Gal: 'Galón', Otros: 'Otros' };
-const unidadDeLinea = (l) => { const u = String(l?.unidad ?? '').trim(); const cod = UNIDADES_TXT[u] ? u : (l?.es_servicio ? 'Sp' : 'Unid'); return UNIDADES_TXT[cod]; };
+// Unidad de medida (Reg. 13 inc. 10). El XML usa la unidad de la línea y, si no trae, «Sp» para servicios y «Unid» para mercancías.
+// En la impresión va en lenguaje llano: «Unidad» o «Servicio» (la comida preparada es servicio según el CABYS 6332; solo las bebidas embotelladas son mercancía),
+// «Kg» tal cual y cualquier otro símbolo como viene. La descripción oficial de la unidad no se imprime (Anexos v4.4, nota 15 no la exige).
+const UNIDAD_LLANA = { Unid: 'Unidad', Sp: 'Servicio', Spe: 'Servicio', Os: 'Servicio' };
+const unidadDeLinea = (l) => { const u = String(l?.unidad ?? '').trim() || (l?.es_servicio ? 'Sp' : 'Unid'); return UNIDAD_LLANA[u] || u; };
 // Código de referencia de una nota o de un reemplazo, con la descripción oficial (Anexos v4.4, nota 9)
 const DESC_REF = { '01': 'Anula documento de referencia', '02': 'Corrige monto', '04': 'Referencia a otro documento', '06': 'Devolución de mercancía', '07': 'Sustituye comprobante electrónico' };
 // Lo que se entregó y el vuelto de un pago en efectivo. Una nota de crédito nunca muestra Recibido ni Vuelto (no se recibe dinero).

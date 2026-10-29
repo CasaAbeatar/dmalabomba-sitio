@@ -25,6 +25,8 @@ const OTROS = ['tarjeta', 'sinpe', 'transferencia'];
 const TODOS = ['efectivo', 'tarjeta', 'sinpe', 'transferencia'];
 const cents = (n) => Math.round((Number(n) || 0) * 100);
 const numCuenta = (n) => '#' + String(n || '').split('-').pop();
+// fx_turno_cerrar rechaza el cierre con cuentas abiertas (error P0001, hint «cuentas_abiertas»). api.js todavía no guarda el hint: mientras tanto se lee el texto del servidor.
+const rechazoPorCuentas = (e) => !!e && !esTransitorio(e) && (e.hint === 'cuentas_abiertas' || /cuentas? abiertas?/i.test(e.message || ''));
 
 // Fecha y hora que se pueden partir en dos renglones sin cortar los números (celular)
 const fechaPartida = (d) => (d ? [h('span.nw', fechaCorta(d) + ','), ' ', h('span.nw', horaCorta(d))] : '');
@@ -240,19 +242,27 @@ export default {
       turnoVisto = app.turno?.id || null;
       soltarZona();
       contenedor.replaceChildren(esqueleto(4, 'Cargando el cierre de caja…'));
+      let e, ab, hist;
       try {
-        const [e, ab, hist] = await Promise.all([
+        [e, ab, hist] = await Promise.all([
           turnoVisto ? api.turnoEstado(turnoVisto) : null,
           turnoVisto ? api.ventasAbiertas(socId) : [],
           api.turnos(socId, 30),
         ]);
         if (mi !== nCarga) return;
-        est = e; abiertas = ab || []; historial = hist || [];
-      } catch (e) {
+      } catch (er) {
         if (!vivo || mi !== nCarga) return;
-        contenedor.replaceChildren(bloqueError({ titulo: 'No se pudo cargar el cierre de caja', mensaje: conPunto(textoError(e, 'Revise la conexión e intente de nuevo.')), alReintentar: () => sincronizar() }));
+        contenedor.replaceChildren(bloqueError({ titulo: 'No se pudo cargar el cierre de caja', mensaje: conPunto(textoError(er, 'Revise la conexión e intente de nuevo.')), alReintentar: () => sincronizar() }));
         return;
       }
+      // Este aparato todavía creía abierta una caja que otro aparato ya cerró: se pone al día lo que sabe la sesión. 'app:cambio' vuelve a cargar con el turno nuevo
+      // (por eso se compara con el número de esta carga y no con turnoVisto). Si no cambió nada, se dibuja como lo que el servidor dice: caja cerrada.
+      if (turnoVisto && e?.turno?.cerrado_en) {
+        try { await app.refrescar(); } catch { /* sin conexión: se dibuja con lo que se leyó */ }
+        if (!vivo || mi !== nCarga) return;
+        turnoVisto = null; e = null; ab = [];
+      }
+      est = e; abiertas = ab || []; historial = hist || [];
       pintar();
     }
 
@@ -545,6 +555,13 @@ export default {
         let res;
         try { res = await api.turnoCerrar(turnoVisto, { efectivo: contado, notas: notasTxt || null }); }
         catch (e) {
+          // El servidor no deja cerrar con cuentas abiertas (otro aparato dejó una después de la revisión): se leen de nuevo y se ofrece cobrarlas o anularlas, como en la revisión de antes
+          if (rechazoPorCuentas(e)) {
+            let fresco = null, lista = null;
+            try { [fresco, lista] = await Promise.all([api.turnoEstado(turnoVisto), api.ventasAbiertas(socId)]); } catch { /* sin poder leerlas queda el texto del servidor, más abajo */ }
+            if (fresco?.turno?.cerrado_en) { await terminarCierre(fresco, avisoYaCerrada(fresco, contado)); return; }
+            if ((lista || []).length) { est = fresco; abiertas = lista; pintar(); avisarAbiertas(lista, datosResumen(fresco), contado, notasTxt); return; }
+          }
           // Cerrar no se repite solo. Si falló, se mira cómo quedó la caja antes de decir nada, para no cerrar dos veces ni perder el resumen.
           const yaCerrada = /ya est[aá] cerrado/i.test(e.message || ''); // otra pantalla ya la cerró
           let cerrada = null, sabe = !esTransitorio(e);
