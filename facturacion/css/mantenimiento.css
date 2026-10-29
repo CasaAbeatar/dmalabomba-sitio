@@ -126,3 +126,5 @@
 
 @media(max-width:560px){.mt-radios{grid-template-columns:1fr}.modal-cuerpo .rejilla.dos{grid-template-columns:1fr}}
 @media(max-width:900px){.mt-cajon-cab{position:static}}
+.mt-casilla{display:flex;align-items:center;gap:.6rem;min-height:48px;font-weight:600;margin:.4rem 0;cursor:pointer}
+.mt-estado-txt{margin:0 0 .5rem}

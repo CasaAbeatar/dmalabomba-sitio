@@ -1,5 +1,6 @@
 // Cierre de caja: solo se cuenta el EFECTIVO. Debe haber en caja = fondo + ventas en efectivo - salidas.
-import { h, money, leerNumero, r2, toast, modal, conBoton, fechaHora, fechaCorta, TIPOS_SERVICIO, MEDIOS } from './util.js';
+import { h, money, leerNumero, r2, toast, modal, conBoton, fechaHora, fechaCorta, esqueleto, bloqueError, nombreLocal, TIPOS_SERVICIO, MEDIOS } from './util.js';
+import { esTransitorio } from './api.js';
 import { abrirSalidas, anularSalida, listaSalidas } from './ui_salidas.js';
 
 const CSS_URL = new URL('../css/caja.css', import.meta.url).href;
@@ -100,7 +101,7 @@ function nodoImpresion(d, soc) {
   const t = d.t;
   const fila = (a, b) => h('div.f', h('span', a), h('b', b));
   return h('div.tk',
-    h('div.c', h('b', soc.nombre_comercial || soc.nombre)),
+    h('div.c', h('b', nombreLocal(soc))),
     h('div.c', soc.nombre + ' · Céd. ' + (soc.cedula || '')),
     h('div.c.g', 'CIERRE DE CAJA'),
     h('div.c', 'Caja ' + (t.terminal || 1) + (t.cerrado_en ? '' : ' (todavía abierta)')),
@@ -182,7 +183,7 @@ export default {
 
     async function cargar() {
       turnoVisto = app.turno?.id || null;
-      contenedor.replaceChildren(h('p.cargando', 'Cargando…'));
+      contenedor.replaceChildren(esqueleto(4, 'Cargando el cierre de caja…'));
       try {
         const [e, ab, hist] = await Promise.all([
           turnoVisto ? api.turnoEstado(turnoVisto) : null,
@@ -191,7 +192,8 @@ export default {
         ]);
         est = e; abiertas = ab || []; historial = hist || [];
       } catch (e) {
-        contenedor.replaceChildren(h('div.vacio', h('p', 'No se pudo cargar el cierre de caja.'), h('p.tenue', e.message || String(e)), h('button.btn', { onclick: cargar }, 'Intentar de nuevo')));
+        if (!vivo) return;
+        contenedor.replaceChildren(bloqueError({ titulo: 'No se pudo cargar el cierre de caja', mensaje: e.message || String(e), alReintentar: () => cargar() }));
         return;
       }
       pintar();
@@ -207,7 +209,7 @@ export default {
     function pintar() {
       if (!vivo) return;
       contenedor.replaceChildren(
-        h('div', h('h1', 'Cierre de caja'), h('p.tenue', (soc.nombre_comercial || soc.nombre) + '. Un turno no es el día: empieza cuando se abre la caja y termina cuando se cierra, aunque cruce la medianoche.')),
+        h('div', h('h1', 'Cierre de caja'), h('p.tenue', nombreLocal(soc) + '. Un turno no es el día: empieza cuando se abre la caja y termina cuando se cierra, aunque cruce la medianoche.')),
         final ? seccionFinal() : (turnoVisto && est ? seccionActual() : seccionSinTurno()),
         seccionHistorial());
     }
@@ -351,7 +353,15 @@ export default {
       if (cerrando) return;
       cerrando = true;
       try {
-        const res = await api.turnoCerrar(turnoVisto, { efectivo: contado, notas: notasTxt || null });
+        let res;
+        try { res = await api.turnoCerrar(turnoVisto, { efectivo: contado, notas: notasTxt || null }); }
+        catch (e) {
+          // Si falló la red, se revisa si la caja igual quedó cerrada (así no se cierra dos veces ni se pierde el resumen)
+          res = null;
+          let sabe = !esTransitorio(e); // un rechazo del servidor (regla de negocio) significa que no se cerró
+          if (esTransitorio(e)) { try { const t = await api.turnoEstado(turnoVisto); sabe = true; if (t?.turno?.cerrado_en) res = t; } catch { /* sin conexión: se avisa abajo */ } }
+          if (!res) throw new Error((e.message || String(e)) + (sabe ? ' La caja sigue abierta; toque «Cerrar caja» para intentarlo de nuevo.' : ' No se pudo confirmar si la caja se cerró. Cuando vuelva la conexión toque «Actualizar cifras» para revisar.'));
+        }
         final = res;
         contadoTxt = ''; notas = '';
         try { await app.refrescar(); } catch { /* la cabecera se actualiza sola luego */ }

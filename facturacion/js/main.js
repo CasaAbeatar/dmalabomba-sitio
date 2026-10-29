@@ -176,7 +176,7 @@ function pintarPendientes(c) {
   const n = Number(c?.pendientes_en_plazo ?? 0);
   if (!c || !(n > 0)) return;
   const urge = Number(c.vencen_pronto ?? 0) > 0;
-  b.append(h('span.pend' + (urge ? '.urge' : ''), n + ' por responder'));
+  b.append(' ', h('span.pend' + (urge ? '.urge' : ''), n + ' por responder'));
   b.setAttribute('aria-label', 'Recepción: ' + n + (n === 1 ? ' factura recibida por responder' : ' facturas recibidas por responder') + (urge ? ', algunas vencen pronto' : ''));
 }
 async function actualizarPendientes() {
