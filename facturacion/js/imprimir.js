@@ -38,9 +38,10 @@ import { h, esc, money, num, r2, modal, toast, conBoton, fechaCorta, horaCorta, 
 // Leyenda del pie. En la versión 4.4 la norma vigente es la resolución MH-DGT-RES-0027-2024 (publicada el 19-nov-2024,
 // obligatoria desde el 1-sep-2025), que reemplaza a la DGT-R-48-2016 de las versiones 4.2/4.3. Esa resolución no obliga a
 // imprimir una leyenda fija y dejó suspendido el código QR en la representación gráfica hasta que la DGT lo informe, así que
-// el QR no se imprime. Se deja la leyenda con la resolución vigente; si Hacienda pidiera otro texto, se cambia solo aquí.
+// el QR no se imprime. La leyenda solo cita la resolución (no afirma una autorización que la resolución no da); si Hacienda pidiera
+// otro texto, se cambia solo aquí.
 export const RESOLUCION_VIGENTE = 'MH-DGT-RES-0027-2024';
-const LEYENDA_RESOLUCION = 'Autorizada mediante resolución ' + RESOLUCION_VIGENTE;
+const LEYENDA_RESOLUCION = 'Comprobante electrónico según la resolución ' + RESOLUCION_VIGENTE;
 
 const TITULOS = { '01': 'FACTURA ELECTRÓNICA', '02': 'NOTA DE DÉBITO ELECTRÓNICA', '03': 'NOTA DE CRÉDITO ELECTRÓNICA', '04': 'TIQUETE ELECTRÓNICO' };
 const NOMBRE_DOC = { '01': 'Factura electrónica', '02': 'Nota de débito electrónica', '03': 'Nota de crédito electrónica', '04': 'Tiquete electrónico' };
@@ -65,6 +66,9 @@ const DISTRITOS_SARAPIQUI = { 1: 'Puerto Viejo', 2: 'La Virgen', 3: 'Horquetas',
 
 const AJUSTES_CLAVE = 'fx_impresion';
 const DEFECTO = { papel: 80, copias: 1, auto: false, formato: 'tiquete', hoja: 'carta', modo: 'auto' };
+// El tiquete se entrega en el mismo acto de la venta (Res. MH-DGT-RES-0027-2024, art. 5). Por eso, mientras el aparato no haya guardado
+// su propia opción, la impresión automática viene encendida en computadora y tableta (pantalla de más de 700 px) y apagada en celular.
+const esCelular = () => { try { return window.matchMedia('(max-width:700px)').matches; } catch { return false; } };
 const CSS_URL = new URL('../css/imprimir.css', import.meta.url).href;
 const FUENTES_URL = 'https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&display=swap';
 
@@ -78,7 +82,7 @@ if (!document.querySelector('link[data-fx-imprimir]')) document.head.append(h('l
 export function leerAjustes() {
   let g = {};
   try { g = JSON.parse(localStorage.getItem(AJUSTES_CLAVE) || '{}') || {}; } catch { g = {}; }
-  const a = { ...DEFECTO, ...g };
+  const a = { ...DEFECTO, auto: !esCelular(), ...g };
   a.papel = Number(a.papel) === 58 ? 58 : 80;
   a.copias = Math.min(5, Math.max(1, parseInt(a.copias, 10) || 1));
   a.auto = !!a.auto;
@@ -90,7 +94,10 @@ export function leerAjustes() {
   return a;
 }
 export function guardarAjustes(parcial) {
-  const nuevo = { ...leerAjustes(), ...parcial };
+  // Se guarda solo lo que la persona escogió (no los valores por defecto), así la opción de impresión automática por tipo de pantalla sigue valiendo hasta que alguien la cambie.
+  let g = {};
+  try { g = JSON.parse(localStorage.getItem(AJUSTES_CLAVE) || '{}') || {}; } catch { g = {}; }
+  const nuevo = { ...g, ...parcial };
   delete nuevo.autoImprimir; delete nuevo.formatoAuto;
   try { localStorage.setItem(AJUSTES_CLAVE, JSON.stringify(nuevo)); } catch { /* sin almacenamiento: se usan los valores por defecto */ }
   return leerAjustes();
@@ -124,11 +131,18 @@ const fmtTel = (t) => { const d = soloDig(t); return d.length === 8 ? d.slice(0,
 function direccion(x) {
   const prov = parseInt(x.provincia, 10), cant = parseInt(x.canton, 10), dist = parseInt(x.distrito, 10);
   const lugar = [];
-  if (prov === 4 && cant === 10) lugar.push(DISTRITOS_SARAPIQUI[dist] || titulo(x.barrio), 'Sarapiquí', 'Heredia');
-  else { if (x.barrio) lugar.push(titulo(x.barrio)); if (PROVINCIAS[prov]) lugar.push(PROVINCIAS[prov]); }
+  // Barrio, distrito, cantón y provincia: la norma pide la dirección completa con barrio (Reg. 13 inc. 2). Si el barrio y el distrito se llaman igual, sale una sola vez.
+  if (x.barrio) lugar.push(titulo(x.barrio));
+  if (prov === 4 && cant === 10) lugar.push(DISTRITOS_SARAPIQUI[dist] || '', 'Sarapiquí', 'Heredia');
+  else if (PROVINCIAS[prov]) lugar.push(PROVINCIAS[prov]);
   const senas = titulo(x.otras_senas);
-  // si las señas ya mencionan el distrito (p. ej. "Frente a Gasolinera JyJ Horquetas") no se repite
-  const resto = lugar.filter((l) => l && !senas.toLowerCase().includes(String(l).toLowerCase()));
+  // si las señas ya mencionan el lugar (p. ej. "Frente a Gasolinera JyJ Horquetas") no se repite, ni tampoco un nombre repetido
+  const vistos = new Set();
+  const resto = lugar.filter((l) => {
+    const k = String(l || '').trim().toLowerCase();
+    if (!k || vistos.has(k) || senas.toLowerCase().includes(k)) return false;
+    vistos.add(k); return true;
+  });
   return [senas, ...resto].filter(Boolean).join(', ');
 }
 const fechaLinea = (d) => d ? fechaCorta(d) + ' ' + horaCorta(d) : '';
@@ -141,6 +155,9 @@ function etiquetaIva(t, codigo) {
   if (codigo === '11') return 'IVA 0% (sin derecho a crédito)';
   return 'Exento (IVA 0%)';
 }
+// Título que pide la norma para el monto de cada tarifa (Reg. 13 inc. 15): «Impuesto sobre el Valor Agregado» y la tarifa.
+const etiquetaTarifa = (t, codigo) => (t > 0 ? 'Tarifa ' + num(t, 2) + '%' : codigo === '01' ? 'Tarifa 0% (no sujeto)' : codigo === '11' ? 'Tarifa 0% (sin derecho a crédito)' : 'Tarifa exenta (0%)');
+const etiquetaLarga = (t, codigo) => 'Impuesto sobre el Valor Agregado ' + (t > 0 ? num(t, 2) + '%' : codigo === '01' ? '0% (no sujeto)' : codigo === '11' ? '0% (sin derecho a crédito)' : 'exento (0%)');
 // IVA por tarifa. Los importes salen del precio final con IVA; si el comprobante trae el IVA oficial (total_iva),
 // la diferencia de redondeo se absorbe en la tarifa mayor para que la suma cuadre al céntimo con el comprobante.
 // Se agrupa por código de tarifa de Hacienda (no solo por porcentaje): "Exento" y "0 % no sujeto" salen en renglones separados.
@@ -153,7 +170,7 @@ function desgloseIva(lineas, ivaOficial) {
     x.bruto = r2(x.bruto + (Number(l.total_linea) || 0));
     g.set(clave, x);
   }
-  const filas = [...g.values()].map((x) => { const base = r2(x.bruto / (1 + x.t / 100)); return { t: x.t, codigo: x.codigo, etq: etiquetaIva(x.t, x.codigo), bruto: x.bruto, base, iva: r2(x.bruto - base) }; })
+  const filas = [...g.values()].map((x) => { const base = r2(x.bruto / (1 + x.t / 100)); return { t: x.t, codigo: x.codigo, etq: etiquetaIva(x.t, x.codigo), etqTarifa: etiquetaTarifa(x.t, x.codigo), etqLarga: etiquetaLarga(x.t, x.codigo), bruto: x.bruto, base, iva: r2(x.bruto - base) }; })
     .sort((a, b) => a.t - b.t || String(a.codigo).localeCompare(String(b.codigo)));
   if (ivaOficial != null && filas.length) {
     const dif = r2(ivaOficial - filas.reduce((a, f) => a + f.iva, 0));
@@ -161,6 +178,25 @@ function desgloseIva(lineas, ivaOficial) {
   }
   return filas;
 }
+// Mercancías y servicios, gravados y exentos (Reg. 13 incs. 12 y 13), con la misma clasificación del XML: la base de cada línea es su total sin IVA.
+// Solo salen los renglones con monto. Si alguna línea no dice si es servicio o mercancía (datos viejos), no se inventa: se devuelve null y solo se imprime el precio neto.
+function desgloseTipo(lineas) {
+  if (!lineas.length || lineas.some((l) => typeof l.es_servicio !== 'boolean')) return null;
+  const t = { mg: 0, me: 0, mn: 0, sg: 0, se: 0, sn: 0 };
+  for (const l of lineas) {
+    const tf = tarifaDeLinea(l), bruto = Number(l.total_linea) || 0;
+    const base = r2(bruto / (1 + (tf.pct || 0) / 100));
+    const clase = tf.pct > 0 ? 'g' : (tf.codigo === '01' || tf.codigo === '11') ? 'n' : 'e';
+    t[(l.es_servicio ? 's' : 'm') + clase] = r2(t[(l.es_servicio ? 's' : 'm') + clase] + base);
+  }
+  const nombres = [['mg', 'Mercancías gravadas'], ['me', 'Mercancías exentas'], ['mn', 'Mercancías no sujetas'], ['sg', 'Servicios gravados'], ['se', 'Servicios exentos'], ['sn', 'Servicios no sujetos']];
+  return nombres.filter(([k]) => t[k] > 0).map(([k, etq]) => ({ etq, monto: t[k] }));
+}
+// Unidad de medida (Reg. 13 inc. 10): el XML usa el código de la línea si lo trae y, si no, «Sp» para servicios y «Unid» para mercancías. Aquí se imprime con su descripción oficial (Anexos v4.4, nota 7).
+const UNIDADES_TXT = { Unid: 'Unidad', Sp: 'Servicios Profesionales', Os: 'Otro tipo de servicio', Spe: 'Servicios Profesionales de medicina', Kg: 'Kilogramo', G: 'Gramo', L: 'Litro', mL: 'Mililitro', Oz: 'Onza', Gal: 'Galón', Otros: 'Otros' };
+const unidadDeLinea = (l) => { const u = String(l?.unidad ?? '').trim(); const cod = UNIDADES_TXT[u] ? u : (l?.es_servicio ? 'Sp' : 'Unid'); return UNIDADES_TXT[cod]; };
+// Código de referencia de una nota o de un reemplazo, con la descripción oficial (Anexos v4.4, nota 9)
+const DESC_REF = { '01': 'Anula documento de referencia', '02': 'Corrige monto', '04': 'Referencia a otro documento', '06': 'Devolución de mercancía', '07': 'Sustituye comprobante electrónico' };
 // Lo que se entregó y el vuelto de un pago en efectivo. Una nota de crédito nunca muestra Recibido ni Vuelto (no se recibe dinero).
 function pagoEfectivo(p) {
   const monto = Number(p.monto) || 0, rec = Number(p.recibido) || 0, vue = Number(p.vuelto) || 0;
@@ -196,6 +232,10 @@ export function modeloComprobante(c) {
     pagos: c.pagos_snapshot || [], consecutivo: c.consecutivo || '', clave: c.clave || '', fecha: c.fecha_emision, estado: c.estado,
     sandbox: (c.ambiente || c.sociedad?.ambiente) !== 'produccion', motivo: c.motivo || '',
     original: c.original || null, venta: c.venta || null,
+    tipos: desgloseTipo(lineas),
+    // Código de referencia (solo si la base ya lo devuelve; si no, la impresión queda como estaba). En una nota sin código guardado el único que se emite hoy es el 01.
+    codigoRef: 'codigo_referencia' in c ? (c.codigo_referencia || (c.tipo_doc === '03' ? '01' : '')) : null,
+    reemplaza: c.reemplaza_a ? { id: c.reemplaza_a, ...(c.reemplazado || {}) } : null,
   };
 }
 export function modeloPrefactura(r, soc) {
@@ -262,7 +302,9 @@ function nodoTiquete(m, { papel, logo, copia }) {
     raiz.append(h('div.aviso-pre', 'NO ES UN COMPROBANTE ELECTRÓNICO.', h('br'), 'NO VÁLIDA COMO FACTURA'));
     raiz.append(h('div.dato', 'Cuenta para revisar con el cliente'));
   } else {
+    // Tipo de documento (el título), consecutivo y clave juntos (Anexos v4.4, nota 1)
     raiz.append(h('div.etq-chica', 'Consecutivo'), h('div.mono', m.consecutivo));
+    raiz.append(h('div.etq-chica', 'Clave numérica'), ...partir(m.clave, 25).map((p) => h('div.mono', p)));
   }
   raiz.append(fila('Fecha', fechaLinea(m.fecha)));
   if (m.venta?.numero) raiz.append(fila(pre ? 'Cuenta' : 'Venta', m.venta.numero));
@@ -270,11 +312,18 @@ function nodoTiquete(m, { papel, logo, copia }) {
   if (pre && Number(m.venta?.prefactura_revision) > 1) raiz.append(fila('Revisión', String(Number(m.venta.prefactura_revision))));
   if (m.venta?.tipo_servicio) raiz.append(fila('Servicio', TIPOS_SERVICIO[m.venta.tipo_servicio] || m.venta.tipo_servicio));
   if (m.venta?.referencia) raiz.append(fila('Referencia', m.venta.referencia));
-  if (!pre) raiz.append(fila('Condición de venta', 'Contado'));
+  if (!pre) raiz.append(fila('Condición de venta', 'Contado'), fila('Moneda', 'Colón (CRC)'));
   if (nc && m.original) {
     raiz.append(linea());
     raiz.append(h('div.etq-chica', 'Anula el documento'), h('div.dato', (NOMBRE_DOC[m.original.tipo_doc] || 'Comprobante') + ' N.° ' + numCorto(m.original.consecutivo)), h('div.mono', m.original.consecutivo));
+    if (m.codigoRef && DESC_REF[m.codigoRef]) raiz.append(h('div.dato', 'Código de referencia ' + m.codigoRef + ': ' + DESC_REF[m.codigoRef]));
     if (m.motivo) raiz.append(h('div.dato', 'Motivo: ' + m.motivo));
+  } else if (!pre && !nc && m.reemplaza) {
+    // Venta hecha de nuevo después de una anulación: dice cuál documento sustituye (código 07)
+    raiz.append(linea());
+    raiz.append(h('div.etq-chica', 'Sustituye al documento'));
+    if (m.reemplaza.consecutivo) raiz.append(h('div.dato', (NOMBRE_DOC[m.reemplaza.tipo_doc] || 'Comprobante') + ' N.° ' + numCorto(m.reemplaza.consecutivo)), h('div.mono', m.reemplaza.consecutivo));
+    raiz.append(h('div.dato', 'Código de referencia 07: ' + DESC_REF['07']));
   }
   if (m.cliente) {
     raiz.append(linea());
@@ -287,13 +336,20 @@ function nodoTiquete(m, { papel, logo, copia }) {
   for (const l of m.lineas) {
     raiz.append(h('div.lin',
       h('div.d', l.descripcion || ''),
-      h('div.q', h('span', `${num(l.cantidad)} x ${money(l.precio_final)}`), h('b', money(l.total_linea))),
+      h('div.q', h('span', pre ? `${num(l.cantidad)} x ${money(l.precio_final)}` : `${num(l.cantidad)} ${unidadDeLinea(l)} x ${money(l.precio_final)}`), h('b', money(l.total_linea))),
       tarifaDeLinea(l).pct !== 13 ? h('div.iva-lin', etiquetaIva(tarifaDeLinea(l).pct, tarifaDeLinea(l).codigo)) : null,
       l.nota ? h('div.nota', l.nota) : null));
   }
   raiz.append(linea('doble'));
-  raiz.append(fila('Subtotal sin IVA', money(m.subtotal)));
-  for (const f of m.desglose) raiz.append(fila(f.etq, money(f.iva)));
+  if (pre) raiz.append(fila('Subtotal sin IVA', money(m.subtotal)));
+  else {
+    // Mercancías y servicios, gravados y exentos; después el precio neto de venta (no hay descuentos, así que es la suma de lo anterior)
+    for (const t of m.tipos || []) raiz.append(fila(t.etq, money(t.monto)));
+    raiz.append(fila('Precio neto de venta (sin IVA)', money(m.subtotal)));
+  }
+  // Monto del impuesto de cada tarifa, con la indicación que pide la norma
+  if (m.desglose.length) raiz.append(h('div.etq-chica', 'Impuesto sobre el Valor Agregado'));
+  for (const f of m.desglose) raiz.append(fila(pre ? f.etq : f.etqTarifa, money(f.iva)));
   raiz.append(h('div.fila-tq.total', h('span', nc ? 'TOTAL ACREDITADO' : 'TOTAL'), h('span.v', money(m.total))));
   if (m.pagos.length) {
     raiz.append(linea());
@@ -307,7 +363,6 @@ function nodoTiquete(m, { papel, logo, copia }) {
   }
   if (!pre) {
     raiz.append(linea());
-    raiz.append(h('div.etq-chica', 'Clave numérica'), ...partir(m.clave, 25).map((p) => h('div.mono', p)));
     const st = estadoImpreso(m); if (st) raiz.append(st);
     raiz.append(h('div.pie', LEYENDA_RESOLUCION));
   } else {
@@ -335,6 +390,8 @@ function nodoCarta(m, { logo, copia }) {
     h('div.ct-titulo',
       h('div.ct-tit', m.titulo),
       h('div.ct-num', 'N.° ' + numCorto(m.consecutivo)),
+      // Tipo de documento (arriba), consecutivo y clave juntos (Anexos v4.4, nota 1)
+      h('div.ct-clave-enc', h('div', h('span.ct-etq', 'Consecutivo'), ' ', h('span.mono', m.consecutivo)), h('div', h('span.ct-etq', 'Clave numérica'), ' ', h('span.mono', m.clave))),
       h('div.ct-fecha', fechaLinea(m.fecha)),
       m.sandbox ? h('div.ct-prueba', 'COMPROBANTE DE PRUEBA SIN VALIDEZ') : null)));
   raiz.append(h('div.ct-regla', h('i')));
@@ -371,15 +428,22 @@ function nodoCarta(m, { logo, copia }) {
     raiz.append(h('div.ct-ref',
       h('div', h('b', 'Esta nota de crédito anula: '), (NOMBRE_DOC[m.original.tipo_doc] || 'Comprobante') + ' N.° ' + numCorto(m.original.consecutivo)),
       h('div.mono', m.original.consecutivo),
+      m.codigoRef && DESC_REF[m.codigoRef] ? h('div', h('b', 'Código de referencia: '), m.codigoRef + ', ' + DESC_REF[m.codigoRef]) : null,
       m.motivo ? h('div', h('b', 'Motivo: '), m.motivo) : null));
+  } else if (!nc && m.reemplaza) {
+    raiz.append(h('div.ct-ref',
+      h('div', h('b', 'Este documento sustituye a: '), m.reemplaza.consecutivo ? (NOMBRE_DOC[m.reemplaza.tipo_doc] || 'Comprobante') + ' N.° ' + numCorto(m.reemplaza.consecutivo) : 'un documento anulado'),
+      m.reemplaza.consecutivo ? h('div.mono', m.reemplaza.consecutivo) : null,
+      h('div', h('b', 'Código de referencia: '), '07, ' + DESC_REF['07'])));
   }
 
   // Líneas
   raiz.append(h('table.ct-tabla',
-    h('thead', h('tr', h('th', 'Código'), h('th', 'Descripción'), h('th.der', 'Cant.'), h('th.der', 'Precio unit.'), h('th.der', 'IVA'), h('th.der', 'Total'))),
+    h('thead', h('tr', h('th', 'CABYS'), h('th', 'Descripción'), h('th', 'Unidad'), h('th.der', 'Cant.'), h('th.der', 'Precio unit.'), h('th.der', 'IVA'), h('th.der', 'Total'))),
     h('tbody', m.lineas.map((l) => h('tr',
       h('td.cod', l.cabys || ''),
       h('td', h('div', l.descripcion || ''), l.nota ? h('div.ct-tenue', l.nota) : null),
+      h('td.uni', unidadDeLinea(l)),
       h('td.der', num(l.cantidad)),
       h('td.der', money(l.precio_final)),
       h('td.der', (tarifaDeLinea(l).pct ? num(tarifaDeLinea(l).pct, 2) + '%' : tarifaDeLinea(l).codigo === '10' || !tarifaDeLinea(l).codigo ? 'Exento' : '0%')),
@@ -396,18 +460,16 @@ function nodoCarta(m, { logo, copia }) {
     }
   } else pagos.append(h('div.ct-tenue', 'Sin pagos registrados'));
   const tot = h('div.ct-totales',
-    h('div.ct-fila', h('span', 'Subtotal sin IVA'), h('span.v', money(m.subtotal))),
-    m.desglose.map((f) => h('div.ct-fila', h('span', f.etq), h('span.v', money(f.iva)))),
+    (m.tipos || []).map((t) => h('div.ct-fila', h('span', t.etq), h('span.v', money(t.monto)))),
+    h('div.ct-fila.neto', h('span', 'Precio neto de venta (sin IVA)'), h('span.v', money(m.subtotal))),
+    m.desglose.map((f) => h('div.ct-fila', h('span', f.etqLarga), h('span.v', money(f.iva)))),
     h('div.ct-fila.gran', h('span', nc ? 'Total acreditado' : 'Total'), h('span.v', money(m.total))));
   raiz.append(h('div.ct-cierre', pagos, tot));
 
-  // Clave, consecutivo y estado
+  // Estado de validación (el consecutivo y la clave van arriba, junto al tipo de documento)
   const st = m.estado;
   const txtSt = st === 'aceptado' ? 'Aceptado por Hacienda' : st === 'rechazado' ? 'RECHAZADO POR HACIENDA. Este documento no es válido.' : 'Pendiente de validación: Hacienda aún no confirma este comprobante.';
-  raiz.append(h('div.ct-clave',
-    h('div', h('span.ct-etq', 'Consecutivo'), h('span.mono', m.consecutivo)),
-    h('div', h('span.ct-etq', 'Clave numérica'), h('span.mono', m.clave)),
-    h('div.ct-estado.' + (st === 'aceptado' ? 'ok' : st === 'rechazado' ? 'mal' : 'pend'), txtSt)));
+  raiz.append(h('div.ct-clave', h('div.ct-estado.' + (st === 'aceptado' ? 'ok' : st === 'rechazado' ? 'mal' : 'pend'), txtSt)));
 
   // Pie con quiénes somos
   const pieIzq = h('div.ct-quienes',
@@ -451,7 +513,7 @@ function nodoPrueba(papel, logo) {
   for (const px of [9, 10, 11, 12, 14, 16, 20]) raiz.append(h('div', { style: `font-size:${px}px;line-height:1.25` }, `${px} px: La Bomba 0123456789`));
   raiz.append(h('div', { style: 'font-weight:700;font-size:13px' }, 'Negrita: TOTAL ₡12 345,00'));
   raiz.append(h('div.mono', '00100001040000000001'));
-  raiz.append(...partir('50628102600310211194300100001040000000011847027391', 25).map((p) => h('div.mono', p)));
+  raiz.append(...partir('0'.repeat(50), 25).map((p) => h('div.mono', p))); // ceros: un papel de prueba no debe parecer un comprobante real
   raiz.append(linea());
   raiz.append(h('div.etq-chica', 'Tildes y eñes'));
   raiz.append(h('div', 'áéíóúü ÁÉÍÓÚÜ ñ Ñ ¡Hola! ¿Qué tal?'));
@@ -558,8 +620,10 @@ export async function imprimirComprobante(comprobanteId, { formato, copias } = {
   const aj = leerAjustes();
   formato = formato === 'carta' ? 'carta' : formato === 'tiquete' ? 'tiquete' : aj.formato;
   copias = Math.min(5, Math.max(1, parseInt(copias, 10) || aj.copias));
-  const c = await api.comprobante(comprobanteId);
+  let c = await api.comprobante(comprobanteId);
   if (!c) throw new Error('No se encontró el comprobante.');
+  // Una venta hecha de nuevo después de anular dice cuál documento sustituye: se busca su número (si no se puede leer, se imprime sin él)
+  if (c.reemplaza_a) { try { const o = await api.comprobante(c.reemplaza_a); if (o) c = { ...c, reemplazado: { tipo_doc: o.tipo_doc, consecutivo: o.consecutivo } }; } catch { /* se imprime sin el número */ } }
   const m = modeloComprobante(c);
   const logo = await logoDataUri(m.soc.codigo);
   const nodos = [];
@@ -633,7 +697,7 @@ export function abrirAjustesImpresion() {
     estadoAuto.className = 'fx-estado ' + (aj.auto ? 'si' : 'no');
     estadoAuto.textContent = aj.auto
       ? 'En este aparato: ENCENDIDA. Al terminar cada cobro sale ' + (aj.formato === 'carta' ? 'la factura carta' : 'el tiquete') + ' solo.'
-      : 'En este aparato: APAGADA. Al terminar el cobro no sale nada solo; aparece el botón «Imprimir tiquete» para tocarlo si el cliente lo quiere.';
+      : 'En este aparato: APAGADA. Al terminar el cobro no sale nada solo; aparece el botón «Imprimir tiquete» para tocarlo y entregarle el tiquete al cliente.';
   };
   const cambiar = (k, v) => { aj = guardarAjustes({ [k]: v }); guardado.textContent = 'Guardado.'; pintarEstadoAuto(); };
   const grupo = (tit, ayuda, ...ctl) => h('div.fx-grupo', h('div.fx-tit', tit), ayuda ? h('div.fx-ayuda', ayuda) : null, ...ctl);
@@ -650,7 +714,7 @@ export function abrirAjustesImpresion() {
       seg([[80, 'Papel de 80 mm'], [58, 'Papel de 58 mm']], aj.papel, (v) => cambiar('papel', Number(v)), 'Ancho del papel')),
     grupo('Copias de cada tiquete', 'Cuántas copias salen cada vez que se imprime.',
       seg([[1, '1 copia'], [2, '2 copias'], [3, '3 copias']], aj.copias, (v) => cambiar('copias', Number(v)), 'Copias')),
-    grupo('Imprimir automáticamente al cobrar', 'Encienda esto en cada aparato que tenga impresora (la computadora o la tableta de la caja). En los demás aparatos, como los celulares, déjelo apagado y el tiquete se imprime tocando el botón. Cada aparato guarda su propia opción.',
+    grupo('Imprimir automáticamente al cobrar', 'En computadora y tableta viene encendido: el tiquete sale solo al terminar el cobro y se entrega al cliente. En celular viene apagado: el tiquete se imprime tocando el botón y se entrega igual. Cada aparato guarda su propia opción.',
       seg([['si', 'Sí, imprimir solo'], ['no', 'No, yo lo pido']], aj.auto ? 'si' : 'no', (v) => cambiar('auto', v === 'si'), 'Imprimir automáticamente'), estadoAuto),
     grupo('Qué se imprime automáticamente', 'Solo aplica si arriba escogió que se imprima solo.',
       seg([['tiquete', 'Tiquete (rollo)'], ['carta', 'Factura carta (hoja)']], aj.formato, (v) => cambiar('formato', v), 'Formato automático')),

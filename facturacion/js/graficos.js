@@ -123,7 +123,7 @@ export function graficoBarras(datos, o = {}) {
   const M = { l: 18 + lw, r: 12, t: 10, b: 54 };
   const H = M.t + M.b + datos.length * fila;
   const pw = W - M.l - M.r - 92; // reserva a la derecha para el valor
-  const sc = escala(0, Math.max(0, ...datos.map((d) => d.valor)), 3);
+  const sc = escala(0, Math.max(0, ...datos.map((d) => d.valor)), pw < 220 ? 2 : 3); // en pantallas angostas, menos marcas para que los valores no se peguen
   const xx = (v) => M.l + (v / sc.hi) * pw;
   const svg = s('svg', { class: 'gr', viewBox: `0 0 ${W} ${H}`, width: W, height: H, role: 'img', 'aria-label': o.descripcion || '' });
   sc.ticks.forEach((t) => {

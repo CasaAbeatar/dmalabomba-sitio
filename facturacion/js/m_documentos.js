@@ -312,7 +312,7 @@ export default {
       raiz.append(h('div.doc-encab',
         h('div', h('div.doc-etq', tipoNombre), h('div.doc-num', 'N.° ' + numeroCorto(c.consecutivo)), h('div.tenue', fechaHora(c.fecha_emision))),
         h('div.doc-chips', h('span.chip.' + (CLASE_ESTADO[c.estado] || ''), ETQ_ESTADO[c.estado] || c.estado), c.ambiente !== 'produccion' ? h('span.chip.espera', 'Prueba, sin validez') : null, nc ? h('span.chip.anulado', 'Anulado') : null)));
-      raiz.append(textoEstado(c));
+      raiz.append(textoEstado(c, !!nc));
 
       // Datos
       const dato = (e, v, extra) => h('div.doc-dato', h('span.doc-etq', e), h('div' + (extra ? '.' + extra : ''), v));
@@ -350,18 +350,18 @@ export default {
       return raiz;
     }
 
-    function textoEstado(c) {
+    function textoEstado(c, anulado = false) {
       const th = traducirHacienda(c.mensaje);
       const t = {
         pendiente: 'Está por enviarse a Hacienda. No tiene que hacer nada.',
         enviado: 'Ya se envió a Hacienda y se espera su respuesta. Esta ventana se actualiza sola.',
-        aceptado: 'Hacienda lo aceptó: el documento es válido.' + (c.ambiente !== 'produccion' ? ' Como estamos en modo de pruebas, no tiene validez tributaria.' : ''),
+        aceptado: (anulado ? 'Hacienda lo aceptó, y después se anuló con una nota de crédito.' : 'Hacienda lo aceptó: el documento es válido.') + (c.ambiente !== 'produccion' ? ' Como estamos en modo de pruebas, no tiene validez tributaria.' : ''),
         rechazado: 'Hacienda no aceptó este documento, así que no es válido y no necesita nota de crédito. Si fue una venta real, hay que hacerla de nuevo en Facturación.',
         error: 'Todavía no se pudo enviar a Hacienda (por ejemplo, por falta de internet). El sistema lo intentará de nuevo solo; también puede tocar «Reenviar a Hacienda».',
       }[c.estado] || '';
       // Lo que dice Hacienda, en palabras simples. Si el documento fue aceptado, lo que trae es un aviso y no impide nada.
       const motivos = th.items.length
-        ? h('div.doc-motivos', h('b', c.estado === 'aceptado' ? 'Aviso de Hacienda (el documento sigue siendo válido):' : 'Qué dice Hacienda:'),
+        ? h('div.doc-motivos', h('b', c.estado === 'aceptado' ? (anulado ? 'Aviso de Hacienda:' : 'Aviso de Hacienda (el documento sigue siendo válido):') : 'Qué dice Hacienda:'),
           h('ul', th.items.map((i) => h('li', i.texto))))
         : null;
       // El texto original queda plegado, con las comillas y corchetes quitados, por si alguien de soporte lo necesita
