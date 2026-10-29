@@ -20,7 +20,7 @@
 .cuentas-envoltura.mas-der .cuentas-borde.der,.cuentas-envoltura.mas-izq .cuentas-borde.izq{opacity:1}
 .cuentas-pista{display:none;font-size:.86rem;font-weight:600;color:var(--tinta2);padding:0 .25rem .1rem}
 .cuentas-envoltura.mas-der .cuentas-pista{display:block}
-.cuenta-btn{flex:0 0 auto;min-width:158px;max-width:230px;min-height:60px;padding:.45rem .8rem;text-align:left;border:1px solid var(--linea2);border-left:4px solid var(--linea2);border-radius:var(--r);background:var(--papel);cursor:pointer;display:flex;flex-direction:column;gap:.1rem}
+.cuenta-btn{flex:0 0 auto;min-width:158px;max-width:230px;min-height:60px;padding:.45rem .8rem;text-align:left;border:1px solid var(--borde-control,#8f8672);border-left:4px solid var(--borde-control,#8f8672);border-radius:var(--r);background:var(--papel);cursor:pointer;display:flex;flex-direction:column;gap:.1rem}
 .cuenta-btn:hover{border-color:var(--tinta)}
 .cuenta-btn[aria-pressed=true]{border-color:var(--tinta);border-left-color:var(--ambar);background:#fff;box-shadow:0 0 0 1px var(--tinta) inset}
 .cuenta-btn .c-tipo{font-size:.76rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--tinta2)}
@@ -30,8 +30,8 @@
 .cuentas-vacio{align-self:center;color:var(--tinta2);padding:0 .3rem}
 .cuentas-bar>.btn{flex:0 0 auto;align-self:center;min-height:52px}
 
-.caja-cuerpo{display:grid;grid-template-columns:minmax(0,1fr) 430px;gap:1rem;align-items:start}
-@media(max-width:1150px){.caja-cuerpo{grid-template-columns:minmax(0,1fr) 390px}}
+/* La cuenta es lo que más se mira: en tableta y escritorio tiene ancho de sobra para que cada línea quepa en UNA fila */
+.caja-cuerpo{display:grid;grid-template-columns:minmax(0,1fr) 480px;gap:1rem;align-items:start}
 
 /* ---------- Catálogo ---------- */
 .caja-catalogo{display:flex;flex-direction:column;gap:.8rem;min-width:0}
@@ -39,11 +39,11 @@
 .buscar-fila .campo{flex:1 1 auto;font-size:1.05rem}
 .cajones{display:flex;flex-wrap:wrap;gap:.45rem}
 .cajones[hidden]{display:none}
-.cajon-btn{min-height:48px;padding:.4rem .9rem;border:1px solid var(--linea2);border-radius:99px;background:var(--papel);font-weight:600;cursor:pointer;white-space:nowrap}
+.cajon-btn{min-height:48px;padding:.4rem .9rem;border:1px solid var(--borde-control,#8f8672);border-radius:99px;background:var(--papel);font-weight:600;cursor:pointer;white-space:nowrap}
 .cajon-btn:hover{border-color:var(--tinta)}
 .cajon-btn[aria-pressed=true]{background:var(--tinta);border-color:var(--tinta);color:#fff}
 .productos{display:grid;gap:.6rem;grid-template-columns:repeat(auto-fill,minmax(148px,1fr))}
-.prod{position:relative;min-height:96px;padding:.7rem .75rem .6rem;border:1px solid var(--linea);border-radius:12px;background:var(--papel);text-align:left;cursor:pointer;display:flex;flex-direction:column;justify-content:space-between;gap:.4rem;transition:border-color .12s,box-shadow .12s,transform .06s}
+.prod{position:relative;min-height:96px;padding:.7rem .75rem .6rem;border:1px solid var(--borde-control,#8f8672);border-radius:12px;background:var(--papel);text-align:left;cursor:pointer;display:flex;flex-direction:column;justify-content:space-between;gap:.4rem;transition:border-color .12s,box-shadow .12s,transform .06s}
 .prod:hover{border-color:var(--tinta);box-shadow:var(--sombra)}
 .prod:active,.prod.tocado{transform:scale(.97);border-color:var(--rojo)}
 .prod-nombre{font-weight:600;line-height:1.2;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
@@ -54,7 +54,7 @@
 .prod-cuenta{position:absolute;top:-8px;right:-6px;min-width:28px;height:28px;padding:0 .4rem;border-radius:99px;background:var(--rojo);color:#fff;font-weight:700;font-size:.85rem;display:grid;place-items:center;border:2px solid var(--fondo);font-variant-numeric:tabular-nums}
 .prod-cuenta[hidden]{display:none}
 /* Cascada: nivel 2 (producto con opciones) y nivel 3 (modificadores) */
-.prod-grupo{border-color:var(--linea2);background:linear-gradient(180deg,var(--papel),var(--fondo))}
+.prod-grupo{border-color:var(--borde-control,#8f8672);background:linear-gradient(180deg,var(--papel),var(--fondo))}
 .prod-cab{display:flex;flex-direction:column;gap:.15rem}
 .prod-opciones{font-size:.8rem;color:var(--tinta2);font-weight:600;white-space:nowrap}
 .prod-desde{font-size:.78rem;font-weight:500;color:var(--tinta2)}
@@ -68,42 +68,48 @@
 
 /* ---------- Cuenta activa ---------- */
 .caja-cuenta{position:sticky;top:122px;display:flex;flex-direction:column;max-height:calc(100vh - 140px);background:var(--papel);border:1px solid var(--linea);border-radius:14px;box-shadow:var(--sombra);overflow:hidden}
-.cuenta-cab{padding:.6rem 1rem;border-bottom:1px solid var(--linea);display:flex;gap:.6rem;justify-content:space-between;align-items:flex-start;flex-wrap:wrap}
+.cuenta-cab{padding:.4rem 1rem;border-bottom:1px solid var(--linea);display:flex;gap:.6rem;justify-content:space-between;align-items:center;flex-wrap:wrap}
 .cuenta-cab h2{font-size:1.1rem}
 .cuenta-cab .sub{color:var(--tinta2);font-size:.92rem;overflow-wrap:anywhere}
 .cuenta-lineas{flex:1 1 auto;overflow-y:auto;min-height:120px}
-.cuenta-items{padding:.3rem 1rem}
-.linea{padding:.55rem 0;border-bottom:1px solid var(--linea);display:flex;flex-direction:column;gap:.4rem}
+.cuenta-items{padding:0 .8rem}
+
+/* Una línea = UNA fila de unos 64 px: nombre, cantidad (menos, número, más), total y el botón «Opciones».
+   Lo demás (precio de cada uno, nota, detalle e IVA, cambiar producto, quitar) se abre con «Opciones». */
+.linea{display:grid;grid-template-columns:minmax(0,1fr) auto auto auto;grid-template-areas:"nombre cant total mas";align-items:center;column-gap:.4rem;row-gap:.1rem;padding:.45rem 0;border-bottom:1px solid var(--linea)}
 .linea:last-child{border-bottom:0}
-.linea.editada,.linea.personalizada{box-shadow:inset 3px 0 0 var(--ambar);padding-left:.7rem;margin-left:-.7rem}
-.linea-top{display:flex;justify-content:space-between;gap:.6rem;align-items:flex-start}
-.linea-nombre{font-weight:600;line-height:1.25;overflow-wrap:anywhere}
-.linea-total{font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap}
-.linea-sub{display:flex;flex-wrap:wrap;gap:.1rem .7rem;font-size:.8rem;color:var(--tinta2)}
-.linea-sub .amb{color:#8a5a00;font-weight:600}
+.linea.editada,.linea.personalizada{box-shadow:inset 3px 0 0 var(--ambar);padding-left:.6rem;margin-left:-.6rem}
+.linea-nombre{grid-area:nombre;font-weight:600;font-size:.95rem;line-height:1.15;overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.linea .cant{grid-area:cant}
+.linea-total{grid-area:total;min-width:5.3rem;text-align:right;font-weight:700;font-size:.98rem;font-variant-numeric:tabular-nums;white-space:nowrap}
+.linea .mas-btn{grid-area:mas;min-width:5rem;padding:.3rem .5rem;font-size:.9rem}
+.linea-sub{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:.1rem .7rem;font-size:.82rem;color:var(--tinta2);padding-bottom:.1rem}
+.linea-sub .amb{color:#7a4f00;font-weight:600}
 .linea-sub .nota-vista{font-style:italic}
-.linea-ctrl{display:flex;gap:.4rem;align-items:center;flex-wrap:wrap}
 .cant{display:flex;align-items:stretch}
-.cant .mm{min-width:48px;min-height:48px;padding:0;border:1px solid var(--linea2);background:#fff;font-size:1.5rem;font-weight:600;cursor:pointer;line-height:1}
+.cant .mm{min-width:48px;min-height:48px;padding:0;border:1px solid var(--borde-control,#8f8672);background:#fff;font-size:1.5rem;font-weight:600;cursor:pointer;line-height:1}
 .cant .mm:first-child{border-radius:var(--r) 0 0 var(--r)}
 .cant .mm:last-child{border-radius:0 var(--r) var(--r) 0}
 .cant .mm:hover:not([disabled]){border-color:var(--tinta)}
-.cant .mm[disabled]{opacity:.35;cursor:not-allowed}
-.cant .cant-inp{width:48px;border-radius:0;text-align:center;font-weight:600;padding:.4rem .2rem;border-left:0;border-right:0;min-height:48px}
-.precio-et{display:flex;flex-direction:column;gap:.1rem;font-size:.72rem;font-weight:600;color:var(--tinta2);flex:1 1 80px;min-width:80px}
-.precio-et .campo{font-size:1rem;font-weight:600;text-align:right;font-variant-numeric:tabular-nums;min-height:48px}
-.linea.editada .precio-inp{border-color:var(--ambar);background:var(--ambar-suave)}
-.mas-btn{min-height:48px;flex:0 0 auto;padding-left:.7rem;padding-right:.7rem}
-.linea-pie{display:flex;gap:.5rem;align-items:center;flex-wrap:wrap}
-.linea-pie .nota-inp{flex:1 1 150px;min-height:48px;font-size:.92rem}
-.cuenta-pie{border-top:1px solid var(--linea);padding:.6rem 1rem .8rem;background:#fffdf9;display:flex;flex-direction:column;gap:.5rem}
-.total-fila{display:flex;justify-content:space-between;align-items:baseline;gap:.6rem}
-.total-fila .et{font-weight:600;color:var(--tinta2)}
-.total-fila small{display:block}
-.total-monto{font-size:2.1rem;font-weight:700;letter-spacing:-.02em;font-variant-numeric:tabular-nums;line-height:1.05}
+.cant .mm[disabled]{color:#8a8478;background:#f4f1ea;cursor:not-allowed}
+.cant .cant-inp{width:44px;border-radius:0;text-align:center;font-weight:600;padding:.4rem .1rem;border-left:0;border-right:0;min-height:48px}
+.linea.editada .precio-inp{border-color:var(--borde-ambar,#a87400);background:var(--ambar-suave)}
+/* Dentro de «Opciones» */
+.linea-pie{grid-column:1/-1;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:.6rem;margin:.2rem 0 .3rem;padding:.7rem;border:1px solid var(--linea2);border-radius:12px;background:#faf6ec}
+.linea-pie .etq{display:flex;flex-direction:column;justify-content:flex-end;gap:.25rem;font-size:.85rem;font-weight:600;color:var(--tinta2)}
+.linea-pie .campo{min-height:48px;font-size:1rem;color:var(--tinta)}
+.linea-pie .precio-inp{text-align:right;font-weight:600;font-variant-numeric:tabular-nums}
+.pie-botones{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:.5rem}
+.pie-botones .btn{flex:1 1 120px;min-height:48px;padding:.35rem .5rem;font-size:.92rem;line-height:1.15}
+.cuenta-pie{border-top:1px solid var(--linea);padding:.55rem 1rem .7rem;background:#fffdf9;display:flex;flex-direction:column;gap:.5rem}
+.pie-cobro{display:flex;gap:.5rem .8rem;align-items:center;flex-wrap:wrap}
+.total-fila{flex:1 1 auto;display:flex;flex-direction:column;gap:.05rem;min-width:0}
+.total-fila .et{font-size:.85rem;font-weight:600;color:var(--tinta2)}
+.total-monto{font-size:1.9rem;font-weight:700;letter-spacing:-.02em;font-variant-numeric:tabular-nums;line-height:1.05}
+.pie-cobro .btn-cobrar-aside{flex:1 1 150px}
 .acciones-cuenta{display:grid;grid-template-columns:1.45fr 1fr;gap:.5rem}
 .acciones-cuenta .btn.ancho{grid-column:1/-1}
-.aviso-pref{padding:.6rem .8rem;border:1px solid #efd08f;background:var(--ambar-suave);border-radius:var(--r);font-size:.92rem;color:#5c3d00}
+.aviso-pref{padding:.6rem .8rem;border:1px solid var(--borde-ambar,#a87400);background:var(--ambar-suave);border-radius:var(--r);font-size:.92rem;color:#5c3d00}
 .aviso-pref strong{display:block}
 .vacio-cuenta{padding:2rem 1.2rem;text-align:center;color:var(--tinta2);display:flex;flex-direction:column;gap:.9rem;align-items:center}
 
@@ -118,7 +124,9 @@
   .cuenta-lineas{overflow:visible}
   .barra-movil{display:flex;gap:.6rem;position:fixed;left:0;right:0;bottom:0;z-index:30;padding:.6rem .8rem calc(.6rem + env(safe-area-inset-bottom));background:rgba(251,248,242,.97);border-top:1px solid var(--linea2);backdrop-filter:blur(8px)}
   .barra-movil .btn{flex:1 1 0;min-height:56px;font-size:1.05rem}
-  .barra-movil .btn.primario{flex:1.6 1 0}
+  .barra-movil .btn.bm-ver{flex:1.5 1 0}
+  .barra-movil .btn.bm-cobrar{flex:1 1 0}
+  .barra-movil.sin-cobro .bm-cobrar{display:none}
   .btn-cobrar-aside{display:none}
   .productos{grid-template-columns:repeat(auto-fill,minmax(136px,1fr))}
   .cajones{flex-wrap:nowrap;overflow-x:auto;padding-bottom:.3rem;scrollbar-width:thin}
@@ -126,12 +134,11 @@
 @media(max-width:560px){
   .cuentas-bar{flex-direction:column}
   .cuentas-bar>.btn{width:100%}
-  .total-monto{font-size:2rem}
 }
 
 /* ---------- Ventana de cuenta nueva / cobro ---------- */
 .tipos-cuenta{display:grid;grid-template-columns:repeat(2,1fr);gap:.5rem}
-.tipo-btn{min-height:64px;padding:.5rem .7rem;border:1px solid var(--linea2);border-radius:var(--r);background:#fff;cursor:pointer;text-align:left;display:flex;flex-direction:column;gap:.1rem}
+.tipo-btn{min-height:64px;padding:.5rem .7rem;border:1px solid var(--borde-control,#8f8672);border-radius:var(--r);background:#fff;cursor:pointer;text-align:left;display:flex;flex-direction:column;gap:.1rem}
 .tipo-btn b{font-size:1rem}
 .tipo-btn small{line-height:1.2}
 .tipo-btn[aria-pressed=true]{border-color:var(--tinta);box-shadow:0 0 0 1px var(--tinta) inset;background:var(--ambar-suave)}
@@ -144,7 +151,7 @@
 .cobro-doc .doc{font-weight:700}
 .cobro-doc .cli{color:var(--tinta2);font-size:.92rem;overflow-wrap:anywhere}
 .medios{display:grid;grid-template-columns:repeat(4,1fr);gap:.5rem}
-.medio-btn{min-height:60px;padding:.4rem .5rem;border:1px solid var(--linea2);border-radius:var(--r);background:#fff;font-weight:700;cursor:pointer}
+.medio-btn{min-height:60px;padding:.4rem .5rem;border:1px solid var(--borde-control,#8f8672);border-radius:var(--r);background:#fff;font-weight:700;cursor:pointer}
 .medio-btn:hover{border-color:var(--tinta)}
 .medio-btn[aria-pressed=true]{background:var(--tinta);border-color:var(--tinta);color:#fff}
 @media(max-width:560px){.medios{grid-template-columns:repeat(2,1fr)}}
@@ -155,20 +162,20 @@
 .pago-item .p-det{color:var(--tinta2);font-size:.88rem;overflow-wrap:anywhere}
 .cobro-resumen{border-radius:12px;padding:.8rem 1rem;border:1px solid var(--linea);display:flex;justify-content:space-between;align-items:center;gap:.8rem;flex-wrap:wrap}
 .cobro-resumen .grande{font-size:1.7rem;font-weight:700;font-variant-numeric:tabular-nums}
-.cobro-resumen.falta{border-color:#e9b3b7;background:var(--rojo-suave);color:var(--rojo-osc)}
-.cobro-resumen.ok{border-color:#a8d5bd;background:var(--verde-suave);color:var(--verde)}
-.cobro-resumen.vuelto{border-color:#efd08f;background:var(--ambar-suave);color:#5c3d00}
-.seg{display:flex;border:1px solid var(--linea2);border-radius:var(--r);overflow:hidden;background:#fff}
+.cobro-resumen.falta{border-color:var(--borde-mal,#bf4a54);background:var(--rojo-suave);color:var(--rojo-osc)}
+.cobro-resumen.ok{border-color:var(--borde-ok,#3f8f66);background:var(--verde-suave);color:var(--verde)}
+.cobro-resumen.vuelto{border-color:var(--borde-ambar,#a87400);background:var(--ambar-suave);color:#5c3d00}
+.seg{display:flex;border:1px solid var(--borde-control,#8f8672);border-radius:var(--r);overflow:hidden;background:#fff}
 .seg button{flex:1 1 0;min-height:48px;border:0;background:transparent;font-weight:600;cursor:pointer;padding:.3rem .5rem}
-.seg button+button{border-left:1px solid var(--linea2)}
+.seg button+button{border-left:1px solid var(--borde-control,#8f8672)}
 .seg button[aria-pressed=true]{background:var(--tinta);color:#fff}
 .cobro-pie{position:sticky;bottom:-1.2rem;margin:0 -1.2rem -1.2rem;padding:.8rem 1.2rem;background:var(--papel);border-top:1px solid var(--linea);display:flex;gap:.6rem;justify-content:flex-end;flex-wrap:wrap}
 .cobro-pie .btn.primario{flex:1 1 220px}
 .lista-clientes{display:flex;flex-direction:column;gap:.5rem;max-height:340px;overflow:auto}
-.cli-item{min-height:60px;text-align:left;padding:.55rem .8rem;border:1px solid var(--linea);border-radius:var(--r);background:#fff;cursor:pointer;display:flex;flex-direction:column}
+.cli-item{min-height:60px;text-align:left;padding:.55rem .8rem;border:1px solid var(--borde-control,#8f8672);border-radius:var(--r);background:#fff;cursor:pointer;display:flex;flex-direction:column}
 .cli-item:hover{border-color:var(--tinta)}
 .cli-item b{overflow-wrap:anywhere}
-.mas-datos{border:1px solid var(--linea);border-radius:var(--r);padding:.5rem .8rem}
+.mas-datos{border:1px solid var(--borde-control,#8f8672);border-radius:var(--r);padding:.5rem .8rem}
 .mas-datos summary{cursor:pointer;min-height:48px;display:flex;align-items:center;font-weight:600}
 .exito{text-align:center;display:flex;flex-direction:column;gap:.9rem;align-items:stretch}
 .exito .gran{font-size:1.5rem;font-weight:700}
@@ -197,10 +204,10 @@
 .medio-fila .campo{text-align:right;font-weight:600;font-variant-numeric:tabular-nums}
 .medio-fila .sub-det{display:block;font-size:.78rem;color:var(--tinta2);font-weight:400}
 .medio-fila.total{font-weight:700;border-top:2px solid var(--tinta);border-bottom:0}
-.dif{display:inline-block;padding:.2rem .7rem;border-radius:99px;font-weight:700;font-size:.92rem;font-variant-numeric:tabular-nums;border:1px solid var(--linea2);color:var(--tinta2);background:#fff}
-.dif.cuadra{color:var(--verde);border-color:#a8d5bd;background:var(--verde-suave)}
-.dif.sobra{color:#8a5a00;border-color:#efd08f;background:var(--ambar-suave)}
-.dif.falta{color:var(--rojo);border-color:#e9b3b7;background:var(--rojo-suave)}
+.dif{display:inline-block;padding:.2rem .7rem;border-radius:99px;font-weight:700;font-size:.92rem;font-variant-numeric:tabular-nums;border:1px solid var(--borde-control,#8f8672);color:var(--tinta2);background:#fff}
+.dif.cuadra{color:var(--verde);border-color:var(--borde-ok,#3f8f66);background:var(--verde-suave)}
+.dif.sobra{color:#8a5a00;border-color:var(--borde-ambar,#a87400);background:var(--ambar-suave)}
+.dif.falta{color:var(--rojo);border-color:var(--borde-mal,#bf4a54);background:var(--rojo-suave)}
 @media(max-width:700px){
   .medio-fila{grid-template-columns:1fr 1fr;gap:.4rem .8rem}
   .medio-fila.cab{display:none}
@@ -208,13 +215,16 @@
   .medio-fila .c-esp::before{content:'Esperado: ';font-weight:400;color:var(--tinta2)}
   .medio-fila .c-dif{grid-column:1/-1}
 }
-.aviso-abiertas{border:1px solid #efd08f;background:var(--ambar-suave);border-radius:12px;padding:.9rem 1rem;display:flex;flex-direction:column;gap:.6rem}
+.aviso-abiertas{border:1px solid var(--borde-ambar,#a87400);background:var(--ambar-suave);border-radius:12px;padding:.9rem 1rem;display:flex;flex-direction:column;gap:.6rem}
 .aviso-abiertas ul{margin:0;padding-left:1.2rem}
 .resumen-final{border:2px solid var(--verde);border-radius:14px;padding:1rem;background:#fff;display:flex;flex-direction:column;gap:.8rem}
 .hist td,.hist th{vertical-align:middle}
 .hist .noche{font-size:.74rem}
 
 /* ---------- Ajustes generales de la caja ---------- */
+/* El pie fijo con «Volver» y «Cobrar» no debe tapar el campo que se está escribiendo (referencia del pago con el teclado abierto) */
+.modal-cuerpo{scroll-padding-bottom:7rem}
+.caja .campo{scroll-margin-bottom:7rem}
 [hidden]{display:none!important}
 .sr-solo{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 :root{--cab-h:110px;--bus-h:92px}
@@ -226,10 +236,10 @@
 .buscador-caja .rotulo{display:flex;justify-content:space-between;gap:.6rem;align-items:baseline;flex-wrap:wrap}
 .buscador-caja .rotulo small{font-weight:400}
 .buscador-fila{display:flex;gap:.5rem;align-items:stretch}
-.buscador-inp{flex:1 1 auto;min-height:56px!important;font-size:1.15rem!important;border-width:1.5px!important;border-color:var(--linea2)}
+.buscador-inp{flex:1 1 auto;min-height:56px!important;font-size:1.15rem!important;border-width:1.5px!important;border-color:var(--borde-control,#8f8672)}
 .buscador-fila .btn{flex:0 0 auto}
 .resultados{position:absolute;left:0;right:0;top:100%;margin-top:.3rem;z-index:25;background:var(--papel);border:1px solid var(--tinta);border-radius:12px;box-shadow:0 14px 40px rgba(29,26,23,.22);max-height:min(54vh,420px);max-height:min(54dvh,420px);overflow-y:auto;overscroll-behavior:contain}
-.buscador-caja.en-linea .resultados{position:static;box-shadow:none;border-color:var(--linea2);max-height:340px;margin-top:.5rem}
+.buscador-caja.en-linea .resultados{position:static;box-shadow:none;border-color:var(--borde-control,#8f8672);max-height:340px;margin-top:.5rem}
 .res-item{display:grid;grid-template-columns:1fr auto;gap:.05rem .8rem;width:100%;min-height:56px;padding:.5rem .9rem;text-align:left;border:0;border-bottom:1px solid var(--linea);background:transparent;cursor:pointer;align-items:center}
 .res-item:last-child{border-bottom:0}
 .res-item:hover,.res-item[aria-selected=true]{background:var(--ambar-suave)}
@@ -238,7 +248,16 @@
 .res-cod{font-size:.8rem;color:var(--tinta2);font-variant-numeric:tabular-nums}
 .res-vacio{padding:.9rem 1rem;color:var(--tinta2)}
 .grupo-sep{grid-column:1/-1;height:0;border-top:1px solid var(--linea);margin:.15rem 0}
-.caja.bus-activo .barra-movil{display:none}
+/* Buscando un producto con el teclado abierto: la barra de abajo se reduce a un botón «Cobrar» pequeño, sobre el teclado (si hay algo que cobrar) */
+@media(max-width:979px){
+  .barra-movil{bottom:0}
+  .caja.bus-activo .barra-movil{bottom:var(--teclado,0px);left:auto;right:0;background:transparent;border:0;backdrop-filter:none;pointer-events:none;padding:.5rem .8rem}
+  .caja.bus-activo .barra-movil .bm-ver,.caja.bus-activo .barra-movil .bm-total{display:none}
+  .caja.bus-activo .barra-movil .bm-cobrar{flex:0 0 auto;min-height:48px;min-width:120px;pointer-events:auto;box-shadow:0 4px 16px rgba(29,26,23,.3)}
+  .caja.bus-activo .barra-movil.sin-cobro{display:none}
+  /* La lista de resultados termina arriba del botón «Cobrar» para no quedar tapada */
+  .caja.bus-activo .resultados{max-height:max(180px,calc(var(--vv-alto,100dvh) - 185px))}
+}
 
 /* La cabecera deja de fijarse en celular para que el teclado no tape el buscador */
 @media(max-width:979px){
@@ -252,7 +271,7 @@
 }
 .caja-izq{display:flex;flex-direction:column;gap:.7rem;min-width:0}
 
-.exito .botones .btn.suave{grid-column:1/-1}
+.exito .botones .btn.suave,.exito .botones .btn.peligro{grid-column:1/-1}
 .cobro-total .monto{font-size:2.6rem}
 
 .cuentas-extras{display:flex;gap:.5rem;flex-wrap:wrap;justify-content:flex-end;margin-top:-.3rem}
@@ -295,10 +314,14 @@
   .cobro-pie .btn:not(.primario){flex:0 0 auto}
   .cobro-pie .btn.primario{flex:1 1 0;min-width:0}
 }
-.linea-pie .btn{min-height:48px}
-@media(max-width:979px){
-  .linea-pie .nota-inp{flex:1 1 100%}
-  .linea-pie .btn{flex:1 1 0}
+/* Celular: la línea pasa a dos filas (nombre y total arriba; cantidad y «Opciones» abajo) y lo de «Opciones» queda en una columna */
+@media(max-width:639px){
+  .linea{grid-template-columns:minmax(0,1fr) auto;grid-template-areas:"nombre total" "cant mas";row-gap:.3rem;padding:.45rem 0}
+  .linea-nombre{display:block;-webkit-line-clamp:unset;overflow:visible;font-size:1rem}
+  .linea .mas-btn{justify-self:end;min-width:7.5rem}
+  .linea-total{font-size:1.02rem}
+  .linea-pie{grid-template-columns:minmax(0,1fr)}
+  .pie-botones .btn{flex:1 1 100%}
 }
 
 /* ---------- Actividad del cliente para esta factura / crear cliente en el cobro ---------- */
@@ -307,10 +330,10 @@
 .act-txt{flex:1 1 240px;min-width:0;overflow-wrap:anywhere;line-height:1.35}
 .act-txt .et{color:var(--tinta2)}
 .act-txt .chip{margin-left:.4rem}
-.act-aviso{padding:.55rem .75rem;border:1px solid #efd08f;background:var(--ambar-suave);color:#6b4500;border-radius:var(--r);font-size:.92rem;line-height:1.35}
+.act-aviso{padding:.55rem .75rem;border:1px solid var(--borde-ambar,#a87400);background:var(--ambar-suave);color:#6b4500;border-radius:var(--r);font-size:.92rem;line-height:1.35}
 .act-aviso.info{border-color:var(--linea2);background:#f4f1ea;color:var(--tinta)}
 .cli-item[aria-pressed=true]{border-color:var(--verde);background:var(--verde-suave);box-shadow:0 0 0 1px var(--verde) inset}
-.cobro-chk{display:flex;gap:.7rem;align-items:flex-start;min-height:56px;padding:.6rem .8rem;border:1px solid var(--linea2);border-radius:var(--r);background:#fff;cursor:pointer}
+.cobro-chk{display:flex;gap:.7rem;align-items:flex-start;min-height:56px;padding:.6rem .8rem;border:1px solid var(--borde-control,#8f8672);border-radius:var(--r);background:#fff;cursor:pointer}
 .cobro-chk input{width:26px;height:26px;margin-top:.1rem;accent-color:var(--rojo);flex:0 0 auto}
 .cobro-chk small{display:block;color:var(--tinta2);font-weight:400;line-height:1.35}
 
@@ -336,7 +359,7 @@
 .tarifas{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:.5rem}
 .tarifa-btn{min-height:52px;text-align:left;justify-content:flex-start;line-height:1.2}
 .tarifa-btn[aria-pressed=true]{background:var(--rojo);border-color:var(--rojo);color:#fff}
-.otras-tarifas summary{display:inline-flex;align-items:center;min-height:48px;padding-inline:.9rem;border:1px solid var(--linea2);border-radius:var(--r);background:#fff;margin-bottom:.5rem}
+.otras-tarifas summary{display:inline-flex;align-items:center;min-height:48px;padding-inline:.9rem;border:1px solid var(--borde-control,#8f8672);border-radius:var(--r);background:#fff;margin-bottom:.5rem}
 .lin-prev{border:1px solid var(--linea);border-radius:12px;padding:.8rem 1rem;background:#fffdf8;display:flex;flex-direction:column;gap:.3rem}
 .lin-prev-tit{font-size:.78rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--tinta2)}
 .lin-prev-det{font-weight:600;overflow-wrap:anywhere;white-space:pre-line}
@@ -355,12 +378,14 @@
 .cc-fila{display:flex;gap:.5rem .7rem;align-items:center;justify-content:space-between;flex-wrap:wrap}
 .cc-txt{flex:1 1 120px;min-width:0;display:flex;flex-direction:column;gap:.05rem;overflow-wrap:anywhere;line-height:1.3}
 .cc-txt small{color:var(--tinta2)}
-.aviso-tarifa{display:flex;flex-direction:column;gap:.45rem;border:2px solid var(--ambar);background:var(--ambar-suave);border-radius:12px;padding:.65rem .8rem;color:#5c3d00;line-height:1.35}
+/* El nombre del cliente ocupa como mucho dos renglones para no quitarle lugar a las líneas (el nombre completo se ve al cobrar) */
+.cc-txt strong{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.aviso-tarifa{display:flex;flex-direction:column;gap:.45rem;border:2px solid var(--borde-ambar,#a87400);background:var(--ambar-suave);border-radius:12px;padding:.65rem .8rem;color:#5c3d00;line-height:1.35}
 .aviso-tarifa small{color:#6b4500}
 .aviso-botones{display:flex;flex-wrap:wrap;gap:.45rem}
 .aviso-botones .btn{flex:1 1 150px}
 .aviso-botones .btn.primario{flex:2 1 190px}
-.aviso-tarifa.lista{border:1px solid #a8d5bd;background:var(--verde-suave);color:#14583a}
+.aviso-tarifa.lista{border:1px solid var(--borde-ok,#3f8f66);background:var(--verde-suave);color:#14583a}
 .aviso-tarifa.lista small{color:#1f6b46}
-.aviso-tarifa.suave{flex-direction:row;align-items:center;justify-content:space-between;flex-wrap:wrap;border:1px dashed #d9b25d}
+.aviso-tarifa.suave{flex-direction:row;align-items:center;justify-content:space-between;flex-wrap:wrap;border:1px dashed var(--borde-ambar,#a87400)}
 .cobro-tarifa .aviso-tarifa{background:var(--ambar-suave)}

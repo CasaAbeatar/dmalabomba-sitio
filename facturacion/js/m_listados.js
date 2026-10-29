@@ -1,4 +1,4 @@
-// Listados: reportes de ventas facturadas. Datos: fx_listados2 (ventas netas de notas de crédito), ver sql/05_listados2.sql.
+// Informes (antes Listados): reportes de ventas facturadas. Datos: fx_listados2 (ventas netas de notas de crédito), ver sql/05_listados2.sql.
 import { h, money, num, fechaHora, horaCorta, fechaCorta, sumaDias, toast, nombrePropio, nombreLocal, TIPOS_SERVICIO, MEDIOS } from './util.js';
 import { listados2 } from './api_listados.js';
 import { selectorPeriodo, textoRango, fechaLarga } from './periodo.js';
@@ -14,7 +14,7 @@ const nombreMedio = (m) => MEDIOS[m] || m;
 const todosLosDias = (d, a) => { const r = []; for (let x = d; x <= a && r.length < 800; x = sumaDias(x, 1)) r.push(x); return r; };
 
 export default {
-  id: 'listados', titulo: 'Listados',
+  id: 'listados', titulo: 'Informes',
   async mount(root, app) {
     if (!document.getElementById('css-listados')) document.head.append(h('link', { id: 'css-listados', rel: 'stylesheet', href: cssUrl }));
     const limpiezas = [];
@@ -33,7 +33,7 @@ export default {
       h('button.btn', { type: 'button', onclick: () => { est.demo = false; cargar(est.desde, est.hasta); } }, 'Volver a los datos reales'));
 
     root.append(
-      h('div.lis-cab', h('div', h('h1', 'Listados de ventas'), h('p.tenue', 'Ventas ya facturadas de ', h('strong', nomSoc), '. Las cifras vienen de las facturas y tiquetes emitidos; las notas de crédito se restan.')),
+      h('div.lis-cab', h('div', h('p.tenue', 'Ventas ya facturadas de ', h('strong', nomSoc), '. Las cifras vienen de las facturas y tiquetes emitidos; las notas de crédito se restan.')),
         h('button.btn', { type: 'button', onclick: (e) => imprimir(e.currentTarget) }, 'Imprimir resumen')),
       h('div.tarjeta.lis-filtros', periodo.el, turnoCaja),
       demoBanner, rotulo, resumenEl, cuerpo);
@@ -172,8 +172,8 @@ export default {
       const datos = serie.map((x) => ({ id: x.hora, etiqueta: etq(x.hora), valor: +x.total, texto: `De ${rangoH(x.hora)}: ${money(x.total)} en ${x.docs} ${x.docs === 1 ? 'venta' : 'ventas'}.` }));
       const mejor = serie.reduce((a, b) => (+b.total > +a.total ? b : a), serie[0]);
       const csv = () => csvBajar(nombreArchivo('Ventas por hora'), ['Hora (inicio)', 'Ventas (número)', 'Monto con IVA'], serie.map((x) => [etq(x.hora), +x.docs, +x.total]));
-      return seccion('Ventas por hora', `Suma de todos los días del periodo. La hora con más ventas es ${etq(mejor.hora)} a ${String(mejor.hora).padStart(2, '0')}:59 (${money(mejor.total)}). No incluye ventas anuladas con nota de crédito.`, csv,
-        conGrafico('col', datos, { tituloX: 'Hora del día (formato de 24 horas, la columna de 7:00 son las ventas entre 7:00 y 7:59)', tituloY: 'Ventas (₡, IVA incluido)', color: 'ambar', anchoEtiqueta: 36, descripcion: 'Gráfico de columnas de ventas por hora del día' }));
+      return seccion('Ventas por hora', `Suma de todos los días del periodo. Cada columna es una hora completa: la de 7:00 son las ventas entre 7:00 y 7:59. La hora con más ventas es ${etq(mejor.hora)} a ${String(mejor.hora).padStart(2, '0')}:59 (${money(mejor.total)}). No incluye ventas anuladas con nota de crédito.`, csv,
+        conGrafico('col', datos, { tituloX: 'Hora del día (24 horas)', tituloY: 'Ventas (₡, IVA incluido)', color: 'ambar', anchoEtiqueta: 36, descripcion: 'Gráfico de columnas de ventas por hora del día' }));
     }
 
     /* ---------- medio de pago y tipo de servicio ---------- */
@@ -229,8 +229,8 @@ export default {
     function avisoRechazados(rech) {
       const n = +rech.n || 0;
       return h('div.lis-aviso.mal',
-        h('div', h('b', `${n} ${n === 1 ? 'documento fue rechazado' : 'documentos fueron rechazados'} por Hacienda`), ` (${money(rech.total)}). No cuentan en las ventas de arriba. Si eran ventas reales, hay que hacerlas de nuevo en Caja.`),
-        h('button.btn', { type: 'button', onclick: () => app.ir('documentos', { filtro: 'problemas', desde: est.desde }) }, 'Ver en Documentos del día'));
+        h('div', h('b', `${n} ${n === 1 ? 'documento fue rechazado' : 'documentos fueron rechazados'} por Hacienda`), ` (${money(rech.total)}). No cuentan en las ventas de arriba. Si eran ventas reales, hay que hacerlas de nuevo en Facturación.`),
+        h('button.btn', { type: 'button', onclick: () => app.ir('anular', { filtro: 'problemas', desde: est.desde }) }, 'Ver en Anular y reimprimir'));
     }
     function seccionRechazados(rech) {
       const lista = rech.lista || [];
@@ -239,7 +239,7 @@ export default {
           ? tablaSimple([{ t: 'Fecha y hora' }, { t: 'Documento' }, { t: 'Total', der: 1 }, { t: 'Qué dice Hacienda' }],
             lista.map((x) => [fechaHora(x.fecha), `${{ '01': 'Factura', '03': 'Nota de crédito', '04': 'Tiquete' }[x.tipo_doc] || 'Documento'} N.° ${x.numero}`, money(x.total), x.mensaje || 'Sin detalle']))
           : h('p.tenue', 'No hay detalle para mostrar.'),
-        +rech.n > lista.length ? h('p.tenue', `Se muestran los ${lista.length} más recientes de ${rech.n}. Los demás están en Documentos del día.`) : null);
+        +rech.n > lista.length ? h('p.tenue', `Se muestran los ${lista.length} más recientes de ${rech.n}. Los demás están en Anular y reimprimir.`) : null);
     }
 
     /* ---------- productos (código de 6 dígitos: cajón + producto + modificador) ---------- */

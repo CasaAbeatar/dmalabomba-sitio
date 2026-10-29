@@ -1,9 +1,10 @@
 // Gráficos SVG propios (sin librerías). Ejes con título en palabras, orden cronológico, valores al tocar.
 // Los estilos están en css/listados.css (clases .gr ...).
+import { atributoSeguro } from './util.js';
 const NS = 'http://www.w3.org/2000/svg';
 export function s(tag, attrs = {}, ...kids) {
   const e = document.createElementNS(NS, tag);
-  for (const [k, v] of Object.entries(attrs)) if (v != null && v !== false) e.setAttribute(k, v === true ? '' : v);
+  for (const [k, v] of Object.entries(attrs)) if (v != null && v !== false && atributoSeguro(k, v === true ? '' : v, tag)) e.setAttribute(k, v === true ? '' : v);
   kids.flat().forEach((k) => { if (k != null && k !== false) e.append(k.nodeType ? k : document.createTextNode(String(k))); });
   return e;
 }
@@ -32,6 +33,30 @@ function escala(vmin, vmax, n = 4) {
 function ajustar(texto, max) { // recorta con puntos suspensivos según un ancho aproximado (6,2 px por letra a 11 px)
   const maxChars = Math.max(4, Math.floor(max / 6.2));
   return texto.length > maxChars ? texto.slice(0, maxChars - 1) + '…' : texto;
+}
+
+// Parte un título de eje en hasta 2 renglones para que nunca se salga del gráfico (6,3 px por letra a 11,5 px)
+function partir(texto, maxPx) {
+  const t = String(texto || '').trim();
+  const maxChars = Math.max(10, Math.floor(maxPx / 6.3));
+  if (t.length <= maxChars) return t ? [t] : [];
+  const lineas = [''];
+  for (const p of t.split(' ')) {
+    const l = lineas[lineas.length - 1], prueba = (l + ' ' + p).trim();
+    if (prueba.length <= maxChars) lineas[lineas.length - 1] = prueba; else lineas.push(p);
+  }
+  if (lineas.length > 2) { const resto = lineas.slice(1).join(' '); lineas.length = 2; lineas[1] = resto.length > maxChars ? resto.slice(0, maxChars - 1) + '…' : resto; }
+  return lineas;
+}
+// Título del eje horizontal (abajo, centrado). El último renglón queda pegado al borde de abajo.
+function tituloEjeX(svg, texto, cx, H, ancho) {
+  const ls = partir(texto, ancho);
+  ls.forEach((t, i) => svg.append(s('text', { class: 'eje-tit', x: cx, y: H - 6 - (ls.length - 1 - i) * 13, 'text-anchor': 'middle' }, t)));
+}
+// Título del eje vertical (a la izquierda, girado)
+function tituloEjeY(svg, texto, cy, alto) {
+  const ls = partir(texto, alto);
+  ls.forEach((t, i) => svg.append(s('text', { class: 'eje-tit', transform: `translate(${ls.length > 1 ? 11 + i * 13 : 14} ${cy}) rotate(-90)`, 'text-anchor': 'middle' }, t)));
 }
 
 // Columnas verticales. datos: [{id, etiqueta, valor, texto}]  (texto = lectura completa al tocar)
@@ -63,8 +88,8 @@ export function graficoColumnas(datos, o = {}) {
     return r;
   });
   // títulos de ejes en palabras
-  svg.append(s('text', { class: 'eje-tit', x: M.l + pw / 2, y: H - 6, 'text-anchor': 'middle' }, o.tituloX || ''));
-  svg.append(s('text', { class: 'eje-tit', transform: `translate(14 ${M.t + ph / 2}) rotate(-90)`, 'text-anchor': 'middle' }, o.tituloY || ''));
+  tituloEjeX(svg, o.tituloX, M.l + pw / 2, H, W - 16);
+  tituloEjeY(svg, o.tituloY, M.t + ph / 2, ph);
   // zonas para tocar (una por columna, de arriba abajo)
   let sel = o.seleccionado ?? -1;
   const marcar = (i) => { sel = i; barras.forEach((b, k) => b.classList.toggle('sel', k === i)); };
@@ -113,8 +138,8 @@ export function graficoBarras(datos, o = {}) {
     barras.push(r); svg.append(r);
     svg.append(s('text', { class: 'val', x: xx(0) + bw + 6, y: cy + 4 }, corto(d.valor) + (d.extra ? ' · ' + d.extra : '')));
   });
-  svg.append(s('text', { class: 'eje-tit', x: M.l + pw / 2, y: H - 6, 'text-anchor': 'middle' }, o.tituloX || ''));
-  svg.append(s('text', { class: 'eje-tit', transform: `translate(12 ${M.t + (datos.length * fila) / 2}) rotate(-90)`, 'text-anchor': 'middle' }, o.tituloY || ''));
+  tituloEjeX(svg, o.tituloX, M.l + pw / 2, H, W - 16);
+  tituloEjeY(svg, o.tituloY, M.t + (datos.length * fila) / 2, datos.length * fila);
   const marcar = (i) => barras.forEach((b, k) => b.classList.toggle('sel', k === i));
   datos.forEach((d, i) => {
     const z = s('rect', { class: 'zona', x: 0, y: M.t + i * fila, width: W, height: fila, tabindex: 0, role: 'button', 'aria-label': d.texto || d.etiqueta });

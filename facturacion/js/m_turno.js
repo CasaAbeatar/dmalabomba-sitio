@@ -1,5 +1,5 @@
 // Cierre de caja: solo se cuenta el EFECTIVO. Debe haber en caja = fondo + ventas en efectivo - salidas - devoluciones en efectivo por notas de crédito.
-import { h, money, leerNumero, r2, toast, modal, conBoton, fechaHora, fechaCorta, esqueleto, bloqueError, nombreLocal, TIPOS_SERVICIO, MEDIOS } from './util.js';
+import { h, money, leerNumero, r2, toast, modal, conBoton, fechaHora, fechaCorta, horaCorta, esqueleto, bloqueError, nombreLocal, conPistaDesliz, hoyCR, TIPOS_SERVICIO, MEDIOS } from './util.js';
 import { esTransitorio } from './api.js';
 import { abrirSalidas, anularSalida, listaSalidas } from './ui_salidas.js';
 
@@ -18,6 +18,10 @@ const OTROS = ['tarjeta', 'sinpe', 'transferencia'];
 const TODOS = ['efectivo', 'tarjeta', 'sinpe', 'transferencia'];
 const cents = (n) => Math.round((Number(n) || 0) * 100);
 const numCuenta = (n) => '#' + String(n || '').split('-').pop();
+
+// Fecha y hora que se pueden partir en dos renglones sin cortar los números (celular)
+const fechaPartida = (d) => (d ? [h('span.nw', fechaCorta(d) + ','), ' ', h('span.nw', horaCorta(d))] : '');
+const ymdDe = (iso) => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Costa_Rica' }).format(new Date(iso));
 
 function duracion(desde, hasta) {
   const min = Math.max(0, Math.round((new Date(hasta) - new Date(desde)) / 60000));
@@ -46,6 +50,8 @@ function datosResumen(est) {
     ventas: Number(est.ventas || 0), totalVentas: Number(est.total_ventas || 0),
     notasCredito: Number(est.notas_credito || 0), sinAceptar: Number(est.sin_aceptar || 0),
     anuladasN: Number(est.ventas_anuladas_n || 0), anuladasTotal: Number(est.ventas_anuladas_total || 0),
+    // Ventas cobradas cuyo documento Hacienda no aceptó (fx_turno_estado.rechazadas_n y rechazadas_total). Siguen contadas en el total: la plata sí se cobró.
+    rechazadasN: Number(est.rechazadas_n || 0), rechazadasTotal: Number(est.rechazadas_total || 0),
   };
 }
 
@@ -59,6 +65,12 @@ function chipDif(dif) {
   return h('span.dif.' + (c === 0 ? 'cuadra' : c > 0 ? 'sobra' : 'falta'), textoDif(dif));
 }
 
+// «Incluye 1 venta (₡5 000,00) cuyo documento Hacienda no aceptó. Informes no la cuenta.»
+function textoRechazadas(d) {
+  const uno = d.rechazadasN === 1;
+  return `Incluye ${d.rechazadasN} ${uno ? 'venta' : 'ventas'} (${money(d.rechazadasTotal)}) cuyo${uno ? '' : 's'} documento${uno ? '' : 's'} Hacienda no aceptó. Informes no ${uno ? 'la cuenta' : 'las cuenta'}.`;
+}
+
 // Filas de la cuenta: abrió + ventas - salidas = debe haber
 function bloqueCalculo(d, { alAnularSalida, extra } = {}) {
   return h('div.calc',
@@ -66,18 +78,19 @@ function bloqueCalculo(d, { alAnularSalida, extra } = {}) {
     h('div.calc-fila', h('span', h('span.op', '+'), 'Ventas en efectivo'), h('span.v', money(d.efVentas))),
     h('div.calc-fila', h('span', h('span.op', '−'), 'Salidas de efectivo'), h('span.v', money(d.totSal))),
     d.salidas.length || alAnularSalida ? h('div.calc-sub', listaSalidas(d.salidas, alAnularSalida)) : null,
-    d.devoluciones != null ? h('div.calc-fila', h('span', h('span.op', '−'), 'Devoluciones en efectivo por notas de crédito', d.devoluciones > 0 ? h('small.calc-nota', 'Dinero que se le devolvió a clientes al anular ventas durante este turno.') : null), h('span.v', money(d.devoluciones))) : null,
+    d.devoluciones != null ? h('div.calc-fila', h('span', h('span.op', '−'), 'Efectivo de ventas anuladas con nota de crédito', d.devoluciones > 0 ? h('small.calc-nota', 'Efectivo de ventas anuladas con nota de crédito en este turno. Se resta porque ese dinero debe haber salido de la caja.') : null), h('span.v', money(d.devoluciones))) : null,
     h('div.calc-fila.total', h('span', h('span.op', '='), 'Debe haber en caja'), h('span.v', money(d.esperado))),
     extra);
 }
 
 // Lo vendido en el turno por cada medio de pago, calculado por el sistema
-function bloqueVentas(d) {
+function bloqueVentas(d, { alVer } = {}) {
   return h('div.tarjeta.col',
     h('div.fila.sep', h('h3', 'Vendido en el turno'), h('span.chip.ok', 'Registrado automáticamente por el sistema')),
     h('div.ventas-medios',
       d.porMedio.map((o) => h('div.dato', h('div.et', MEDIOS[o.medio]), h('div.val', money(o.monto)))),
       h('div.dato.total', h('div.et', 'Total vendido'), h('div.val', money(d.totalVentas)), h('div.det', d.ventas + (d.ventas === 1 ? ' venta' : ' ventas') + ', IVA incluido'))),
+    d.rechazadasN > 0 ? h('div.aviso-rechazadas', { role: 'note' }, h('span', textoRechazadas(d)), alVer ? h('button.btn.chico', { type: 'button', onclick: alVer }, 'Ver esos documentos') : null) : null,
     d.anuladasN > 0 ? h('p.tenue-linea', `De ese total, ${d.anuladasN} ${d.anuladasN === 1 ? 'venta se anuló' : 'ventas se anularon'} con nota de crédito (${money(d.anuladasTotal)}). Sin esas ventas anuladas, lo vendido es ${money(r2(d.totalVentas - d.anuladasTotal))}.`) : null,
     h('p.tenue-linea', 'Solo el efectivo se cuenta a mano. Tarjeta, SINPE Móvil y transferencia los suma el sistema con cada cobro.'));
 }
@@ -87,8 +100,8 @@ function nodoPantalla(d) {
   const t = d.t;
   return h('div.col',
     h('div.turno-datos',
-      h('div.dato', h('div.et', 'Abrió'), h('div.val', fechaHora(t.abierto_en)), h('div.det', t.abierto_por || '')),
-      h('div.dato', h('div.et', 'Cerró'), h('div.val', t.cerrado_en ? fechaHora(t.cerrado_en) : 'Sigue abierta'), h('div.det', t.cerrado_en ? (t.cerrado_por || '') + ' · duró ' + duracion(t.abierto_en, t.cerrado_en) : 'Lleva ' + duracion(t.abierto_en, new Date()))),
+      h('div.dato', h('div.et', 'Abrió'), h('div.val', fechaPartida(t.abierto_en)), h('div.det', t.abierto_por || '')),
+      h('div.dato', h('div.et', 'Cerró'), h('div.val', t.cerrado_en ? fechaPartida(t.cerrado_en) : 'Sigue abierta'), h('div.det', t.cerrado_en ? (t.cerrado_por || '') + ' · duró ' + duracion(t.abierto_en, t.cerrado_en) : 'Lleva ' + duracion(t.abierto_en, new Date()))),
       h('div.dato', h('div.et', 'Notas de crédito'), h('div.val', money(d.notasCredito)), h('div.det', 'Durante el turno'))),
     bloqueVentas(d),
     h('div.tarjeta',
@@ -121,6 +134,7 @@ function nodoImpresion(d, soc) {
     d.porMedio.map((o) => fila(MEDIOS[o.medio], money(o.monto))),
     fila('TOTAL VENDIDO', money(d.totalVentas)),
     fila('Ventas', String(d.ventas)),
+    d.rechazadasN > 0 ? h('div.c.p', textoRechazadas(d)) : null,
     fila('Notas de crédito', money(d.notasCredito)),
     h('hr'),
     h('div.c', h('b', 'EFECTIVO EN LA CAJA')),
@@ -128,7 +142,7 @@ function nodoImpresion(d, soc) {
     fila('+ Ventas en efectivo', money(d.efVentas)),
     fila('- Salidas de efectivo', money(d.totSal)),
     d.salidas.map((s) => h('div.f.sal', h('span', '  ' + s.motivo), h('span', money(s.monto)))),
-    d.devoluciones != null ? fila('- Devoluciones en efectivo', money(d.devoluciones)) : null,
+    d.devoluciones != null ? fila('- Ventas anuladas en efectivo', money(d.devoluciones)) : null,
     fila('= Debe haber en caja', money(d.esperado)),
     d.cerrado ? fila('Efectivo contado', money(d.contado)) : null,
     d.cerrado ? fila('Diferencia', textoDif(d.dif)) : null,
@@ -172,7 +186,7 @@ function imprimirNodo(nodo, titulo) {
 
 export default {
   id: 'turno',
-  titulo: 'Cierre de caja',
+  titulo: 'Apertura y cierre de caja',
   async mount(root, app) {
     await cargarCss();
     const api = app.api;
@@ -215,7 +229,7 @@ export default {
     function pintar() {
       if (!vivo) return;
       contenedor.replaceChildren(
-        h('div', h('h1', 'Cierre de caja'), h('p.tenue', nombreLocal(soc) + '. Un turno no es el día: empieza cuando se abre la caja y termina cuando se cierra, aunque cruce la medianoche.')),
+        h('p.tenue.mt-intro', nombreLocal(soc) + '. Un turno no es el día: empieza cuando se abre la caja y termina cuando se cierra, aunque cruce la medianoche.'),
         final ? seccionFinal() : (turnoVisto && est ? seccionActual() : seccionSinTurno()),
         seccionHistorial());
     }
@@ -228,12 +242,12 @@ export default {
         nodoPantalla(d),
         h('div.fila',
           h('button.btn.primario.grande', { type: 'button', onclick: () => imprimirNodo(nodoImpresion(d, soc)) }, 'Imprimir resumen del cierre'),
-          h('button.btn.grande', { type: 'button', onclick: () => app.ir('caja') }, 'Ir a abrir una caja nueva')));
+          h('button.btn.grande', { type: 'button', onclick: () => app.ir('caja') }, 'Abrir una caja nueva')));
     }
 
     function seccionSinTurno() {
       return h('section.tarjeta', h('h2', 'La caja está cerrada'), h('p', 'No hay un turno abierto en este local. Para vender hay que abrir la caja.'),
-        h('button.btn.primario.grande', { type: 'button', onclick: () => app.ir('caja') }, 'Ir a abrir la caja'));
+        h('button.btn.primario.grande', { type: 'button', onclick: () => app.ir('caja') }, 'Abrir la caja'));
     }
 
     /* ---------- Turno abierto: conteo del efectivo ---------- */
@@ -269,18 +283,18 @@ export default {
       const avisoAbiertas = abiertas.length ? h('div.aviso-abiertas',
         h('strong', 'Hay ' + abiertas.length + (abiertas.length === 1 ? ' cuenta abierta sin cobrar' : ' cuentas abiertas sin cobrar')),
         h('span', 'Antes de cerrar hay que cobrarlas o anularlas.'),
-        h('div.fila', h('button.btn', { type: 'button', onclick: () => app.ir('caja') }, 'Volver a la caja a cobrarlas'))) : null;
+        h('div.fila', h('button.btn', { type: 'button', onclick: () => app.ir('caja') }, 'Volver a Facturación a cobrarlas'))) : null;
       const alAnular = async (s) => { if (await anularSalida(api, s)) await recargarTurno(); };
 
       const sec = h('section.col',
         h('h2', 'Turno abierto'),
         h('div.turno-datos',
-          h('div.dato', h('div.et', 'Abrió'), h('div.val', fechaHora(t.abierto_en)), h('div.det', (t.abierto_por || '') + ' · lleva ' + duracion(t.abierto_en, new Date()))),
+          h('div.dato', h('div.et', 'Abrió'), h('div.val', fechaPartida(t.abierto_en)), h('div.det', (t.abierto_por || '') + ' · lleva ' + duracion(t.abierto_en, new Date()))),
           h('div.dato', h('div.et', 'Notas de crédito'), h('div.val', money(d.notasCredito)), h('div.det', 'Durante el turno')),
           h('div.dato', h('div.et', 'Cuentas abiertas'), h('div.val', String(abiertas.length)), h('div.det', abiertas.length ? 'Sin cobrar' : 'Todo cobrado'))),
-        d.sinAceptar ? h('div.aviso-abiertas', h('strong', d.sinAceptar + (d.sinAceptar === 1 ? ' comprobante todavía no aceptado por Hacienda' : ' comprobantes todavía no aceptados por Hacienda')), h('span', 'Esto no impide cerrar la caja. Quedan en «Documentos del día».')) : null,
+        d.sinAceptar ? h('div.aviso-abiertas', h('strong', d.sinAceptar + (d.sinAceptar === 1 ? ' comprobante todavía no aceptado por Hacienda' : ' comprobantes todavía no aceptados por Hacienda')), h('span', 'Esto no impide cerrar la caja. Quedan en «Anular y reimprimir».')) : null,
         avisoAbiertas,
-        bloqueVentas(d),
+        bloqueVentas(d, { alVer: () => app.ir('anular', { filtro: 'problemas', desde: ymdDe(t.abierto_en) < hoyCR() ? ymdDe(t.abierto_en) : null }) }),
         h('div.tarjeta',
           h('h3', 'Cuánto efectivo debe haber'),
           bloqueCalculo(d, { alAnularSalida: alAnular }),
@@ -313,10 +327,10 @@ export default {
     function avisarAbiertas(lista, d, contado, notasTxt) {
       modal({ titulo: 'Hay cuentas sin cobrar', ancho: 520,
         contenido: h('div.col',
-          h('p.conf', 'No se puede cerrar la caja con cuentas abiertas. Cóbrelas en la caja o anúlelas aquí.'),
+          h('p.conf', 'No se puede cerrar la caja con cuentas abiertas. Cóbrelas en Facturación o anúlelas aquí.'),
           h('ul', { style: 'margin:0;padding-left:1.2rem' }, lista.map((c) => h('li', (TIPOS_SERVICIO[c.tipo_servicio] || c.tipo_servicio) + ' ' + (c.referencia || numCuenta(c.numero)) + ' · ' + money(c.total) + (c.estado === 'prefacturada' ? ' · con prefactura' : ''))))),
         botones: [
-          { texto: 'Volver a la caja', clase: 'primario', onclick: (c) => { c(); app.ir('caja'); } },
+          { texto: 'Volver a Facturación', clase: 'primario', onclick: (c) => { c(); app.ir('caja'); } },
           { texto: 'Anular estas ' + lista.length + (lista.length === 1 ? ' cuenta' : ' cuentas'), clase: 'peligro', onclick: (c) => { c(); anularTodas(lista, d, contado, notasTxt); } },
           { texto: 'Cancelar', onclick: (c) => c() }] });
     }
@@ -411,9 +425,9 @@ export default {
       return h('section.col',
         h('h2', 'Turnos anteriores'),
         h('p.tenue', 'Del más reciente al más antiguo. Las horas son de Costa Rica. Lo vendido por cada medio lo registra el sistema; solo el efectivo se cuenta a mano.'),
-        h('div.tabla-caja', h('table.tabla.hist',
+        conPistaDesliz(h('div.tabla-caja', h('table.tabla.hist',
           h('thead', h('tr', ['Abrió', 'Cerró', 'Abierta por', 'Fondo', 'Debía haber en caja', 'Contado', 'Diferencia', 'Vendido en efectivo', 'Vendido con tarjeta', 'Vendido por SINPE', 'Vendido por transferencia', 'Total vendido', ''].map((x, i) => h('th' + (i === 3 || i === 4 || i === 5 || i >= 7 && i <= 11 ? '.der' : ''), x)))),
-          h('tbody', filas))));
+          h('tbody', filas))), 'Deslice la tabla hacia los lados para ver más columnas: lo vendido por cada medio, el total y el botón «Ver resumen».'));
     }
 
     async function verDetalle(t) {

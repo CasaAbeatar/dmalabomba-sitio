@@ -32,7 +32,7 @@ export function estadoFila(f) {
 }
 
 export default {
-  id: 'recepcion', titulo: 'Recepción',
+  id: 'recepcion', titulo: 'Contable',
   async mount(root, app) {
     if (!document.getElementById('css-recepcion')) document.head.append(h('link', { id: 'css-recepcion', rel: 'stylesheet', href: cssUrl }));
     const soc = app.soc; const nomLocal = nombreLocal(soc);
@@ -51,7 +51,7 @@ export default {
     const btnCorreo = h('button.btn', { type: 'button', onclick: () => conBoton(btnCorreo, buscarCorreo) }, 'Buscar facturas nuevas en el correo');
 
     root.append(
-      h('div.rec-cab', h('div', h('h1', 'Facturas de proveedores'),
+      h('div.rec-cab', h('div', h('h2', 'Facturas de proveedores'),
         h('p.tenue', 'Facturas que llegaron a los correos de contabilidad a nombre de ', h('strong', nomLocal), soc?.cedula ? ` (cédula ${soc.cedula})` : '', '. Aquí no aparecen las facturas que emiten nuestros propios negocios.')),
         h('div.rec-cab-botones', btnCorreo)),
       estadoCorreo, kpis, tabs, periodoCaja, h('label.etq.rec-buscar', 'Buscar', campoBusqueda(buscar, () => { est.q = ''; cargar(); })), rotulo, resumen, lista);
@@ -100,7 +100,7 @@ export default {
       }
     }
 
-    // La insignia de la pestaña «Recepción» la dibuja el encabezado (main.js), con la misma cifra que esta pantalla y el aviso de arriba
+    // La insignia de las tarjetas de Contable y de Administración la dibuja el inicio (ui_inicio.js, con la cifra de app.recepcion), con la misma cifra que esta pantalla y el aviso de arriba
     const marcarPestana = (c) => app.alertas?.fijarRecepcion?.(c);
 
     function pintarKpis() {

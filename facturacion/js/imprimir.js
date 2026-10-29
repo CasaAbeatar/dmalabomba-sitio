@@ -31,7 +31,7 @@
 
 import { api } from './api.js';
 import { tarifaDeLinea } from './iva.js';
-import { h, esc, money, num, r2, modal, toast, conBoton, fechaCorta, horaCorta, TIPOS_ID, TIPOS_SERVICIO, MEDIOS } from './util.js';
+import { h, esc, money, num, r2, modal, toast, conBoton, fechaCorta, horaCorta, nombrePropio, TIPOS_ID, TIPOS_SERVICIO, MEDIOS } from './util.js';
 
 /* ------------------------------------------------------------------ constantes */
 
@@ -176,13 +176,14 @@ export { direccion as formatoDireccion, fmtCedula as formatoCedula, fmtTel as fo
 function datosSoc(s = {}) {
   const codigo = s.codigo === 'pollos' ? 'pollos' : 'soda';
   return {
-    codigo, comercial: nombreComercial(s.nombre_comercial || s.nombre || ''), razon: s.nombre || '', cedula: fmtCedula(s.cedula, s.cedula_tipo || '02'),
+    codigo, comercial: nombreComercial(s.nombre_comercial || s.nombre || ''), razon: nombrePropio(s.nombre), cedula: fmtCedula(s.cedula, s.cedula_tipo || '02'),
     tel: fmtTel(s.telefono), dir: direccion(s), correo: s.correo || '', ambiente: s.ambiente,
   };
 }
 function datosCliente(c) {
   if (!c || !(c.nombre || c.identificacion)) return null;
-  return { nombre: c.nombre || '', comercial: c.nombre_comercial || '', tipoId: TIPOS_ID[c.tipo_id] || '', ident: fmtCedula(c.identificacion, c.tipo_id), correo: c.correo || '', tel: fmtTel(c.telefono), dir: direccion(c) };
+  // Solo para mostrar: "CORPORACION DMA..." se imprime como nombre propio. El XML que va a Hacienda conserva el original.
+  return { nombre: nombrePropio(c.nombre), comercial: nombrePropio(c.nombre_comercial), tipoId: TIPOS_ID[c.tipo_id] || '', ident: fmtCedula(c.identificacion, c.tipo_id), correo: c.correo || '', tel: fmtTel(c.telefono), dir: direccion(c) };
 }
 
 export function modeloComprobante(c) {
@@ -625,7 +626,15 @@ function comandoChrome() {
 export function abrirAjustesImpresion() {
   let aj = leerAjustes();
   const guardado = h('small.fx-guardado', 'Los cambios se guardan solos en este aparato.');
-  const cambiar = (k, v) => { aj = guardarAjustes({ [k]: v }); guardado.textContent = 'Guardado.'; };
+  // Frase que dice, en palabras, qué pasa en ESTE aparato al terminar un cobro (se actualiza al cambiar la opción)
+  const estadoAuto = h('div.fx-estado', { role: 'status' });
+  const pintarEstadoAuto = () => {
+    estadoAuto.className = 'fx-estado ' + (aj.auto ? 'si' : 'no');
+    estadoAuto.textContent = aj.auto
+      ? 'En este aparato: ENCENDIDA. Al terminar cada cobro sale ' + (aj.formato === 'carta' ? 'la factura carta' : 'el tiquete') + ' solo.'
+      : 'En este aparato: APAGADA. Al terminar el cobro no sale nada solo; aparece el botón «Imprimir tiquete» para tocarlo si el cliente lo quiere.';
+  };
+  const cambiar = (k, v) => { aj = guardarAjustes({ [k]: v }); guardado.textContent = 'Guardado.'; pintarEstadoAuto(); };
   const grupo = (tit, ayuda, ...ctl) => h('div.fx-grupo', h('div.fx-tit', tit), ayuda ? h('div.fx-ayuda', ayuda) : null, ...ctl);
 
   const cmd = comandoChrome();
@@ -640,8 +649,8 @@ export function abrirAjustesImpresion() {
       seg([[80, 'Papel de 80 mm'], [58, 'Papel de 58 mm']], aj.papel, (v) => cambiar('papel', Number(v)), 'Ancho del papel')),
     grupo('Copias de cada tiquete', 'Cuántas copias salen cada vez que se imprime.',
       seg([[1, '1 copia'], [2, '2 copias'], [3, '3 copias']], aj.copias, (v) => cambiar('copias', Number(v)), 'Copias')),
-    grupo('Imprimir automáticamente al cobrar', 'Si dice Sí, al terminar cada cobro se manda a imprimir solo. Si dice No, se imprime tocando el botón.',
-      seg([['si', 'Sí, imprimir solo'], ['no', 'No, yo lo pido']], aj.auto ? 'si' : 'no', (v) => cambiar('auto', v === 'si'), 'Imprimir automáticamente')),
+    grupo('Imprimir automáticamente al cobrar', 'Encienda esto en cada aparato que tenga impresora (la computadora o la tableta de la caja). En los demás aparatos, como los celulares, déjelo apagado y el tiquete se imprime tocando el botón. Cada aparato guarda su propia opción.',
+      seg([['si', 'Sí, imprimir solo'], ['no', 'No, yo lo pido']], aj.auto ? 'si' : 'no', (v) => cambiar('auto', v === 'si'), 'Imprimir automáticamente'), estadoAuto),
     grupo('Qué se imprime automáticamente', 'Solo aplica si arriba escogió que se imprima solo.',
       seg([['tiquete', 'Tiquete (rollo)'], ['carta', 'Factura carta (hoja)']], aj.formato, (v) => cambiar('formato', v), 'Formato automático')),
     grupo('Tamaño de la hoja para la factura carta', null,
@@ -663,5 +672,6 @@ export function abrirAjustesImpresion() {
       h('p.fx-nota', 'Importante: con este acceso directo todo se imprime en la impresora predeterminada. Para una factura carta en hoja normal, abra el sistema con el Chrome de siempre (el que muestra la ventanita) y escoja la impresora de hojas ahí.'),
       h('p.fx-nota', 'En celular o tableta no hay forma de saltarse la ventanita: aparece la ventana de impresión del aparato y ahí se escoge la impresora.')));
 
+  pintarEstadoAuto();
   modal({ titulo: 'Ajustes de impresión', contenido, ancho: 680, botones: [{ texto: 'Listo', clase: 'primario', onclick: (c) => c() }] });
 }

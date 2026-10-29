@@ -6,7 +6,7 @@ import { apiM } from './api_mantenimiento.js';
 import { esTransitorio } from './api.js';
 import { TARIFAS_IVA, tarifaDeLinea, desgloseIva, tarifaHabitual } from './iva.js';
 import { infoActividad, textoActividad } from './actividades.js';
-import { h, money, money0, num, leerNumero, toast, modal, pedir, confirmar, conBoton, esqueleto, bloqueError, nombreLocal, TIPOS_SERVICIO, TIPOS_DOC, TIPOS_ID, MEDIOS, describirEstado, numeroDoc } from './util.js';
+import { h, money, money0, num, leerNumero, toast, modal, pedir, confirmar, conBoton, esqueleto, bloqueError, nombreLocal, TIPOS_SERVICIO, TIPOS_DOC, TIPOS_ID, MEDIOS, describirEstado, traducirHacienda, numeroDoc, nombrePropio } from './util.js';
 
 const CSS_URL = new URL('../css/caja.css', import.meta.url).href;
 function cargarCss() {
@@ -30,6 +30,34 @@ const plano = (n) => String(Number(n)); // para campos de texto: sin separador d
 // Lo que se muestra en lugar del precio: el genérico pide detalle y precio al agregarlo
 const textoPrecio = (p) => (p.descripcion_libre ? 'Detalle y precio' : p.precio_abierto ? 'Precio abierto' : money(p.precio_final));
 const fino = () => window.matchMedia?.('(pointer:fine)').matches ?? true;
+// Lleva un campo a la parte que sí se ve de su ventana cuando se abre el teclado del celular (el pie con los botones lo tapaba).
+// Se repite un instante después porque el teclado tarda en abrirse, y otra vez si la ventana visible cambia de tamaño.
+// Si el teclado tapa la parte de abajo SIN achicar la página (iPhone y Android recientes), se agrega espacio al final del contenido
+// mientras el campo tiene el foco, para que pueda subir lo suficiente. El espacio va dentro del contenido (no en la ventana) para que el
+// pie fijo con «Volver» y «Cobrar» no cambie de lugar.
+function llevarALaVista(el) {
+  const cont = el.closest('.modal-cuerpo');
+  const relleno = el.closest('.cobro') || cont;
+  const ir = () => {
+    if (!el.isConnected || document.activeElement !== el) return;
+    const vv = window.visualViewport;
+    const tapado = vv ? Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop)) : 0;
+    if (relleno) relleno.style.paddingBottom = tapado > 80 ? tapado + 'px' : '';
+    try { el.scrollIntoView({ block: 'center', inline: 'nearest' }); } catch { el.scrollIntoView(); }
+    if (tapado > 80) {
+      const r = el.getBoundingClientRect(), limite = vv.offsetTop + vv.height - 16;
+      if (r.bottom > limite) (cont || document.scrollingElement).scrollTop += r.bottom - limite;
+    }
+  };
+  setTimeout(ir, 60);
+  setTimeout(ir, 350);
+  const vv = window.visualViewport;
+  if (vv) vv.addEventListener('resize', ir);
+  el.addEventListener('blur', () => {
+    if (vv) vv.removeEventListener('resize', ir);
+    if (relleno) relleno.style.paddingBottom = '';
+  }, { once: true });
+}
 // Envuelve lo que hace un botón: si algo falla, se avisa en palabras en vez de dejar un error sin atender en la consola
 const seguro = (fn) => (...a) => Promise.resolve().then(() => fn(...a)).catch((e) => { console.error(e); toast((e && e.message) || 'Algo no salió bien. Intente de nuevo.', 'error', 7000); });
 // Motivos que se tocan de un solo toque al anular una cuenta abierta
@@ -48,6 +76,26 @@ function ajustesImp() {
   return { papel: Number(g.papel) === 58 ? 58 : 80, copias: Math.min(5, Math.max(1, parseInt(g.copias, 10) || 1)), auto: !!g.auto, formato: g.formato === 'carta' ? 'carta' : 'tiquete', hoja: g.hoja === 'a4' ? 'a4' : 'carta' };
 }
 const textoImpresion = (a) => (a.formato === 'carta' ? 'factura carta' : 'tiquete de ' + a.papel + ' mm') + ', ' + a.copias + (a.copias === 1 ? ' copia' : ' copias');
+// Estado del comprobante para la pantalla de éxito. Es el de describirEstado (util.js) más un caso: Hacienda lo aceptó PERO dejó un aviso
+// (por ejemplo, la ubicación del emisor). En ese caso se dice «Aceptado con aviso» y el aviso en palabras simples, para que no parezca un rechazo.
+function describirCobro(estado, mensaje) {
+  const d = describirEstado(estado, mensaje);
+  const items = traducirHacienda(mensaje).items;
+  if (d.estado === 'aceptado') {
+    const avisos = items.filter((i) => i.codigo);
+    if (!avisos.length) return d;
+    return { ...d, chip: 'Aceptado con aviso', clase: 'espera',
+      texto: 'Cobro registrado. Hacienda aceptó el comprobante, pero dejó un aviso: ' + avisos.map((i) => i.texto).join(' ') + ' No hace falta repetir el cobro.' };
+  }
+  if (d.estado === 'rechazado') {
+    // El código -37 (provincia, cantón o distrito del emisor) es solo un aviso: no es la causa del rechazo, así que no se mezcla con el motivo real
+    const causas = items.filter((i) => i.codigo !== '-37');
+    if (causas.length && causas.length < items.length) {
+      return { ...d, texto: 'Cobro registrado, pero Hacienda no aceptó el comprobante. Motivo: ' + causas.map((i) => i.texto).join(' ') + ' Avise a la persona encargada; el documento queda en «Documentos del día».' };
+    }
+  }
+  return d;
+}
 // Firma de una cuenta (para saber si un cambio que falló por la red sí llegó al servidor)
 const firmaCuenta = (c) => JSON.stringify([c.venta.total, c.venta.estado, (c.lineas || []).map((l) => [l.id, Number(l.cantidad), cents(l.precio_final), l.nota || '', l.producto_id, l.descripcion, l.codigo_tarifa_iva || '', Number(l.tarifa_iva)])]);
 
@@ -273,7 +321,8 @@ export default {
         barraMovil);
       root.replaceChildren(cajaEl);
       buscador.inp.addEventListener('focus', () => { cajaEl.classList.add('bus-activo'); if (!fino()) setTimeout(irAlBuscador, 250); });
-      buscador.inp.addEventListener('blur', () => cajaEl.classList.remove('bus-activo'));
+      // La barra compacta se queda un instante después de cerrar el teclado: si no, al tocar «Cobrar» el botón se movería antes de soltar el dedo y el toque se perdería
+      buscador.inp.addEventListener('blur', () => setTimeout(() => { if (cajaEl && document.activeElement !== buscador.inp) cajaEl.classList.remove('bus-activo'); }, 300));
       midePegajosos();
       pintarCajones(); pintarProductos();
       repintar();
@@ -687,7 +736,8 @@ export default {
       b.inp.focus();
     }
 
-    // Cada línea se ve compacta (nombre, total, cantidad y precio). «Opciones» abre la nota, el detalle e IVA, cambiar producto y quitar.
+    // Cada línea ocupa UNA fila de unos 64 px: nombre, cantidad (menos, número, más) y total, con el botón «Opciones» al lado.
+    // Todo lo demás (precio de cada uno con IVA, nota, detalle e IVA, cambiar producto y quitar) está dentro de «Opciones».
     const lineasAbiertas = new Set();
     // Lo que se lee bajo el nombre de una línea cuya tarifa no es la normal
     const rotuloIva = (t) => t.pct > 0 ? 'IVA ' + String(t.pct).replace('.', ',') + ' %' : t.codigo === '01' ? 'IVA 0 % (no sujeto)' : t.codigo === '11' ? 'IVA 0 % sin derecho a crédito' : 'Exenta de IVA';
@@ -697,11 +747,11 @@ export default {
       const cantidad = Number(l.cantidad);
       const qty = h('input.campo.cant-inp', { type: 'text', inputmode: 'decimal', value: plano(cantidad), 'aria-label': 'Cantidad de ' + l.descripcion, autocomplete: 'off' });
       const precio = h('input.campo.precio-inp', { type: 'text', inputmode: 'decimal', value: plano(l.precio_final), 'aria-label': 'Precio final con IVA de cada ' + l.descripcion, autocomplete: 'off' });
-      const nota = h('input.campo.nota-inp', { type: 'text', maxlength: 120, value: l.nota || '', placeholder: 'Nota (ej. sin cebolla)', 'aria-label': 'Nota de ' + l.descripcion, autocomplete: 'off' });
+      const nota = h('input.campo.nota-inp', { type: 'text', maxlength: 120, value: l.nota || '', placeholder: 'Ej. sin cebolla', 'aria-label': 'Nota de ' + l.descripcion, autocomplete: 'off' });
       const editar = (cambio, aviso) => accion(async () => { cur = await api.lineaEditar(l.id, cambio); repintar(); if (aviso) toast(aviso); });
       qty.addEventListener('change', () => {
         const v = leerCant(qty.value);
-        if (!(v > 0) || !Number.isFinite(v)) { toast('La cantidad tiene que ser mayor que cero. Para sacar el producto use «Quitar» (dentro de «Opciones»).', 'error'); qty.value = plano(cantidad); return; }
+        if (!(v > 0) || !Number.isFinite(v)) { toast('La cantidad tiene que ser mayor que cero. Para sacar el producto use «Opciones» y luego «Quitar de la cuenta».', 'error'); qty.value = plano(cantidad); return; }
         if (r3(v) !== cantidad) editar({ cantidad: r3(v) });
       });
       precio.addEventListener('change', () => {
@@ -710,7 +760,10 @@ export default {
         if (cents(v) !== cents(l.precio_final)) editar({ precio: v });
       });
       nota.addEventListener('change', () => { if (nota.value.trim() !== (l.nota || '')) editar({ nota: nota.value.trim() }); });
-      [qty, precio, nota].forEach((i) => i.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); i.blur(); } }));
+      [qty, precio, nota].forEach((i) => {
+        i.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); i.blur(); } });
+        i.addEventListener('focus', () => llevarALaVista(i));
+      });
       const tar = tarifaDeLinea(l);
       const detalleCambiado = !!prod && !prod.descripcion_libre && l.descripcion !== prod.nombre;
       const tarifaCambiada = !!prod && Number(l.tarifa_iva) !== Number(prod.tarifa_iva);
@@ -721,22 +774,29 @@ export default {
       if (detalleCambiado) marcas.push(h('span.amb', 'Detalle cambiado'));
       if (editada) marcas.push(h('span.amb', 'Precio cambiado (el menú dice ' + money(prod.precio_final) + ')'));
       if (l.nota && !abierta) marcas.push(h('span.nota-vista', 'Nota: ' + l.nota));
-      const mas = h('button.btn.chico.mas-btn', { type: 'button', 'aria-expanded': String(abierta), 'aria-label': (abierta ? 'Cerrar las opciones de ' : 'Abrir más opciones de ') + l.descripcion,
-        onclick: () => { if (abierta) lineasAbiertas.delete(l.id); else lineasAbiertas.add(l.id); pintarCuenta(); } }, abierta ? 'Cerrar' : 'Opciones');
+      const id = l.id;
+      const mas = h('button.btn.mas-btn', { type: 'button', 'aria-expanded': String(abierta), 'aria-label': (abierta ? 'Cerrar las opciones de ' : 'Abrir las opciones de ') + l.descripcion,
+        onclick: () => {
+          if (abierta) lineasAbiertas.delete(id); else lineasAbiertas.add(id);
+          pintarCuenta();
+          asideCuenta?.querySelector('[data-linea="' + id + '"]')?.scrollIntoView({ block: 'nearest' });
+        } }, abierta ? 'Cerrar' : 'Opciones');
       return h('div.linea' + (editada ? '.editada' : '') + (detalleCambiado || tarifaCambiada ? '.personalizada' : '') + (abierta ? '.abierta' : ''), { 'data-linea': l.id },
-        h('div.linea-top', h('span.linea-nombre', l.descripcion), h('span.linea-total', money(l.total_linea))),
+        h('div.linea-nombre', l.descripcion),
+        h('div.cant',
+          h('button.mm', { type: 'button', disabled: cantidad - 1 <= 0, 'aria-label': 'Quitar una unidad de ' + l.descripcion, onclick: () => editar({ cantidad: r3(cantidad - 1) }) }, '−'),
+          qty,
+          h('button.mm', { type: 'button', 'aria-label': 'Agregar una unidad de ' + l.descripcion, onclick: () => editar({ cantidad: r3(cantidad + 1) }) }, '+')),
+        h('div.linea-total', money(l.total_linea)),
+        mas,
         marcas.length ? h('div.linea-sub', marcas) : null,
-        h('div.linea-ctrl',
-          h('div.cant',
-            h('button.mm', { type: 'button', disabled: cantidad - 1 <= 0, 'aria-label': 'Quitar una unidad de ' + l.descripcion, onclick: () => editar({ cantidad: r3(cantidad - 1) }) }, '−'),
-            qty,
-            h('button.mm', { type: 'button', 'aria-label': 'Agregar una unidad de ' + l.descripcion, onclick: () => editar({ cantidad: r3(cantidad + 1) }) }, '+')),
-          h('label.precio-et', 'Precio c/u con IVA', precio),
-          mas),
-        abierta ? h('div.linea-pie', nota,
-          h('button.btn.chico.suave', { type: 'button', onclick: () => dialogoLinea({ linea: l }) }, 'Editar detalle e IVA'),
-          h('button.btn.chico.suave', { type: 'button', onclick: () => cambiarProducto(l) }, 'Cambiar producto'),
-          h('button.btn.chico.peligro', { type: 'button', 'aria-label': 'Quitar ' + l.descripcion + ' de la cuenta', onclick: () => accion(async () => { cur = await api.lineaQuitar(l.id); lineasAbiertas.delete(l.id); repintar(); toast('Quitado: ' + l.descripcion); }) }, 'Quitar')) : null);
+        abierta ? h('div.linea-pie',
+          h('label.etq.pie-precio', 'Precio de cada uno con IVA (₡)', precio),
+          h('label.etq.pie-nota', 'Nota para esta línea', nota),
+          h('div.pie-botones',
+            h('button.btn', { type: 'button', onclick: () => dialogoLinea({ linea: l }) }, 'Editar detalle e IVA'),
+            h('button.btn', { type: 'button', onclick: () => cambiarProducto(l) }, 'Cambiar producto'),
+            h('button.btn.peligro', { type: 'button', 'aria-label': 'Quitar ' + l.descripcion + ' de la cuenta', onclick: () => accion(async () => { cur = await api.lineaQuitar(l.id); lineasAbiertas.delete(l.id); repintar(); toast('Quitado: ' + l.descripcion); }) }, 'Quitar de la cuenta'))) : null);
     }
 
     /* ---------- Cliente de la cuenta y tarifa de IVA habitual ---------- */
@@ -748,7 +808,7 @@ export default {
       await accion(async () => {
         cur = await api.ventaDatos(id, cl ? { cliente: cl.id } : { quitarCliente: true });
         repintar();
-        toast(cl ? 'Cliente elegido: ' + (cl.nombre || '') + '. Se emitirá una factura electrónica a su nombre.' : 'Cliente quitado. Se emitirá un tiquete electrónico.');
+        toast(cl ? 'Cliente elegido: ' + nombrePropio(cl.nombre) + '. Se emitirá una factura electrónica a su nombre.' : 'Cliente quitado. Se emitirá un tiquete electrónico.');
       }, st);
       return !st.error;
     }
@@ -792,7 +852,7 @@ export default {
       }
       return h('div.cuenta-cliente.con',
         h('div.cc-fila',
-          h('div.cc-txt', h('strong', 'Factura a nombre de ' + (cl.nombre || '')), h('small', (TIPOS_ID[cl.tipo_id] || 'Identificación') + ' ' + (cl.identificacion || ''))),
+          h('div.cc-txt', h('strong', { title: nombrePropio(cl.nombre) }, 'Factura a nombre de ' + nombrePropio(cl.nombre)), h('small', (TIPOS_ID[cl.tipo_id] || 'Identificación') + ' ' + (cl.identificacion || ''))),
           h('div.fila', h('button.btn.chico', { type: 'button', onclick: elegirClienteCuenta }, 'Cambiar cliente'), h('button.btn.chico', { type: 'button', onclick: seguro(() => asignarCliente(null)) }, 'Quitar cliente'))),
         avisoTarifaCliente(cl, aplicarTarifaCliente));
     }
@@ -824,25 +884,30 @@ export default {
         lineas,
         h('div.cuenta-pie',
           v.estado === 'prefacturada' ? h('div.aviso-pref', h('strong', 'PREFACTURA N.° ' + (v.prefactura_numero || '')), 'No es una factura: es solo para que el cliente revise su cuenta.') : null,
-          h('div.total-fila', h('div', h('span.et', 'Total a pagar'), h('small', 'IVA incluido')), h('div.total-monto', { 'aria-live': 'polite' }, money(v.total))),
-          h('button.btn.primario.grande.btn-cobrar-aside', { type: 'button', disabled: !puede, onclick: seguro(abrirCobro) }, 'Cobrar'),
-          h('div.acciones-cuenta', prefBtn, h('button.btn.peligro' + (prefBtn ? '' : '.ancho'), { type: 'button', onclick: anularCuenta }, 'Anular esta cuenta')),
-          null));
+          h('div.pie-cobro',
+            h('div.total-fila', h('span.et', 'Total a pagar (IVA incluido)'), h('div.total-monto', { 'aria-live': 'polite' }, money(v.total))),
+            h('button.btn.primario.grande.btn-cobrar-aside', { type: 'button', disabled: !puede, onclick: seguro(abrirCobro) }, 'Cobrar')),
+          h('div.acciones-cuenta', prefBtn, h('button.btn.peligro' + (prefBtn ? '' : '.ancho'), { type: 'button', onclick: anularCuenta }, 'Anular esta cuenta'))));
       const nuevo = asideCuenta.querySelector('.cuenta-lineas');
       nuevo.scrollTop = irAlFinal ? nuevo.scrollHeight : scroll;
     }
 
+    // Barra de abajo en celular. Con el teclado abierto (buscando un producto) se queda solo un botón «Cobrar» pequeño, sobre el teclado:
+    // así siempre se puede cobrar sin cerrar el teclado, y la lista de resultados no pierde lugar.
+    const sinQuitarFoco = (e) => e.preventDefault(); // tocar un botón de la barra no cierra el teclado ni mueve la barra antes de tiempo
     function pintarMovil() {
       if (!barraMovil) return;
       const total = cur ? money(cur.venta.total) : '';
       const n = cur ? cur.lineas.length : 0;
       const puede = !!cur && n > 0 && Number(cur.venta.total) > 0;
+      barraMovil.classList.toggle('sin-cobro', !puede);
+      const cobrar = puede ? h('button.btn.primario.bm-cobrar', { type: 'button', 'aria-label': 'Cobrar ' + total, onmousedown: sinQuitarFoco, onclick: seguro(abrirCobro) }, 'Cobrar', h('span.bm-total', ' ' + total)) : null;
       if (vista === 'productos') {
-        barraMovil.replaceChildren(h('button.btn.primario', { type: 'button', onclick: () => cambiarVista('cuenta') }, cur ? 'Ver cuenta (' + n + ') · ' + total : 'Ver cuenta'));
+        barraMovil.replaceChildren(h('button.btn.bm-ver', { type: 'button', onmousedown: sinQuitarFoco, onclick: () => cambiarVista('cuenta') }, cur ? 'Ver cuenta (' + n + ')' : 'Ver cuenta'), cobrar);
       } else {
         barraMovil.replaceChildren(
-          h('button.btn', { type: 'button', onclick: () => cambiarVista('productos') }, 'Agregar productos'),
-          h('button.btn.primario', { type: 'button', disabled: !puede, onclick: seguro(abrirCobro) }, cur ? 'Cobrar ' + total : 'Cobrar'));
+          h('button.btn.bm-ver', { type: 'button', onmousedown: sinQuitarFoco, onclick: () => cambiarVista('productos') }, 'Agregar productos'),
+          puede ? cobrar : h('button.btn.primario.bm-cobrar', { type: 'button', disabled: true }, 'Cobrar'));
       }
     }
 
@@ -960,7 +1025,7 @@ export default {
       }
       function pintarCliente() {
         docTxt.textContent = 'Documento: ' + (cliente ? TIPOS_DOC['01'] : TIPOS_DOC['04'] + ' (sin cliente)');
-        cliTxt.textContent = cliente ? 'Cliente: ' + cliente.nombre + ' · ' + cliente.identificacion : 'Si el cliente pide factura con su nombre, toque «Elegir cliente».';
+        cliTxt.textContent = cliente ? 'Cliente: ' + nombrePropio(cliente.nombre) + ' · ' + cliente.identificacion : 'Si el cliente pide factura con su nombre, toque «Elegir cliente».';
         btnElegir.textContent = cliente ? 'Cambiar cliente' : 'Elegir cliente (factura)';
         btnQuitarCli.hidden = !cliente;
         pintarTarifa();
@@ -1037,6 +1102,7 @@ export default {
         inpMonto.focus(); inpMonto.select();
       }
       inpMonto.addEventListener('input', () => { auto = false; actualizar(); });
+      [inpMonto, inpRef].forEach((i) => i.addEventListener('focus', () => llevarALaVista(i)));
       inpMonto.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !btnCobrar.disabled) { e.preventDefault(); confirmarCobro(); } });
       inpRef.addEventListener('input', actualizar);
 
@@ -1105,7 +1171,7 @@ export default {
         pintarLista();
         mostrar(h('div.col',
           h('h3', 'Actividad para esta factura'),
-          h('p.tenue-linea', 'Cliente: ' + cliente.nombre + '. Si el cliente tiene varias actividades, elija la que pide en esta factura. Esto no cambia los datos del cliente, salvo que marque la casilla de abajo.'),
+          h('p.tenue-linea', 'Cliente: ' + nombrePropio(cliente.nombre) + '. Si el cliente tiene varias actividades, elija la que pide en esta factura. Esto no cambia los datos del cliente, salvo que marque la casilla de abajo.'),
           cajaLista, btnHac, nota,
           h('label.etq', 'O escriba otro código de actividad', inp, h('small', 'Cuatro números, un punto y un número (por ejemplo 5610.0), o seis números seguidos.')),
           h('label.cobro-chk', chk, h('span', h('b', 'Guardar también como actividad principal del cliente'), h('small', 'Si no la marca, el código vale solo para esta factura y el cliente queda como estaba.'))),
@@ -1174,9 +1240,9 @@ export default {
       const chip = h('span.chip');
       const msgEstado = h('p.tenue-linea');
       const impEstado = h('p.tenue-linea', { role: 'status' });
-      // Los textos salen de describirEstado (util.js): nunca dicen que algo "ya está" si la base no lo sabe
+      // Los textos salen de describirCobro (describirEstado de util.js más el caso «aceptado con aviso»): nunca dicen que algo "ya está" si la base no lo sabe
       const pintarEstado = (c) => {
-        const d = describirEstado(c.estado, c.mensaje);
+        const d = describirCobro(c.estado, c.mensaje);
         chip.textContent = d.chip;
         chip.className = 'chip ' + (d.clase === 'ok' ? 'ok' : d.clase === 'mal' ? 'mal' : 'espera');
         msgEstado.className = 'tenue-linea' + (d.clase === 'mal' ? ' msg-mal' : '');
@@ -1221,7 +1287,7 @@ export default {
           h('button.btn', { type: 'button', onclick: () => imprimir(fmtPrincipal) }, aj.auto ? 'Imprimir otra vez' : 'Imprimir ' + nombrePrincipal),
           h('button.btn', { type: 'button', onclick: () => imprimir(fmtPrincipal === 'carta' ? 'tiquete' : 'carta') }, fmtPrincipal === 'carta' ? 'Imprimir tiquete' : 'Imprimir factura carta'),
           h('button.btn.suave', { type: 'button', onclick: () => cerrarM() }, 'Listo, cerrar'),
-          h('button.btn.cab-anular', { type: 'button', onclick: () => { cerrarM(); app.ir('anular'); } }, 'Me equivoqué: anular esta factura')));
+          h('button.btn.peligro', { type: 'button', onclick: () => { cerrarM(); app.ir('anular'); } }, 'Me equivoqué: anular esta factura')));
       const mo = modal({ titulo: 'Cobro listo', contenido, ancho: 520, alCerrar: () => { abierto = false; dejarDeVigilar(); if (vivo && buscador && fino()) buscador.inp.focus(); } });
       cerrarM = mo.cerrar;
       if (aj.auto) imprimir(fmtPrincipal);
@@ -1230,19 +1296,61 @@ export default {
     }
 
     /* ---------- Arranque ---------- */
+    // «Hacer la venta de nuevo en Caja» (Anular factura) deja en sessionStorage['fx.caja.abrir'] el id de la cuenta nueva que se creó con
+    // las mismas líneas. Se lee UNA sola vez (y se borra al leerla), se deja como cuenta activa y, si no se pudo abrir, se avisa con palabras.
+    const CLAVE_ABRIR = 'fx.caja.abrir';
+    let pedida = null; // id pedido, mientras no se abra la caja o no se haya podido leer
+    function leerPedida() {
+      try {
+        const id = sessionStorage.getItem(CLAVE_ABRIR);
+        if (id != null) sessionStorage.removeItem(CLAVE_ABRIR);
+        if (id && String(id).trim()) pedida = String(id).trim();
+      } catch { /* sin almacenamiento: no hay cuenta pedida */ }
+    }
+    let avisoApertura = null; // { ok, texto } se muestra al terminar de armar la caja
+    async function abrirPedida() {
+      const id = pedida; pedida = null;
+      try {
+        if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) throw new Error('El número de la cuenta no es válido.');
+        const v = await api.venta(id);
+        if (!v?.venta) throw new Error('No se encontró esa cuenta.');
+        if (v.venta.estado !== 'abierta' && v.venta.estado !== 'prefacturada') {
+          throw new Error('Esa cuenta ya no está abierta (ya se cobró o se anuló).');
+        }
+        cur = v; guardarActiva();
+        if (!abiertas.some((x) => x.id === id)) sincronizarBarra();
+        const n = v.lineas.length;
+        avisoApertura = { ok: true, texto: 'Se abrió la cuenta «' + (v.venta.referencia || numCuenta(v.venta.numero)) + '» con ' + n + (n === 1 ? ' producto' : ' productos') + '. Revísela y cóbrela cuando esté lista.' };
+      } catch (e) {
+        const crudo = String(e?.message || '');
+        const claro = /uuid|invalid input/i.test(crudo) ? 'El número de la cuenta no es válido.' : (crudo || 'No se sabe el motivo.');
+        avisoApertura = { ok: false, texto: (/[.!?]$/.test(claro) ? claro : claro + '.') + ' Busque la cuenta nueva entre las cuentas abiertas, o repita la corrección desde «Anular factura».' };
+        await elegirInicial();
+      }
+    }
+    function mostrarAvisoApertura() {
+      const a = avisoApertura; avisoApertura = null;
+      if (!a || !barraAviso) return;
+      if (a.ok) { toast(a.texto, 'ok', 8000); return; }
+      const cerrar = h('button.btn', { type: 'button', onclick: () => { n.remove(); } }, 'Entendido');
+      const n = h('div.aviso-red', { role: 'alert' }, h('div.aviso-red-txt', h('strong', 'No se pudo abrir la cuenta de la corrección. '), a.texto), h('div.fila', cerrar));
+      barraAviso.prepend(n);
+    }
     async function iniciar() {
       turnoMostrado = app.turno?.id || null;
+      leerPedida();
       if (!turnoMostrado) { cur = null; pintarSinTurno(); return; }
       root.replaceChildren(esqueleto(4, 'Cargando la caja…'));
       try {
         await Promise.all([cargarCatalogo(), cargarAbiertas()]);
-        await elegirInicial();
+        if (pedida) await abrirPedida(); else await elegirInicial();
       } catch (e) {
         if (!vivo) return;
         root.replaceChildren(bloqueError({ titulo: 'No se pudo cargar la caja', mensaje: e.message || String(e), alReintentar: () => iniciar() }));
         return;
       }
       armarCaja();
+      mostrarAvisoApertura();
     }
 
     // Escribir con el teclado (o el lector de códigos) en cualquier parte lleva el texto al buscador
@@ -1258,6 +1366,10 @@ export default {
     const alCambio = () => { if (vivo && (app.turno?.id || null) !== turnoMostrado) iniciar(); };
     document.addEventListener('app:cambio', alCambio);
     window.addEventListener('resize', midePegajosos);
+    // La barra de abajo se sube sobre el teclado cuando este tapa la parte de abajo sin achicar la página (iPhone y Android recientes)
+    const vvTeclado = window.visualViewport;
+    const alTeclado = () => { if (!cajaEl) return; cajaEl.style.setProperty('--teclado', Math.max(0, Math.round(window.innerHeight - vvTeclado.height - vvTeclado.offsetTop)) + 'px'); cajaEl.style.setProperty('--vv-alto', Math.round(vvTeclado.height) + 'px'); };
+    if (vvTeclado) { vvTeclado.addEventListener('resize', alTeclado); vvTeclado.addEventListener('scroll', alTeclado); }
 
     // Refresco silencioso por si otro equipo (tableta, celular) cambia las cuentas
     async function refrescoSilencioso() {
@@ -1290,6 +1402,7 @@ export default {
       document.removeEventListener('app:cambio', alCambio);
       document.removeEventListener('visibilitychange', alVolver);
       window.removeEventListener('resize', midePegajosos);
+      if (vvTeclado) { vvTeclado.removeEventListener('resize', alTeclado); vvTeclado.removeEventListener('scroll', alTeclado); }
       document.body.classList.remove('fx-caja');
     };
   },

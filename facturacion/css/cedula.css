@@ -24,11 +24,11 @@
 .ced-est-cuerpo strong{font-size:1.02rem;overflow-wrap:anywhere}
 .ced-est-cuerpo span{overflow-wrap:anywhere}
 .ced-est-cuerpo .btn{align-self:flex-start;margin-top:.3rem}
-.ced-estado.verde{border-color:#a8d5bd;background:var(--verde-suave);color:#14583a}
+.ced-estado.verde{border-color:var(--borde-ok,#3f8f66);background:var(--verde-suave);color:#14583a}
 .ced-estado.verde .ico{background:var(--verde);color:#fff}
-.ced-estado.ambar{border-color:#efd08f;background:var(--ambar-suave);color:#6b4500}
+.ced-estado.ambar{border-color:var(--borde-ambar,#a87400);background:var(--ambar-suave);color:#6b4500}
 .ced-estado.ambar .ico{background:var(--ambar);color:#2a1d00}
-.ced-estado.rojo{border-color:#e9b3b7;background:var(--rojo-suave);color:var(--rojo-osc)}
+.ced-estado.rojo{border-color:var(--borde-mal,#bf4a54);background:var(--rojo-suave);color:var(--rojo-osc)}
 .ced-estado.rojo .ico{background:var(--rojo);color:#fff}
 .ced-estado.gris{border-color:var(--linea2);background:#f4f1ea;color:var(--tinta)}
 .ced-estado.azul{border-color:#bcd0ea;background:#edf3fb;color:#1d4175}
@@ -65,10 +65,10 @@
 .ced-act-nota{font-size:.9rem;line-height:1.35}
 .ced-act-nota.ok{color:#14583a}
 .ced-act-nota.mal{color:var(--rojo-osc);font-weight:600}
-.ced-act-nota.aviso{color:#6b4500;background:var(--ambar-suave);border:1px solid #efd08f;border-radius:var(--r);padding:.5rem .7rem}
+.ced-act-nota.aviso{color:#6b4500;background:var(--ambar-suave);border:1px solid var(--borde-ambar,#a87400);border-radius:var(--r);padding:.5rem .7rem}
 .ced-lista-act{display:flex;flex-direction:column;gap:.35rem;max-height:240px;overflow:auto}
 .ced-lista-act .tit{font-size:.88rem;font-weight:600;color:var(--tinta2)}
-.ced-opt{display:flex;gap:.7rem;align-items:flex-start;width:100%;min-height:52px;padding:.5rem .8rem;text-align:left;border:1px solid var(--linea2);border-radius:var(--r);background:#fff;cursor:pointer}
+.ced-opt{display:flex;gap:.7rem;align-items:flex-start;width:100%;min-height:52px;padding:.5rem .8rem;text-align:left;border:1px solid var(--borde-control,#8f8672);border-radius:var(--r);background:#fff;cursor:pointer}
 .ced-opt:hover{border-color:var(--tinta)}
 .ced-opt[aria-pressed=true]{border-color:var(--verde);background:var(--verde-suave);box-shadow:0 0 0 1px var(--verde) inset}
 .ced-opt .cod{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-weight:700;white-space:nowrap}

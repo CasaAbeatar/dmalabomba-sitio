@@ -1,33 +1,5 @@
-/* Anular factura: lista con botón Anular en cada fila, líneas finas, botones grandes con texto. */
-.an-mod{display:flex;flex-direction:column;gap:.9rem}
-.an-ayuda{margin:0;color:var(--tinta2);max-width:60ch}
-.an-fecha{margin:0;font-weight:700;font-size:1.05rem}
-.an-rango{display:flex;flex-wrap:wrap;gap:.5rem}
-.an-rango .btn[aria-pressed=true]{background:var(--tinta);border-color:var(--tinta);color:#fff}
-.an-otras{padding:.9rem;display:flex;flex-direction:column;gap:.8rem}
-.an-buscar .campo{width:100%;min-height:52px}
-.an-lista{display:flex;flex-direction:column;border:1px solid var(--linea);border-radius:var(--r);background:var(--papel);overflow:hidden}
-.an-lista .cargando,.an-lista .vacio,.an-lista .error-caja{margin:1rem}
-.an-cabeza,.an-fila{display:grid;grid-template-columns:4.5rem minmax(11rem,1.2fr) minmax(8rem,1.4fr) 8rem 11rem;gap:.8rem;align-items:center;padding:.7rem 1rem}
-.an-cabeza{font-size:.78rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--tinta2);border-bottom:1px solid var(--linea);background:var(--fondo)}
-.an-fila{border-bottom:1px solid var(--linea)}
-.an-fila:last-child{border-bottom:0}
-.an-fila.anulada{background:#faf6ee;color:var(--tinta2)}
-.an-fila.anulada .an-total{text-decoration:line-through}
-.an-hora{font-variant-numeric:tabular-nums;font-weight:600}
-.an-doc{display:flex;flex-direction:column;min-width:0}
-.an-doc small{color:var(--tinta2)}
-.an-cli{min-width:0;overflow-wrap:anywhere}
-.an-total{font-variant-numeric:tabular-nums;font-weight:700}
-.an-accion{display:flex;justify-content:flex-end}
-.an-btn{min-width:9rem}
-.an-estado{display:flex;flex-direction:column;align-items:flex-end;gap:.15rem;text-align:right}
-.an-estado small{color:var(--tinta2);font-size:.78rem}
-.an-lista .chip.anulado{color:var(--tinta2);border-color:var(--linea2);background:#fff}
-.an-dia{padding:.55rem 1rem;font-weight:700;background:var(--fondo);border-bottom:1px solid var(--linea);border-top:1px solid var(--linea)}
+/* Ventana de anulación (la usa la ventana «Anular y reimprimir») */
 .der{text-align:right}
-
-/* Ventana de anulación */
 .an-dlg{display:flex;flex-direction:column;gap:.9rem}
 .an-resumen{border:1px solid var(--linea);border-radius:12px;padding:.8rem 1rem;display:flex;flex-direction:column;gap:.15rem}
 .an-resumen-total{font-size:1.5rem;font-weight:700;font-variant-numeric:tabular-nums}
@@ -49,11 +21,6 @@
 .an-ok{background:var(--verde-suave);border:1px solid #a8d5bd;border-radius:12px;padding:.8rem 1rem}
 
 @media(max-width:760px){
-  .an-cabeza{display:none}
-  .an-fila{grid-template-columns:3.6rem 1fr auto;grid-template-areas:"hora doc total" "cli cli cli" "acc acc acc";row-gap:.4rem;padding:.8rem .9rem}
-  .an-hora{grid-area:hora}.an-doc{grid-area:doc}.an-total{grid-area:total}.an-cli{grid-area:cli;color:var(--tinta2)}.an-accion{grid-area:acc;justify-content:stretch}
-  .an-btn{width:100%}
-  .an-estado{align-items:flex-start;text-align:left;flex-direction:row;flex-wrap:wrap;gap:.5rem}
   .an-motivos{grid-template-columns:1fr}
   .an-pie .btn{flex:1 1 40%;padding-inline:.6rem}
   .an-pie .peligro{order:1}

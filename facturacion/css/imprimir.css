@@ -124,15 +124,20 @@ table.ct-tabla{width:100%;border-collapse:collapse;margin-top:2mm}
 .fx-grupo{display:flex;flex-direction:column;gap:.45rem}
 .fx-tit{font-weight:700}
 .fx-ayuda{color:var(--tinta2);font-size:.92rem}
-.fx-seg{display:flex;flex-wrap:wrap;border:1px solid var(--linea2);border-radius:var(--r);overflow:hidden;background:#fff}
+.fx-seg{display:flex;flex-wrap:wrap;border:1px solid var(--borde-control,#8f8672);border-radius:var(--r);overflow:hidden;background:#fff}
 .fx-seg button{flex:1 1 140px;min-height:52px;padding:.5rem .9rem;border:0;background:transparent;cursor:pointer;font-weight:600}
-.fx-seg button+button{border-left:1px solid var(--linea2)}
+.fx-seg button+button{border-left:1px solid var(--borde-control,#8f8672)}
 .fx-seg button[aria-pressed=true]{background:var(--rojo);color:#fff}
 .fx-guardado{color:var(--tinta2)}
 .fx-instr{border-top:1px solid var(--linea);padding-top:1rem;display:flex;flex-direction:column;gap:.7rem}
 .fx-instr h3{font-size:1.05rem}
 .fx-instr p{margin:0}
 .fx-instr ol{margin:0;padding-left:1.3rem;display:flex;flex-direction:column;gap:.55rem}
-.fx-cmd{font-family:"Courier New","Liberation Mono",monospace;font-size:.85rem;background:#fbf8f2;border:1px solid var(--linea2);border-radius:var(--r);padding:.7rem .8rem;word-break:break-all;user-select:all}
+.fx-cmd{font-family:"Courier New","Liberation Mono",monospace;font-size:.85rem;background:#fbf8f2;border:1px solid var(--borde-control,#8f8672);border-radius:var(--r);padding:.7rem .8rem;word-break:break-all;user-select:all}
 .fx-nota{color:var(--tinta2);font-size:.92rem}
 .fx-instr .btn{align-self:flex-start}
+
+/* Frase que dice cómo quedó la impresión automática en este aparato */
+.fx-estado{margin-top:.5rem;padding:.55rem .75rem;border-radius:var(--r);border:1px solid var(--borde-control,#8f8672);background:#fff;font-weight:600;line-height:1.35}
+.fx-estado.si{border-color:var(--borde-ok,#3f8f66);background:var(--verde-suave);color:#14583a}
+.fx-estado.no{border-color:var(--borde-ambar,#a87400);background:var(--ambar-suave);color:#5c3d00}

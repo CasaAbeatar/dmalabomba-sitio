@@ -69,7 +69,7 @@ table.arbol .n3 td.nom{padding-left:3rem;color:var(--tinta2);font-weight:400}
 table.arbol .n3 td{font-weight:400}
 .arbol-btn{display:inline-flex;align-items:center;gap:.5rem;min-height:48px;padding:.1rem .3rem;margin:-.5rem 0;border:0;background:transparent;cursor:pointer;font:inherit;font-weight:inherit;text-align:left;color:inherit}
 .arbol-btn .flecha{width:1.1em;color:var(--rojo)}
-.arbol-btn .ver{font-size:.78rem;font-weight:500;color:var(--tinta2);border:1px solid var(--linea2);border-radius:99px;padding:.02rem .5rem;white-space:nowrap}
+.arbol-btn .ver{font-size:.78rem;font-weight:500;color:var(--tinta2);border:1px solid var(--borde-control,#8f8672);border-radius:99px;padding:.02rem .5rem;white-space:nowrap}
 .arbol-btn:hover .ver{border-color:var(--tinta);color:var(--tinta)}
 code.cod{margin-left:.5rem;font-size:.78rem;color:var(--tinta2);background:#f4efe4;border-radius:5px;padding:.05rem .35rem}
 td.pc{white-space:nowrap}
