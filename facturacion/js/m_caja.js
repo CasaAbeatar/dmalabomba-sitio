@@ -1162,7 +1162,7 @@ export default {
       }
       function pintarCliente() {
         docTxt.textContent = 'Documento: ' + (cliente ? TIPOS_DOC['01'] : TIPOS_DOC['04'] + ' (sin cliente)');
-        cliTxt.textContent = cliente ? 'Cliente: ' + nombrePropio(cliente.nombre) + ' · ' + cliente.identificacion : 'Si el cliente pide factura con su nombre, toque «Elegir cliente».';
+        cliTxt.textContent = cliente ? 'Cliente: ' + nombrePropio(cliente.nombre) + ' · ' + cliente.identificacion : '¿El cliente necesita factura a su nombre? Elíjalo aquí antes de cobrar.';
         btnElegir.textContent = cliente ? 'Cambiar cliente' : 'Elegir cliente (factura)';
         btnQuitarCli.hidden = !cliente;
         pintarTarifa();
@@ -1199,7 +1199,7 @@ export default {
             h('button.btn', { type: 'button', onclick: () => vistaActividad() }, 'Cambiar')),
           cod ? null : h('small.tenue', 'Si el cliente declara IVA y pide que se anote su actividad, toque «Cambiar» y escriba el código.'),
           fueraDeLista ? h('div.act-aviso', 'Este código no está entre las actividades que Hacienda tiene para este cliente. Hacienda podría rechazar la factura.') : null,
-          !cliente.correo ? h('div.act-aviso', 'Este cliente no tiene correo. La factura se emite igual, pero no se le podrá enviar por correo.') : null,
+          !cliente.correo ? h('div.act-aviso', 'Este cliente no tiene correo. La factura se emite igual, pero la copia impresa no le sirve como gasto o crédito: con el correo recibiría el archivo que sí le sirve. Puede agregarlo en Clientes.') : null,
           direccionIncompleta(cliente) ? h('div.act-aviso', 'A este cliente le falta la dirección completa (provincia, cantón, distrito y otras señas). La factura se emite igual; complétela en Clientes cuando pueda.') : null,
         ].filter(Boolean));
       }
@@ -1444,7 +1444,7 @@ export default {
       const mo = modal({ titulo: 'Cobro listo', contenido, ancho: 520, alCerrar: () => { abierto = false; dejarDeVigilar(); if (vivo && buscador && fino()) buscador.inp.focus(); } });
       cerrarM = mo.cerrar;
       if (aj.auto) imprimir(fmtPrincipal);
-      else impEstado.textContent = 'No se imprimió sola (la impresión automática está apagada en «Impresora»). Toque «Imprimir ' + nombrePrincipal + '» si el cliente lo quiere.';
+      else impEstado.textContent = 'No se imprimió sola (la impresión automática está apagada en «Impresora»). Toque «Imprimir ' + nombrePrincipal + '» y ' + (fmtPrincipal === 'carta' ? 'entréguela' : 'entréguelo') + ' al cliente.';
       vigilar();
     }
 
