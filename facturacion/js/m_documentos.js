@@ -1,11 +1,11 @@
-// Anular y reimprimir: una sola ventana con los documentos del día (Este turno primero, Hoy, Ayer y otras fechas), buscador por número, cliente, cédula o monto,
-// y en cada fila los botones «Reimprimir» y «Anular». Tocar la fila abre el detalle (estado en Hacienda, «Ya lo atendí», archivos, reenvíos).
+// Anular y reimprimir: una sola ventana con los documentos de Hoy, Este mes, Mes anterior o Cualquier fecha, buscador por número, cliente, cédula, estado o monto,
+// y en cada fila los botones «Reimprimir» y «Anular». La lista se pinta por tandas («Mostrar más»): la búsqueda y los filtros actúan sobre todo lo cargado. Tocar la fila abre el detalle (estado en Hacienda, «Ya lo atendí», archivos, reenvíos).
 // La anulación con nota de crédito es la de m_anular.js; la impresión es la de imprimir.js.
 import { h, money, modal, toast, descargar, hoyCR, sumaDias, fechaHora, horaCorta, debounce, num, r2, nombrePropio, traducirHacienda, campoBusqueda, TIPOS_SERVICIO, MEDIOS, TIPOS_ID } from './util.js';
 import { documentos, ncDe, correoActivo, reenviarCorreo, alertaAtender, hacerVentaDeNuevo, mensajeAmable } from './api_documentos.js';
 import { anularDocumento, cambiarCliente, textoCodigoNota, codigoDeNota, sustituyeSoportado, TEXTO_07 } from './m_anular.js';
 import { selectorCliente } from './ui_cliente.js';
-import { sumarDocumentos, frasesDeLista, puenteConTurno } from './cuadre_turno.js';
+import { sumarDocumentos, frasesDeLista, puenteConTurno, docsDelTurno } from './cuadre_turno.js';
 import { imprimirComprobante, reimprimirComprobante, formatoDireccion, formatoCedula, formatoTelefono, numeroCorto, NOMBRES_DOCUMENTO } from './imprimir.js';
 
 if (!document.querySelector('link[data-fx-documentos]')) document.head.append(h('link', { rel: 'stylesheet', href: new URL('../css/documentos.css', import.meta.url).href, 'data-fx-documentos': '1' }));
@@ -15,11 +15,25 @@ const fmtDia = new Intl.DateTimeFormat('es-CR', { timeZone: TZ, weekday: 'long',
 const fmtDiaCorto = new Intl.DateTimeFormat('es-CR', { timeZone: TZ, day: 'numeric', month: 'long' });
 const diaTxt = (ymd) => { const t = fmtDia.format(new Date(ymd + 'T12:00:00Z')); return t.charAt(0).toUpperCase() + t.slice(1); };
 const diaCortoTxt = (ymd) => fmtDiaCorto.format(new Date(ymd + 'T12:00:00Z'));
-const ymdDe = (iso) => new Intl.DateTimeFormat('en-CA', { timeZone: TZ }).format(new Date(iso));
+// Día (AAAA-MM-DD, hora de Costa Rica) de un instante. El formateador se crea una sola vez y el resultado se recuerda: con miles de documentos, crear un formateador por documento era lo más lento de la pantalla.
+const fmtYmd = new Intl.DateTimeFormat('en-CA', { timeZone: TZ });
+const cacheYmd = new Map();
+const ymdDe = (iso) => { let v = cacheYmd.get(iso); if (v === undefined) { v = fmtYmd.format(new Date(iso)); if (cacheYmd.size > 30000) cacheYmd.clear(); cacheYmd.set(iso, v); } return v; };
 const norm = (s) => String(s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 
-// Mismos nombres que en el aviso del cobro: «Por enviar a Hacienda», «Enviado a Hacienda», «Aceptado», «Rechazado», «No se pudo enviar»
-const ETQ_ESTADO = { pendiente: 'Por enviar a Hacienda', enviado: 'Enviado a Hacienda', aceptado: 'Aceptado', rechazado: 'Rechazado', error: 'No se pudo enviar' };
+// La frase «El nuevo indicará que sustituye a este» solo se puede decir cuando la base guarde la referencia de un comprobante rechazado
+// (hoy fx_cobrar_reemplazo solo reemplaza documentos aceptados que ya tienen nota de crédito). Se enciende junto con ese cambio.
+const SUSTITUYE_RECHAZADO = false;
+// Nombres de los estados: los mismos en toda la aplicación
+const ETQ_ESTADO = { pendiente: 'Por enviar a Hacienda', enviado: 'Enviado a Hacienda', aceptado: 'Aceptado por Hacienda', rechazado: 'Rechazado por Hacienda', error: 'No se pudo enviar' };
+const PAGINA_ESCRITORIO = 100, PAGINA_CELULAR = 50; // documentos por página (la búsqueda y los filtros miran todos, no solo la página)
+const esCelular = () => { try { return window.matchMedia('(max-width:700px)').matches; } catch { return false; } };
+const porPagina = () => (esCelular() ? PAGINA_CELULAR : PAGINA_ESCRITORIO);
+const fmtMes = new Intl.DateTimeFormat('es-CR', { timeZone: 'UTC', month: 'long', year: 'numeric' });
+const mesTxt = (ymd) => { const t = fmtMes.format(new Date(ymd + 'T12:00:00Z')); return t.charAt(0).toUpperCase() + t.slice(1); }; // «Octubre de 2026»
+export const primerDiaMes = (ymd) => ymd.slice(0, 8) + '01';
+// Último día del mes anterior y primer día del mes anterior (sirve en enero y en años bisiestos: Date.UTC con día 0 es el último día del mes anterior)
+export const mesAnterior = (ymd) => { const y = Number(ymd.slice(0, 4)), m = Number(ymd.slice(5, 7)); return [new Date(Date.UTC(y, m - 2, 1)).toISOString().slice(0, 10), new Date(Date.UTC(y, m - 1, 0)).toISOString().slice(0, 10)]; };
 const CLASE_ESTADO = { pendiente: 'espera', enviado: 'espera', aceptado: 'ok', rechazado: 'mal', error: 'mal' };
 const NOMBRE_TIPO = { ...NOMBRES_DOCUMENTO, '01': 'Factura', '03': 'Nota de crédito', '04': 'Tiquete' }; // nombres cortos para la lista
 const esVenta = (d) => d.tipo_doc === '01' || d.tipo_doc === '04';
@@ -31,12 +45,14 @@ export default {
   id: 'anular',
   titulo: 'Anular y reimprimir',
   async mount(root, app) {
-    const est = { rango: 'hoy', desde: hoyCR(), hasta: hoyCR(), q: '', filtro: 'todos', lista: [], cargando: false, error: null, turnoEstado: null, firma: null };
-    let nCarga = 0; // cada carga lleva su número: si llega tarde la respuesta de una anterior (por ejemplo «Ayer» y enseguida «Hoy»), se descarta
-    // «Este turno» es el primer filtro (desde la hora en que se abrió la caja). Si el turno abierto empezó antes de hoy (cruzó la medianoche), es el que se abre por omisión.
+    const est = { rango: 'hoy', desde: hoyCR(), hasta: hoyCR(), q: '', filtro: 'todos', lista: [], cargando: false, error: null, turnoEstado: null, firma: null, pagina: 1 };
+    let nCarga = 0; // cada carga lleva su número: si llega tarde la respuesta de una anterior (por ejemplo «Este mes» y enseguida «Hoy»), se descarta
+    // Con la caja abierta, «Hoy» es el turno: si el turno abrió en un día anterior (cruzó la medianoche), «Hoy» arranca en la hora de apertura,
+    // y el cuadre con «Apertura y cierre de caja» sigue saliendo cuando el rango es «Hoy».
     const turnoAbierto = () => app.turno || null;
-    if (turnoAbierto() && ymdDe(turnoAbierto().abierto_en) < hoyCR()) { est.rango = 'turno'; est.desde = ymdDe(turnoAbierto().abierto_en); }
-    // Si otra pantalla pidió ver los problemas (el aviso rojo del encabezado), se abre con ese filtro y con las mismas fechas del aviso
+    const turnoDeAyer = () => (turnoAbierto() && ymdDe(turnoAbierto().abierto_en) < hoyCR() ? turnoAbierto() : null);
+    est.desde = turnoDeAyer() ? ymdDe(turnoDeAyer().abierto_en) : hoyCR();
+    // Si otra pantalla pidió ver los problemas (el aviso rojo del encabezado), se abre con ese filtro y con las mismas fechas del aviso (esas fechas caen en «Cualquier fecha»)
     const pedido = app.pedido; app.pedido = null;
     if (pedido?.filtro === 'problemas') {
       est.filtro = 'problemas';
@@ -46,19 +62,19 @@ export default {
     const verDocumento = typeof pedido?.comprobante === 'string' ? pedido.comprobante : null; // «Me equivoqué» del cobro abre el documento recién emitido
     let detalleActual = null;
     let ultimaCarga = 0;
+    let cacheTexto = new WeakMap(); // texto normalizado de cada documento para el buscador (se arma una vez por carga)
 
     /* ---------- encabezado y controles ---------- */
     const rangoDe = (r) => {
       const hoy = hoyCR();
-      if (r === 'turno' && turnoAbierto()) return [ymdDe(turnoAbierto().abierto_en), hoy];
-      if (r === 'hoy') return [hoy, hoy];
-      if (r === 'ayer') { const a = sumaDias(hoy, -1); return [a, a]; }
-      if (r === 'semana') { const dow = new Date(hoy + 'T12:00:00Z').getUTCDay(); return [sumaDias(hoy, -((dow + 6) % 7)), hoy]; }
+      if (r === 'hoy') return [turnoDeAyer() ? ymdDe(turnoDeAyer().abierto_en) : hoy, hoy];
+      if (r === 'mes') return [primerDiaMes(hoy), hoy]; // del día 1 a hoy, en hora de Costa Rica
+      if (r === 'anterior') return mesAnterior(hoy);    // del día 1 al último día del mes anterior
       return [est.desde, est.hasta];
     };
     const titulo = h('p.doc-fecha');
     const botonesRango = h('div.doc-rango', { role: 'group', 'aria-label': 'Fechas a mostrar' },
-      [turnoAbierto() ? ['turno', 'Este turno'] : null, ['hoy', 'Hoy'], ['ayer', 'Ayer'], ['otro', 'Otras fechas']].filter(Boolean).map(([r, t]) =>
+      [['hoy', 'Hoy'], ['mes', 'Este mes'], ['anterior', 'Mes anterior'], ['otro', 'Cualquier fecha']].map(([r, t]) =>
         h('button.btn', { type: 'button', 'data-r': r, onclick: () => elegirRango(r) }, t)));
     const inDesde = h('input.campo', { type: 'date', 'aria-label': 'Desde' });
     const inHasta = h('input.campo', { type: 'date', 'aria-label': 'Hasta' });
@@ -69,23 +85,26 @@ export default {
     } }, 'Ver estas fechas');
     const cajaFechas = h('div.doc-otras.tarjeta', { hidden: true },
       h('div.rejilla.dos', h('label.etq', 'Desde', inDesde), h('label.etq', 'Hasta', inHasta)), verFechas);
-    const buscador = h('input.campo#anular-buscar', { type: 'search', placeholder: 'Número, cliente, cédula o monto', 'aria-label': 'Buscar documento por número, cliente, cédula o monto', autocomplete: 'off',
-      oninput: debounce((e) => { est.q = e.target.value; pintar(); }, 150) });
-    const buscadorFila = campoBusqueda(buscador, () => { est.q = ''; pintar(); });
+    const buscador = h('input.campo#anular-buscar', { type: 'search', placeholder: 'Número, cliente, cédula, estado o monto', 'aria-label': 'Buscar documento por número, cliente, cédula, estado, monto o rango de montos, por ejemplo 5000-20000', autocomplete: 'off',
+      oninput: debounce((e) => { est.q = e.target.value; est.pagina = 1; pintar(); }, 150) });
+    const buscadorFila = campoBusqueda(buscador, () => { est.q = ''; est.pagina = 1; pintar(); });
     const refrescar = h('button.btn', { type: 'button', onclick: async () => { refrescar.disabled = true; await cargar(); refrescar.disabled = false; } }, 'Actualizar');
     const zonaResumen = h('div');
     const zonaCuadre = h('div.doc-cuadre-zona');
     const zonaFiltros = h('div.doc-filtros');
     const zonaLista = h('div.doc-lista');
+    const zonaCabeza = h('div.doc-lista-cab');                       // «N documentos» y, a la derecha, el hueco de las descargas
+    const zonaDescargas = h('div#doc-descargas.doc-descargas');       // HUECO: aquí se agregan los botones de descarga (Excel, CSV, PDF, XML). Vacío no se ve.
+    const zonaPaginas = h('div.doc-paginas');
 
     root.append(h('div.doc-mod',
       h('div.doc-buscar', buscadorFila),
       botonesRango, h('div.doc-fecha-fila', titulo, refrescar), cajaFechas, zonaResumen, zonaCuadre, zonaFiltros,
-      h('p.doc-ayuda', 'Toque una fila para ver el detalle. «Anular» crea una nota de crédito (código 01, anulación total): el documento original no se borra.'),
-      zonaLista));
+      h('p.doc-ayuda', 'Toque una fila para ver el detalle. «Anular» crea una nota de crédito (código 01, anulación total): el documento original no se borra. En el buscador también puede escribir un estado (aceptado, rechazado, pendiente) o un rango de montos, por ejemplo 5000-20000.'),
+      zonaCabeza, zonaLista, zonaPaginas));
 
     function elegirRango(r) {
-      est.rango = r;
+      est.rango = r; est.pagina = 1;
       if (r === 'otro') {
         inDesde.value = est.desde || hoyCR(); inHasta.value = est.hasta || hoyCR();
         cajaFechas.hidden = false; pintarControles(); return;
@@ -97,9 +116,12 @@ export default {
     function pintarControles() {
       botonesRango.querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.r === est.rango)));
       const una = est.desde === est.hasta;
-      const pre = est.rango === 'hoy' ? 'Hoy, ' : est.rango === 'ayer' ? 'Ayer, ' : '';
-      if (est.rango === 'turno' && turnoAbierto()) { titulo.textContent = 'Este turno: desde el ' + diaCortoTxt(ymdDe(turnoAbierto().abierto_en)) + ' a las ' + horaCorta(turnoAbierto().abierto_en) + ', hasta ahora'; return; }
-      titulo.textContent = !una ? `Del ${diaCortoTxt(est.desde)} al ${diaCortoTxt(est.hasta)}` : pre ? pre + fmtDia.format(new Date(est.desde + 'T12:00:00Z')) : diaTxt(est.desde);
+      if (est.rango === 'hoy' && turnoDeAyer()) { titulo.textContent = 'Hoy, desde que abrió el turno el ' + diaCortoTxt(ymdDe(turnoDeAyer().abierto_en)) + ' a las ' + horaCorta(turnoDeAyer().abierto_en); return; }
+      if (est.rango === 'mes' || est.rango === 'anterior') { // el mes con palabras («Octubre de 2026») y, aparte, los días que cubre
+        titulo.replaceChildren(mesTxt(est.desde), h('span.tenue', ` (del ${Number(est.desde.slice(8))} al ${Number(est.hasta.slice(8))})`));
+        return;
+      }
+      titulo.textContent = !una ? `Del ${diaCortoTxt(est.desde)} al ${diaCortoTxt(est.hasta)}` : est.rango === 'hoy' ? 'Hoy, ' + fmtDia.format(new Date(est.desde + 'T12:00:00Z')) : diaTxt(est.desde);
     }
 
     /* ---------- carga ---------- */
@@ -109,15 +131,16 @@ export default {
       if (!silencioso) { est.cargando = true; est.error = null; est.firma = null; pintar(); }
       try {
         // Lo más reciente va arriba (igual que en «Anular factura»): lo último que hizo la cajera se ve sin bajar
-        if (est.rango === 'turno' && !turnoAbierto()) { est.rango = 'hoy'; [est.desde, est.hasta] = rangoDe('hoy'); pintarControles(); } // la caja se cerró mientras tanto
-        const desdeTurno = est.rango === 'turno' ? new Date(turnoAbierto().abierto_en).getTime() : 0;
-        // En «Este turno» también se lee el estado del turno, para mostrar cómo cuadra esta cifra con la de «Apertura y cierre de caja» (si no se puede leer, solo falta esa explicación)
-        const turnoId = est.rango === 'turno' ? turnoAbierto()?.id : null;
+        if (est.rango === 'hoy') { const [d0, h0] = rangoDe('hoy'); if (d0 !== est.desde || h0 !== est.hasta) { [est.desde, est.hasta] = [d0, h0]; pintarControles(); } } // la caja se cerró o cambió el día mientras tanto
+        // «Hoy» con un turno que abrió en un día anterior arranca en la hora de apertura
+        const desdeTurno = est.rango === 'hoy' && turnoDeAyer() ? new Date(turnoDeAyer().abierto_en).getTime() : 0;
+        // En «Hoy» con la caja abierta también se lee el estado del turno, para mostrar cómo cuadra con «Apertura y cierre de caja» (si no se puede leer, solo falta esa explicación)
+        const turnoId = est.rango === 'hoy' ? turnoAbierto()?.id : null;
         const [filas, turno] = await Promise.all([documentos(app.soc.id, est.desde, est.hasta), turnoId ? app.api.turnoEstado(turnoId).catch(() => null) : null]);
         if (mi !== nCarga) return; // llegó tarde: ya se pidió otra cosa
         const lista = filas.filter((d) => !desdeTurno || new Date(d.fecha_emision).getTime() >= desdeTurno).sort((a, b) => new Date(b.fecha_emision) - new Date(a.fecha_emision));
         // En el refresco automático solo se vuelve a pintar si algo cambió; así no se pierde lo que la cajera esté escribiendo ni se mueve la pantalla
-        est.lista = lista; est.turnoEstado = turno;
+        est.lista = lista; est.turnoEstado = turno; cacheTexto = new WeakMap();
         const firma = JSON.stringify([lista, turno]) + '|' + lista.filter(esProblema).length; // esProblema cambia con el reloj (más de 15 minutos esperando a Hacienda)
         if (silencioso && !est.error && est.firma && firma === est.firma) { ultimaCarga = Date.now(); return; }
         est.firma = firma;
@@ -128,12 +151,35 @@ export default {
     }
 
     /* ---------- resumen, filtros y lista ---------- */
+    // Un monto escrito como lo escribe la gente: «5000», «5 000», «5.000», «5 000,50», «₡5000»
+    const aMonto = (t) => {
+      let x = String(t).replace(/[₡\s]/g, '');
+      if (/,\d{1,2}$/.test(x)) x = x.replace(/\./g, '').replace(',', '.'); else if (/^\d{1,3}(\.\d{3})+$/.test(x)) x = x.replace(/\./g, ''); else x = x.replace(/,/g, '');
+      return /^\d+(\.\d+)?$/.test(x) ? Number(x) : NaN;
+    };
+    // Las tarifas de IVA de las líneas solo se buscan si fx_documentos las trae (campo «tarifas»); si no, no se inventa nada
+    const tarifasTxt = (d) => (d.tarifas == null ? '' : [].concat(d.tarifas).map((t) => (Number.isFinite(Number(t)) && String(t).trim() !== '' ? `iva ${t} ${t}%` : `iva ${t}`)).join(' '));
+    let consulta = ''; // la búsqueda normalizada, una sola vez por pintura
+    let ultimosVisibles = [];
+    const visiblesAhora = () => ultimosVisibles;
     function coincide(d) {
       const q = est.q.trim();
       if (!q) return true;
+      // Rango de montos contra el total del documento: «5000-20000» (también «5 000 - 20 000»)
+      const rango = q.match(/^([₡\d][\d\s.,₡]*?)\s*-\s*([₡\d][\d\s.,₡]*)$/);
+      if (rango) {
+        const a = aMonto(rango[1]), b = aMonto(rango[2]);
+        if (Number.isFinite(a) && Number.isFinite(b)) { const t = Number(d.total) || 0; return t >= Math.min(a, b) - 0.005 && t <= Math.max(a, b) + 0.005; }
+      }
       // cliente_identificacion (la cédula) la trae fx_documentos cuando el servidor la incluye; si no viene, la búsqueda por cédula no encuentra nada y lo demás sigue igual
-      const texto = norm([NOMBRE_TIPO[d.tipo_doc], NOMBRES_DOCUMENTO[d.tipo_doc], d.cliente || 'consumidor final', d.cliente_identificacion, d.venta_numero, d.referencia, d.consecutivo, numeroCorto(d.consecutivo), mediosTxt(d.medios), d.ref_consecutivo, d.nc_consecutivo].join(' '));
-      if (texto.includes(norm(q))) return true;
+      // También se busca por la condición de venta («contado»), el estado en palabras y las tarifas de IVA si la lista las trae
+      let texto = cacheTexto.get(d);
+      if (texto === undefined) {
+        texto = norm([NOMBRE_TIPO[d.tipo_doc], NOMBRES_DOCUMENTO[d.tipo_doc], d.cliente || 'consumidor final', d.cliente_identificacion, d.venta_numero, d.referencia, d.consecutivo, numeroCorto(d.consecutivo), mediosTxt(d.medios), d.ref_consecutivo, d.nc_consecutivo,
+          'contado', d.estado, ETQ_ESTADO[d.estado], d.nc_id ? 'anulado' : '', tarifasTxt(d)].join(' '));
+        cacheTexto.set(d, texto);
+      }
+      if (texto.includes(consulta)) return true;
       if (!/^[\d\s.,₡]+$/.test(q)) return false; // solo un número escrito se compara con montos y consecutivos
       const dig = q.replace(/\D/g, '');
       if (!dig) return false;
@@ -143,26 +189,49 @@ export default {
     const esPendiente = (d) => d.estado === 'pendiente' || d.estado === 'enviado';
     // «Con problemas» = lo mismo que cuenta el aviso rojo: rechazados (salvo los que solo traen un aviso o ya se rehicieron bien), con error, o que llevan más de 15 minutos esperando a Hacienda
     const soloAviso = (d) => { const it = traducirHacienda(d.mensaje).items; return it.length > 0 && it.every((x) => x.codigo === '-37'); };
-    const reemplazado = (d) => est.lista.some((n) => n.id !== d.id && n.tipo_doc === d.tipo_doc && ['aceptado', 'pendiente', 'enviado'].includes(n.estado) && new Date(n.fecha_emision) > new Date(d.fecha_emision)
-      && ((d.venta_numero && n.venta_numero === d.venta_numero) || (d.comprobante_ref && n.comprobante_ref === d.comprobante_ref)));
+    // ¿Ya se rehízo bien? Hay otro documento del mismo tipo, vivo (aceptado, pendiente o enviado), más nuevo y de la misma venta o del mismo comprobante de referencia.
+    // Se arma un índice una sola vez por carga (con miles de documentos, recorrer la lista por cada rechazado sería lento).
+    let indiceVivos = { lista: null, venta: new Map(), ref: new Map() };
+    const vivos = () => {
+      if (indiceVivos.lista === est.lista) return indiceVivos;
+      const venta = new Map(), ref = new Map();
+      for (const n of est.lista) {
+        if (n.estado !== 'aceptado' && n.estado !== 'pendiente' && n.estado !== 'enviado') continue;
+        const t = new Date(n.fecha_emision).getTime();
+        if (n.venta_numero) { const k = n.tipo_doc + '|' + n.venta_numero; if (!(venta.get(k) >= t)) venta.set(k, t); }
+        if (n.comprobante_ref) { const k = n.tipo_doc + '|' + n.comprobante_ref; if (!(ref.get(k) >= t)) ref.set(k, t); }
+      }
+      return (indiceVivos = { lista: est.lista, venta, ref });
+    };
+    const reemplazado = (d) => {
+      const ix = vivos(), t = new Date(d.fecha_emision).getTime();
+      return (!!d.venta_numero && ix.venta.get(d.tipo_doc + '|' + d.venta_numero) > t) || (!!d.comprobante_ref && ix.ref.get(d.tipo_doc + '|' + d.comprobante_ref) > t);
+    };
     const esProblema = (d) => ((d.estado === 'error' || d.estado === 'rechazado') && !(d.estado === 'rechazado' && soloAviso(d)) && !reemplazado(d) && !d.atendida)
       || (esPendiente(d) && Date.now() - new Date(d.fecha_emision).getTime() > 15 * 60000);
 
     function pintar() {
       pintarControles();
-      if (est.cargando && !est.lista.length) { zonaResumen.replaceChildren(); zonaCuadre.replaceChildren(); zonaFiltros.replaceChildren(); zonaLista.replaceChildren(h('p.cargando', 'Cargando los documentos…')); return; }
+      if (est.cargando && !est.lista.length) { zonaResumen.replaceChildren(); zonaCuadre.replaceChildren(); zonaFiltros.replaceChildren(); zonaCabeza.replaceChildren(); zonaPaginas.replaceChildren(); zonaLista.replaceChildren(h('p.cargando', 'Cargando los documentos…')); return; }
       if (est.error) {
-        zonaResumen.replaceChildren(); zonaCuadre.replaceChildren(); zonaFiltros.replaceChildren();
+        zonaResumen.replaceChildren(); zonaCuadre.replaceChildren(); zonaFiltros.replaceChildren(); zonaCabeza.replaceChildren(); zonaPaginas.replaceChildren();
         zonaLista.replaceChildren(h('div.vacio', h('p', 'No se pudieron cargar los documentos.'), h('p.tenue', est.error), h('button.btn.primario', { type: 'button', onclick: () => cargar() }, 'Intentar de nuevo')));
         return;
       }
       pintarResumen();
       const problemas = est.lista.filter(esProblema), pend = est.lista.filter(esPendiente);
+      const nAcept = est.lista.reduce((a, d) => a + (d.estado === 'aceptado' ? 1 : 0), 0), nRech = est.lista.reduce((a, d) => a + (d.estado === 'rechazado' ? 1 : 0), 0);
       if (est.filtro === 'problemas' && !problemas.length) est.filtro = 'todos';
       if (est.filtro === 'pendientes' && !pend.length) est.filtro = 'todos';
-      zonaFiltros.replaceChildren(...[['todos', `Todos (${est.lista.length})`], problemas.length ? ['problemas', `Con problemas (${problemas.length})`] : null, pend.length ? ['pendientes', `Esperando a Hacienda (${pend.length})`] : null]
-        .filter(Boolean).map(([k, t]) => h('button.btn' + (k === 'problemas' ? '.alerta' : ''), { type: 'button', 'aria-pressed': String(est.filtro === k), onclick: () => { est.filtro = k; pintar(); } }, t)));
-      const visibles = est.lista.filter((d) => coincide(d) && (est.filtro === 'todos' || (est.filtro === 'problemas' ? esProblema(d) : esPendiente(d))));
+      if (est.filtro === 'aceptados' && !nAcept) est.filtro = 'todos';
+      if (est.filtro === 'rechazados' && !nRech) est.filtro = 'todos';
+      zonaFiltros.replaceChildren(...[['todos', `Todos (${est.lista.length})`], problemas.length ? ['problemas', `Con problemas (${problemas.length})`] : null, pend.length ? ['pendientes', `Esperando a Hacienda (${pend.length})`] : null,
+        nAcept ? ['aceptados', `Aceptados (${nAcept})`] : null, nRech ? ['rechazados', `Rechazados (${nRech})`] : null]
+        .filter(Boolean).map(([k, t]) => h('button.btn' + (k === 'problemas' ? '.alerta' : ''), { type: 'button', 'aria-pressed': String(est.filtro === k), onclick: () => { est.filtro = k; est.pagina = 1; pintar(); } }, t)));
+      consulta = norm(est.q.trim());
+      const pasa = { todos: () => true, problemas: esProblema, pendientes: esPendiente, aceptados: (d) => d.estado === 'aceptado', rechazados: (d) => d.estado === 'rechazado' }[est.filtro] || (() => true);
+      const visibles = est.lista.filter((d) => pasa(d) && coincide(d)); // la búsqueda y los filtros actúan sobre TODO el rango cargado
+      ultimosVisibles = visibles;
       pintarLista(visibles);
     }
 
@@ -170,7 +239,7 @@ export default {
       const s = sumarDocumentos(est.lista);
       const una = est.desde === est.hasta;
       zonaResumen.replaceChildren(h('div.doc-resumen',
-        h('div.doc-neto', h('span.doc-etq', est.rango === 'turno' ? 'Total de este turno' : una ? (est.rango === 'hoy' ? 'Total de hoy' : 'Total del día') : 'Total de las fechas elegidas'), h('b.doc-gran', money(s.neto))),
+        h('div.doc-neto', h('span.doc-etq', est.rango === 'hoy' ? (turnoDeAyer() ? 'Total de este turno' : 'Total de hoy') : (est.rango === 'mes' || est.rango === 'anterior') ? 'Total del mes' : una ? 'Total del día' : 'Total de las fechas elegidas'), h('b.doc-gran', money(s.neto))),
         h('span.doc-det-res', `${s.nVentas} ${s.nVentas === 1 ? 'venta' : 'ventas'}`, s.nNC ? `, ${s.nNC} ${s.nNC === 1 ? 'anulación' : 'anulaciones'}` : '', ` · de los cuales ${money(s.iva / 100)} son IVA`)));
       pintarCuadre(s);
     }
@@ -178,9 +247,11 @@ export default {
     // Qué no suma y qué sí suma este total, y cómo cuadra con «Apertura y cierre de caja» (mismas frases y montos que en esa pantalla)
     function pintarCuadre(s) {
       const frases = frasesDeLista(s);
-      const p = est.rango === 'turno' ? puenteConTurno(s, est.turnoEstado) : null;
+      // El cuadre con «Apertura y cierre de caja» sale en «Hoy» con la caja abierta: se hace con los documentos emitidos desde la apertura del turno
+      const turno = est.rango === 'hoy' ? turnoAbierto() : null;
+      const p = turno && est.turnoEstado ? puenteConTurno(sumarDocumentos(docsDelTurno(est.lista, turno.abierto_en)), est.turnoEstado) : null;
       const partes = frases.map((t) => h('p.doc-cuadre-frase', t));
-      if (p && p.coincide && !p.turnoRech && !p.sin) partes.push(h('p.doc-cuadre-frase.ok', `Coincide con el total vendido de «Apertura y cierre de caja» (${money(p.turnoNeto / 100)}).`));
+      if (p && p.coincide && !p.turnoRech && !p.sin) partes.push(h('p.doc-cuadre-frase.ok', `El turno abierto coincide con el total vendido de «Apertura y cierre de caja» (${money(p.turnoNeto / 100)}).`));
       else if (p) {
         const fila = (txt, monto, clase = '') => h('div.doc-cuadre-fila' + clase, h('span', txt), h('b', money(monto / 100)));
         partes.push(h('details.doc-cuadre',
@@ -190,32 +261,70 @@ export default {
             p.turnoRech ? fila('Menos las ventas que Hacienda no aceptó (el cierre de caja sí las cuenta)', p.turnoRech) : null,
             p.sin ? fila(`Más ${p.sinN === 1 ? '1 documento que no salió' : p.sinN + ' documentos que no salieron'} de una cuenta cobrada en Facturación (el cierre de caja no los cuenta)`, p.sin) : null,
             p.otras ? fila('Otras diferencias, por ejemplo notas de crédito de ventas de otro turno', p.otras) : null,
-            fila('Total de esta lista', p.lista, '.total'))));
+            fila('Total de este turno en esta lista', p.lista, '.total'))));
       }
       zonaCuadre.replaceChildren(...(partes.length ? [h('div.doc-cuadre-caja', partes)] : []));
     }
 
+    // La lista se pinta por páginas (100 documentos en escritorio, 50 en celular): un mes entero puede traer miles y pintarlos todos congelaría la pantalla.
+    // `visibles` ya es el resultado de la búsqueda y del filtro sobre TODO lo cargado; aquí solo se decide qué página se dibuja.
     function pintarLista(visibles) {
       if (!visibles.length) {
+        const hoy = est.rango === 'hoy';
+        zonaCabeza.replaceChildren(); zonaPaginas.replaceChildren();
         zonaLista.replaceChildren(h('div.vacio',
           est.lista.length ? h('p', 'Ningún documento coincide con lo que buscó.')
-            : h('p', est.rango === 'turno' ? 'Todavía no hay documentos en este turno. Cuando cobre una venta en Facturación, aparecerá aquí.' : est.rango === 'hoy' ? 'Todavía no hay documentos hoy. Cuando cobre una venta en Facturación, aparecerá aquí.' : 'No hay documentos en estas fechas.'),
-          !est.lista.length && (est.rango === 'hoy' || est.rango === 'turno') ? h('button.btn.primario', { onclick: () => app.ir('caja') }, 'Ir a Facturación') : null));
+            : h('p', hoy ? (turnoDeAyer() ? 'Todavía no hay documentos en este turno. Cuando cobre una venta en Facturación, aparecerá aquí.' : 'Todavía no hay documentos hoy. Cuando cobre una venta en Facturación, aparecerá aquí.') : 'No hay documentos en estas fechas.'),
+          !est.lista.length && hoy ? h('button.btn.primario', { onclick: () => app.ir('caja') }, 'Ir a Facturación') : null));
         return;
       }
-      const dias = new Map();
-      for (const d of visibles) { const k = ymdDe(d.fecha_emision); if (!dias.has(k)) dias.set(k, []); dias.get(k).push(d); }
-      const multi = dias.size > 1 || est.desde !== est.hasta;
+      const ps = porPagina(), paginas = Math.max(1, Math.ceil(visibles.length / ps));
+      est.pagina = Math.min(Math.max(1, est.pagina), paginas);
+      // Totales de cada día sobre TODOS los documentos que pasan la búsqueda (un día puede continuar en la página siguiente)
+      const porDia = new Map();
+      for (const d of visibles) {
+        const k = ymdDe(d.fecha_emision); let x = porDia.get(k); if (!x) porDia.set(k, x = { n: 0, t: 0 });
+        x.n++; if (d.estado !== 'rechazado') x.t += signo(d) * Math.round((Number(d.total) || 0) * 100);
+      }
+      const multi = porDia.size > 1 || est.desde !== est.hasta;
+      const desde = (est.pagina - 1) * ps, trozo = visibles.slice(desde, desde + ps);
       const out = [];
-      for (const [dia, docs] of dias) {
-        if (multi) {
-          let t = 0; for (const d of docs) if (d.estado !== 'rechazado') t += signo(d) * Math.round((Number(d.total) || 0) * 100);
-          out.push(h('div.doc-dia', h('b', diaTxt(dia)), h('span', `${docs.length} ${docs.length === 1 ? 'documento' : 'documentos'}, total ${money(t / 100)}`)));
+      let diaActual = null;
+      for (const d of trozo) {
+        const k = ymdDe(d.fecha_emision);
+        if (k !== diaActual) {
+          diaActual = k;
+          if (multi) { const x = porDia.get(k); out.push(h('div.doc-dia', h('b', diaTxt(k)), h('span', `${x.n} ${x.n === 1 ? 'documento' : 'documentos'}, total ${money(x.t / 100)}`))); }
+          out.push(h('div.doc-cabeza', h('div.doc-cabeza-cols', h('span', 'Hora'), h('span', 'Documento'), h('span', 'Cliente'), h('span.der', 'Total'), h('span', 'Estado')), h('span.doc-cabeza-acc', 'Acciones')));
         }
-        out.push(h('div.doc-cabeza', h('div.doc-cabeza-cols', h('span', 'Hora'), h('span', 'Documento'), h('span', 'Cliente'), h('span.der', 'Total'), h('span', 'Estado')), h('span.doc-cabeza-acc', 'Acciones')));
-        for (const d of docs) out.push(fila(d));
+        out.push(fila(d));
       }
       zonaLista.replaceChildren(...out);
+      // Encabezado de la lista: cuántos documentos hay y cuáles se ven. El hueco #doc-descargas es para los botones de descarga (Excel, CSV, PDF, XML) que se agregan aparte.
+      zonaCabeza.replaceChildren(
+        h('span.doc-conteo', paginas > 1 ? `Documentos ${(desde + 1).toLocaleString('es-CR')} a ${(desde + trozo.length).toLocaleString('es-CR')} de ${visibles.length.toLocaleString('es-CR')}` : `${visibles.length.toLocaleString('es-CR')} ${visibles.length === 1 ? 'documento' : 'documentos'}`),
+        zonaDescargas);
+      pintarPaginas(paginas);
+    }
+
+    // Paginación: Primera, Anterior, «Página 3 de 120», Siguiente, Última y un campo para ir a una página. Todos los controles miden 48 px o más.
+    function irAPagina(n) {
+      const total = Math.max(1, Math.ceil(visiblesAhora().length / porPagina()));
+      est.pagina = Math.min(Math.max(1, Math.round(Number(n)) || 1), total);
+      pintar();
+      zonaCabeza.scrollIntoView({ block: 'start' });
+    }
+    function pintarPaginas(paginas) {
+      if (paginas <= 1) { zonaPaginas.replaceChildren(); return; }
+      const p = est.pagina;
+      const boton = (txt, destino, desactivado, etiqueta) => h('button.btn', { type: 'button', disabled: desactivado, 'aria-label': etiqueta, onclick: () => irAPagina(destino) }, txt);
+      const campo = h('input.campo', { type: 'number', inputmode: 'numeric', min: '1', max: String(paginas), step: '1', value: String(p), 'aria-label': `Ir a la página (de 1 a ${paginas})`,
+        onkeydown: (e) => { if (e.key === 'Enter') { e.preventDefault(); irAPagina(campo.value); } } });
+      zonaPaginas.replaceChildren(h('nav.doc-pags', { 'aria-label': 'Páginas de la lista' },
+        boton('Primera', 1, p === 1, 'Ir a la primera página'), boton('Anterior', p - 1, p === 1, 'Página anterior'),
+        h('span.doc-pag-txt', { role: 'status' }, `Página ${p.toLocaleString('es-CR')} de ${paginas.toLocaleString('es-CR')}`),
+        boton('Siguiente', p + 1, p === paginas, 'Página siguiente'), boton('Última', paginas, p === paginas, 'Ir a la última página'),
+        h('div.doc-pag-ir', h('label', { for: 'doc-pag-campo' }, 'Ir a la página'), Object.assign(campo, { id: 'doc-pag-campo' }), h('button.btn', { type: 'button', onclick: () => irAPagina(campo.value) }, 'Ir'))));
     }
 
     // Una fila = la zona que se toca para ver el detalle + los botones «Reimprimir» y «Anular» (o «Ver y atender» si Hacienda no lo aceptó)
@@ -356,7 +465,7 @@ export default {
         pendiente: 'Está por enviarse a Hacienda. No tiene que hacer nada.',
         enviado: 'Ya se envió a Hacienda y se espera su respuesta. Esta ventana se actualiza sola.',
         aceptado: (anulado ? 'Hacienda lo aceptó, y después se anuló con una nota de crédito.' : 'Hacienda lo aceptó: el documento es válido.') + (c.ambiente !== 'produccion' ? ' Como estamos en modo de pruebas, no tiene validez tributaria.' : ''),
-        rechazado: 'Hacienda no aceptó este documento, así que no es válido y no necesita nota de crédito. Si fue una venta real, hay que hacerla de nuevo en Facturación.',
+        rechazado: 'Hacienda no aceptó este documento, así que no es válido.',
         error: 'Todavía no se pudo enviar a Hacienda (por ejemplo, por falta de internet). El sistema lo intentará de nuevo solo; también puede tocar «Reenviar a Hacienda».',
       }[c.estado] || '';
       // Lo que dice Hacienda, en palabras simples. Si el documento fue aceptado, lo que trae es un aviso y no impide nada.
@@ -448,7 +557,7 @@ export default {
             accion({ texto: esTiquete ? 'El cliente pide factura' : 'Corregir el cliente de la factura', hint: esTiquete ? 'Elige al cliente, anula el tiquete y deja la factura lista para cobrar.' : 'Elige al cliente correcto, anula y deja la venta lista para cobrar.', clase: 'primario', onclick: async () => { cambiarCliente(app, doc, { alTerminar: repintar }); } }),
             accion({ texto: 'Anular con nota de crédito', clase: 'peligro', onclick: async () => { abrirAnular(doc, { alTerminar: repintar, alVerNC: (n) => { ctx.cerrar(); abrirDetalle(n.id); } }); } })));
       } else if (c.estado === 'rechazado') {
-        g.append(h('p.tenue', 'Hacienda rechazó este documento, así que ya no vale y no necesita nota de crédito.'), bloqueAtender(c, ctx));
+        g.append(h('p.tenue', 'Hacienda rechazó este comprobante, por eso no vale y no se le hace nota de crédito. Toque «Hacer la venta de nuevo en Facturación» para sacar uno correcto de inmediato.' + (SUSTITUYE_RECHAZADO ? ' El nuevo indicará que sustituye a este.' : '')), bloqueAtender(c, ctx));
       } else {
         // pendiente, enviado o con error: todavía no hay nada que anular. Se explica qué significa y qué hacer, sin prometer cuánto tarda Hacienda.
         const pend = c.estado === 'pendiente' || c.estado === 'enviado';
@@ -495,12 +604,18 @@ export default {
     await cargar();
     if (alFinal) buscador.focus(); // desde el botón rojo «Anular factura»: el cursor queda en el buscador
     if (verDocumento) abrirDetalle(verDocumento); // desde «Me equivoqué» del cobro: se abre el documento recién emitido
-    // Los documentos cambian de estado solos (en cola, enviado, aceptado): se actualiza la lista cada 20 segundos
+    // Los documentos cambian de estado solos (en cola, enviado, aceptado): «Hoy» se actualiza cada 20 segundos. Un mes entero pesa mucho más:
+    // «Este mes» y «Cualquier fecha» se actualizan cada minuto y «Mes anterior» solo con el botón «Actualizar».
     const reloj = setInterval(() => {
       if (document.hidden || !root.isConnected) return;
-      if (Date.now() - ultimaCarga < 15000) return;
-      cargar(true); detalleActual?.repintar(true);
+      const espera = est.rango === 'hoy' ? 15000 : est.rango === 'anterior' ? Infinity : 60000;
+      if (Date.now() - ultimaCarga >= espera) cargar(true);
+      detalleActual?.repintar(true);
     }, 20000);
-    return () => clearInterval(reloj);
+    // Si el aparato cambia de ancho (girar el celular), el tamaño de la página cambia: se vuelve a la primera
+    let mq = null; try { mq = window.matchMedia('(max-width:700px)'); } catch { /* sin matchMedia */ }
+    const alCambiarAncho = () => { est.pagina = 1; if (est.lista.length && root.isConnected) pintar(); };
+    mq?.addEventListener?.('change', alCambiarAncho);
+    return () => { clearInterval(reloj); mq?.removeEventListener?.('change', alCambiarAncho); };
   },
 };

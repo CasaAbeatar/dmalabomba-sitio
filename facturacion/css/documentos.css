@@ -167,3 +167,21 @@
 .doc-det .tabla th{white-space:normal}
 .doc-det .tabla td,.doc-det .tabla th{padding:.6rem .6rem}
 .doc-ver .nw{white-space:nowrap}
+
+/* Encabezado de la lista y paginación (100 documentos por página en escritorio, 50 en celular) */
+.doc-lista-cab{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:.6rem;margin:.4rem 0 .2rem}
+.doc-conteo{font-weight:600;color:var(--tinta,#1d1a17)}
+.doc-descargas{display:flex;flex-wrap:wrap;gap:.5rem} /* hueco para los botones de descarga que se agregan aparte */
+.doc-descargas:empty{display:none}
+.doc-pags{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:.5rem;padding:1rem 0 1.6rem}
+.doc-pags .btn{min-height:48px;min-width:6rem}
+.doc-pag-txt{font-weight:700;padding:0 .6rem;min-height:48px;display:inline-flex;align-items:center}
+.doc-pag-ir{display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;justify-content:center}
+.doc-pag-ir label{font-weight:600}
+.doc-pag-ir .campo{width:6.5rem;min-height:48px;text-align:center}
+@media (max-width:700px){
+  .doc-pags{display:grid;grid-template-columns:1fr 1fr;gap:.5rem}
+  .doc-pags .btn{min-width:0;width:100%}
+  .doc-pag-txt{grid-column:1/-1;justify-content:center;order:-1}
+  .doc-pag-ir{grid-column:1/-1;justify-content:center}
+}
