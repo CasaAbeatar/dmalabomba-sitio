@@ -135,8 +135,8 @@
 }
 /* Celular acostado (poca altura): ni la tira de cajones ni el panel de opciones se fijan; todo corre con la página y nada queda tapado */
 @media(max-width:979px) and (max-height:520px){
-  .opciones{position:static;max-height:none;margin-top:.5rem;box-shadow:none}
-  .buscador,.cajones{position:static}
+  .opciones{position:static;max-height:calc(100vh - var(--barra-h,76px) - 18px);max-height:calc(100dvh - var(--barra-h,76px) - 18px);margin-top:.5rem;box-shadow:none;scroll-margin-top:6px}
+  .caja .buscador,.caja .cajones{position:static}
   .catalogo-medio.con-opciones{padding-bottom:0}
 }
 

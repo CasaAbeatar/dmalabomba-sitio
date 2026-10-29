@@ -183,5 +183,6 @@
   .doc-pags{display:grid;grid-template-columns:1fr 1fr;gap:.5rem}
   .doc-pags .btn{min-width:0;width:100%}
   .doc-pag-txt{grid-column:1/-1;justify-content:center;order:-1}
-  .doc-pag-ir{grid-column:1/-1;justify-content:center}
+  .doc-pag-ir{grid-column:1/-1;justify-content:center;flex-wrap:nowrap}
+  .doc-pag-ir .btn{width:auto;min-width:5rem}
 }
