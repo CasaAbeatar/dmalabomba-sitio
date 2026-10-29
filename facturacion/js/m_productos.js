@@ -1,6 +1,7 @@
 // Productos: catálogo del local en tres niveles como en Prisma.
-//   cajón (2 dígitos) > producto (dígitos 3-4, tamaño o formato) > modificador (dígitos 5-6, marca o sabor con su precio final)
-//   Código de 6 dígitos = cajón + producto + modificador; "00" en el tercer par si no hay modificador.
+//   nivel 1 cajón (2 dígitos) > nivel 2 producto (dígitos 3-4) > nivel 3 modificador u opción (dígitos 5-6, con su precio final)
+//   Código de 6 dígitos CCPPMM = cajón + producto + modificador; "00" en el tercer par si se vende con un toque (sin opciones).
+//   Cada artículo guarda producto_nombre (el nombre del nivel 2) y modificador_nombre (el del nivel 3); Caja los usa para armar la cascada.
 // Precio siempre FINAL con IVA incluido. Nunca se borra: se desactiva.
 import { h, money, r2, leerNumero, toast, modal, confirmar, conBoton, debounce, descargar, fechaHora, hoyCR } from './util.js';
 import { api } from './api.js';
@@ -27,6 +28,8 @@ function dialogo({ titulo, contenido, botones, ancho = 600 }) {
 
 // Nombre del grupo (dígitos 3-4): el del producto con modificador 00 o lo que tengan en común los nombres
 function nombreGrupo(prods) {
+  const dado = prods.find((p) => p.producto_nombre && String(p.producto_nombre).trim());
+  if (dado) return String(dado.producto_nombre).trim();
   const base = prods.find((p) => p.codigo.slice(4) === '00');
   if (base) return base.nombre;
   if (prods.length === 1) return prods[0].nombre;
@@ -59,6 +62,7 @@ function leerCsv(texto) {
   if (cel !== '' || fila.length) cerrarFila();
   return filas;
 }
+const esUnToque = (cod) => String(cod).slice(4) === '00';
 const sino = (v) => /^(si|s|1|true|x|yes|verdadero)$/.test(norm(v));
 
 export default {
@@ -74,6 +78,10 @@ export default {
     const cabysEnCat = new Map(); // CABYS que sí están en el catálogo oficial -> {descripcion, tarifa}
     const cabysPreguntados = new Set();
     const S = { q: '', cajon: '', ver: 'activos', sel: new Set() };
+    // Una opción (modificador) activa necesita el nombre del producto (nivel 2) y el de la opción (nivel 3) para verse en la cascada de Caja
+    const faltaNivel = (p) => p.activo && !esUnToque(p.codigo) && (!String(p.producto_nombre || '').trim() || !String(p.modificador_nombre || '').trim());
+    // Una opción (nivel 3) debería llevar su precio final; con precio abierto y ₡0 en el menú, Caja tiene que preguntarlo en cada venta
+    const opcionSinPrecio = (p) => p.activo && !esUnToque(p.codigo) && Number(p.precio_final) <= 0;
     const noEnCatalogo = (p) => cabysPreguntados.has(p.cabys) && !cabysEnCat.has(p.cabys);
 
     /* ---------- Datos ---------- */
@@ -195,10 +203,12 @@ export default {
       if (S.ver === 'activos' && !p.activo) return false;
       if (S.ver === 'inactivos' && p.activo) return false;
       if (S.ver === 'confirmar' && !esProvisional(p)) return false;
+      if (S.ver === 'nivel' && !faltaNivel(p)) return false;
+      if (S.ver === 'opcion0' && !opcionSinPrecio(p)) return false;
       if (S.ver === 'precio' && !(p.precio_abierto || sinPrecio(p))) return false;
       if (S.ver === 'cabys' && !noEnCatalogo(p)) return false;
       if (S.q) {
-        const hay = norm(p.nombre + ' ' + p.codigo + ' ' + p.cabys + ' ' + (p.nota || ''));
+        const hay = norm(p.nombre + ' ' + p.codigo + ' ' + p.cabys + ' ' + (p.nota || '') + ' ' + (p.producto_nombre || '') + ' ' + (p.modificador_nombre || ''));
         if (!norm(S.q).split(/\s+/).every((w) => hay.includes(w))) return false;
       }
       return true;
@@ -222,14 +232,16 @@ export default {
 
     function pintar() {
       const t = cat.productos;
-      const cuenta = { activos: t.filter((p) => p.activo).length, todos: t.length, confirmar: t.filter(esProvisional).length, precio: t.filter((p) => p.precio_abierto || sinPrecio(p)).length, cabys: t.filter(noEnCatalogo).length, inactivos: t.filter((p) => !p.activo).length };
-      selVer.replaceChildren(...[['activos', 'Productos activos'], ['todos', 'Todos (incluye desactivados)'], ['confirmar', 'Por confirmar CABYS'], ['precio', 'Precio abierto o sin precio'], ['cabys', 'CABYS fuera del catálogo'], ['inactivos', 'Desactivados']]
+      const cuenta = { opcion0: t.filter(opcionSinPrecio).length, nivel: t.filter(faltaNivel).length, activos: t.filter((p) => p.activo).length, todos: t.length, confirmar: t.filter(esProvisional).length, precio: t.filter((p) => p.precio_abierto || sinPrecio(p)).length, cabys: t.filter(noEnCatalogo).length, inactivos: t.filter((p) => !p.activo).length };
+      selVer.replaceChildren(...[['activos', 'Productos activos'], ['todos', 'Todos (incluye desactivados)'], ['confirmar', 'Por confirmar CABYS'], ['nivel', 'Sin nombre de producto u opción'], ['opcion0', 'Opciones sin precio fijo (₡0)'], ['precio', 'Precio abierto o sin precio'], ['cabys', 'CABYS fuera del catálogo'], ['inactivos', 'Desactivados']]
         .map(([k, n]) => h('option', { value: k, selected: S.ver === k }, n + ' (' + cuenta[k] + ')')));
       const cajonesOrd = [...cat.cajones].sort((a, b) => (a.orden - b.orden) || a.codigo.localeCompare(b.codigo));
       selCajon.replaceChildren(h('option', { value: '' }, 'Todos los cajones'), ...cajonesOrd.map((c) => h('option', { value: c.codigo, selected: S.cajon === c.codigo }, c.codigo + ' · ' + c.nombre + (c.activo ? '' : ' (desactivado)'))));
       resumen.replaceChildren(...[
         h('span.chip.ok', plural(cuenta.activos, 'producto activo', 'productos activos')),
-        cuenta.confirmar ? h('button.chip.espera', { type: 'button', style: 'cursor:pointer;background:var(--ambar-suave)', onclick: () => { S.ver = 'confirmar'; pintar(); } }, plural(cuenta.confirmar, 'producto por confirmar CABYS', 'productos por confirmar CABYS')) : null,
+        cuenta.opcion0 ? h('button.btn.chico.ambar', { type: 'button', onclick: () => { S.ver = 'opcion0'; pintar(); } }, plural(cuenta.opcion0, 'opción sin precio fijo (₡0): pide el precio al vender', 'opciones sin precio fijo (₡0): piden el precio al vender')) : null,
+        cuenta.nivel ? h('button.btn.chico.ambar', { type: 'button', onclick: () => { S.ver = 'nivel'; pintar(); } }, plural(cuenta.nivel, 'opción sin nombre de producto u opción', 'opciones sin nombre de producto u opción')) : null,
+        cuenta.confirmar ? h('button.btn.chico.ambar', { type: 'button', onclick: () => { S.ver = 'confirmar'; pintar(); } }, plural(cuenta.confirmar, 'producto por confirmar CABYS', 'productos por confirmar CABYS')) : null,
         cuenta.precio ? h('span.chip', plural(cuenta.precio, 'con precio abierto o sin precio', 'con precio abierto o sin precio')) : null,
         cuenta.cabys ? h('span.chip.espera', plural(cuenta.cabys, 'CABYS fuera del catálogo', 'CABYS fuera del catálogo')) : null,
         cuenta.inactivos ? h('span.chip.gris', plural(cuenta.inactivos, 'desactivado', 'desactivados')) : null].filter(Boolean));
@@ -248,8 +260,8 @@ export default {
         for (const [g, ps] of porGrupo) {
           const todos = t.filter((p) => p.codigo.startsWith(g));
           cuerpo.push(h('div.mt-grupo-cab',
-            h('div.tit', chkMultiple(ps.map((p) => p.id), 'Seleccionar el grupo ' + g), h('div', h('strong', g + ' · ' + nombreGrupo(todos)), h('div.tenue', { style: 'font-size:.85rem' }, plural(ps.length, 'producto', 'productos')))),
-            h('div.mt-btns', h('button.btn', { type: 'button', onclick: () => abrirProducto({ modo: 'modificador', grupo: g }) }, 'Agregar modificador a este producto'))));
+            h('div.tit', chkMultiple(ps.map((p) => p.id), 'Seleccionar el grupo ' + g), h('div', h('strong', g + ' · ' + nombreGrupo(todos)), h('div.tenue', { style: 'font-size:.85rem' }, todos.some((x) => !esUnToque(x.codigo)) ? 'Producto con ' + plural(todos.filter((x) => !esUnToque(x.codigo) && x.activo).length, 'opción', 'opciones') : 'Producto que se cobra con un toque'))),
+            h('div.mt-btns', h('button.btn', { type: 'button', onclick: () => abrirProducto({ modo: 'modificador', grupo: g }) }, 'Agregar opción a este producto'))));
           ps.forEach((p) => cuerpo.push(fila(p)));
         }
         if (!prods.length) cuerpo.push(h('div.vacio', { style: 'border:0;border-radius:0' }, 'Este cajón todavía no tiene productos.'));
@@ -277,6 +289,11 @@ export default {
     function fila(p) {
       const sub = [];
       if (!p.activo) sub.push(h('span.chip.gris', 'Desactivado'));
+      if (esUnToque(p.codigo)) sub.push(h('span.chip', 'Un toque'));
+      else if (faltaNivel(p)) sub.push(h('span.chip.mal', 'Falta el nombre ' + (!String(p.producto_nombre || '').trim() ? 'del producto' : 'de la opción')));
+      else if (!String(p.producto_nombre || '').trim() || !String(p.modificador_nombre || '').trim()) sub.push(h('span.chip.gris', 'Sin nombre de producto u opción'));
+      else sub.push(h('span.chip', 'Opción «' + String(p.modificador_nombre).trim() + '» de «' + String(p.producto_nombre).trim() + '»'));
+      if (p.descripcion_libre) sub.push(h('span.chip', 'Descripción libre'));
       if (esProvisional(p)) sub.push(h('span.chip.espera', 'Confirmar CABYS'));
       if (p.precio_abierto) sub.push(h('span.chip', 'Precio abierto'));
       else if (sinPrecio(p)) sub.push(h('span.chip.mal', 'Falta el precio'));
@@ -323,7 +340,7 @@ export default {
       if (!ok) return;
       await conBoton(btn, async () => { await api.productoGuardar(cuerpoProducto(p, { activo: !p.activo })); toast(p.activo ? 'Producto desactivado.' : 'Producto activado.'); await cargar(); });
     }
-    const cuerpoProducto = (p, extra = {}) => ({ sociedad_id: soc.id, cajon_id: p.cajon_id, codigo: p.codigo, nombre: p.nombre, cabys: p.cabys, precio_final: Number(p.precio_final), tarifa_iva: Number(p.tarifa_iva), activo: p.activo, precio_abierto: p.precio_abierto, nota: p.nota || null, ...extra });
+    const cuerpoProducto = (p, extra = {}) => ({ sociedad_id: soc.id, cajon_id: p.cajon_id, codigo: p.codigo, nombre: p.nombre, cabys: p.cabys, precio_final: Number(p.precio_final), tarifa_iva: Number(p.tarifa_iva), activo: p.activo, precio_abierto: p.precio_abierto, nota: p.nota || null, producto_nombre: p.producto_nombre || null, modificador_nombre: p.modificador_nombre || null, descripcion_libre: !!p.descripcion_libre, ...extra });
 
     /* ---------- Formulario de producto ---------- */
     async function abrirProducto({ modo, p, cajon, grupo }) {
@@ -343,6 +360,15 @@ export default {
       const decod = h('small.tenue');
       const nombre = h('textarea.campo', { rows: 2, 'aria-label': 'Nombre' }, esEd ? p.nombre : '');
       const avisoNombre = h('div', { hidden: true });
+      // Nombres de los niveles 2 y 3 (producto y opción). Caja arma la cascada con ellos.
+      const grupoProds = modo === 'modificador' ? cat.productos.filter((x) => x.codigo.startsWith(grupo)) : [];
+      const prodNom = h('input.campo', { type: 'text', maxlength: 80, autocomplete: 'off', placeholder: 'Ej. Hamburguesa', 'aria-label': 'Nombre del producto (nivel 2)',
+        value: esEd ? (p.producto_nombre || '') : modo === 'modificador' ? (hermanos.find((x) => x.producto_nombre)?.producto_nombre || nombreGrupo(grupoProds)) : '' });
+      const modNom = h('input.campo', { type: 'text', maxlength: 80, autocomplete: 'off', placeholder: 'Ej. Doble', 'aria-label': 'Nombre de la opción (nivel 3)', value: esEd ? (p.modificador_nombre || '') : '' });
+      const bloqueNiveles = h('div.col');
+      const avisosCodigo = h('div.col', { 'aria-live': 'polite' });
+      const libre = h('input', { type: 'checkbox', checked: esEd && !!p.descripcion_libre });
+      let nombreAuto = ''; // lo último que se escribió solo en «Nombre o descripción»
       const cabysInp = soloDigitos(h('input.campo', { type: 'text', inputmode: 'numeric', autocomplete: 'off', value: esEd ? p.cabys : hermano?.cabys || '', 'aria-label': 'CABYS de 13 números' }), 13);
       const cabysEstado = h('div');
       const buscarCabys = h('input.campo', { type: 'search', autocomplete: 'off', placeholder: 'Escriba el nombre del producto o el inicio de un código CABYS', 'aria-label': 'Buscar en el catálogo CABYS' });
@@ -358,9 +384,52 @@ export default {
       const cajaProv = h('div', { hidden: !(esEd && esProvisional(p)) });
       let infoCabys = null;
 
+      const quedaActivo = () => (esEd ? activo.checked : true);
+      // Revisa el código CCPPMM contra el menú. errores = no deja guardar; pendientes = falta escribir algo (se pide al guardar)
+      const revisarCodigo = () => {
+        const c = codigo.value, errores = [], pendientes = [];
+        if (c.length !== 6) return { errores, pendientes, completo: false };
+        const cj = cat.cajones.find((x) => x.codigo === selC.value);
+        const ccpp = c.slice(0, 4), mm = c.slice(4);
+        if (cj && c.slice(0, 2) !== cj.codigo) errores.push('El código tiene que empezar con el código del cajón (' + cj.codigo + ').');
+        if (!esEd) { const ya = cat.productos.find((x) => x.codigo === c); if (ya) errores.push('Ese código ya lo usa «' + ya.nombre + '». Toque «Sugerir el siguiente código libre».'); }
+        const pn = prodNom.value.trim(), mn = modNom.value.trim();
+        const demas = cat.productos.filter((x) => x.activo && x.id !== p?.id && x.codigo !== c && x.codigo.startsWith(ccpp));
+        if (mm === '00') {
+          const conOp = demas.find((x) => !esUnToque(x.codigo));
+          if (conOp && quedaActivo()) errores.push('El producto ' + ccpp + ' ya tiene opciones (por ejemplo ' + conOp.codigo + '). Un producto con opciones no se cobra solo: use un código que no termine en 00.');
+        } else if (quedaActivo()) {
+          const suelto = demas.find((x) => esUnToque(x.codigo));
+          if (suelto) errores.push('El producto ' + ccpp + ' ya existe como artículo suelto (' + suelto.codigo + ' «' + suelto.nombre + '»). Un producto con opciones no se cobra solo: desactive ese artículo o use otro número de producto.');
+          if (!pn) pendientes.push('Falta el nombre del producto (nivel 2), por ejemplo «Hamburguesa».');
+          if (!mn) pendientes.push('Falta el nombre de la opción (nivel 3), por ejemplo «Doble».');
+          const rep = mn && demas.find((x) => !esUnToque(x.codigo) && norm(x.modificador_nombre || '') === norm(mn));
+          if (rep) errores.push('Ya existe la opción «' + mn + '» en este producto (código ' + rep.codigo + '). Use otro nombre.');
+          const otroNombre = pn && demas.find((x) => !esUnToque(x.codigo) && x.producto_nombre && norm(x.producto_nombre) !== norm(pn));
+          if (otroNombre) pendientes.push('Las otras opciones de este producto se llaman «' + otroNombre.producto_nombre + '». Si es el mismo producto, escriba el mismo nombre para que se vean juntas en Caja.');
+        }
+        return { errores, pendientes, completo: true };
+      };
       const decodificar = () => {
         const c = codigo.value;
-        decod.textContent = c.length === 6 ? 'Cajón ' + c.slice(0, 2) + ' · Producto ' + c.slice(2, 4) + ' · Modificador ' + c.slice(4) + (c.slice(4) === '00' ? ' (sin modificador)' : '') : 'El código tiene 6 números: cajón (2) + producto (2) + modificador (2). Lleva ' + c.length + '.';
+        decod.textContent = c.length === 6
+          ? 'Cajón ' + c.slice(0, 2) + ' (nivel 1) · Producto ' + c.slice(2, 4) + ' (nivel 2) · Opción ' + c.slice(4) + (c.slice(4) === '00' ? ' (se vende con un toque, sin opciones)' : ' (nivel 3)')
+          : 'El código tiene 6 números: cajón (2) + producto (2) + opción (2). Lleva ' + c.length + '.';
+        const r = revisarCodigo();
+        avisosCodigo.replaceChildren(...r.errores.map((t) => aviso('rojo', t)), ...r.pendientes.map((t) => aviso('ambar', t)),
+          ...(r.completo && !r.errores.length && !r.pendientes.length ? [aviso('verde', 'El código está bien: no choca con otro producto del menú.')] : []));
+        // Los nombres de producto y de opción solo se piden cuando el código lleva opción (no termina en 00)
+        const conOpcion = c.length === 6 && c.slice(4) !== '00';
+        bloqueNiveles.replaceChildren(...(conOpcion
+          ? [campo('Nombre del producto (nivel 2)', prodNom, 'Es lo que se ve en el segundo paso de Caja, por ejemplo «Hamburguesa». Todas las opciones del mismo producto llevan el mismo nombre.'),
+             campo('Nombre de la opción (nivel 3)', modNom, 'Es lo que se ve en el tercer paso, por ejemplo «Doble». Déjelo vacío si el producto se vende con un toque (el código termina en 00).')]
+          : c.length === 6 ? [h('small.tenue', 'Este artículo se vende con un toque: no lleva nombre de producto ni de opción. En Caja sale con el nombre de abajo. Si quiere que tenga opciones (tamaños, sabores), cambie los dos últimos números del código a 01, 02 y así.')] : []));
+      };
+      const componerNombre = () => {
+        if (codigo.value.slice(4) === '00') return;
+        if (nombre.value.trim() && nombre.value !== nombreAuto) return; // la persona ya lo escribió a su manera
+        nombreAuto = [prodNom.value.trim(), modNom.value.trim()].filter(Boolean).join(', ');
+        nombre.value = nombreAuto; refrescarNombre();
       };
       const refrescarIva = () => {
         const v = leerNumero(precio.value), t = Number(tarifa.value);
@@ -373,6 +442,7 @@ export default {
         }
       };
       const refrescarAbierto = () => { precio.disabled = abierto.checked; if (abierto.checked) precio.value = ''; refrescarIva(); };
+      libre.addEventListener('change', refrescarIva);
       const refrescarNombre = () => {
         const n = norm(nombre.value);
         const igual = n ? cat.productos.find((x) => x.id !== p?.id && x.activo && norm(x.nombre) === n) : null;
@@ -412,6 +482,8 @@ export default {
       }
       selC.addEventListener('change', () => { if (!esEd && modo === 'nuevo') codigo.value = siguienteProducto(selC.value); decodificar(); });
       codigo.addEventListener('input', decodificar);
+      [prodNom, modNom].forEach((i) => i.addEventListener('input', () => { componerNombre(); decodificar(); }));
+      if (esEd) activo.addEventListener('change', decodificar);
       nombre.addEventListener('input', refrescarNombre);
       cabysInp.addEventListener('input', verificar);
       buscarCabys.addEventListener('input', buscarEnCatalogo);
@@ -425,16 +497,24 @@ export default {
         if (!cj) return mostrar('Elija el cajón.', selC);
         const cod = codigo.value;
         if (!/^\d{6}$/.test(cod)) return mostrar('El código debe tener 6 números (ahora lleva ' + cod.length + ').', codigo);
-        if (cod.slice(0, 2) !== cj.codigo) return mostrar('El código tiene que empezar con el código del cajón (' + cj.codigo + ').', codigo);
-        if (!esEd) { const ya = cat.productos.find((x) => x.codigo === cod); if (ya) return mostrar('Ese código ya lo usa "' + ya.nombre + '". Use el botón "Sugerir el siguiente código libre".', codigo); }
+        const rc = revisarCodigo();
+        if (rc.errores.length) return mostrar(rc.errores[0], codigo);
+        if (rc.pendientes.length && /^Falta/.test(rc.pendientes[0])) return mostrar(rc.pendientes[0], rc.pendientes[0].includes('opción') ? modNom : prodNom);
+        const unToque = esUnToque(cod);
         if (!nombre.value.trim()) return mostrar('Escriba el nombre del producto.', nombre);
         if (!/^\d{13}$/.test(cabysInp.value)) return mostrar('El CABYS debe tener 13 números (ahora lleva ' + cabysInp.value.length + '). Use el buscador para encontrarlo.', cabysInp);
         let pr = 0;
         if (!abierto.checked) {
-          pr = r2(leerNumero(precio.value));
-          if (!Number.isFinite(pr) || pr <= 0) return mostrar('Escriba el precio final. El precio no puede ser ₡0; si cambia cada vez que se vende, marque "Precio abierto".', precio);
+          const txt = precio.value.trim();
+          pr = txt === '' && libre.checked ? 0 : r2(leerNumero(precio.value));
+          if (!Number.isFinite(pr) || pr < 0 || (pr === 0 && !libre.checked)) return mostrar(unToque
+            ? 'Escriba el precio final. El precio no puede ser ₡0; si cambia cada vez que se vende, marque «Precio abierto».'
+            : 'Una opción no puede costar ₡0. Escriba su precio final (la opción lleva su propio precio, no es un recargo) o marque «Precio abierto» si cambia cada vez.', precio);
         }
-        const cuerpo = { sociedad_id: soc.id, cajon_id: cj.id, codigo: cod, nombre: nombre.value.trim(), cabys: cabysInp.value, precio_final: pr, tarifa_iva: Number(tarifa.value), activo: activo.checked, precio_abierto: abierto.checked, nota: nota.value.trim() || null };
+        const cuerpo = { sociedad_id: soc.id, cajon_id: cj.id, codigo: cod, nombre: nombre.value.trim(), cabys: cabysInp.value, precio_final: pr, tarifa_iva: Number(tarifa.value), activo: quedaActivo(), precio_abierto: abierto.checked, nota: nota.value.trim() || null,
+          descripcion_libre: libre.checked, modificador_nombre: unToque ? null : (modNom.value.trim() || null) };
+        if (!unToque) cuerpo.producto_nombre = prodNom.value.trim() || null;
+        if (!esEd) cuerpo.solo_nuevo = true; // el servidor avisa si el código ya existe, en vez de pisar otro artículo
         const btn = m.el.querySelector('.modal-pie .primario');
         await conBoton(btn, async () => {
           let rev = { dec: 'aqui', diffs: [] };
@@ -448,17 +528,19 @@ export default {
         });
       }
 
-      const titulo = esEd ? 'Editar producto' : modo === 'modificador' ? 'Agregar modificador a ' + nombreGrupo(cat.productos.filter((x) => x.codigo.startsWith(grupo))) : 'Agregar producto';
+      const titulo = esEd ? 'Editar producto' : modo === 'modificador' ? 'Agregar opción a ' + nombreGrupo(cat.productos.filter((x) => x.codigo.startsWith(grupo))) : 'Agregar producto';
       const m = modal({
         titulo, ancho: 780,
         contenido: h('div.mt-form', err,
-          modo === 'modificador' ? aviso('info', 'Un modificador es una marca, sabor o presentación con su propio precio final dentro de un producto. Use un nombre corto. Se copiaron el CABYS y el IVA del producto "' + (hermano?.nombre || '') + '".') : null,
+          modo === 'modificador' ? aviso('info', 'Una opción (nivel 3) es un tamaño, sabor o presentación con su propio precio final dentro de un producto. No es un recargo: es el artículo que se cobra. Se copiaron el CABYS y el IVA de «' + (hermano?.nombre || '') + '».') : null,
           h('fieldset', h('legend', 'Código y nombre'),
             h('div.col',
               campo('Cajón', selC),
               h('div.col', { style: 'gap:.3rem' }, campo('Código de 6 números', codigo, esEd ? 'El código no se puede cambiar. Si necesita otro, cree un producto nuevo y desactive este.' : null), decod,
                 esEd ? null : h('div.fila', h('button.btn', { type: 'button', onclick: () => { codigo.value = modo === 'modificador' ? siguienteModificador(grupo) : siguienteProducto(selC.value); decodificar(); } }, 'Sugerir el siguiente código libre'))),
-              campo('Nombre o descripción', nombre, 'Sin límite de largo. En la factura electrónica Hacienda solo recibe los primeros 200 caracteres.'),
+              avisosCodigo,
+              bloqueNiveles,
+              campo('Nombre o descripción (el que sale en la factura)', nombre, 'Sin límite de largo. En la factura electrónica Hacienda solo recibe los primeros 200 caracteres. Si llena los nombres de arriba, este se arma solo y usted lo puede cambiar.'),
               avisoNombre)),
           h('fieldset', h('legend', 'CABYS y IVA'),
             h('div.col',
@@ -469,7 +551,8 @@ export default {
           h('fieldset', h('legend', 'Precio'),
             h('div.col',
               campo('Precio final con IVA incluido (₡)', precio, 'Es lo que paga el cliente. Con él se calcula todo en la factura.'), desglose, avisoPrecio,
-              h('label.mt-interruptor', abierto, h('span', 'Precio abierto', h('small', 'Se pide el precio cada vez que se vende (por ejemplo, productos por peso o precio variable).'))))),
+              h('label.mt-interruptor', abierto, h('span', 'Precio abierto', h('small', 'Se pide el precio cada vez que se vende (por ejemplo, productos por peso o precio variable).'))),
+              h('label.mt-interruptor', libre, h('span', 'Descripción libre', h('small', 'Quien cobra escribe qué se vendió y el precio en cada venta (por ejemplo «Servicio de alimentación» para un banquete). Sirve para los genéricos 180100 y 180200.'))))),
           h('fieldset', h('legend', 'Otros datos'),
             h('div.col',
               esEd ? h('label.mt-interruptor', activo, h('span', 'Producto activo', h('small', 'Si lo desmarca, deja de aparecer en Caja. No se borra.'))) : null,
@@ -559,7 +642,7 @@ export default {
               h('td.der', f.p.precio_abierto ? 'Abierto' : money(f.actual)),
               h('td.der', f.estado === 'cambia' ? h('strong', money(f.nuevo)) : f.motivo),
               h('td.der' + (dif > 0 ? '.sube' : dif < 0 ? '.baja' : ''), f.estado === 'cambia' ? (dif > 0 ? '+' : '−') + money(Math.abs(dif)) : ''),
-              mapaOtro ? h('td.der', x ? (x.precio_abierto ? 'Abierto' : money(x.precio_final)) : '—') : null);
+              mapaOtro ? h('td.der', x ? (x.precio_abierto ? 'Abierto' : money(x.precio_final)) : 'No está') : null);
           })))));
         resumenL.replaceChildren(aviso(cambian.length ? 'verde' : 'info', cambian.length ? 'Se cambiarán ' + plural(cambian.length, 'precio', 'precios') + (plan.length - cambian.length ? ' y ' + plural(plan.length - cambian.length, 'producto queda igual', 'productos quedan igual') + '.' : '.') : 'Todavía no hay ningún precio que cambiar. Escriba el valor.'));
         aplicarBtn().textContent = cambian.length ? 'Aplicar a ' + plural(cambian.length, 'producto', 'productos') : 'Aplicar cambios';
@@ -610,6 +693,9 @@ export default {
           case 'tarifa_iva': return 'IVA: ' + Number(a) + '% → ' + Number(d) + '%';
           case 'activo': return d === 'true' ? 'Se activó' : 'Se desactivó';
           case 'precio_abierto': return d === 'true' ? 'Pasó a precio abierto' : 'Dejó de ser precio abierto';
+          case 'producto_nombre': return 'Nombre del producto (nivel 2): "' + (a || '') + '" → "' + (d || '') + '"';
+          case 'modificador_nombre': return 'Nombre de la opción (nivel 3): "' + (a || '') + '" → "' + (d || '') + '"';
+          case 'descripcion_libre': return d === 'true' ? 'Pasó a descripción libre' : 'Dejó de ser descripción libre';
           case 'nota': return 'Nota: "' + (a || '') + '" → "' + (d || '') + '"';
           default: return x.campo;
         }
@@ -635,8 +721,8 @@ export default {
     /* ---------- Exportar e importar CSV ---------- */
     function exportar() {
       const nombreCajon = new Map(cat.cajones.map((c) => [c.codigo, c.nombre]));
-      const filas = [['Cajón', 'Código', 'Nombre', 'CABYS', 'Precio final (IVA incluido)', 'IVA %', 'Precio abierto', 'Activo', 'Nota']];
-      [...cat.productos].sort((a, b) => a.codigo.localeCompare(b.codigo)).forEach((p) => filas.push([nombreCajon.get(p.codigo.slice(0, 2)) || '', p.codigo, p.nombre, p.cabys, String(r2(p.precio_final)).replace('.', ','), Number(p.tarifa_iva), p.precio_abierto ? 'Sí' : 'No', p.activo ? 'Sí' : 'No', p.nota || '']));
+      const filas = [['Cajón', 'Código', 'Nombre', 'CABYS', 'Precio final (IVA incluido)', 'IVA %', 'Precio abierto', 'Activo', 'Nota', 'Nombre del producto (nivel 2)', 'Nombre de la opción (nivel 3)', 'Descripción libre']];
+      [...cat.productos].sort((a, b) => a.codigo.localeCompare(b.codigo)).forEach((p) => filas.push([nombreCajon.get(p.codigo.slice(0, 2)) || '', p.codigo, p.nombre, p.cabys, String(r2(p.precio_final)).replace('.', ','), Number(p.tarifa_iva), p.precio_abierto ? 'Sí' : 'No', p.activo ? 'Sí' : 'No', p.nota || '', p.producto_nombre || '', p.modificador_nombre || '', p.descripcion_libre ? 'Sí' : 'No']));
       descargar('productos ' + (soc.codigo || 'local') + ' ' + hoyCR() + '.csv', '﻿' + filas.map((f) => f.map(csvCelda).join(';')).join('\r\n'), 'text/csv;charset=utf-8');
       toast('Archivo descargado: ' + plural(cat.productos.length, 'producto', 'productos') + '. Se abre con Excel.');
     }
@@ -647,7 +733,7 @@ export default {
       const inicio = () => cuerpo.replaceChildren(
         aviso('info', 'Puede cambiar muchos productos a la vez con un archivo de Excel guardado como CSV. Lo más fácil: toque "Exportar CSV", cambie lo que necesite en Excel y súbalo aquí. Antes de guardar verá una vista previa de cada cambio.'),
         h('div.fila', h('button.btn.primario.grande', { type: 'button', onclick: () => archivo.click() }, 'Elegir el archivo CSV')),
-        h('small.tenue', 'Columnas: Código, Nombre, CABYS, Precio final, IVA %, Precio abierto, Activo y Nota. Los productos que no estén en el archivo no se tocan.'));
+        h('small.tenue', 'Columnas: Código, Nombre, CABYS, Precio final, IVA %, Precio abierto, Activo, Nota, Nombre del producto (nivel 2), Nombre de la opción (nivel 3) y Descripción libre. Los productos que no estén en el archivo no se tocan.'));
       archivo.addEventListener('change', async () => {
         const f = archivo.files[0]; if (!f) return;
         let filas;
@@ -659,7 +745,7 @@ export default {
         if (filas.length > 1501) return cuerpo.replaceChildren(aviso('rojo', 'El archivo tiene demasiadas filas (máximo 1500). Divídalo en partes.'), h('div.fila', h('button.btn', { type: 'button', onclick: inicio }, 'Elegir otro archivo')));
         const enc = filas[0].map((x) => norm(x).replace(/[_\s]+/g, ' ').trim());
         const col = (...nombres) => enc.findIndex((e) => nombres.some((n) => e === n || e.startsWith(n + ' ')));
-        const C = { cod: col('codigo', 'cod'), nom: col('nombre', 'descripcion', 'producto', 'detalle'), cab: col('cabys'), pre: col('precio final', 'precio', 'precio con iva'), iva: col('iva', 'tarifa', 'tarifa iva', 'impuesto'), abi: col('precio abierto', 'abierto'), act: col('activo'), not: col('nota', 'notas') };
+        const C = { cod: col('codigo', 'cod'), nom: col('nombre', 'descripcion', 'producto', 'detalle'), cab: col('cabys'), pre: col('precio final', 'precio', 'precio con iva'), iva: col('iva', 'tarifa', 'tarifa iva', 'impuesto'), abi: col('precio abierto', 'abierto'), act: col('activo'), not: col('nota', 'notas'), pnom: col('nombre del producto', 'producto nivel 2', 'nivel 2'), mnom: col('nombre de la opcion', 'nombre del modificador', 'opcion', 'modificador', 'nivel 3'), lib: col('descripcion libre', 'texto libre') };
         if (C.cod < 0) return cuerpo.replaceChildren(aviso('rojo', 'No encontré la columna "Código" en la primera fila del archivo.'), h('div.fila', h('button.btn', { type: 'button', onclick: inicio }, 'Elegir otro archivo')));
         const porCodigo = new Map(cat.productos.map((p) => [p.codigo, p]));
         const vistos = new Set();
@@ -681,11 +767,19 @@ export default {
           const tarifa = g('iva') != null && g('iva') !== '' ? Number(String(g('iva')).replace('%', '').replace(',', '.')) : ex ? Number(ex.tarifa_iva) : 13;
           const activo = g('act') != null && g('act') !== '' ? sino(g('act')) : ex ? ex.activo : true;
           const nota = g('not') != null ? g('not') : ex?.nota || '';
+          // Si el archivo no trae estas columnas se conserva lo que ya está guardado
+          const pnom = C.pnom >= 0 ? g('pnom') : (ex?.producto_nombre || '');
+          const mnom = C.mnom >= 0 ? g('mnom') : (ex?.modificador_nombre || '');
+          const libre = g('lib') != null && g('lib') !== '' ? sino(g('lib')) : ex?.descripcion_libre ?? false;
           if (!nombre) { it.msg = 'Falta el nombre'; return it; }
+          if (esUnToque(cod) && mnom) { it.msg = 'Un código que termina en 00 no lleva nombre de opción'; return it; }
+          if (!esUnToque(cod) && activo && (!pnom || !mnom)) { it.msg = 'Falta el nombre del producto o de la opción (niveles 2 y 3)'; return it; }
           if (!/^\d{13}$/.test(cabys || '')) { it.msg = 'CABYS debe tener 13 números'; return it; }
           if (!TARIFAS.includes(tarifa)) { it.msg = 'IVA debe ser 13, 4, 2, 1 o 0'; return it; }
-          if (!abierto && !(precio > 0)) { it.msg = 'Precio en ₡0 (use Precio abierto = Sí)'; return it; }
-          it.cuerpo = { sociedad_id: soc.id, cajon_id: cj.id, codigo: cod, nombre, cabys, precio_final: abierto ? 0 : precio, tarifa_iva: tarifa, activo, precio_abierto: abierto, nota: nota || null };
+          if (!abierto && !libre && !(precio > 0)) { it.msg = 'Precio en ₡0 (use Precio abierto = Sí)'; return it; }
+          it.cuerpo = { sociedad_id: soc.id, cajon_id: cj.id, codigo: cod, nombre, cabys, precio_final: abierto ? 0 : precio, tarifa_iva: tarifa, activo, precio_abierto: abierto, nota: nota || null, descripcion_libre: libre };
+          if (C.pnom >= 0 || ex?.producto_nombre) it.cuerpo.producto_nombre = pnom || null;
+          it.cuerpo.modificador_nombre = mnom || null;
           if (!ex) { it.estado = 'nuevo'; it.msg = 'Producto nuevo'; return it; }
           const dif = [];
           if (ex.nombre !== nombre) dif.push('nombre');
@@ -695,6 +789,9 @@ export default {
           if (ex.precio_abierto !== abierto) dif.push('precio abierto');
           if (ex.activo !== activo) dif.push(activo ? 'activar' : 'desactivar');
           if ((ex.nota || '') !== (nota || '')) dif.push('nota');
+          if ((ex.producto_nombre || '') !== (pnom || '')) dif.push('nombre del producto');
+          if ((ex.modificador_nombre || '') !== (mnom || '')) dif.push('nombre de la opción');
+          if (!!ex.descripcion_libre !== libre) dif.push('descripción libre');
           if (!dif.length) { it.estado = 'igual'; it.msg = 'Sin cambios'; return it; }
           it.estado = 'cambia'; it.msg = dif.join(', '); it.precioNuevo = abierto ? 0 : precio; it.cambioPrecio = dif.some((d) => d.startsWith('precio ')); return it;
         });
@@ -738,7 +835,7 @@ export default {
     /* ---------- Armado ---------- */
     root.append(
       h('div.mt-cab',
-        h('div', h('h1', 'Productos de ' + nomSoc(soc)), h('p', 'Cajón > producto > modificador. El precio es siempre el final, con IVA incluido. Nada se borra: se desactiva.')),
+        h('div', h('h1', 'Productos de ' + nomSoc(soc)), h('p', 'Nivel 1 cajón, nivel 2 producto, nivel 3 opción (modificador). El precio es siempre el final, con IVA incluido. Nada se borra: se desactiva.')),
         h('div.mt-acciones',
           h('button.btn.primario.grande', { type: 'button', onclick: () => abrirProducto({ modo: 'nuevo' }) }, 'Agregar producto'),
           h('button.btn.grande', { type: 'button', onclick: () => abrirCajon(null) }, 'Agregar cajón'))),

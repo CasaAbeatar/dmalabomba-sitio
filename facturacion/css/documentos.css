@@ -72,6 +72,10 @@
 .doc-estado.ok{background:var(--verde-suave);border-color:#a8d5bd}
 .doc-estado.espera{background:var(--ambar-suave);border-color:#efd08f}
 .doc-estado.mal{background:var(--rojo-suave);border-color:#e9b3b7}
+.doc-motivos{margin-top:.5rem}
+.doc-motivos ul{margin:.25rem 0 0;padding-left:1.2rem;display:flex;flex-direction:column;gap:.25rem}
+.doc-tecnico p{margin:.5rem 0 0;font-size:.9rem;overflow-wrap:anywhere}
+.doc-crudo{margin-top:.6rem}
 .doc-estado details{margin-top:.6rem}
 .doc-estado summary{list-style:none;cursor:pointer;display:inline-flex}
 .doc-estado summary::-webkit-details-marker{display:none}
@@ -108,7 +112,14 @@
 .doc-atajos .atajo{min-height:56px}
 .doc-atajos .atajo[aria-pressed=true]{background:var(--rojo-suave);border-color:var(--rojo);color:var(--rojo-osc)}
 @media(max-width:480px){.doc-atajos{grid-template-columns:1fr}}
-.doc-pie-anular{display:flex;flex-wrap:wrap;gap:.6rem;justify-content:flex-end;margin-top:.3rem}
+.doc-pie-anular{display:flex;flex-wrap:wrap;gap:.6rem;justify-content:flex-end}
+.doc-pie-anular .error-caja{flex:1 0 100%;margin:0}
+.doc-pie-anular .btn{min-height:56px}
+@media(max-width:480px){.doc-pie-anular .btn{flex:1 1 40%;padding-inline:.6rem}.doc-pie-anular .peligro{order:1}}
+.doc-botones.res{grid-template-columns:1fr 1fr}
+.doc-botones.res>.primario{grid-column:1/-1}
+@media(max-width:480px){.doc-botones.res{grid-template-columns:1fr}}
+.doc-botones.res .btn{min-height:56px}
 .doc-resultado{display:flex;flex-direction:column;gap:.9rem}
 .doc-resultado p{margin:0}
 

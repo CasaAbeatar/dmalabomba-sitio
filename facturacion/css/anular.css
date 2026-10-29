@@ -41,6 +41,11 @@
 .an-motivos .btn{min-height:52px;text-align:left;justify-content:flex-start}
 .an-motivos .btn[aria-pressed=true]{background:var(--rojo);border-color:var(--rojo);color:#fff}
 .an-pie{display:flex;flex-wrap:wrap;gap:.6rem;justify-content:flex-end}
+.an-pie .error-caja{flex:1 0 100%;margin:0}
+.an-pie .btn{min-height:56px}
+.an-botones{display:grid;grid-template-columns:1fr 1fr;gap:.6rem}
+.an-botones>.primario{grid-column:1/-1}
+.an-botones .btn{min-height:56px}
 .an-ok{background:var(--verde-suave);border:1px solid #a8d5bd;border-radius:12px;padding:.8rem 1rem}
 
 @media(max-width:760px){
@@ -50,5 +55,7 @@
   .an-btn{width:100%}
   .an-estado{align-items:flex-start;text-align:left;flex-direction:row;flex-wrap:wrap;gap:.5rem}
   .an-motivos{grid-template-columns:1fr}
-  .an-pie .btn{flex:1 1 100%}
+  .an-pie .btn{flex:1 1 40%;padding-inline:.6rem}
+  .an-pie .peligro{order:1}
+  .an-botones{grid-template-columns:1fr}
 }

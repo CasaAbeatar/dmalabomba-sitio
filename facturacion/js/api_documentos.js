@@ -1,18 +1,10 @@
-// Datos propios del módulo "Documentos del día" (no se edita api.js).
+// Datos propios del módulo "Documentos del día" y del aviso del encabezado (no se edita api.js).
 // Funciones SQL usadas (ver /home/claude/facturador/sql/05_documentos.sql):
 //   fx_documentos(p_soc, p_desde, p_hasta)  -> comprobantes del rango en orden cronológico, con el vínculo factura <-> nota de crédito
 //   fx_comprobante_nc(p_id)                 -> nota de crédito vigente (no rechazada) de un comprobante, o null
-import { sb, api, ErrorApi, funcion } from './api.js';
-
-async function rpc(nombre, args) {
-  const { data, error } = await sb.rpc(nombre, args);
-  if (error) {
-    let m = error.message || 'Error desconocido';
-    if (/JWT|expired|not authenticated/i.test(m)) m = 'Su sesión venció. Recargue la página e ingrese de nuevo.';
-    throw new ErrorApi(m);
-  }
-  return data;
-}
+//   fx_alertas(p_soc)                       -> { rechazados, pendientes, recepcion_por_responder, ultimos[] } (contrato 3; lo crea Base de datos)
+import { api, rpc, funcion } from './api.js';
+import { hoyCR, sumaDias, numeroDoc, traducirHacienda } from './util.js';
 
 // Lista del rango. Cada fila trae además nc_id, nc_consecutivo, nc_estado (si fue anulada) y ref_consecutivo, ref_tipo (si es una nota de crédito).
 export async function documentos(soc, desde, hasta) {
@@ -41,3 +33,47 @@ export const ncDe = (id) => rpc('fx_comprobante_nc', { p_id: id });
 // poner CORREO_ACTIVO en true y ajustar el nombre de la función de borde si hace falta.
 export const CORREO_ACTIVO = false;
 export const reenviarCorreo = (id) => funcion('facturador-correo', { id });
+
+/* ---------- Alertas del encabezado ---------- */
+// Devuelve { rechazados, pendientes, recepcion_por_responder (número o null si no se sabe), recepcion_vencen_pronto, ultimos:[{id, numero, estado, mensaje}], desde (YYYY-MM-DD), fuente }.
+// «pendientes» son los que llevan demasiado esperando a Hacienda (fx_alertas los trae como pendientes_demorados, más de 15 minutos); un cobro recién hecho siempre está en cola un momento y no debe dar aviso.
+// La ventana de fx_alertas son los últimos 3 días (hoy y los 3 anteriores): «desde» es el primer día, para que «Ver» abra la lista con las mismas fechas.
+// Usa fx_alertas cuando la base ya la tiene. Mientras no exista usa un valor de reserva sacado de fx_documentos (los últimos 3 días) y vuelve a probar fx_alertas cada 5 minutos,
+// así que cambia sola a la función nueva cuando se cree.
+let noHayAlertasHasta = 0;
+const SIN_FUNCION = /fx_alertas|does not exist|schema cache|could not find the function/i;
+const entero = (x) => { const n = Number(x); return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0; };
+
+export async function alertas(soc) {
+  if (Date.now() >= noHayAlertasHasta) {
+    try {
+      const a = (await rpc('fx_alertas', { p_soc: soc })) || {};
+      return {
+        rechazados: entero(a.rechazados), pendientes: entero(a.pendientes_demorados ?? a.pendientes),
+        recepcion_por_responder: a.recepcion_por_responder == null ? null : entero(a.recepcion_por_responder),
+        recepcion_vencen_pronto: entero(a.recepcion_vencen_pronto),
+        ultimos: (Array.isArray(a.ultimos) ? a.ultimos : []).slice(0, 5).map((u) => ({ id: u.id, numero: String(u.numero ?? ''), estado: u.estado || '', mensaje: String(u.mensaje ?? '') })),
+        desde: typeof a.desde === 'string' ? a.desde.slice(0, 10) : sumaDias(hoyCR(), -DIAS_VENTANA), fuente: 'fx_alertas',
+      };
+    } catch (e) {
+      if (!SIN_FUNCION.test(e.message || '')) throw e;
+      noHayAlertasHasta = Date.now() + 5 * 60 * 1000;
+    }
+  }
+  return alertasDeReserva(soc);
+}
+
+const MIN_PENDIENTE = 15; // igual que fx_alertas: un cobro recién hecho siempre está en cola un momento; avisa solo si pasan más de 15 minutos
+const DIAS_VENTANA = 3;
+async function alertasDeReserva(soc) {
+  const hoy = hoyCR(), desde = sumaDias(hoy, -DIAS_VENTANA);
+  const docs = await documentos(soc, desde, hoy);
+  const ahora = Date.now();
+  const rechazados = docs.filter((d) => d.estado === 'rechazado');
+  const pendientes = docs.filter((d) => ['pendiente', 'enviado', 'error'].includes(d.estado) && ahora - new Date(d.fecha_emision).getTime() > MIN_PENDIENTE * 60000);
+  const ultimos = [...rechazados, ...pendientes].sort((a, b) => new Date(b.fecha_emision) - new Date(a.fecha_emision)).slice(0, 5).map((d) => ({
+    id: d.id, numero: numeroDoc(d.consecutivo), estado: d.estado,
+    mensaje: d.estado === 'rechazado' ? (traducirHacienda(d.mensaje).resumen || 'Hacienda no lo aceptó.') : 'Todavía no llegó a Hacienda. El sistema vuelve a intentarlo solo.',
+  }));
+  return { rechazados: rechazados.length, pendientes: pendientes.length, recepcion_por_responder: null, recepcion_vencen_pronto: 0, ultimos, desde, fuente: 'reserva' };
+}

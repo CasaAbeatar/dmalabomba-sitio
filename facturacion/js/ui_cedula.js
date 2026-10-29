@@ -13,10 +13,11 @@
 //   ced.valores()     -> { tipo_id, identificacion, nombre, actividad_codigo, sin_verificar_motivo, verificado }
 //
 // Reglas: el número es siempre texto de solo dígitos (se quitan guiones y espacios al pegar; nunca se pierden ceros ni se corta el primer número);
-// el tipo se detecta por el largo; se consulta a Hacienda mientras se escribe (espera 0,5 s sin teclear y cancela la consulta vieja);
-// nunca se muestra ni se guarda si la persona está morosa u omisa.
+// el tipo se detecta por el largo; se consulta a Hacienda mientras se escribe (espera 0,5 s sin teclear y cancela la consulta vieja).
+// De Hacienda solo se usan el nombre, el tipo y las actividades económicas (que se muestran en palabras, no como código crudo).
 import { h, TIPOS_ID, fechaCorta } from './util.js';
 import { apiM } from './api_mantenimiento.js';
+import { infoActividad, textoActividad } from './actividades.js';
 
 let cssListo = null;
 export function cargarCssCedula() {
@@ -56,6 +57,7 @@ export function tipoDetectado(d) {
   return '';
 }
 const LARGOS = { '01': [9, 9], '02': [10, 10], '03': [11, 12], '04': [10, 10] };
+const MOTIVOS_RAPIDOS = ['Persona recién inscrita', 'Cliente de otro país', 'Hacienda no lo muestra en la consulta'];
 const MOTIVOS = {
   falto_3: 'Al número le faltaba el 3 del principio.',
   cero_de_mas: 'Al número le sobraba un 0 al principio.',
@@ -90,6 +92,7 @@ export function crearCampoIdentificacion(opts = {}) {
   const tipoTxt = h('span.ced-tipo-txt');
   const tipoSel = h('select.campo', { hidden: true, 'aria-label': 'Tipo de identificación' }, Object.entries(TIPOS_ID).map(([k, v]) => h('option', { value: k }, v)));
   const btnTipo = h('button.btn.chico.suave', { type: 'button' }, 'Cambiar tipo');
+  const tipoFila = h('div.ced-tipo', tipoTxt, btnTipo);
   const estado = h('div', { 'aria-live': 'polite' });
   const sugs = h('div.ced-sugs');
   const dupEl = h('div.ced-dup');
@@ -106,15 +109,15 @@ export function crearCampoIdentificacion(opts = {}) {
     h('div.ced-bloque',
       h('label.etq', 'Número de cédula o identificación', ident),
       ayuda,
-      h('div.ced-tipo', tipoTxt, btnTipo),
+      tipoFila,
       tipoSel,
       estado, sugs, dupEl, sinEl),
     h('div.ced-bloque',
       h('label.etq', 'Nombre o razón social', nombre),
       datos),
     h('div.ced-bloque',
-      h('label.etq', 'Código de actividad económica', actividad,
-        h('small', 'Hacienda lo usa en las facturas a empresas. Se llena solo si Hacienda lo tiene; si no, déjelo vacío o escríbalo.')),
+      h('label.etq', 'Actividad económica (código)', actividad,
+        h('small', 'Hacienda lo usa en las facturas a empresas. Se llena solo si Hacienda lo tiene; si no, déjelo vacío o escríbalo. Debajo verá el nombre de la actividad.')),
       actNota, actLista));
 
   /* ---------- Reglas ---------- */
@@ -188,6 +191,15 @@ export function crearCampoIdentificacion(opts = {}) {
   }
   function recibir(resp) {
     if (!resp.ok && resp.estado === 'servicio') resp = { ...resp, mensaje: '' }; // el detalle técnico no le sirve a quien cobra
+    // El padrón a veces encuentra el número aunque le sobre un 0 al inicio. Ese número no sirve para facturar: se propone el correcto en vez de aceptarlo.
+    if (resp.ok && /^0[1-4]$/.test(resp.tipo || '') && LARGOS[resp.tipo]) {
+      const [mn, mx] = LARGOS[resp.tipo], d = ident.value;
+      if (d.length < mn || d.length > mx) {
+        const limpio = d.replace(/^0+/, '');
+        resp = { ok: false, estado: 'no_encontrada', cedula: d, sugerencias: limpio.length >= mn && limpio.length <= mx && limpio !== d
+          ? [{ cedula: limpio, nombre: resp.nombre, tipo: resp.tipo, tipo_nombre: resp.tipo_nombre || TIPOS_ID[resp.tipo], motivo: 'cero_de_mas' }] : [] };
+      }
+    }
     r = resp;
     sinConfirmar = false;
     if (resp.ok) {
@@ -330,6 +342,7 @@ export function crearCampoIdentificacion(opts = {}) {
       }
     }
     btnTipo.hidden = !n || !!r?.ok;
+    tipoFila.hidden = !n; // sin número escrito no hay nada que decir del tipo
     btnTipo.setAttribute('aria-expanded', String(abrirTipo));
     tipoSel.hidden = !(abrirTipo && !r?.ok);
     tipoSel.value = t || '01';
@@ -343,7 +356,7 @@ export function crearCampoIdentificacion(opts = {}) {
     else if (fase === 'encontrada' && r) {
       const via = r.estado === 'padron';
       nodo = caja('verde', '✓', via ? 'Existe en el padrón de personas' : 'Existe en Hacienda',
-        r.nombre + (TIPOS_ID[r.tipo] ? ' · ' + TIPOS_ID[r.tipo] : ''),
+        (r.nombre || '') + (TIPOS_ID[r.tipo] ? ' · ' + TIPOS_ID[r.tipo] : ''),
         via ? h('span', 'Hacienda no muestra actividad económica para este número.') : null,
         r.desactualizado ? h('span', 'Hacienda no respondió ahora. Estos datos son de la consulta del ' + fechaCorta(r.consultado_en) + '.') : null);
     } else if (fase === 'no_encontrada') {
@@ -370,15 +383,17 @@ export function crearCampoIdentificacion(opts = {}) {
       h('span.acc', 'Sí, usar este número'))));
 
     // Guardar de todos modos (cédula física o jurídica que Hacienda no encuentra)
-    const pideMotivo = fase === 'no_encontrada' && (t === '01' || t === '02');
+    // Cédula física o jurídica, DIMEX y NITE que Hacienda no encuentra: se pueden guardar sin verificar, siempre con un motivo escrito
+    const pideMotivo = fase === 'no_encontrada' && /^0[1-4]$/.test(t || '');
     sinEl.hidden = !pideMotivo;
     if (pideMotivo) {
-      pon(sinEl, 'sin:' + sinConfirmar, () => [sinConfirmar
+      pon(sinEl, 'sin:' + sinConfirmar + ':' + t, () => [sinConfirmar
         ? h('div.col',
           h('label.etq', 'Motivo (obligatorio)', motivo, h('small', 'Queda anotado y el cliente se marca como «sin verificar» en la lista.')),
+          h('div.fila', MOTIVOS_RAPIDOS.map((x) => h('button.btn.chico', { type: 'button', onclick: () => { motivo.value = x; motivo.focus(); } }, x))),
           h('div.fila', h('button.btn.chico.suave', { type: 'button', onclick: () => { sinConfirmar = false; pintar(); ident.focus(); } }, 'Mejor corrijo el número')))
         : h('div.col',
-          h('p', 'Si está segura o seguro de que el número es correcto, puede guardar el cliente sin la confirmación de Hacienda.'),
+          h('p', 'Si está segura o seguro de que el número es correcto, puede guardar el cliente sin la confirmación de Hacienda. Va a tener que escribir el motivo.'),
           btnSin)]);
     }
 
@@ -389,7 +404,7 @@ export function crearCampoIdentificacion(opts = {}) {
       const igual = m === 'hacienda';
       pon(datos, [m, r.nombre, deHacienda()[0]?.codigo].join('|'), () => [
         h('div.txt', igual ? h('strong', 'Nombre y actividad iguales a los de Hacienda. ') : h('strong', 'Datos escritos por usted. '),
-          igual ? 'Puede cambiarlos si hace falta.' : 'Hacienda tiene: ' + r.nombre + (deHacienda()[0] ? ' · ' + deHacienda()[0].codigo : '') + '.'),
+          igual ? 'Puede cambiarlos si hace falta.' : 'Hacienda tiene: ' + (r.nombre || '') + (deHacienda()[0] ? ' · ' + textoActividad(deHacienda()[0].codigo, acts) : '') + '.'),
         igual ? h('button.btn', { type: 'button', onclick: noUsarHacienda }, 'No usar, escribirlos yo')
           : h('button.btn.primario', { type: 'button', onclick: usarHacienda }, 'Usar los datos de Hacienda')]);
     }
@@ -403,7 +418,8 @@ export function crearCampoIdentificacion(opts = {}) {
     actividad.classList.toggle('hac', !!r?.ok && !!dentro);
     let nota = null;
     if (mal) nota = ['mal', AYUDA_ACTIVIDAD];
-    else if (a && RE_ACTIVIDAD.test(a) && dentro) nota = ['ok', dentro.descripcion ? a + ': ' + dentro.descripcion : null];
+    else if (a && RE_ACTIVIDAD.test(a) && dentro) nota = ['ok', 'Actividad: ' + textoActividad(a, acts)];
+    else if (a && RE_ACTIVIDAD.test(a) && !(r?.ok && deHacienda().length)) nota = ['', 'Actividad: ' + textoActividad(a, acts)];
     else if (a && RE_ACTIVIDAD.test(a) && r?.ok && deHacienda().length) nota = ['aviso', 'Este código no está entre las actividades que Hacienda tiene para este número. Si el cliente lo pide, puede usarlo, pero Hacienda podría rechazar la factura si no está activo en su registro.'];
     else if (!a && r?.ok && !deHacienda().length) nota = ['', 'Hacienda no tiene actividad económica para este número. Puede dejarlo vacío o escribir el código que el cliente le indique.'];
     actNota.hidden = !nota || !nota[1];
@@ -415,11 +431,16 @@ export function crearCampoIdentificacion(opts = {}) {
       pon(actLista, [!!r?.ok, a, ...acts.map((x) => x.codigo)].join('|'), () => [
         h('div.tit', (r?.ok ? (deHacienda().length > 1 ? 'Hacienda tiene ' + deHacienda().length + ' actividades para este número' : 'Actividades de este cliente') : 'Actividades guardadas de este cliente') + '. Toque la que corresponde:'),
         ...acts.map((x) => h('button.ced-opt', { type: 'button', 'aria-pressed': String(x.codigo === a), onclick: () => { actividad.value = x.codigo; actTocada = true; pintar(); } },
-          h('span.cod', x.codigo), h('span.desc', x.manual ? 'Código que se escribió a mano' : (x.descripcion || 'Sin descripción')), x.principal ? h('span.pri', 'Principal') : x.manual ? h('span.pri.man', 'Escrito a mano') : null))]);
+          h('span.desc', h('b', infoActividad(x.codigo, acts).nombre), h('small', 'Código ' + x.codigo)), x.principal ? h('span.pri', 'Principal') : x.manual ? h('span.pri.man', 'Escrito a mano') : null))]);
     }
   }
 
-  btnSin.addEventListener('click', () => { sinConfirmar = true; pintar(); motivo.focus(); });
+  btnSin.addEventListener('click', () => {
+    sinConfirmar = true;
+    const t = tipoActual();
+    if (!motivo.value.trim() && (t === '03' || t === '04')) motivo.value = 'Hacienda no muestra los ' + (t === '03' ? 'DIMEX' : 'NITE') + ' en la consulta';
+    pintar(); motivo.focus();
+  });
   motivo.addEventListener('input', () => { /* el texto se lee al validar */ });
   function aceptarSugerencia(s) {
     ident.value = s.cedula;
@@ -441,7 +462,7 @@ export function crearCampoIdentificacion(opts = {}) {
     if ((t === '05' || t === '06') && ident.value.length > 20) return { mensaje: 'La identificación es demasiado larga (máximo 20 números).', campo: ident };
     if (dup && opts.accionDuplicado) return { mensaje: 'Ese cliente ya existe. Use el que ya está guardado.', campo: ident };
     if (fase === 'formato') return { mensaje: r?.mensaje || 'El número no tiene un largo válido.', campo: ident };
-    if (fase === 'no_encontrada' && (t === '01' || t === '02')) {
+    if (fase === 'no_encontrada' && /^0[1-4]$/.test(t)) {
       if (!sinConfirmar) return { mensaje: 'Hacienda no encontró este número. Corríjalo, o toque «Guardar de todos modos» y escriba el motivo.', campo: sinEl.hidden ? ident : btnSin };
       if (motivo.value.trim().length < 3) return { mensaje: 'Escriba el motivo por el que lo guarda sin la confirmación de Hacienda.', campo: motivo };
     }

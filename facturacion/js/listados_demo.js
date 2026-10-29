@@ -25,7 +25,7 @@ export function datosDemo(desde, hasta) {
   const usar = dias.slice(-120); d0 = usar[0];
   const rnd = semilla(20261028 + usar.length);
   const porDia = [], porHora = new Map(), porMedio = new Map(), porServ = new Map(), porCaj = new Map(), prods = new Map(), turnos = [], tarifa = { total: 0, iva: 0 };
-  const R = { docs_emitidos: 0, ventas_brutas: 0, iva_brutas: 0, notas_credito_n: 0, notas_credito: 0, iva_notas_credito: 0, vigentes_n: 0, vigentes_total: 0, sin_aceptar_n: 0 };
+  const R = { docs_emitidos: 0, ventas_brutas: 0, iva_brutas: 0, notas_credito_n: 0, notas_credito: 0, iva_notas_credito: 0, vigentes_n: 0, vigentes_total: 0, sin_aceptar_n: 0, rechazados_n: 0, rechazados_total: 0 };
   const cajeros = [['Marisol Vargas', 5], ['Kevin Rojas', 3], ['Dixia Martínez', 2]];
   usar.forEach((dia, idx) => {
     const dow = new Date(dia + 'T12:00:00Z').getUTCDay();
@@ -63,6 +63,8 @@ export function datosDemo(desde, hasta) {
   return {
     resumen: R, por_dia: porDia, por_hora: [...porHora.values()].sort((a, b) => a.hora - b.hora).map((x) => ({ ...x, total: r2(x.total) })),
     por_medio: ord(porMedio), por_servicio: ord(porServ), por_cajero: ord(porCaj), por_turno: turnos.slice(-8), productos: ord(prods),
-    por_tarifa: [{ tarifa: 13, total_con_iva: r2(tarifa.total), iva: r2(tarifa.iva) }],
+    // Misma forma que devuelve fx_listados2: una fila por tarifa, con base (sin IVA), IVA y total. Aquí todo va al 13 %.
+    por_tarifa: [{ codigo: '08', nombre: 'Tarifa general', tarifa: 13, base: r2(tarifa.total - tarifa.iva), iva: r2(tarifa.iva), total: r2(tarifa.total), documentos: R.vigentes_n }],
+    rechazados: { n: 0, total: 0, iva: 0, notas_credito_n: 0, lista: [] },
   };
 }

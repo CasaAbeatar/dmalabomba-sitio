@@ -11,7 +11,7 @@
 .ced-num.bien{border-color:#7fc3a0}
 .ced-ayuda{color:var(--tinta2);font-weight:400;font-size:.88rem;line-height:1.35}
 
-.ced-tipo{display:flex;flex-wrap:wrap;gap:.4rem .7rem;align-items:center;min-height:40px}
+.ced-tipo{display:flex;flex-wrap:wrap;gap:.4rem .7rem;align-items:center;min-height:48px}
 .ced-tipo-txt{font-size:.95rem}
 .ced-tipo-txt strong{font-weight:700}
 .ced-tipo-txt .via{color:var(--tinta2)}
@@ -73,6 +73,7 @@
 .ced-opt[aria-pressed=true]{border-color:var(--verde);background:var(--verde-suave);box-shadow:0 0 0 1px var(--verde) inset}
 .ced-opt .cod{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-weight:700;white-space:nowrap}
 .ced-opt .desc{flex:1 1 auto;min-width:0;overflow-wrap:anywhere}
+.ced-opt .desc small{display:block;color:var(--tinta2);font-weight:400}
 .ced-opt .pri{font-size:.76rem;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--verde);white-space:nowrap}
 .ced-opt .pri.man{color:var(--tinta2)}
 

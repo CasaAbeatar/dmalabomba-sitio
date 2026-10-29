@@ -16,7 +16,7 @@
 .tq .logo{height:18mm;width:auto;max-width:100%;margin:0 auto 1.5mm;filter:grayscale(1) contrast(1.8)}
 .tq .nombre{text-align:center;font-weight:800;font-size:1.35em;line-height:1.15}
 .tq .razon{text-align:center;font-size:.82em;margin-top:.6mm}
-.tq .dato{text-align:center;font-size:.9em}
+.tq .dato{text-align:center;font-size:.9em;border:0;border-radius:0;padding:0;background:none}
 .tq .dato.izq{text-align:left}
 .tq .hr{border-top:1px dashed #000;margin:2mm 0}
 .tq .hr.doble{border-top:1.5px solid #000}
@@ -34,6 +34,7 @@
 .tq .lin .q{display:flex;justify-content:space-between;gap:2mm;font-variant-numeric:tabular-nums}
 .tq .lin .q b{white-space:nowrap}
 .tq .lin .nota{font-size:.85em;font-style:italic}
+.tq .lin .iva-lin{font-size:.85em}
 .tq .prueba{border:2px solid #000;text-align:center;padding:1.5mm 1mm;margin:1mm 0 2mm;font-size:1.05em;letter-spacing:.03em;line-height:1.25}
 .tq .prueba b{display:block}
 .tq .aviso-pre{border:2px solid #000;padding:2mm 1.5mm;text-align:center;font-weight:800;font-size:1.15em;line-height:1.3;margin:1.5mm 0}
@@ -64,24 +65,24 @@
 .ct .marca-agua{position:fixed;left:0;right:0;top:42%;text-align:center;font-size:150px;font-weight:800;letter-spacing:.08em;color:rgba(184,22,34,.07);transform:rotate(-28deg);pointer-events:none;z-index:0}
 .ct>*:not(.marca-agua){position:relative;z-index:1}
 .ct-cab{display:flex;justify-content:space-between;align-items:flex-start;gap:8mm}
-.ct-logo{height:25mm;width:auto}
+.ct-logo{height:22mm;width:auto}
 .ct-nombre-grande{font-size:26px;font-weight:700}
 .ct-titulo{text-align:right}
 .ct-tit{font-size:21px;font-weight:700;letter-spacing:.03em;color:#b81622;line-height:1.15}
 .ct-num{font-size:30px;font-weight:700;line-height:1.15;margin-top:1mm}
 .ct-fecha{color:#6b645b;margin-top:.5mm}
 .ct-prueba{display:inline-block;margin-top:2mm;border:.4mm solid #b81622;color:#b81622;font-weight:700;font-size:11px;letter-spacing:.05em;padding:1mm 2.5mm}
-.ct-regla{position:relative;border-top:.25mm solid #b81622;margin:3.5mm 0 4mm}
+.ct-regla{position:relative;border-top:.25mm solid #b81622;margin:3mm 0 3.5mm}
 .ct-regla i{position:absolute;top:-.6mm;left:0;width:24mm;border-top:1.1mm solid #f3a62c}
 .ct-dos{display:grid;grid-template-columns:1fr 1fr;gap:6mm}
-.ct-caja{border:.25mm solid #cfc5b2;border-radius:2mm;padding:3mm 4mm;line-height:1.45;break-inside:avoid}
+.ct-caja{border:.25mm solid #cfc5b2;border-radius:2mm;padding:2.5mm 4mm;line-height:1.35;break-inside:avoid}
 .ct-etq{font-size:9.5px;text-transform:uppercase;letter-spacing:.1em;color:#6b645b;font-weight:600}
 .ct-fuerte{font-weight:700;font-size:14.5px;margin:.6mm 0 .8mm}
 .ct-tenue{color:#6b645b}
-.ct-meta{display:flex;flex-wrap:wrap;gap:1.5mm 9mm;margin:3.5mm 0 3mm}
+.ct-meta{display:flex;flex-wrap:wrap;gap:1.5mm 9mm;margin:3mm 0 2.5mm}
 .ct-meta div{display:flex;flex-direction:column}
 .ct-meta b{font-weight:600}
-.ct-ref{border-left:1.2mm solid #f3a62c;background:#fdf2dc;padding:2mm 4mm;margin:0 0 3mm;line-height:1.45;break-inside:avoid}
+.ct-ref{border-left:1.2mm solid #f3a62c;background:#fdf2dc;padding:1.5mm 4mm;margin:0 0 2.5mm;line-height:1.4;break-inside:avoid}
 .ct-ref .mono{font-size:11px}
 table.ct-tabla{width:100%;border-collapse:collapse;margin-top:2mm}
 .ct-tabla thead{display:table-header-group}
@@ -105,14 +106,15 @@ table.ct-tabla{width:100%;border-collapse:collapse;margin-top:2mm}
 .ct-estado.ok{color:#1f7a4d}
 .ct-estado.mal{color:#b81622}
 .ct-estado.pend{color:#8a5a00}
-.ct-pie{display:grid;grid-template-columns:2fr 1fr;gap:10mm;margin-top:5mm;padding-top:3mm;border-top:.25mm solid #cfc5b2;break-inside:avoid}
+.ct-pie{display:grid;grid-template-columns:2fr 1fr;gap:10mm;margin-top:4mm;padding-top:2.5mm;border-top:.25mm solid #cfc5b2;break-inside:avoid}
 .ct-quienes p{margin:1mm 0 0}
 .ct-contacto div:not(.ct-etq){margin-top:.6mm}
-.ct-ley{text-align:center;font-size:10px;color:#6b645b;margin-top:3.5mm}
+.ct-ley{text-align:center;font-size:10px;color:#6b645b;margin-top:2.5mm}
 
 /* ---------- modo "pagina" (iPhone y iPad): el documento va en la página principal y al imprimir se oculta todo lo demás ---------- */
 #fx-impresion{position:absolute;left:-10000px;top:0;opacity:0;pointer-events:none}
 @media print{
+  body.fx-imprimiendo{background:#fff!important}
   body.fx-imprimiendo>*:not(#fx-impresion){display:none!important}
   body.fx-imprimiendo #fx-impresion{position:static!important;left:auto!important;width:auto!important;opacity:1!important}
 }

@@ -1,17 +1,6 @@
 // Datos del módulo Recepción (no se edita api.js). Funciones SQL de solo lectura: public.fx_recibidas y public.fx_recibida (ver sql/06_recepcion.sql).
 // Responder (aceptar, parcial, rechazar) y revisar el correo usan funciones de borde con la sesión del usuario.
-import { sb, ErrorApi, funcion } from './api.js';
-
-async function rpc(nombre, args) {
-  const { data, error } = await sb.rpc(nombre, args);
-  if (error) {
-    let m = error.message || 'Error desconocido';
-    if (/JWT|expired|not authenticated/i.test(m)) m = 'Su sesión venció. Recargue la página e ingrese de nuevo.';
-    else if (/failed to fetch|networkerror|load failed|timeout|canceling statement/i.test(m)) m = 'El servidor tardó demasiado o no hay conexión. Espere un momento e intente de nuevo.';
-    throw new ErrorApi(m);
-  }
-  return data;
-}
+import { rpc, ErrorApi, funcion } from './api.js';
 
 // modo: 'todas' (por periodo) | 'pendientes' (sin respuesta y dentro del plazo de 8 días hábiles; ignora el periodo) | 'vencidas' (sin respuesta y plazo vencido, dentro del periodo)
 // Devuelve {hoy, conteo:{llegaron_hoy,pendientes_en_plazo,vencen_pronto,vencen_hoy,iva_en_riesgo,vencidas_recientes,vencidas_antiguas}, resumen:{n,total,iva,neto,sin_responder}, otras_cedulas, truncado, filas[]}

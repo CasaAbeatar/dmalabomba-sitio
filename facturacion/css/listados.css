@@ -14,7 +14,12 @@
 .kpi.resalta{border-color:var(--rojo);box-shadow:0 0 0 1px var(--rojo) inset,var(--sombra)}
 .kpi.resalta .kpi-v{color:var(--rojo)}
 .lis-aviso{margin:.4rem 0;padding:.6rem .85rem;border:1px solid #efd08f;background:var(--ambar-suave);border-radius:var(--r);color:#6b4600;font-size:.92rem}
-.demo-banner{margin:.4rem 0 .8rem;padding:.8rem 1rem;border:2px dashed var(--ambar);background:var(--ambar-suave);border-radius:var(--r);display:flex;flex-wrap:wrap;gap:.5rem;align-items:center}
+.lis-aviso.mal{border-color:#e9b3b7;background:var(--rojo-suave);color:var(--rojo-osc);display:flex;flex-wrap:wrap;gap:.5rem 1rem;align-items:center;justify-content:space-between}
+.lis-aviso.mal .btn{background:#fff}
+.demo-banner{position:sticky;top:var(--cab-alto,0px);z-index:20;margin:.4rem 0 .8rem;padding:.7rem 1rem;border:2px solid var(--tinta);background:var(--ambar);color:var(--tinta);border-radius:var(--r);display:flex;flex-wrap:wrap;gap:.4rem 1rem;align-items:center}
+.demo-banner strong{font-size:1.05rem;letter-spacing:.02em}
+.demo-banner span{flex:1 1 14rem}
+.demo-banner .btn{background:#fff;border-color:var(--tinta)}
 .demo-banner[hidden]{display:none}
 .lis-vacio h2{margin-bottom:.4rem;color:var(--tinta)}
 .lis-vacio .fila{margin-top:.8rem}
@@ -47,7 +52,10 @@ svg.gr{display:block;width:100%;height:auto;max-width:100%;overflow:visible}
 .gr .barra.neg{opacity:.7}
 .gr .barra.sel{stroke:var(--tinta);stroke-width:2}
 .gr .zona{fill:transparent;cursor:pointer;outline:none}
+.gr .zona:focus-visible{fill:rgba(184,22,34,.08)}
 .gr .zona:hover{fill:rgba(184,22,34,.06)}
+.gr.cols .zona{pointer-events:none}
+.gr .zona-toque{fill:transparent;cursor:pointer}
 .gr .zona:focus-visible{stroke:var(--rojo);stroke-width:2}
 .lectura{margin:.5rem 0 0;padding:.65rem .85rem;min-height:48px;border:1px solid var(--linea);border-left:3px solid var(--ambar);background:#fff;border-radius:var(--r);font-weight:500}
 
@@ -59,7 +67,7 @@ table.arbol .n2 td{font-weight:600}
 table.arbol .n2.solo td{font-weight:500}
 table.arbol .n3 td.nom{padding-left:3rem;color:var(--tinta2);font-weight:400}
 table.arbol .n3 td{font-weight:400}
-.arbol-btn{display:inline-flex;align-items:center;gap:.5rem;min-height:44px;padding:.1rem .3rem;margin:-.4rem 0;border:0;background:transparent;cursor:pointer;font:inherit;font-weight:inherit;text-align:left;color:inherit}
+.arbol-btn{display:inline-flex;align-items:center;gap:.5rem;min-height:48px;padding:.1rem .3rem;margin:-.5rem 0;border:0;background:transparent;cursor:pointer;font:inherit;font-weight:inherit;text-align:left;color:inherit}
 .arbol-btn .flecha{width:1.1em;color:var(--rojo)}
 .arbol-btn .ver{font-size:.78rem;font-weight:500;color:var(--tinta2);border:1px solid var(--linea2);border-radius:99px;padding:.02rem .5rem;white-space:nowrap}
 .arbol-btn:hover .ver{border-color:var(--tinta);color:var(--tinta)}
@@ -67,7 +75,7 @@ code.cod{margin-left:.5rem;font-size:.78rem;color:var(--tinta2);background:#f4ef
 td.pc{white-space:nowrap}
 .pc-barra{display:inline-block;width:56px;height:6px;margin-right:.5rem;background:#efe8d8;border-radius:3px;vertical-align:middle;overflow:hidden}
 .pc-barra i{display:block;height:100%;background:var(--rojo)}
-th button.ord{border:0;background:transparent;font:inherit;font-weight:600;text-transform:inherit;letter-spacing:inherit;color:inherit;cursor:pointer;min-height:36px;padding:0}
+th button.ord{border:0;background:transparent;font:inherit;font-weight:600;text-transform:inherit;letter-spacing:inherit;color:inherit;cursor:pointer;min-height:48px;padding:0 .2rem}
 th button.ord .flecha{color:var(--rojo)}
 .tabla tfoot td{font-weight:700;border-top:1px solid var(--linea2);background:#fcfaf5}
 

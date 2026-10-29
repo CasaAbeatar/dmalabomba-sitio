@@ -45,7 +45,7 @@ export function graficoColumnas(datos, o = {}) {
   const y = (v) => M.t + ph - ((v - sc.lo) / (sc.hi - sc.lo)) * ph;
   const slot = pw / Math.max(1, datos.length), bw = Math.max(3, Math.min(56, slot * 0.68));
   const x = (i) => M.l + slot * i + slot / 2;
-  const svg = s('svg', { class: 'gr', viewBox: `0 0 ${W} ${H}`, width: W, height: H, role: 'img', 'aria-label': o.descripcion || '' });
+  const svg = s('svg', { class: 'gr cols', viewBox: `0 0 ${W} ${H}`, width: W, height: H, role: 'img', 'aria-label': o.descripcion || '' });
   // cuadrícula y eje vertical con valores en colones
   sc.ticks.forEach((t) => {
     svg.append(s('line', { class: t === 0 ? 'base' : 'rej', x1: M.l, x2: W - M.r, y1: y(t), y2: y(t) }));
@@ -77,13 +77,23 @@ export function graficoColumnas(datos, o = {}) {
     z.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); elegir(); } });
     svg.append(z);
   });
+  // Con el dedo, toda el área del gráfico es el botón: se elige la columna más cercana al toque (las columnas angostas no se podrían tocar una por una).
+  // Las zonas de cada columna quedan solo para el teclado y los lectores de pantalla.
+  if (datos.length) {
+    const toque = s('rect', { class: 'zona-toque', x: M.l, y: M.t, width: pw, height: ph + 22 });
+    const indice = (e) => { const r = svg.getBoundingClientRect(); const x = (e.clientX - r.left) * (W / (r.width || W)); return Math.max(0, Math.min(datos.length - 1, Math.floor((x - M.l) / slot))); };
+    const elegirToque = (e) => { const i = indice(e); marcar(i); o.alSeleccionar?.(datos[i], i); };
+    toque.addEventListener('click', elegirToque);
+    toque.addEventListener('pointermove', (e) => { if (e.pointerType === 'mouse') elegirToque(e); });
+    svg.append(toque);
+  }
   if (sel >= 0 && sel < datos.length) marcar(sel);
   return svg;
 }
 
 // Barras horizontales. datos: [{etiqueta, valor, texto, extra}]  extra = texto corto a la derecha de la barra (porcentaje)
 export function graficoBarras(datos, o = {}) {
-  const W = Math.max(300, Math.round(o.ancho || 640)), fila = 38;
+  const W = Math.max(300, Math.round(o.ancho || 640)), fila = 48; // 48 px: la zona de cada barra se toca con el dedo
   const lw = Math.min(150, Math.max(84, W * 0.28));
   const M = { l: 18 + lw, r: 12, t: 10, b: 54 };
   const H = M.t + M.b + datos.length * fila;
@@ -99,7 +109,7 @@ export function graficoBarras(datos, o = {}) {
   datos.forEach((d, i) => {
     const cy = M.t + i * fila + fila / 2, bw = Math.max(2, xx(Math.max(0, d.valor)) - xx(0));
     svg.append(s('text', { class: 'cat', x: M.l - 8, y: cy + 4, 'text-anchor': 'end' }, s('title', {}, d.etiqueta), ajustar(d.etiqueta, lw)));
-    const r = s('rect', { class: 'barra ' + (o.color || 'rojo'), x: xx(0), y: cy - 11, width: bw, height: 22, rx: 3 });
+    const r = s('rect', { class: 'barra ' + (o.color || 'rojo'), x: xx(0), y: cy - 12, width: bw, height: 24, rx: 3 });
     barras.push(r); svg.append(r);
     svg.append(s('text', { class: 'val', x: xx(0) + bw + 6, y: cy + 4 }, corto(d.valor) + (d.extra ? ' · ' + d.extra : '')));
   });

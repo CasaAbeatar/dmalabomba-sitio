@@ -2,7 +2,7 @@
 // Lista las facturas y tiquetes (hoy primero) con hora, número, cliente y total, y un botón Anular en cada uno.
 // Anular = nota de crédito por el total que referencia el documento original (código 01 "Anula documento de referencia"
 // y la razón escrita, como exige Hacienda). El documento original no se borra.
-import { h, money, modal, toast, confirmar, hoyCR, sumaDias, horaCorta, debounce, MEDIOS } from './util.js';
+import { h, money, modal, toast, confirmar, hoyCR, sumaDias, horaCorta, debounce, nombrePropio, campoBusqueda, MEDIOS } from './util.js';
 import { documentos } from './api_documentos.js';
 import { imprimirComprobante, numeroCorto, NOMBRES_DOCUMENTO } from './imprimir.js';
 
@@ -58,13 +58,14 @@ export default {
       h('div.rejilla.dos', h('label.etq', 'Desde', inDesde), h('label.etq', 'Hasta', inHasta)), verFechas);
     const buscador = h('input.campo', { type: 'search', placeholder: 'Buscar por número, cliente, cédula o monto', 'aria-label': 'Buscar factura', autocomplete: 'off',
       oninput: debounce((e) => { est.q = e.target.value; pintar(); }, 150) });
+    const buscadorFila = campoBusqueda(buscador, () => { est.q = ''; pintar(); });
     const refrescar = h('button.btn', { type: 'button', onclick: async () => { refrescar.disabled = true; await cargar(); refrescar.disabled = false; } }, 'Actualizar la lista');
     const zonaLista = h('div.an-lista');
 
     root.append(h('div.an-mod',
       h('div.fila.sep', h('h2', 'Anular una factura o tiquete'), refrescar),
       h('p.an-ayuda', 'Toque el botón Anular de la factura que se hizo mal. Se emite una nota de crédito, que es el documento que Hacienda pide para dejar sin efecto una factura. La factura original no se borra.'),
-      titulo, botonesRango, cajaFechas, h('div.an-buscar', buscador), zonaLista));
+      titulo, botonesRango, cajaFechas, h('div.an-buscar', buscadorFila), zonaLista));
 
     function elegirRango(r) {
       est.rango = r;
@@ -80,7 +81,7 @@ export default {
       botonesRango.querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.r === est.rango)));
       const una = est.desde === est.hasta;
       const pre = est.rango === 'hoy' ? 'Hoy, ' : est.rango === 'ayer' ? 'Ayer, ' : '';
-      titulo.textContent = una ? pre + diaTxt(est.desde, !pre) : `Del ${diaTxt(est.desde)} al ${diaTxt(est.hasta)}`;
+      titulo.textContent = una ? (pre ? pre + diaTxt(est.desde).toLowerCase() : diaTxt(est.desde, true)) : `Del ${diaTxt(est.desde)} al ${diaTxt(est.hasta)}`;
     }
 
     /* ---------- carga y lista ---------- */
@@ -143,7 +144,7 @@ export default {
       return h('div.an-fila' + (anulado ? '.anulada' : ''),
         h('span.an-hora', horaCorta(d.fecha_emision)),
         h('span.an-doc', h('b', tipo + ' N.° ' + numeroCorto(d.consecutivo)), d.medios ? h('small', mediosTxt(d.medios)) : null),
-        h('span.an-cli', d.cliente || h('span.tenue', 'Consumidor final')),
+        h('span.an-cli', d.cliente ? nombrePropio(d.cliente) : h('span.tenue', 'Consumidor final')),
         h('span.an-total.der', money(d.total)),
         h('span.an-accion', accion));
     }
@@ -155,9 +156,9 @@ export default {
       app.api.comprobante(d.id).then((c) => {
         const ls = c?.lineas_snapshot || [];
         if (!ls.length || !m.el.isConnected) { detalleLineas.replaceChildren(); return; }
-        detalleLineas.replaceChildren(h('div.an-lineas-tit', 'Lo que se va a dejar sin efecto'),
+        detalleLineas.replaceChildren(...[h('div.an-lineas-tit', 'Lo que se va a dejar sin efecto'),
           ...ls.slice(0, 10).map((l) => h('div.an-linea', h('span', `${Number(l.cantidad) || 1} × ${l.descripcion || l.nombre || 'Producto'}`), h('span.der', money(l.total ?? l.total_linea ?? 0)))),
-          ls.length > 10 ? h('small.tenue', `y ${ls.length - 10} líneas más`) : null);
+          ls.length > 10 ? h('small.tenue', `y ${ls.length - 10} líneas más`) : null].filter(Boolean));
       }).catch(() => detalleLineas.replaceChildren());
 
       let elegido = null;
@@ -195,7 +196,7 @@ export default {
         contenido: h('div.an-dlg',
           h('div.an-resumen',
             h('div', h('b', `${NOMBRE_TIPO[d.tipo_doc]} N.° ${numeroCorto(d.consecutivo)}`), h('span.tenue', ' · ' + horaCorta(d.fecha_emision))),
-            h('div', d.cliente || 'Consumidor final'),
+            h('div', d.cliente ? nombrePropio(d.cliente) : 'Consumidor final'),
             h('div.an-resumen-total', money(d.total))),
           detalleLineas,
           h('div.an-explica',
@@ -207,9 +208,10 @@ export default {
               h('li', 'Este paso no mueve dinero: si hay que devolver efectivo, lo maneja usted en la caja.'))),
           h('div.an-etq', '¿Por qué se anula? (Hacienda lo pide)'),
           h('div.an-motivos', botonesMotivo),
-          etqDetalle, error,
-          h('div.an-pie', volver, seguir)) });
-  }
+          etqDetalle) });
+      // Los dos botones quedan fuera de la parte que se desplaza: se ven siempre, aunque la ventana sea más alta que la pantalla
+      m.el.append(h('div.modal-pie.an-pie', error, volver, seguir));
+    }
 
     function resultado(d, nc) {
       const imp = h('button.btn.primario', { type: 'button', onclick: async () => { imp.disabled = true; try { await imprimirComprobante(nc.id, { formato: 'tiquete', copias: 1 }); } catch (e) { toast(e.message || String(e), 'error', 7000); } finally { imp.disabled = false; } } }, 'Imprimir la nota de crédito');
@@ -217,7 +219,7 @@ export default {
       const r = modal({ titulo: 'Listo, quedó anulada', ancho: 560, contenido: h('div.an-dlg',
         h('div.an-ok', h('b', `Se creó la nota de crédito N.° ${numeroCorto(nc.consecutivo)}.`), h('div', `Anula ${conArticulo(d.tipo_doc)} N.° ${numeroCorto(d.consecutivo)} por ${money(d.total)}.`)),
         h('p', nc.estado === 'aceptado' ? 'Hacienda ya la aceptó.' : 'Se enviará a Hacienda en el próximo minuto y su estado cambia solo.'),
-        h('div.an-pie', imp, nueva, h('button.btn', { type: 'button', onclick: () => r.cerrar() }, 'Cerrar'))) });
+        h('div.an-botones', imp, nueva, h('button.btn', { type: 'button', onclick: () => r.cerrar() }, 'Cerrar'))) });
     }
 
     /* ---------- arranque y actualización automática ---------- */
