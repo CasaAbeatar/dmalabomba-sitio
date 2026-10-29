@@ -59,3 +59,5 @@
   .an-pie .peligro{order:1}
   .an-botones{grid-template-columns:1fr}
 }
+.an-aviso-botones{display:flex;flex-wrap:wrap;gap:.5rem;align-self:stretch}
+.an-aviso-botones .btn{flex:1 1 11rem;min-height:52px}

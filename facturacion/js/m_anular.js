@@ -67,7 +67,7 @@ const COMO_DEVOLVER = {
   sinpe: (m) => `SINPE Móvil ${money(m)}: devuélvalo por SINPE al mismo número.`,
   transferencia: (m) => `Transferencia ${money(m)}: devuélvala por transferencia a la misma cuenta.`,
 };
-const lineasDevolver = (pagos) => pagos.map((p) => h('li', (COMO_DEVOLVER[p.medio] || ((m) => `${MEDIOS[p.medio] || p.medio} ${money(m)}: devuélvalo por el mismo medio.`))(p.monto)));
+export const lineasDevolver = (pagos) => pagos.map((p) => h('li', (COMO_DEVOLVER[p.medio] || ((m) => `${MEDIOS[p.medio] || p.medio} ${money(m)}: devuélvalo por el mismo medio.`))(p.monto)));
 const pagoTxt = (pagos) => pagos.map((p) => `${MEDIOS[p.medio] || p.medio} ${money(p.monto)}`).join(', ');
 
 function bloqueDinero(motivo, pagos) {
@@ -86,7 +86,7 @@ function bloqueDinero(motivo, pagos) {
 }
 
 // Un doble toque en «Anular» no debe cerrar la ventana recién abierta: el segundo toque cae sobre el fondo y el sistema lo toma por «tocar fuera». Se ignora en el primer instante.
-function ignorarToqueDeFondo(m) {
+export function ignorarToqueDeFondo(m) {
   const fondo = m.el.parentElement, t0 = Date.now();
   fondo?.addEventListener('mousedown', (e) => { if (Date.now() - t0 < 700) e.stopImmediatePropagation(); }, true);
 }
@@ -166,8 +166,10 @@ function confirmarAnulacion(d, razon, soporta07) {
    opciones.alTerminar(nc): se llama cuando la nota de crédito ya quedó creada (la lista vuelve a cargarse).
    opciones.alVerNC(nc): si viene, el resultado ofrece «Ver la nota de crédito».
    opciones.alCambiarCliente(): si viene, el motivo «Error en el cliente» ofrece el camino guiado.
+   opciones.alDevolverParte() y opciones.alCorregirMonto(): si vienen y la base admite notas parciales (admite_notas), la ventana ofrece «Devolver parte» y «Corregir un monto»
+   para cuando solo hay que devolver o corregir una parte y no hace falta anular todo (m_nota_parcial.js).
    ===================================================================================================================== */
-export function anularDocumento(app, d, { alTerminar, alVerNC, alCambiarCliente } = {}) {
+export function anularDocumento(app, d, { alTerminar, alVerNC, alCambiarCliente, alDevolverParte, alCorregirMonto } = {}) {
   if (d.estado && d.estado !== 'aceptado') { toast('Todavía no se puede anular: Hacienda debe aceptar este documento primero.', 'error', 6000); return null; }
   if (enCurso.has(d.id)) { toast('Ya hay una ventana de anulación abierta para este documento.', 'error'); return null; }
   enCurso.add(d.id);
@@ -200,6 +202,7 @@ export function anularDocumento(app, d, { alTerminar, alVerNC, alCambiarCliente 
   const etqDetalle = h('label.etq', h('span.an-etq-det', 'Cuente brevemente qué pasó'), detalle);
   const error = h('div.error-caja', { hidden: true, role: 'alert' });
   const zonaCliente = h('div');
+  const zonaParcial = h('div'); // «¿Solo hay que devolver o corregir una parte?», cuando la base admite notas parciales
   const pintarDinero = () => zonaDinero.replaceChildren(bloqueDinero(elegido, pagosDe(original)));
   const botonesMotivo = MOTIVOS.map((t) => h('button.btn.atajo', { type: 'button', 'aria-pressed': 'false', onclick: () => {
     if (enVuelo) return;
@@ -216,6 +219,7 @@ export function anularDocumento(app, d, { alTerminar, alVerNC, alCambiarCliente 
 
   // Todo lo que se escoge para anular; se esconde si la base dice que este documento no se puede anular completo
   const cuerpoMotivos = h('div.an-dlg',
+    zonaParcial,
     h('div.an-etq', '¿Por qué se anula? (Hacienda lo pide)'),
     h('div.an-motivos', botonesMotivo),
     zonaCliente,
@@ -275,10 +279,17 @@ export function anularDocumento(app, d, { alTerminar, alVerNC, alCambiarCliente 
   m.el.append(h('div.modal-pie.an-pie', error, volver, seguir));
   // ¿La base permite anular completo? Si dice que no (por ejemplo, el documento tiene una devolución o una nota de débito, o ya se anuló), se muestra su frase tal cual, se esconden los motivos y el botón queda apagado.
   // Si no se puede preguntar, todo sigue como antes.
+  // Un botón que cierra esta ventana y abre la de la nota parcial (el mismo documento no puede tener las dos abiertas)
+  const botonParcial = (texto, abrirla) => h('button.btn', { type: 'button', onclick: () => { if (enVuelo) return; m.cerrar(); abrirla(); } }, texto);
+  const avisoParcial = (s, enBloqueo) => {
+    if (s?.admite_notas !== true || !(alDevolverParte || alCorregirMonto)) return null;
+    return h('div.an-aviso', h('p', h('b', enBloqueo ? 'Lo que sí se puede hacer: ' : '¿Solo hay que devolver o corregir una parte? '), enBloqueo ? 'devolver una parte del documento o corregir un monto.' : 'No hace falta anular todo: puede devolver una parte o corregir un monto.'),
+      h('div.an-aviso-botones', alDevolverParte ? botonParcial('Devolver parte', alDevolverParte) : null, alCorregirMonto ? botonParcial('Corregir un monto', alCorregirMonto) : null));
+  };
   const cargaSaldos = saldosDe(d.id).then((s) => {
     if (!m.el.isConnected) return;
     const permiso = permiteAnular(s);
-    if (!permiso.sabe || permiso.permite) return;
+    if (!permiso.sabe || permiso.permite) { const a = avisoParcial(s, false); if (a) zonaParcial.replaceChildren(a); return; }
     bloqueado = true;
     cuerpoMotivos.hidden = true;
     detalleLineas.style.display = 'none'; // «Lo que se va a dejar sin efecto» ya no aplica: no se va a dejar nada sin efecto
@@ -288,7 +299,8 @@ export function anularDocumento(app, d, { alTerminar, alVerNC, alCambiarCliente 
       h('p.an-bloqueo-tit', yaAnulada ? 'Este documento ya está anulado' : 'Este documento no se puede anular completo'),
       yaAnulada ? h('p', textoNota(yaAnulada)) : null,
       h('p', permiso.motivo),
-      notas ? h('div.an-notas-caja', h('div.an-etq', 'Notas que ya tiene este documento'), notas) : null));
+      notas ? h('div.an-notas-caja', h('div.an-etq', 'Notas que ya tiene este documento'), notas) : null,
+      avisoParcial(s, true)));
     seguir.disabled = true; seguir.textContent = rotuloSeguir();
     error.hidden = true;
     if (anulacionDeSaldos(s)) Promise.resolve(alTerminar?.(null)).catch(() => { /* la lista se actualiza sola en unos segundos */ }); // ya estaba anulado: la lista debe ponerse al día

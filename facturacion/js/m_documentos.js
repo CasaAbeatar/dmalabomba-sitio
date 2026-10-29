@@ -2,8 +2,9 @@
 // y en cada fila los botones «Reimprimir» y «Anular». La lista se pinta por tandas («Mostrar más»): la búsqueda y los filtros actúan sobre todo lo cargado. Tocar la fila abre el detalle (estado en Hacienda, «Ya lo atendí», archivos, reenvíos).
 // La anulación con nota de crédito es la de m_anular.js; la impresión es la de imprimir.js.
 import { h, money, modal, toast, descargar, hoyCR, sumaDias, fechaHora, horaCorta, debounce, num, r2, nombrePropio, nombreLocal, traducirHacienda, campoBusqueda, TIPOS_SERVICIO, MEDIOS, TIPOS_ID } from './util.js';
-import { documentos, anulacionDe, permiteAnular, otrasNotas, correoActivo, reenviarCorreo, alertaAtender, hacerVentaDeNuevo, mensajeAmable } from './api_documentos.js';
+import { documentos, anulacionDe, saldosDe, permiteAnular, otrasNotas, sinEfectoDeSaldos, correoActivo, reenviarCorreo, alertaAtender, hacerVentaDeNuevo, mensajeAmable } from './api_documentos.js';
 import { anularDocumento, cambiarCliente, textoCodigoNota, codigoDeNota, sustituyeSoportado, listaNotas, TEXTO_07 } from './m_anular.js';
+import { devolverParte, corregirMonto, dejarSinEfecto } from './m_nota_parcial.js';
 import { selectorCliente } from './ui_cliente.js';
 import { sumarDocumentos, frasesDeLista, puenteConTurno, docsDelTurno } from './cuadre_turno.js';
 import { imprimirComprobante, reimprimirComprobante, formatoDireccion, formatoCedula, formatoTelefono, numeroCorto, NOMBRES_DOCUMENTO } from './imprimir.js';
@@ -459,7 +460,8 @@ export default {
 
     // Una sola puerta para anular: el motivo «Error en el cliente» ofrece el camino guiado «Cambiar el cliente y hacer la venta de nuevo»
     function abrirAnular(doc, ctx = {}) {
-      return anularDocumento(app, doc, { ...ctx, alCambiarCliente: () => cambiarCliente(app, doc, { alTerminar: ctx.alTerminar }) });
+      return anularDocumento(app, doc, { ...ctx, alCambiarCliente: () => cambiarCliente(app, doc, { alTerminar: ctx.alTerminar }),
+        alDevolverParte: () => devolverParte(app, doc, { alTerminar: ctx.alTerminar, alVerNota: ctx.alVerNC }), alCorregirMonto: () => corregirMonto(app, doc, { alTerminar: ctx.alTerminar, alVerNota: ctx.alVerNC }) });
     }
 
     /* ---------- detalle de un documento ---------- */
@@ -478,17 +480,22 @@ export default {
         try {
           let falloNC = false;
           // anulacionDe trae la anulación total (nc: solo la nota de crédito de código 01; una devolución parcial NO anula) y los saldos con las demás notas del documento
-          const [c, { nc, saldos }] = await Promise.all([app.api.comprobante(id), anulacionDe(id).catch(() => { falloNC = true; return { nc: null, saldos: null }; })]);
+          const [c, { nc: ncAnula, saldos }] = await Promise.all([app.api.comprobante(id), anulacionDe(id).catch(() => { falloNC = true; return { nc: null, saldos: null }; })]);
           if (!vivo || mi !== nCarga) return;
           estadoVisto = c?.estado || null;
           if (silencioso && falloNC) return; // si no se pudo ver la nota de crédito, mejor no cambiar lo que ya se ve
-          const nueva = JSON.stringify([c, nc, saldos]);
+          // Si el documento está anulado, se lee la nota de crédito para saber si se puede dejar sin efecto (admite_sin_efecto) o si ya se dejó sin efecto con una nota de débito (cuelga de la nota de crédito, no del documento)
+          const saldosNC = ncAnula && esVenta(c) ? await saldosDe(ncAnula.id) : null;
+          if (!vivo || mi !== nCarga) return;
+          const sinEfecto = sinEfectoDeSaldos(saldosNC);
+          const nc = sinEfecto ? null : ncAnula; // con la anulación dejada sin efecto, el documento vuelve a valer
+          const nueva = JSON.stringify([c, nc, saldos, saldosNC, sinEfecto]);
           if (silencioso && nueva === firma) return; // nada cambió: no se toca la pantalla (ni el cursor, ni el teclado del celular)
           firma = nueva;
           // Si había un campo con el cursor adentro, después de pintar vuelve a quedar ahí, en el mismo lugar
           const foco = caja.contains(document.activeElement) && /^(INPUT|TEXTAREA)$/.test(document.activeElement.tagName)
             ? { etiqueta: document.activeElement.getAttribute('aria-label'), ini: document.activeElement.selectionStart, fin: document.activeElement.selectionEnd } : null;
-          caja.replaceChildren(vistaDetalle(c, nc, { repintar: pintarDet, cerrar: m.cerrar, borrador, saldos }));
+          caja.replaceChildren(vistaDetalle(c, nc, { repintar: pintarDet, cerrar: m.cerrar, borrador, saldos, saldosNC, sinEfecto, ncAnula }));
           if (foco?.etiqueta) {
             const campo = [...caja.querySelectorAll('input,textarea')].find((x) => x.getAttribute('aria-label') === foco.etiqueta);
             if (campo) { campo.focus({ preventScroll: true }); try { campo.setSelectionRange(foco.ini, foco.fin); } catch { /* campo sin cursor */ } }
@@ -515,6 +522,11 @@ export default {
       if (nc) raiz.append(h('div.doc-aviso.anulado', h('div', h('b', 'Anulado por la nota de crédito N.° ' + numeroCorto(nc.consecutivo) + '. '), 'Este documento ya no vale.' + (nc.estado !== 'aceptado' ? ' La nota de crédito todavía está esperando la respuesta de Hacienda.' : ''),
           textoCodigoNota(codigoDeNota(nc)) ? h('div.doc-motivo', 'Tipo de nota: ' + textoCodigoNota(codigoDeNota(nc)) + '.' + (sustituyeSoportado(c) ? ' Si se hace la venta de nuevo, la venta nueva llevará el ' + TEXTO_07 + '.' : '')) : null),
         h('button.btn', { type: 'button', onclick: () => { ctx.cerrar(); abrirDetalle(nc.id); } }, 'Ver la nota de crédito')));
+      // La anulación se dejó sin efecto con una nota de débito (que cuelga de la nota de crédito): el documento vuelve a valer
+      if (ctx.sinEfecto && esVenta(c)) raiz.append(h('div.doc-aviso.ref', h('div', h('b', `La anulación de este documento se dejó sin efecto con la nota de débito N.° ${numeroCorto(ctx.sinEfecto.consecutivo)}. `), 'El documento vuelve a valer. Ya no admite más devoluciones, correcciones ni anulaciones.' + (ctx.sinEfecto.estado !== 'aceptado' ? ' La nota de débito todavía está esperando la respuesta de Hacienda.' : '')),
+        h('button.btn', { type: 'button', onclick: () => { ctx.cerrar(); abrirDetalle(ctx.sinEfecto.id); } }, 'Ver la nota de débito')));
+      if (esNC && sinEfectoDeSaldos(ctx.saldos)) { const nd = sinEfectoDeSaldos(ctx.saldos); raiz.append(h('div.doc-aviso.ref', h('div', h('b', `Esta anulación se dejó sin efecto con la nota de débito N.° ${numeroCorto(nd.consecutivo)}. `), 'El documento que se había anulado vuelve a valer.'),
+        h('button.btn', { type: 'button', onclick: () => { ctx.cerrar(); abrirDetalle(nd.id); } }, 'Ver la nota de débito'))); }
       if ((esNC || esND) && c.original) {
         const sobreNota = c.original.tipo_doc === '03'; // una nota de débito que deja sin efecto la anulación se apoya en la nota de crédito
         const queHace = esNC
@@ -544,7 +556,7 @@ export default {
       // Encabezado y estado
       raiz.append(h('div.doc-encab',
         h('div', h('div.doc-etq', tipoNombre), h('div.doc-num', 'N.° ' + numeroCorto(c.consecutivo)), h('div.tenue', fechaHora(c.fecha_emision))),
-        h('div.doc-chips', h('span.chip.' + (CLASE_ESTADO[c.estado] || ''), ETQ_ESTADO[c.estado] || c.estado), c.ambiente !== 'produccion' ? h('span.chip.espera', 'Prueba, sin validez') : null, nc ? h('span.chip.anulado', 'Anulado') : null,
+        h('div.doc-chips', h('span.chip.' + (CLASE_ESTADO[c.estado] || ''), ETQ_ESTADO[c.estado] || c.estado), c.ambiente !== 'produccion' ? h('span.chip.espera', 'Prueba, sin validez') : null, nc ? h('span.chip.anulado', 'Anulado') : null, ctx.sinEfecto ? h('span.chip.nota', 'Anulación dejada sin efecto') : null,
           (esNC || esND) && nombreNota ? h('span.chip.nota', nombreNota) : null, otras.length ? h('span.chip.nota', otras.some((n) => n.tipo_doc === '03') ? 'Con devolución' : 'Con nota de débito') : null)));
       raiz.append(textoEstado(c, !!nc));
 
@@ -663,6 +675,7 @@ export default {
 
       const grupos = [impr, arch, env];
       if (esVenta(c)) grupos.push(bloqueAnular(c, nc, ctx));
+      else if (c.tipo_doc === '03') { const g = bloqueSinEfecto(c, ctx); if (g) grupos.push(g); }
       return h('div.doc-acciones', grupos);
     }
 
@@ -670,11 +683,18 @@ export default {
       const g = h('div.doc-grupo.anular', h('h3', 'Corregir o anular'));
       const repintar = async () => { await ctx.repintar(true); await cargar(true); };
       const doc = { ...c, cliente: c.cliente_snapshot?.nombre || '' };
+      const verNota = (n) => { ctx.cerrar(); abrirDetalle(n.id); };
+      if (!nc && ctx.sinEfecto) { g.append(h('p.tenue', 'La anulación se dejó sin efecto, así que este documento vuelve a valer. Ya no admite más devoluciones, correcciones ni anulaciones.')); return g; }
       if (nc) {
+        // Una anulación aceptada se puede dejar sin efecto con una nota de débito (la base lo dice en admite_sin_efecto de la NOTA DE CRÉDITO)
+        const sinEf = ctx.saldosNC?.admite_sin_efecto === true && nc.estado === 'aceptado';
+        const docNC = { id: nc.id, tipo_doc: '03', consecutivo: nc.consecutivo, total: nc.total ?? c.total, fecha_emision: nc.fecha_emision, cliente: doc.cliente };
         g.append(...[h('p.tenue', `Este documento ya fue anulado con la nota de crédito N.° ${numeroCorto(nc.consecutivo)}. No se puede anular dos veces.`),
           c.venta_id ? h('div.doc-botones',
             accion({ texto: 'Hacer la venta de nuevo en Facturación', hint: 'Copia los productos a una cuenta nueva y abre Facturación.', onclick: async () => { ctx.cerrar(); await hacerVentaDeNuevo(app, c.venta_id, toast); } }),
-            accion({ texto: 'Hacer la venta de nuevo con otro cliente', hint: 'Primero elige al cliente; después abre Facturación.', onclick: async () => { selectorCliente(app, { titulo: 'Elegir el cliente de la venta nueva', alElegir: async (cl) => { ctx.cerrar(); await hacerVentaDeNuevo(app, c.venta_id, toast, cl?.id); } }); } })) : null].filter(Boolean));
+            accion({ texto: 'Hacer la venta de nuevo con otro cliente', hint: 'Primero elige al cliente; después abre Facturación.', onclick: async () => { selectorCliente(app, { titulo: 'Elegir el cliente de la venta nueva', alElegir: async (cl) => { ctx.cerrar(); await hacerVentaDeNuevo(app, c.venta_id, toast, cl?.id); } }); } })) : null,
+          sinEf ? h('div.doc-botones',
+            accion({ texto: 'Dejar sin efecto la anulación', hint: 'Úselo si la anulación fue un error: el documento vuelve a valer.', onclick: async () => { dejarSinEfecto(app, docNC, { alTerminar: repintar, alVerNota: verNota }); } })) : null].filter(Boolean));
         return g;
       }
       if (c.estado === 'aceptado') {
@@ -682,9 +702,16 @@ export default {
         // fx_comprobante_saldos dice si se puede anular completo (admite_anulacion). Si no se puede, se muestra su frase tal cual y los dos botones quedan apagados.
         // Si no se pudo preguntar, los botones funcionan como siempre y es la base la que rechaza lo que no corresponde.
         const permiso = permiteAnular(ctx.saldos), bloq = permiso.sabe && !permiso.permite;
-        g.append(...[h('p.tenue', 'Si la venta se hizo mal, se anula con una nota de crédito (código 01, anulación total). El documento original no se borra: queda guardado y enlazado a la nota.'),
+        // fx_comprobante_saldos también dice si admite devoluciones y correcciones (admite_notas); si no, se muestra su frase tal cual y los botones quedan apagados
+        const noNotas = !!ctx.saldos && ctx.saldos.admite_notas === false;
+        const motivoNotas = noNotas ? (String(ctx.saldos.motivo_no_admite || '').trim() || 'Este documento no admite devoluciones ni correcciones.') : '';
+        const abrirParcial = (abrirla) => async () => { abrirla(app, doc, { alTerminar: repintar, alVerNota: verNota }); };
+        g.append(...[h('p.tenue', 'Si la venta se hizo mal, se anula con una nota de crédito (código 01, anulación total). El documento original no se borra: queda guardado y enlazado a la nota. Si solo hay que devolver o corregir una parte, no hace falta anular todo: use «Devolver parte» o «Corregir un monto».'),
           bloq ? h('div.doc-espera-caja', { role: 'note' }, h('p', h('b', 'Este documento no se puede anular completo.')), h('p', permiso.motivo)) : null,
+          noNotas ? h('div.doc-espera-caja', { role: 'note' }, h('p', h('b', 'No se puede devolver ni corregir una parte de este documento.')), h('p', motivoNotas)) : null,
           h('div.doc-botones',
+            accion({ texto: 'Devolver parte', hint: noNotas ? 'No se puede: lea el aviso de arriba' : 'El cliente devuelve algunos productos y se le devuelve esa parte.', disabled: noNotas, onclick: abrirParcial(devolverParte) }),
+            accion({ texto: 'Corregir un monto', hint: noNotas ? 'No se puede: lea el aviso de arriba' : 'Se cobró de más o de menos en un producto.', disabled: noNotas, onclick: abrirParcial(corregirMonto) }),
             accion({ texto: esTiquete ? 'El cliente pide factura' : 'Corregir el cliente de la factura', hint: bloq ? 'No se puede: lea el aviso de arriba' : esTiquete ? 'Elige al cliente, anula el tiquete y deja la factura lista para cobrar.' : 'Elige al cliente correcto, anula y deja la venta lista para cobrar.', clase: 'primario', disabled: bloq, onclick: async () => { cambiarCliente(app, doc, { alTerminar: repintar }); } }),
             accion({ texto: 'Anular con nota de crédito', hint: bloq ? 'No se puede: lea el aviso de arriba' : null, clase: 'peligro', disabled: bloq, onclick: async () => { abrirAnular(doc, { alTerminar: repintar, alVerNC: (n) => { ctx.cerrar(); abrirDetalle(n.id); } }); } }))].filter(Boolean));
       } else if (c.estado === 'rechazado') {
@@ -698,9 +725,25 @@ export default {
           h('p', pend ? 'Qué hacer mientras tanto: deje esta ventana abierta, se actualiza sola y el botón se habilitará cuando Hacienda lo acepte. También puede cerrarla, seguir atendiendo y volver más tarde.'
             : 'Qué hacer mientras tanto: toque «Reenviar a Hacienda» (arriba, en «Enviar»). Cuando Hacienda lo acepte podrá anularlo. Si pasa mucho tiempo, avise a la persona encargada.')),
           h('div.doc-botones',
+            accion({ texto: 'Devolver parte', disabled: true, hint: 'Primero debe estar aceptado por Hacienda' }),
+            accion({ texto: 'Corregir un monto', disabled: true, hint: 'Primero debe estar aceptado por Hacienda' }),
             accion({ texto: 'Anular con nota de crédito', clase: 'peligro', disabled: true, hint: 'Primero debe estar aceptado por Hacienda' }),
             accion({ texto: esTiqueteTxt(c), disabled: true, hint: 'Primero debe estar aceptado por Hacienda' })));
       }
+      return g;
+    }
+    // Detalle de una nota de crédito: si es una anulación total aceptada, se puede dejar sin efecto con una nota de débito (admite_sin_efecto). Una devolución o una corrección no se deshace así.
+    function bloqueSinEfecto(c, ctx) {
+      if (!['01', '13'].includes(String(c.codigo_referencia || '01'))) return null;
+      const g = h('div.doc-grupo.anular', h('h3', 'Corregir esta anulación'));
+      const ya = sinEfectoDeSaldos(ctx.saldos);
+      if (ya) { g.append(h('p.tenue', `Esta anulación ya se dejó sin efecto con la nota de débito N.° ${numeroCorto(ya.consecutivo)}.`)); return g; }
+      const doc = { ...c, cliente: c.cliente_snapshot?.nombre || '' };
+      const sabe = !!ctx.saldos && typeof ctx.saldos.admite_sin_efecto === 'boolean';
+      const apagado = c.estado !== 'aceptado' || (sabe && !ctx.saldos.admite_sin_efecto);
+      const hint = c.estado !== 'aceptado' ? 'Primero debe estar aceptada por Hacienda' : apagado ? 'No se puede en este momento' : 'Úselo si la anulación fue un error: el documento vuelve a valer.';
+      g.append(h('p.tenue', 'Si esta anulación se hizo por error, se puede dejar sin efecto con una nota de débito: la venta vuelve a valer como estaba. Antes de hacerlo se le muestra todo para que lo revise.'),
+        h('div.doc-botones', accion({ texto: 'Dejar sin efecto la anulación', hint, disabled: apagado, onclick: async () => { dejarSinEfecto(app, doc, { alTerminar: async () => { await ctx.repintar(true); await cargar(true); }, alVerNota: (n) => { ctx.cerrar(); abrirDetalle(n.id); } }); } })));
       return g;
     }
     const esTiqueteTxt = (c) => (c.tipo_doc === '04' ? 'El cliente pide factura' : 'Corregir el cliente de la factura');
