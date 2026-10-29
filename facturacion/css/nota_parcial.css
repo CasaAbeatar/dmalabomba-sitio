@@ -2,6 +2,8 @@
 .np-cuerpo{gap:1rem}
 .np-paso{font-size:.85rem;letter-spacing:.04em;text-transform:uppercase;color:var(--tinta2)}
 .np-paso b{color:var(--tinta)}
+/* El foco entra aquí al cambiar de paso (para el teclado y los lectores de pantalla); no es un botón, así que no lleva marco */
+.np-paso:focus,.np-cuerpo .an-bloqueo-tit:focus,.np-cuerpo .bloque-error-tit:focus{outline:none}
 .np-intro{margin:0;color:var(--tinta)}
 .np-ayuda{margin:0;padding:.65rem .9rem;border:1px solid var(--linea2);border-left:3px solid var(--azul);border-radius:10px;background:#fbfcfe;font-size:.95rem}
 

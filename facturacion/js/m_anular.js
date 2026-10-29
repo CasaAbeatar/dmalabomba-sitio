@@ -115,7 +115,7 @@ async function emitirNota(app, d, razon) {
       try { r = await anulacionDe(d.id); }
       catch { throw new FalloNota('El sistema dice que este documento ya tiene una nota de crédito, pero no se pudo comprobar si es una anulación o una devolución. Revise la conexión y mire la lista de documentos.'); }
       if (r.sinEfecto) throw new FalloNota('La anulación de este documento ya se dejó sin efecto con una nota de débito, así que ya no se puede anular otra vez.');
-      if (!r.nc) throw new FalloNota(permiteAnular(r.saldos).motivo || 'Este documento ya tiene una devolución o una corrección y no se puede anular completo.');
+      if (!r.nc) throw new FalloNota(permiteAnular(r.saldos).motivo || 'Este documento ya tiene una devolución o una corrección, así que no se puede anular completo. Para anularlo, devuelva con «Devolver parte» lo que falta.');
       return { nc: r.nc, yaExistia: true };
     }
     if (esDeRed(e)) {
@@ -366,6 +366,7 @@ export function cambiarCliente(app, d, { alTerminar } = {}) {
   const razon = esTiquete ? RAZON_FACTURA : RAZON_CORREGIR;
   let estado = d.estado || 'aceptado', cliente = null, nc = null, original = null, enVuelo = false, vivo = true, soporta07 = false;
   let saldos = null; // fx_comprobante_saldos: si dice que no se puede anular completo, este camino tampoco sirve (también anula)
+  let notaSinEfecto = null; // la nota de débito que dejó sin efecto la anulación de este documento, si la hay
   const pagos = () => pagosDe(original);
   const sinPermiso = () => { const p = permiteAnular(saldos); return estado === 'aceptado' && !nc && p.sabe && !p.permite ? p : null; };
 
@@ -405,7 +406,9 @@ export function cambiarCliente(app, d, { alTerminar } = {}) {
     } else if (sinPermiso()) {
       aviso.hidden = false; aviso.className = 'an-aviso';
       const notas = listaNotas(saldos);
-      aviso.replaceChildren(h('p', h('b', 'Este documento no se puede anular completo. ')), h('p', sinPermiso().motivo), ...(notas ? [h('div.an-etq', 'Notas que ya tiene este documento'), notas] : []));
+      aviso.replaceChildren(h('p', h('b', 'Este documento no se puede anular completo. ')),
+        h('p', notaSinEfecto ? `La anulación se dejó sin efecto con la nota de débito N.° ${numeroCorto(notaSinEfecto.consecutivo)}. El documento vuelve a valer, pero ya no admite más devoluciones, correcciones ni anulaciones.` : sinPermiso().motivo),
+        ...(notas ? [h('div.an-etq', 'Notas que ya tiene este documento'), notas] : []));
     }
     const puede = !!cliente && (estado === 'aceptado' || rechazado || !!nc) && !enVuelo && !sinPermiso();
     principal.disabled = !puede;
@@ -458,7 +461,17 @@ export function cambiarCliente(app, d, { alTerminar } = {}) {
   }, 5000);
   app.api.comprobante(d.id).then((c) => { if (!vivo) return; original = c; soporta07 = sustituyeSoportado(c); if (c?.estado) estado = c.estado; pintar(); }).catch(() => {});
   // Si el documento ya estaba anulado (desde otro aparato), se sigue desde ahí: solo falta dejar lista la venta nueva
-  saldosDe(d.id).then((s) => { if (!vivo || !s) return; saldos = s; const ya = anulacionDeSaldos(s); if (ya && !nc) nc = ya; pintar(); }).catch(() => {});
+  // La anulación puede haberse dejado sin efecto con una nota de débito (cuelga de la nota de crédito): entonces el documento vuelve a valer, NO está anulado, y no se debe dejar lista una venta nueva
+  saldosDe(d.id).then(async (s) => {
+    if (!vivo || !s) return;
+    saldos = s;
+    const ya = anulacionDeSaldos(s);
+    const sinEfecto = ya && !nc ? sinEfectoDeSaldos(await saldosDe(ya.id)) : null;
+    if (!vivo) return;
+    if (ya && !nc && !sinEfecto) nc = ya;
+    notaSinEfecto = sinEfecto;
+    pintar();
+  }).catch(() => {});
   m.el.append(h('div.modal-pie.an-pie', error, porque, volver, principal));
   ignorarToqueDeFondo(m);
   pintar();
