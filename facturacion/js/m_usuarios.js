@@ -145,7 +145,7 @@ export default {
           mostrar('');
           const u = usuarioLimpio(usr.value);
           if (!/^[a-z0-9._-]{2,30}$/.test(u)) return mostrar('El usuario debe tener entre 2 y 30 caracteres: letras minúsculas sin tilde, números, punto o guion.', usr);
-          if (usuarios.some((x) => x.usuario === u)) return mostrar('Ya existe un usuario "' + u + '". Elija otro.', usr);
+          if (usuarios.some((x) => x.usuario === u)) return mostrar('Ya existe un usuario «' + u + '». Elija otro.', usr);
           if (!nom.value.trim()) return mostrar('Escriba el nombre de la persona.', nom);
           if (!/^\d{4}$/.test(pin.value)) return mostrar('El PIN debe tener exactamente 4 números.', pin);
           if (pinDebil(pin.value)) return mostrar(conPunto(pinDebil(pin.value)) + ' Use el botón «Generar un PIN al azar» o escriba otro.', pin);
