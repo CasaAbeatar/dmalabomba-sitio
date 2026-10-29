@@ -52,7 +52,10 @@ export function amigableDelServidor(msg) {
   return String(msg ?? '')
     .replace(/₡\s?(\d+)\.(\d{2})(?!\d)/g, (_, e, d) => money(Number(e + '.' + d)))
     .replace(/(solo tiene |se pidió )(\d+)\.(\d{3})(?!\d)/g, (_, pre, e, d) => pre + num(Number(e + '.' + d)))
-    .replace(/(Los pagos \()(\d+)\.(\d{2})(\) no suman el total de la nota \()(\d+)\.(\d{2})(\))/g, (_, a, e1, d1, b, e2, d2, c) => a + money(Number(e1 + '.' + d1)) + b + money(Number(e2 + '.' + d2)) + c);
+    .replace(/(Los pagos \()(\d+)\.(\d{2})(\) no suman el total de la nota \()(\d+)\.(\d{2})(\))/g, (_, a, e1, d1, b, e2, d2, c) => a + money(Number(e1 + '.' + d1)) + b + money(Number(e2 + '.' + d2)) + c)
+    // Los productos no están numerados en la pantalla: «La línea 1 (Gallo pinto) solo tiene 0 por devolver y se pidió 1.» se dice con el nombre del producto
+    .replace(/\bLa línea \d+ \((.+?)\) solo tiene (.+?) por devolver y se pidió (.+?)\./g, (_, nombre, queda, pidio) => (queda === '0' ? `De «${nombre}» ya no queda nada por devolver y se pidió ${pidio}.` : `De «${nombre}» solo quedan ${queda} por devolver y se pidió ${pidio}.`))
+    .replace(/\b[Ll]a línea \d+ \(([^)]+)\)/g, (_, nombre) => `«${nombre}»`);
 }
 const mensajeDe = (e, defecto) => amigableDelServidor(mensajeAmable(e, defecto));
 
@@ -62,7 +65,7 @@ const mensajeDe = (e, defecto) => amigableDelServidor(mensajeAmable(e, defecto))
 export function validarDevolucion(lineas, texto) {
   const items = [], errores = new Map(); let total = 0;
   for (const l of lineas) {
-    if (l.saldoMil <= 0) continue;
+    if (l.saldoMil <= 0 || l.saldoCent <= 0) continue; // sin cantidad o sin dinero por devolver (una corrección de monto pudo agotar el dinero de la línea) la línea está agotada
     const r = leerCantidad(texto.get(l.linea));
     if (r.vacio) continue;
     if (r.error) { errores.set(l.linea, r.error); continue; }
@@ -178,6 +181,12 @@ const EXPLICA_ND = 'Una nota de débito es un documento que le suma a la factura
 const EXPLICA_ND_SIN_EFECTO = 'Una nota de débito es un documento que vuelve a sumar lo que la anulación había restado. La nota de crédito de la anulación no se borra: queda guardada y enlazada a la nota de débito.';
 
 const CON_ARTICULO = { '01': 'la factura', '02': 'la nota de débito', '03': 'la nota de crédito', '04': 'el tiquete' };
+const DE_DOC = { '01': 'de la factura', '02': 'de la nota de débito', '03': 'de la nota de crédito', '04': 'del tiquete' };
+const EN_DOC = { '01': 'en la factura', '02': 'en la nota de débito', '03': 'en la nota de crédito', '04': 'en el tiquete' };
+const MS_RELEER = 4500;  // tras una respuesta perdida: cuánto se espera para volver a mirar si la nota quedó hecha (la base puede estar terminando de guardar)
+const MS_SEGURO = 15000; // desde que se envió la nota: pasado este tiempo la base ya terminó de guardar o de descartar, y una lectura sin la nota vale como «no se hizo»
+const MAX_RAZON = 180;   // el motivo que se manda a Hacienda: de 3 a 180 letras
+const AVISO_SIN_TURNO = 'No hay un turno abierto, así que el cierre de caja de hoy no incluirá esta nota.';
 const lineasSaldo = (s) => (Array.isArray(s?.lineas) ? s.lineas : []).map((l) => ({
   linea: Number(l.linea), nombre: String(l.descripcion || 'Producto'), cantMil: aMil(l.cantidad), pfCent: aCent(l.precio_final), totCent: aCent(l.total_linea),
   devMil: aMil(l.devuelto_cantidad), acredCent: aCent(l.acreditado_monto), saldoMil: aMil(l.saldo_cantidad), saldoCent: aCent(l.saldo_monto) }));
@@ -199,11 +208,14 @@ function abrir(app, d, clase, { alTerminar, alVerNota } = {}) {
   enCurso.add(d.id);
   const TITULOS = { devolucion: 'Devolver parte', monto: 'Corregir un monto', sinefecto: 'Dejar sin efecto la anulación' };
   const S = { paso: 'cargando', saldos: null, orig: null, dir: null, texto: new Map(), motivo: null, detalle: '', calc: null, queda: null, editor: null, razon: '', payload: null,
-    error: '', errorLectura: '', dudoso: false, enVuelo: false, vivo: true, ultimoReparto: null, pasoPintado: null, refresco: null, errorEsReparto: false };
+    error: '', errorLectura: '', dudoso: false, enVuelo: false, vivo: true, ultimoReparto: null, pasoPintado: null, refresco: null, errorEsReparto: false, aviso: '', revalidar: null };
   const cuerpo = h('div.an-dlg.np-cuerpo');
   const pie = h('div.modal-pie.an-pie.np-pie');
+  // Con la nota en camino (paso 2 y trabajando) cerrar o recargar la pestaña haría perder el aviso de lo que pasó con ella: el navegador pregunta antes de salir
+  const alSalir = (e) => { if (!(S.enVuelo && S.paso === 'revisar')) return undefined; e.preventDefault(); e.returnValue = ''; return ''; };
+  window.addEventListener('beforeunload', alSalir);
   const m = modal({ titulo: TITULOS[clase], ancho: 720, contenido: cuerpo,
-    alCerrar: () => { S.vivo = false; enCurso.delete(d.id); },
+    alCerrar: () => { S.vivo = false; enCurso.delete(d.id); window.removeEventListener('beforeunload', alSalir); },
     bloqueo: () => (S.enVuelo ? 'Espere un momento: se está trabajando en la nota.' : '') });
   m.el.append(pie);
   ignorarToqueDeFondo(m);
@@ -220,6 +232,10 @@ function abrir(app, d, clase, { alTerminar, alVerNota } = {}) {
   const botonVolver = (texto = 'Volver sin hacer nada') => h('button.btn', { type: 'button', onclick: () => m.cerrar() }, texto);
   const cajaError = h('div.error-caja', { hidden: true, role: 'alert' });
   const mostrarError = (t) => { S.error = t || ''; cajaError.textContent = S.error; cajaError.hidden = !S.error; };
+  // Una línea tranquila (gris) sobre los botones: lo que se está comprobando o por qué no se puede cambiar nada
+  const estadoPie = h('p.np-estado', { role: 'status', hidden: true });
+  const ponerEstado = (t) => { estadoPie.textContent = t || ''; estadoPie.hidden = !t; };
+  const TEXTO_DUDOSO = 'Mientras no se sepa, no se puede cambiar nada.';
   const pasoTxt = (n, t) => h('div.np-paso', { tabindex: '-1' }, h('b', `Paso ${n} de 2`), ' · ' + t);
   const motivoNoAdmite = () => {
     if (clase === 'sinefecto') return motivoSinEfecto();
@@ -249,6 +265,7 @@ function abrir(app, d, clase, { alTerminar, alVerNota } = {}) {
       const notas = listaNotas(S.saldos);
       cuerpo.replaceChildren(resumenDoc(d), h('div.an-bloqueo', { role: 'alert' },
         h('p.an-bloqueo-tit', clase === 'sinefecto' ? 'Esta anulación no se puede dejar sin efecto' : 'Este documento no admite devoluciones ni correcciones'),
+        S.aviso ? h('p', S.aviso) : null,
         h('p', motivoNoAdmite()),
         notas ? h('div.an-notas-caja', h('div.an-etq', 'Notas que ya tiene este documento'), notas) : null));
       pie.append(botonVolver('Volver'));
@@ -285,14 +302,17 @@ function abrir(app, d, clase, { alTerminar, alVerNota } = {}) {
   }
 
   /* ---------------------------------------------------------------- paso 1: qué se hace ---------------------------------------------------------------- */
+  // El motivo que se manda a Hacienda es «motivo: detalle» y no puede pasar de 180 letras: el detalle tiene el espacio que le queda al motivo escogido, así nada se recorta sin avisar
+  const limiteDetalle = () => (S.motivo && S.motivo !== OTRO ? MAX_RAZON - S.motivo.length - 2 : MAX_RAZON);
   const botonesMotivo = () => {
     const lista = MOTIVOS[clave()] || [];
     const etq = h('label.etq', h('span.an-etq-det', S.motivo === OTRO ? 'Escriba cuál fue el motivo (obligatorio)' : 'Detalle (opcional)'),
-      h('input.campo', { type: 'text', maxlength: 150, placeholder: 'Escriba aquí qué pasó', 'aria-label': 'Detalle del motivo', value: S.detalle, autocomplete: 'off',
+      h('input.campo', { type: 'text', maxlength: limiteDetalle(), placeholder: 'Escriba aquí qué pasó', 'aria-label': 'Detalle del motivo', value: S.detalle, autocomplete: 'off',
         oninput: (e) => { S.detalle = e.target.value; } }));
     const botones = lista.map((t) => h('button.btn.atajo', { type: 'button', 'aria-pressed': String(S.motivo === t), onclick: () => {
       S.motivo = t; mostrarError('');
       botones.forEach((b) => b.setAttribute('aria-pressed', String(b.textContent === t)));
+      etq.querySelector('input').maxLength = limiteDetalle();
       etq.querySelector('.an-etq-det').textContent = t === OTRO ? 'Escriba cuál fue el motivo (obligatorio)' : 'Detalle (opcional)';
       if (t === OTRO) etq.querySelector('input').focus({ preventScroll: true }); // solo cuando hay que escribir algo: si no, en el celular el teclado taparía los botones
     } }, t));
@@ -307,6 +327,7 @@ function abrir(app, d, clase, { alTerminar, alVerNota } = {}) {
     if (clase === 'devolucion') ({ nodos: partes[1], vivo, validar } = vistaDevolucion());
     else if (clase === 'monto') ({ nodos: partes[1], vivo, validar } = vistaMonto());
     else ({ nodos: partes[1], vivo, validar } = vistaSinEfecto());
+    S.revalidar = validar;
     cuerpo.replaceChildren(...partes.flat().filter(Boolean), ...(clase !== 'monto' || S.dir ? [botonesMotivo()] : []));
     const siguiente = h('button.btn.primario.grande', { type: 'button', onclick: (e) => conBoton(e.currentTarget, irARevisar) }, clase === 'devolucion' ? 'Revisar la devolución' : clase === 'monto' ? 'Revisar la corrección' : 'Revisar antes de confirmar');
     pie.append(...[vivo, cajaError, botonVolver(), siguiente].filter(Boolean));
@@ -320,7 +341,7 @@ function abrir(app, d, clase, { alTerminar, alVerNota } = {}) {
     const vivo = h('div.np-vivo', { 'aria-live': 'polite' });
     const refs = new Map();
     const tarjetas = lineas.map((l) => {
-      const agotada = l.saldoMil <= 0;
+      const agotada = l.saldoMil <= 0 || l.saldoCent <= 0; // sin dinero por devolver también está agotada, aunque quede cantidad (una corrección de monto pudo gastar el dinero de la línea)
       const input = h('input.campo', { type: 'text', inputmode: 'decimal', autocomplete: 'off', 'data-linea': String(l.linea), 'aria-label': `Cantidad a devolver de ${l.nombre}`, value: S.texto.get(l.linea) || '', disabled: agotada,
         oninput: (e) => { S.texto.set(l.linea, e.target.value); validar(); } });
       const todo = h('button.btn.chico', { type: 'button', 'data-todo': String(l.linea), disabled: agotada, onclick: () => {
@@ -334,7 +355,7 @@ function abrir(app, d, clase, { alTerminar, alVerNota } = {}) {
       return h('div.np-linea' + (agotada ? '.agotada' : ''),
         h('div.np-l-nombre', l.nombre),
         h('div.np-l-datos', h('span', 'Compró ', h('b', num(l.cantMil / 1000))), l.devMil > 0 ? h('span', 'Ya devuelto ', h('b', num(l.devMil / 1000))) : null,
-          h('span', agotada ? h('b', 'Ya se devolvió todo') : ['Se puede devolver ', h('b', num(l.saldoMil / 1000))]), h('span', h('b', money(l.pfCent / 100)), ' cada uno')),
+          h('span', agotada ? h('b', l.saldoMil <= 0 ? 'Ya se devolvió todo' : 'Ya se devolvió todo el dinero de este producto') : ['Se puede devolver ', h('b', num(l.saldoMil / 1000))]), h('span', h('b', money(l.pfCent / 100)), ' cada uno')),
         agotada ? null : h('div.np-l-entrada', h('label', h('span', 'Cantidad a devolver'), input), todo),
         error, sub);
     });
@@ -349,7 +370,7 @@ function abrir(app, d, clase, { alTerminar, alVerNota } = {}) {
         r.todo.textContent = lleno ? 'Quitar la cantidad' : `Devolver todo (${num(r.l.saldoMil / 1000)})`;
         r.todo.closest('.np-linea')?.classList.toggle('activa', !!it);
       }
-      vivo.replaceChildren(v.items.length ? h('span', 'Se devolvería: ', h('b.np-vivo-total', moneyC(v.total)), `  ·  ${v.items.length} ${v.items.length === 1 ? 'producto' : 'productos'}`) : h('span.tenue', 'Todavía no escribió ninguna cantidad.'));
+      vivo.replaceChildren(v.items.length ? h('span', 'Se devolvería: ', h('b.np-vivo-total', moneyC(v.total)), `  ·  ${v.items.length} ${v.items.length === 1 ? 'producto' : 'productos'}`, v.errores.size ? ' (sin contar los productos con error)' : '') : h('span.tenue', 'Todavía no escribió ninguna cantidad.'));
       return v;
     }
     const nodos = [pasoTxt(1, 'Qué se devuelve'),
@@ -373,8 +394,9 @@ function abrir(app, d, clase, { alTerminar, alVerNota } = {}) {
       opcion('mas', 'Se cobró de más', 'El cliente pagó más de lo correcto. Se le devuelve la diferencia.'),
       opcion('menos', 'Se cobró de menos', 'El cliente pagó menos de lo correcto. Se le cobra la diferencia.'));
     const refs = new Map();
-    function validar() {
-      if (!S.dir) { vivo.replaceChildren(h('span.tenue', 'Primero escoja si se cobró de más o de menos.')); return null; }
+    // Un solo mensaje: gris mientras no se haya intentado seguir; rojo si se toca el botón sin haber escogido
+    function validar(insistir = false) {
+      if (!S.dir) { vivo.replaceChildren(h(insistir ? 'span.np-vivo-mal' : 'span.tenue', 'Primero escoja si se cobró de más o de menos.')); return null; }
       const v = validarMontos(lineas, S.texto, S.dir, { totalCent, debitadoCent });
       for (const [, r] of refs) {
         const e = v.errores.get(r.l.linea), it = v.items.find((x) => x.linea === r.l.linea);
@@ -384,21 +406,23 @@ function abrir(app, d, clase, { alTerminar, alVerNota } = {}) {
       }
       const verbo = S.dir === 'mas' ? 'devolvería' : 'cobraría';
       vivo.replaceChildren(v.general ? h('span.np-vivo-mal', `Se cobraría ${moneyC(v.total)}, pero a este documento solo se le pueden cobrar ${moneyC(Math.max(totalCent - debitadoCent, 0))} más en total.`)
-        : v.items.length ? h('span', `Se ${verbo}: `, h('b.np-vivo-total', moneyC(v.total)), `  ·  ${v.items.length} ${v.items.length === 1 ? 'producto' : 'productos'}`) : h('span.tenue', 'Todavía no escribió ningún monto.'));
+        : v.items.length ? h('span', `Se ${verbo}: `, h('b.np-vivo-total', moneyC(v.total)), `  ·  ${v.items.length} ${v.items.length === 1 ? 'producto' : 'productos'}`, v.errores.size ? ' (sin contar los productos con error)' : '') : h('span.tenue', 'Todavía no escribió ningún monto.'));
       return v;
     }
     if (S.dir) {
+      const resto = Math.max(totalCent - debitadoCent, 0); // lo que todavía se le puede cobrar al documento entre todos los productos
       for (const l of lineas) {
         const agotada = S.dir === 'mas' && l.saldoCent <= 0;
-        const tope = S.dir === 'mas' ? l.saldoCent : Math.min(l.totCent, Math.max(totalCent - debitadoCent, 0));
+        const tope = S.dir === 'mas' ? l.saldoCent : Math.min(l.totCent, resto);
+        const topeDelDocumento = S.dir === 'menos' && resto < l.totCent; // el tope no es el de este producto: es lo que le queda al documento en total
         const input = h('input.campo', { type: 'text', inputmode: 'decimal', autocomplete: 'off', 'data-linea': String(l.linea), 'aria-label': `${S.dir === 'mas' ? 'Monto que se devuelve' : 'Monto que se cobra'} de ${l.nombre}`, value: S.texto.get(l.linea) || '', disabled: agotada,
           oninput: (e) => { S.texto.set(l.linea, e.target.value); validar(); } });
         const error = h('p.np-l-error', { role: 'alert', hidden: true });
         refs.set(l.linea, { l, input, error });
         zona.append(h('div.np-linea' + (agotada ? '.agotada' : ''),
           h('div.np-l-nombre', l.nombre),
-          h('div.np-l-datos', h('span', 'Se cobró ', h('b', moneyC(l.totCent)), ' (con IVA)'), l.acredCent > 0 ? h('span', 'Ya corregido ', h('b', moneyC(l.acredCent))) : null,
-            h('span', agotada ? h('b', 'Ya no admite más correcciones de crédito') : [S.dir === 'mas' ? 'Se puede devolver hasta ' : 'Se puede cobrar hasta ', h('b', moneyC(tope))])),
+          h('div.np-l-datos', h('span', 'Se cobró ', h('b', moneyC(l.totCent)), ' (con IVA)'), S.dir === 'mas' && l.acredCent > 0 ? h('span', 'Ya acreditado ', h('b', moneyC(l.acredCent))) : null,
+            h('span', agotada ? h('b', 'Ya no admite más correcciones de crédito') : [S.dir === 'mas' ? 'Se puede devolver hasta ' : (topeDelDocumento ? 'Entre todos los productos se puede cobrar hasta ' : 'Se puede cobrar hasta '), h('b', moneyC(tope))])),
           agotada ? null : h('div.np-l-entrada', h('label', h('span', S.dir === 'mas' ? 'Monto que se devuelve (₡)' : 'Monto que se cobra (₡)'), input)),
           error));
       }
@@ -406,7 +430,9 @@ function abrir(app, d, clase, { alTerminar, alVerNota } = {}) {
     const nodos = [pasoTxt(1, 'Qué se corrige'),
       h('p.np-intro', 'Úselo cuando se cobró un monto equivocado en un producto y solo hay que ajustar la diferencia, sin rehacer la venta.'),
       opciones,
-      S.dir ? h('p.np-ayuda', h('b', 'Escriba solo la diferencia, no el precio correcto. '), `Por ejemplo, si se cobró ${money(5000)} y debía ser ${money(4000)}, escriba 1000. Los montos incluyen el IVA.`) : null,
+      S.dir ? h('p.np-ayuda', h('b', 'Escriba solo la diferencia, no el precio correcto. '),
+        S.dir === 'mas' ? `Por ejemplo, si se cobró ${money(5000)} y debía ser ${money(4000)}, escriba 1000. Los montos incluyen el IVA.`
+          : `Por ejemplo, si se cobró ${money(4000)} y debía ser ${money(5000)}, escriba 1000. Los montos incluyen el IVA.`) : null,
       zona];
     return { nodos, vivo, validar };
   }
@@ -419,7 +445,7 @@ function abrir(app, d, clase, { alTerminar, alVerNota } = {}) {
     const nodos = [pasoTxt(1, 'Qué se hace'),
       h('p.np-intro', `Esta nota de crédito N.° ${numeroCorto(o.consecutivo)} anuló ${orig ? `${CON_ARTICULO[orig.tipo_doc] || 'el documento'} N.° ${numeroCorto(orig.consecutivo)}` : 'un documento'} por ${total}.`),
       h('div.an-explica', h('p', h('b', 'Qué pasa si sigue:')), h('ul',
-        h('li', `Se crea una nota de débito por ${total}. ${EXPLICA_ND_SIN_EFECTO}`),
+        h('li', `Se crea una nota de débito por ${total}.`),
         h('li', 'La venta vuelve a valer como estaba antes de anularla.'),
         h('li', 'Después de esto, el documento original ya no admite más devoluciones ni correcciones.'))),
       lineas.length ? h('div.an-lineas', h('div.an-lineas-tit', 'Lo que volvería a valer'),
@@ -440,43 +466,65 @@ function abrir(app, d, clase, { alTerminar, alVerNota } = {}) {
       if (!v.items.length) return mostrarError('Escriba cuánto se devuelve de al menos un producto.');
       payload = v.items.map((x) => ({ linea: x.linea, cantidad: txtMil(x.mil) }));
     } else if (clase === 'monto') {
-      if (!S.dir) return mostrarError('Escoja si se cobró de más o de menos.');
+      if (!S.dir) { S.revalidar?.(true); cuerpo.querySelector('.np-opcion')?.focus(); return; } // el mensaje ya está abajo: se pone en rojo y el cursor va a las dos opciones
       v = validarMontos(lineasSaldo(S.saldos), S.texto, S.dir, { totalCent: aCent(S.saldos.total), debitadoCent: aCent(S.saldos.total_debitado) });
       if (v.errores.size) return mostrarError('Revise los montos marcados en rojo.');
-      if (v.general) return mostrarError(v.general);
+      if (v.general) return mostrarError('No se puede seguir con ese monto. Si el cliente debe más, haga una venta nueva por la diferencia.'); // la cifra del tope ya está en rojo arriba de los botones
       if (!v.items.length) return mostrarError('Escriba el monto de al menos un producto.');
       payload = v.items.map((x) => ({ linea: x.linea, monto: txtCent(x.cent) }));
     }
     if (!S.motivo) return mostrarError('Escoja uno de los motivos de arriba.');
     if (S.motivo === OTRO && S.detalle.trim().length < 5) return mostrarError('Escriba cuál fue el motivo (mínimo 5 letras).');
     const det = S.detalle.trim();
-    const razon = (S.motivo === OTRO ? det : S.motivo + (det ? ': ' + det : '')).slice(0, 180);
+    const razon = S.motivo === OTRO ? det : S.motivo + (det ? ': ' + det : '');
+    if (razon.length > MAX_RAZON) return mostrarError(`El motivo y el detalle juntos pasan de ${MAX_RAZON} letras (tienen ${razon.length}). Acorte el detalle en ${razon.length - MAX_RAZON} letras.`);
     if (typeof navigator !== 'undefined' && navigator.onLine === false) return mostrarError('No hay conexión con internet. Cuando vuelva, toque el botón otra vez.');
     S.enVuelo = true;
     try {
-      const [calc, queda] = await Promise.all([notaCalcular(d.id, tipoNota(), codigoNota(), payload), esCredito() ? capacidadPagos(app, S.saldos) : null]);
+      // Los saldos se leen otra vez junto con el cálculo: si otra persona (u otro aparato) hizo una nota mientras esta ventana estaba abierta, se avisa y se vuelve al paso 1
+      const [calc, queda, fresca] = await Promise.all([notaCalcular(d.id, tipoNota(), codigoNota(), payload), esCredito() ? capacidadPagos(app, S.saldos) : null, saldosEstricto(d.id)]);
       if (!S.vivo) return;
+      const nuevas = notasNuevas(S.saldos, fresca);
+      if (nuevas.length) return hayNotasNuevas(fresca, nuevas);
       if (!calc || typeof calc !== 'object' || !Number.isFinite(Number(calc.total)) || !(Number(calc.total) > 0)) throw new Fallo('No se pudo calcular la nota. Intente de nuevo.');
-      S.calc = calc; S.queda = queda; S.razon = razon; S.payload = payload;
+      S.saldos = fresca; S.calc = calc; S.queda = queda; S.razon = razon; S.payload = payload;
       S.paso = 'revisar'; pintar();
     } catch (e) {
       const msg = e instanceof Fallo ? e.message : mensajeDe(e);
       mostrarError(msg);
       // El servidor dijo que no por los datos (lo más común: otra persona hizo una nota mientras tanto): se leen los saldos de nuevo para que los topes que se ven sean los de ahora
       if (!(e instanceof Fallo) && esRechazo(e)) {
+        const previos = S.saldos;
         await refrescar();
-        if (S.vivo && S.paso === 'editar') { if (permite()) { pintarEditar(); mostrarError(msg); } else { S.paso = 'bloqueado'; pintar(); } }
+        if (S.vivo && S.paso === 'editar') {
+          const nuevas = notasNuevas(previos, S.saldos);
+          const texto = (nuevas.length ? avisoMientrasTanto(nuevas) + ' ' : '') + msg;
+          if (permite()) { pintarEditar(); mostrarError(texto); } else { S.aviso = nuevas.length ? avisoMientrasTanto(nuevas) : ''; S.paso = 'bloqueado'; pintar(); }
+        }
       }
     }
     finally { S.enVuelo = false; }
   }
   // Una falla de datos (el sistema entendió y dijo que no), no de conexión ni de sesión
   const esRechazo = (e) => !esDeRed(e) && !e?.sesion && e?.tipo !== 'sesion';
-  function refrescar() {
-    S.refresco = (async () => { try { const s = await saldosEstricto(d.id); if (S.vivo) S.saldos = s; } catch { /* se queda lo que ya se ve */ } })();
-    return S.refresco;
+  // Las notas vivas que hay ahora en el documento y que esta ventana no conocía (de otra persona o de otro aparato)
+  function notasNuevas(antesS, ahoraS) {
+    const conocidas = new Set(((antesS && antesS.notas) || []).map((n) => n.id));
+    return ((ahoraS && ahoraS.notas) || []).filter((n) => !conocidas.has(n.id) && n.viva !== false && n.estado !== 'rechazado');
   }
-
+  function avisoMientrasTanto(nuevas) {
+    const nums = nuevas.map((n) => `N.° ${numeroCorto(n.consecutivo)}`);
+    const lista = nums.length === 1 ? nums[0] : nums.slice(0, -1).join(', ') + ' y ' + nums.at(-1);
+    return `Mientras tanto se ${nuevas.length === 1 ? 'hizo la nota' : 'hicieron las notas'} ${lista} en este documento. Ya se actualizaron los datos: revise de nuevo antes de seguir.`;
+  }
+  // Se detectó una nota que la pantalla no conocía: se vuelve al paso 1 con los datos de ahora y se avisa (lo escrito se conserva y se revisa contra lo que queda)
+  function hayNotasNuevas(fresca, nuevas) {
+    S.saldos = fresca; S.calc = null; S.queda = null; S.dudoso = false;
+    S.aviso = avisoMientrasTanto(nuevas);
+    S.paso = permite() ? 'editar' : 'bloqueado';
+    pintar();
+    if (S.paso === 'editar') mostrarError(S.aviso);
+  }
   /* ---------------------------------------------------------------- paso 2: revisar y confirmar ---------------------------------------------------------------- */
   const correoTxt = () => {
     const o = S.orig;

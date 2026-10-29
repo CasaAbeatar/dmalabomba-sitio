@@ -106,6 +106,8 @@ export async function anulacionDe(id) {
   }
   if (!vigente) return { saldos: saldos && Array.isArray(saldos.notas) ? saldos : null, nc: null, ncAnulacion: null, saldosNC: null, sinEfecto: null };
   const saldosNC = await saldosDe(vigente.id);
+  // Sin esta segunda lectura no se sabe si la anulación se dejó sin efecto con una nota de débito: darla por vigente mostraría «Anulado» un documento que vuelve a valer
+  if (!saldosNC || !Array.isArray(saldosNC.notas)) throw new ErrorApi('No se pudo comprobar si la anulación se dejó sin efecto. Intente de nuevo.');
   const sinEfecto = sinEfectoDeSaldos(saldosNC);
   return { saldos: saldos && Array.isArray(saldos.notas) ? saldos : null, nc: sinEfecto ? null : vigente, ncAnulacion: vigente, saldosNC, sinEfecto };
 }
