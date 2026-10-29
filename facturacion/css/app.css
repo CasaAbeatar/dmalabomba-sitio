@@ -7,7 +7,21 @@ h1{font-size:1.6rem}h2{font-size:1.2rem}h3{font-size:1rem}
 small,.tenue{color:var(--tinta2)}
 .cargando{padding:3rem;text-align:center;color:var(--tinta2)}
 button{font:inherit;color:inherit}
-:focus-visible{outline:2px solid var(--rojo);outline-offset:2px}
+:focus-visible{outline:3px solid var(--rojo);outline-offset:2px}
+.campo:focus-visible{outline:3px solid rgba(184,22,34,.35);outline-offset:1px}
+summary{padding-block:.8rem;cursor:pointer;font-weight:600}
+input[type=checkbox],input[type=radio]{width:24px;height:24px;accent-color:var(--rojo);flex:0 0 auto}
+
+/* Esqueleto de carga */
+.esqueleto{display:flex;flex-direction:column;gap:.7rem;padding:.4rem 0}
+.esq-texto{margin:0 0 .2rem;color:var(--tinta2);font-weight:600}
+.esq-fila{display:flex;gap:.8rem;align-items:center;padding:.9rem;border:1px solid var(--linea);border-radius:var(--r);background:var(--papel)}
+.esq-fila i{display:block;height:14px;border-radius:7px;background:linear-gradient(90deg,#efe8da 25%,#f8f3e8 50%,#efe8da 75%);background-size:200% 100%;animation:brillo 1.3s linear infinite}
+.esq-fila i.corto{width:18%;margin-left:auto}
+@keyframes brillo{from{background-position:200% 0}to{background-position:-200% 0}}
+@media(prefers-reduced-motion:reduce){.esq-fila i{animation:none}}
+.bloque-error{display:flex;flex-direction:column;align-items:center;gap:.7rem}
+.bloque-error-tit{margin:0;font-weight:700;color:var(--tinta);font-size:1.05rem}
 
 /* Botones: grandes, con texto, borde fino */
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:.5rem;min-height:48px;padding:.6rem 1.15rem;border:1px solid var(--linea2);background:var(--papel);border-radius:var(--r);font-weight:600;cursor:pointer;text-align:center;transition:background .12s,border-color .12s,transform .05s}
@@ -20,7 +34,7 @@ button{font:inherit;color:inherit}
 .btn.peligro:hover{background:var(--rojo-suave)}
 .btn.suave{background:transparent}
 .btn.grande{min-height:60px;font-size:1.1rem;padding:.8rem 1.4rem}
-.btn.chico{min-height:40px;padding:.35rem .8rem;font-size:.92rem}
+.btn.chico{min-height:48px;padding:.35rem .9rem;font-size:.92rem}
 .btn[disabled]{opacity:.5;cursor:not-allowed}
 .btn[data-ocupado]{opacity:.6}
 .fila{display:flex;gap:.6rem;flex-wrap:wrap;align-items:center}
@@ -63,7 +77,7 @@ table.tabla{width:100%;border-collapse:collapse;font-size:.95rem}
 .marca{display:flex;align-items:center;gap:.6rem;font-weight:700}
 .marca img{height:34px;width:auto;display:block}
 .soc-sel{display:flex;border:1px solid var(--linea2);border-radius:var(--r);overflow:hidden;background:#fff}
-.soc-sel button{min-height:44px;padding:.4rem .9rem;border:0;background:transparent;cursor:pointer;font-weight:600}
+.soc-sel button{min-height:48px;padding:.4rem 1rem;border:0;background:transparent;cursor:pointer;font-weight:600}
 .soc-sel button+button{border-left:1px solid var(--linea2)}
 .soc-sel button[aria-pressed=true]{background:var(--rojo);color:#fff}
 .estado-turno{font-size:.88rem;padding:.3rem .7rem;border-radius:99px;border:1px solid var(--linea2);background:#fff}
@@ -75,6 +89,8 @@ table.tabla{width:100%;border-collapse:collapse;font-size:.95rem}
 .pestanas::-webkit-scrollbar{display:none}
 .pestanas button{flex:0 0 auto;min-height:48px;padding:.5rem 1rem;border:0;border-bottom:3px solid transparent;background:transparent;cursor:pointer;font-weight:600;color:var(--tinta2)}
 .pestanas button[aria-selected=true]{color:var(--rojo);border-bottom-color:var(--rojo)}
+.pestanas button .pend{display:inline-block;margin-left:.45rem;padding:.05rem .55rem;border-radius:99px;border:1px solid #efd08f;background:var(--ambar-suave);color:#8a5a00;font-size:.8rem;font-weight:700;vertical-align:1px}
+.pestanas button .pend.urge{border-color:var(--rojo);background:var(--rojo);color:#fff}
 main#vista{max-width:1400px;margin:0 auto;padding:1rem}
 .usuario-caja{margin-left:auto;display:flex;align-items:center;gap:.5rem;font-size:.92rem}
 
@@ -91,13 +107,15 @@ main#vista{max-width:1400px;margin:0 auto;padding:1rem}
 .teclado button{min-height:62px;font-size:1.5rem;font-weight:600;border:1px solid var(--linea2);background:#fff;border-radius:var(--r);cursor:pointer}
 .teclado button:active{background:var(--rojo-suave)}
 .teclado button.texto{font-size:.95rem}
+.login .entrando{margin:.4rem 0;text-align:center;color:var(--tinta2);font-weight:600}
+.teclado button:disabled{opacity:.5;cursor:wait}
 .error-caja{margin:.6rem 0;padding:.7rem .9rem;border:1px solid #e9b3b7;background:var(--rojo-suave);border-radius:var(--r);color:var(--rojo-osc);font-weight:500}
 
 /* Ventanas y avisos */
 .modal-fondo{position:fixed;inset:0;z-index:100;background:rgba(29,26,23,.45);display:grid;place-items:center;padding:1rem;overflow:auto}
 .modal{width:100%;background:var(--papel);border-radius:16px;border:1px solid var(--linea);box-shadow:0 20px 60px rgba(0,0,0,.25);max-height:calc(100vh - 2rem);display:flex;flex-direction:column}
 .modal-tit{display:flex;justify-content:space-between;align-items:center;gap:1rem;padding:1rem 1.2rem;border-bottom:1px solid var(--linea)}
-.modal-tit .cerrar{border:1px solid var(--linea2);background:#fff;border-radius:var(--r);min-height:40px;padding:.2rem .8rem;cursor:pointer}
+.modal-tit .cerrar{border:1px solid var(--linea2);background:#fff;border-radius:var(--r);min-height:48px;padding:.2rem .9rem;cursor:pointer;font-weight:600}
 .modal-cuerpo{padding:1.2rem;overflow:auto}
 .modal-pie{display:flex;gap:.6rem;justify-content:flex-end;flex-wrap:wrap;padding:.9rem 1.2rem;border-top:1px solid var(--linea)}
 .conf{margin:0;font-size:1.05rem}

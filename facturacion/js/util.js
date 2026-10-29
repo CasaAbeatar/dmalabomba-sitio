@@ -57,6 +57,29 @@ export const MEDIOS = { efectivo: 'Efectivo', tarjeta: 'Tarjeta', sinpe: 'SINPE 
 export const TIPOS_ID = { '01': 'Cédula física', '02': 'Cédula jurídica', '03': 'DIMEX', '04': 'NITE', '05': 'Extranjero no domiciliado', '06': 'No contribuyente' };
 export const ESTADOS = { pendiente: 'En cola', enviado: 'Enviado a Hacienda', aceptado: 'Aceptado', rechazado: 'Rechazado', error: 'Con error' };
 
+// Nombre del local para mostrar: usa el nombre comercial (o la razón social si falta) y, si viene todo en mayúsculas, lo pasa a "Pollos La Bomba".
+const MENORES = new Set(['a', 'al', 'de', 'del', 'la', 'las', 'el', 'los', 'y', 'e', 'en', 'con', 'por', 'para']);
+export function nombreLocal(s) {
+  const t = String((s && (s.nombre_comercial || s.nombre)) ?? '').trim();
+  if (!t || t !== t.toUpperCase()) return t;
+  return t.toLowerCase().split(/\s+/).map((w, i) => (i > 0 && MENORES.has(w)) ? w : w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+}
+
+// Esqueleto de carga: rectángulos grises con brillo suave y la palabra "Cargando…" (la hoja de estilos está en app.css)
+export function esqueleto(filas = 4, texto = 'Cargando…') {
+  return h('div.esqueleto', { role: 'status', 'aria-live': 'polite' },
+    h('p.esq-texto', texto),
+    Array.from({ length: filas }, (_, i) => h('div.esq-fila', h('i', { style: `width:${[62, 88, 74, 54, 80][i % 5]}%` }), h('i.corto'))));
+}
+
+// Pantalla de error con botón "Intentar de nuevo". Sirve para cualquier sección que no pudo cargar.
+export function bloqueError({ titulo = 'No se pudo cargar', mensaje = '', alReintentar, texto = 'Intentar de nuevo' } = {}) {
+  return h('div.vacio.bloque-error', { role: 'alert' },
+    h('p.bloque-error-tit', titulo),
+    mensaje ? h('p.tenue', mensaje) : null,
+    alReintentar ? h('button.btn.primario', { type: 'button', onclick: (e) => alReintentar(e.currentTarget) }, texto) : null);
+}
+
 // Avisos breves
 export function toast(msg, tipo = 'ok', ms = 3500) {
   let c = $('#toasts'); if (!c) { c = h('div#toasts', { 'aria-live': 'polite' }); document.body.append(c); }
@@ -65,19 +88,46 @@ export function toast(msg, tipo = 'ok', ms = 3500) {
 }
 
 // Ventana modal. Devuelve {cerrar, el}. contenido: nodo; botones: [{texto, clase, onclick(cerrar)}]
+// Con varias ventanas abiertas, Escape y Tab solo actúan en la de arriba; al cerrar, el foco vuelve a donde estaba.
+const pilaModales = [];
+let contadorModal = 0;
+const FOCOS = 'button:not([disabled]),[href],input:not([disabled]):not([type=hidden]),select:not([disabled]),textarea:not([disabled]),summary,[tabindex]:not([tabindex="-1"])';
 export function modal({ titulo, contenido, botones = [], ancho = 520, alCerrar }) {
   const fondo = h('div.modal-fondo');
-  const cerrar = () => { fondo.remove(); document.removeEventListener('keydown', esc_); alCerrar?.(); };
-  const esc_ = (e) => { if (e.key === 'Escape') cerrar(); };
-  const caja = h('div.modal', { style: `max-width:${ancho}px`, role: 'dialog', 'aria-modal': 'true' },
-    titulo ? h('div.modal-tit', h('h2', titulo), h('button.cerrar', { 'aria-label': 'Cerrar', onclick: cerrar }, 'Cerrar ✕')) : null,
+  const previo = document.activeElement;
+  const idTitulo = titulo ? 'modal-tit-' + (++contadorModal) : null;
+  let cerrado = false;
+  const teclas = (e) => {
+    if (pilaModales[pilaModales.length - 1] !== fondo) return;
+    if (e.key === 'Escape') { e.preventDefault(); cerrar(); return; }
+    if (e.key !== 'Tab') return;
+    const lista = [...caja.querySelectorAll(FOCOS)].filter((x) => x.offsetParent !== null);
+    if (!lista.length) return;
+    const primero = lista[0], ultimo = lista[lista.length - 1];
+    if (!caja.contains(document.activeElement)) { e.preventDefault(); primero.focus(); }
+    else if (e.shiftKey && document.activeElement === primero) { e.preventDefault(); ultimo.focus(); }
+    else if (!e.shiftKey && document.activeElement === ultimo) { e.preventDefault(); primero.focus(); }
+  };
+  const cerrar = () => {
+    if (cerrado) return;
+    cerrado = true;
+    fondo.remove();
+    document.removeEventListener('keydown', teclas);
+    const i = pilaModales.indexOf(fondo); if (i >= 0) pilaModales.splice(i, 1);
+    if (previo && previo.isConnected && typeof previo.focus === 'function' && !pilaModales.length) { try { previo.focus({ preventScroll: true }); } catch { /* nada */ } }
+    alCerrar?.();
+  };
+  const caja = h('div.modal', { style: `max-width:${ancho}px`, role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': idTitulo },
+    titulo ? h('div.modal-tit', h('h2', { id: idTitulo }, titulo), h('button.cerrar', { type: 'button', onclick: cerrar }, 'Cerrar ✕')) : null,
     h('div.modal-cuerpo', contenido),
-    botones.length ? h('div.modal-pie', botones.map((b) => h('button.btn' + (b.clase ? '.' + b.clase : ''), { onclick: () => b.onclick?.(cerrar) }, b.texto))) : null);
+    botones.length ? h('div.modal-pie', botones.map((b) => h('button.btn' + (b.clase ? '.' + b.clase : ''), { type: 'button', onclick: () => b.onclick?.(cerrar) }, b.texto))) : null);
   fondo.append(caja);
   fondo.addEventListener('mousedown', (e) => { if (e.target === fondo) cerrar(); });
-  document.addEventListener('keydown', esc_);
+  document.addEventListener('keydown', teclas);
+  pilaModales.push(fondo);
   document.body.append(fondo);
   const f = caja.querySelector('input,select,textarea'); f?.focus();
+  if (!f) caja.querySelector('.modal-pie .primario, .modal-pie button, .cerrar')?.focus({ preventScroll: true });
   return { cerrar, el: caja };
 }
 
