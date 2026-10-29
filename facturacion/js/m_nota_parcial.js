@@ -15,7 +15,6 @@ if (!document.querySelector('link[data-fx-nota-parcial]')) document.head.append(
 const NOMBRE_TIPO = { '01': 'Factura', '02': 'Nota de débito', '03': 'Nota de crédito', '04': 'Tiquete' };
 const OTRO = 'Otro motivo';
 const MEDIOS_ORDEN = ['efectivo', 'tarjeta', 'sinpe', 'transferencia'];
-const ESTADO_NOTA = { pendiente: 'Por enviar a Hacienda', enviado: 'Enviada a Hacienda', aceptado: 'Aceptada por Hacienda', rechazado: 'Rechazada por Hacienda', error: 'No se pudo enviar a Hacienda' };
 
 /* ---------- Números: todo se calcula en enteros (centavos y milésimas) para no arrastrar decimales ---------- */
 export const aCent = (n) => Math.round((Number(n) + Number.EPSILON) * 100) || 0;
@@ -190,7 +189,7 @@ function abrir(app, d, clase, { alTerminar, alVerNota } = {}) {
   enCurso.add(d.id);
   const TITULOS = { devolucion: 'Devolver parte', monto: 'Corregir un monto', sinefecto: 'Dejar sin efecto la anulación' };
   const S = { paso: 'cargando', saldos: null, orig: null, dir: null, texto: new Map(), motivo: null, detalle: '', calc: null, queda: null, editor: null, razon: '', payload: null,
-    error: '', errorLectura: '', dudoso: false, enVuelo: false, vivo: true, ultimoReparto: null };
+    error: '', errorLectura: '', dudoso: false, enVuelo: false, vivo: true, ultimoReparto: null, pasoPintado: null, refresco: null, errorEsReparto: false };
   const cuerpo = h('div.an-dlg.np-cuerpo');
   const pie = h('div.modal-pie.an-pie.np-pie');
   const m = modal({ titulo: TITULOS[clase], ancho: 720, contenido: cuerpo,
@@ -211,7 +210,7 @@ function abrir(app, d, clase, { alTerminar, alVerNota } = {}) {
   const botonVolver = (texto = 'Volver sin hacer nada') => h('button.btn', { type: 'button', onclick: () => m.cerrar() }, texto);
   const cajaError = h('div.error-caja', { hidden: true, role: 'alert' });
   const mostrarError = (t) => { S.error = t || ''; cajaError.textContent = S.error; cajaError.hidden = !S.error; };
-  const pasoTxt = (n, t) => h('div.np-paso', h('b', `Paso ${n} de 2`), ' · ' + t);
+  const pasoTxt = (n, t) => h('div.np-paso', { tabindex: '-1' }, h('b', `Paso ${n} de 2`), ' · ' + t);
   const motivoNoAdmite = () => {
     if (clase === 'sinefecto') return motivoSinEfecto();
     return String(S.saldos?.motivo_no_admite || '').trim() || 'Este documento no admite devoluciones ni correcciones.';
@@ -248,6 +247,15 @@ function abrir(app, d, clase, { alTerminar, alVerNota } = {}) {
     } else if (S.paso === 'revisar') {
       pintarRevisar();
     }
+    // Al cambiar de paso se lee desde el principio y el foco pasa al contenido nuevo (si no, con teclado o lector de pantalla se queda en «Cerrar» o se pierde)
+    if (S.paso !== S.pasoPintado) { S.pasoPintado = S.paso; if (S.paso !== 'cargando') alInicio(); }
+  }
+  function alInicio() {
+    const c = m.el.querySelector('.modal-cuerpo'); if (c) c.scrollTop = 0;
+    const objetivo = cuerpo.querySelector('.np-paso, .an-bloqueo-tit, .bloque-error-tit');
+    if (!objetivo) return;
+    objetivo.setAttribute('tabindex', '-1');
+    try { objetivo.focus({ preventScroll: true }); } catch { /* nada */ }
   }
 
   async function cargar() {
@@ -276,7 +284,7 @@ function abrir(app, d, clase, { alTerminar, alVerNota } = {}) {
       S.motivo = t; mostrarError('');
       botones.forEach((b) => b.setAttribute('aria-pressed', String(b.textContent === t)));
       etq.querySelector('.an-etq-det').textContent = t === OTRO ? 'Escriba cuál fue el motivo (obligatorio)' : 'Detalle (opcional)';
-      etq.querySelector('input').focus({ preventScroll: true });
+      if (t === OTRO) etq.querySelector('input').focus({ preventScroll: true }); // solo cuando hay que escribir algo: si no, en el celular el teclado taparía los botones
     } }, t));
     return h('div.np-motivo', h('div.an-etq', clase === 'sinefecto' ? '¿Por qué se deja sin efecto? (Hacienda lo pide)' : clase === 'devolucion' ? '¿Por qué se devuelve? (Hacienda lo pide)' : '¿Por qué se corrige? (Hacienda lo pide)'),
       h('div.an-motivos.np-motivos', botones), etq);
@@ -290,7 +298,7 @@ function abrir(app, d, clase, { alTerminar, alVerNota } = {}) {
     else if (clase === 'monto') ({ nodos: partes[1], vivo, validar } = vistaMonto());
     else ({ nodos: partes[1], vivo, validar } = vistaSinEfecto());
     cuerpo.replaceChildren(...partes.flat().filter(Boolean), ...(clase !== 'monto' || S.dir ? [botonesMotivo()] : []));
-    const siguiente = h('button.btn.primario.grande', { type: 'button', onclick: (e) => conBoton(e.currentTarget, irARevisar) }, clase === 'devolucion' ? 'Revisar la devolución' : clase === 'monto' ? 'Revisar la corrección' : 'Revisar');
+    const siguiente = h('button.btn.primario.grande', { type: 'button', onclick: (e) => conBoton(e.currentTarget, irARevisar) }, clase === 'devolucion' ? 'Revisar la devolución' : clase === 'monto' ? 'Revisar la corrección' : 'Revisar antes de confirmar');
     pie.append(...[vivo, cajaError, botonVolver(), siguiente].filter(Boolean));
     mostrarError('');
     validar?.();
@@ -349,6 +357,7 @@ function abrir(app, d, clase, { alTerminar, alVerNota } = {}) {
     const opcion = (dir, titulo, texto) => h('button.np-opcion', { type: 'button', 'data-dir': dir, 'aria-pressed': String(S.dir === dir), onclick: () => {
       if (S.dir === dir) return;
       S.dir = dir; S.texto = new Map(); S.motivo = null; S.detalle = ''; S.error = ''; pintarEditar();
+      cuerpo.querySelector(`.np-opcion[data-dir="${dir}"]`)?.focus({ preventScroll: true });
     } }, h('b', titulo), h('span', texto));
     const opciones = h('div.np-opciones', { role: 'group', 'aria-label': '¿Se cobró de más o de menos?' },
       opcion('mas', 'Se cobró de más', 'El cliente pagó más de lo correcto. Se le devuelve la diferencia.'),
@@ -440,8 +449,22 @@ function abrir(app, d, clase, { alTerminar, alVerNota } = {}) {
       if (!calc || typeof calc !== 'object' || !Number.isFinite(Number(calc.total)) || !(Number(calc.total) > 0)) throw new Fallo('No se pudo calcular la nota. Intente de nuevo.');
       S.calc = calc; S.queda = queda; S.razon = razon; S.payload = payload;
       S.paso = 'revisar'; pintar();
-    } catch (e) { mostrarError(e instanceof Fallo ? e.message : mensajeAmable(e)); }
+    } catch (e) {
+      const msg = e instanceof Fallo ? e.message : mensajeAmable(e);
+      mostrarError(msg);
+      // El servidor dijo que no por los datos (lo más común: otra persona hizo una nota mientras tanto): se leen los saldos de nuevo para que los topes que se ven sean los de ahora
+      if (!(e instanceof Fallo) && esRechazo(e)) {
+        await refrescar();
+        if (S.vivo && S.paso === 'editar') { if (permite()) { pintarEditar(); mostrarError(msg); } else { S.paso = 'bloqueado'; pintar(); } }
+      }
+    }
     finally { S.enVuelo = false; }
+  }
+  // Una falla de datos (el sistema entendió y dijo que no), no de conexión ni de sesión
+  const esRechazo = (e) => !esDeRed(e) && !e?.sesion && e?.tipo !== 'sesion';
+  function refrescar() {
+    S.refresco = (async () => { try { const s = await saldosEstricto(d.id); if (S.vivo) S.saldos = s; } catch { /* se queda lo que ya se ve */ } })();
+    return S.refresco;
   }
 
   /* ---------------------------------------------------------------- paso 2: revisar y confirmar ---------------------------------------------------------------- */
@@ -475,7 +498,6 @@ function abrir(app, d, clase, { alTerminar, alVerNota } = {}) {
     S.editor = editorPagos({ totalCent, filas, alCambiar: (r) => { if (r.ok && S.errorEsReparto) { S.errorEsReparto = false; mostrarError(''); } } });
     const tipo = tipoNota();
     const explica = clase === 'sinefecto' ? EXPLICA_ND_SIN_EFECTO : clase === 'devolucion' ? EXPLICA_NC : credito ? EXPLICA_NC_MONTO : EXPLICA_ND;
-    const rotulos = { devolucion: 'Devolución', monto: 'Corrección de monto', sinefecto: 'Deja sin efecto la anulación' };
     const lineas = Array.isArray(calc.lineas) ? calc.lineas : [];
     const dineroTit = credito ? '¿Cómo se le devuelve el dinero al cliente?' : clase === 'sinefecto' ? '¿Cómo se anota el dinero de la nota?' : '¿Cómo paga el cliente la diferencia?';
     const dineroAyuda = credito ? 'El dinero se devuelve por el mismo medio con que el cliente pagó. Ya se propuso un reparto; puede cambiarlo si hace falta.'
@@ -501,7 +523,12 @@ function abrir(app, d, clase, { alTerminar, alVerNota } = {}) {
         h('p.np-calma', h('b', 'Una vez creada, esta nota no se puede borrar ni deshacer. '), 'Revise que todo esté bien antes de confirmar.'),
         h('p', 'Después se enviará a Hacienda. Hacienda puede tardar unos minutos en aceptarla, y su estado cambiará solo en la lista.'),
         h('p', correoTxt())));
-    volverAEditar = h('button.btn', { type: 'button', disabled: S.dudoso, onclick: () => { if (S.enVuelo) return; S.paso = 'editar'; S.dudoso = false; mostrarError(''); pintar(); } }, 'Volver y cambiar');
+    volverAEditar = h('button.btn', { type: 'button', disabled: S.dudoso, onclick: async () => {
+      if (S.enVuelo) return;
+      if (S.refresco) { await S.refresco; S.refresco = null; } // si el servidor había dicho que no, los saldos ya se leyeron de nuevo
+      if (!S.vivo) return;
+      S.paso = permite() ? 'editar' : 'bloqueado'; S.dudoso = false; mostrarError(''); pintar();
+    } }, 'Volver y cambiar');
     // Doble toque: el botón se apaga en el primer toque y mientras la nota está en camino nada más lo atiende (S.enVuelo)
     principal = h('button.btn.primario.grande', { type: 'button', 'data-confirmar': '1', onclick: async (e) => {
       const b = e.currentTarget;
@@ -562,6 +589,7 @@ function abrir(app, d, clase, { alTerminar, alVerNota } = {}) {
     } catch (e) {
       mostrarError(e instanceof Fallo ? e.message : mensajeAmable(e));
       if (e instanceof Fallo && e.dudoso) { marcarDudoso(); try { Promise.resolve(alTerminar?.(null)).catch(() => {}); } catch { /* nada */ } }
+      else if (!(e instanceof Fallo) && esRechazo(e)) refrescar(); // si la persona vuelve al paso 1, ahí ya están los saldos de ahora
     } finally { S.enVuelo = false; }
   }
   async function revisarSiQuedo() {
@@ -617,4 +645,3 @@ function abrir(app, d, clase, { alTerminar, alVerNota } = {}) {
 export const devolverParte = (app, d, opciones) => abrir(app, d, 'devolucion', opciones);
 export const corregirMonto = (app, d, opciones) => abrir(app, d, 'monto', opciones);
 export const dejarSinEfecto = (app, d, opciones) => abrir(app, d, 'sinefecto', opciones);
-export { ESTADO_NOTA };
