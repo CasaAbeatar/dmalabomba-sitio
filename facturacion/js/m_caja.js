@@ -903,7 +903,7 @@ export default {
       barraMovil.classList.toggle('sin-cobro', !puede);
       const cobrar = puede ? h('button.btn.primario.bm-cobrar', { type: 'button', 'aria-label': 'Cobrar ' + total, onmousedown: sinQuitarFoco, onclick: seguro(abrirCobro) }, 'Cobrar', h('span.bm-total', ' ' + total)) : null;
       if (vista === 'productos') {
-        barraMovil.replaceChildren(h('button.btn.bm-ver', { type: 'button', onmousedown: sinQuitarFoco, onclick: () => cambiarVista('cuenta') }, cur ? 'Ver cuenta (' + n + ')' : 'Ver cuenta'), cobrar);
+        barraMovil.replaceChildren(h('button.btn.bm-ver', { type: 'button', onmousedown: sinQuitarFoco, onclick: () => cambiarVista('cuenta') }, cur ? 'Ver cuenta (' + n + ')' : 'Ver cuenta'), ...(cobrar ? [cobrar] : []));
       } else {
         barraMovil.replaceChildren(
           h('button.btn.bm-ver', { type: 'button', onmousedown: sinQuitarFoco, onclick: () => cambiarVista('productos') }, 'Agregar productos'),
