@@ -58,8 +58,10 @@ export function h(sel, attrs, ...hijos) {
 // Dinero en colones: ₡12 345,50
 const nf = new Intl.NumberFormat('es-CR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const nf0 = new Intl.NumberFormat('es-CR', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
-export const money = (n) => '₡' + nf.format(Number(n) || 0);
-export const money0 = (n) => '₡' + nf0.format(Number(n) || 0);
+// Un monto negativo lleva el signo antes del símbolo: -₡22 350,00 (no ₡-22 350,00). Si al redondear queda en cero no lleva signo.
+const enColones = (f, n) => { const v = Number(n) || 0, t = f.format(Math.abs(v)); return (v < 0 && /[1-9]/.test(t) ? '-' : '') + '₡' + t; };
+export const money = (n) => enColones(nf, n);
+export const money0 = (n) => enColones(nf0, n);
 export const num = (n, dec = 3) => new Intl.NumberFormat('es-CR', { maximumFractionDigits: dec }).format(Number(n) || 0);
 export const r2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
 // Interpreta lo que escribe una persona: "1 500,50", "1.500", "1.500,25", "1500.5" -> número.

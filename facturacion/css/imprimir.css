@@ -67,7 +67,9 @@
 .ct-cab{display:flex;justify-content:space-between;align-items:flex-start;gap:8mm}
 .ct-logo{height:22mm;width:auto}
 .ct-nombre-grande{font-size:26px;font-weight:700}
-.ct-titulo{text-align:right}
+.ct-titulo{text-align:right;max-width:66%}
+.ct-clave-enc{margin-top:1.2mm;font-size:9.5px;line-height:1.35;color:#3a352f}
+.ct-clave-enc .mono{font-size:7.5pt;word-break:break-all}
 .ct-tit{font-size:21px;font-weight:700;letter-spacing:.03em;color:#b81622;line-height:1.15}
 .ct-num{font-size:30px;font-weight:700;line-height:1.15;margin-top:1mm}
 .ct-fecha{color:#6b645b;margin-top:.5mm}
@@ -92,6 +94,8 @@ table.ct-tabla{width:100%;border-collapse:collapse;margin-top:2mm}
 .ct-tabla td{padding:1.8mm 1.5mm;border-bottom:.15mm solid #e2dacb;vertical-align:top}
 .ct-tabla td.cod{font-family:"Courier New","Liberation Mono","DejaVu Sans Mono",monospace;font-size:10.5px;white-space:nowrap;color:#444}
 .ct-tabla td.der{white-space:nowrap}
+.ct-tabla td.uni{font-size:11px;color:#444;width:22mm}
+.ct-fila.neto{border-top:.15mm solid #e2dacb;margin-top:.8mm;padding-top:1.2mm;font-weight:600}
 .ct-nota-precio{font-size:10.5px;color:#6b645b;margin-top:1.5mm}
 .ct-cierre{display:grid;grid-template-columns:1fr 82mm;gap:10mm;margin-top:4mm;break-inside:avoid}
 .ct-fila{display:flex;justify-content:space-between;gap:4mm;padding:.8mm 0}

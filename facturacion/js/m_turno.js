@@ -97,6 +97,10 @@ function bloqueCalculo(d, { alAnularSalida, alAnularEntrada, extra } = {}) {
     d.salidas.length || alAnularSalida ? h('div.calc-sub', listaSalidas(d.salidas, alAnularSalida, 'salida')) : null,
     d.devoluciones != null ? h('div.calc-fila', h('span', h('span.op', '−'), 'Efectivo de ventas anuladas con nota de crédito', d.devoluciones > 0 ? h('small.calc-nota', 'Efectivo de ventas anuladas con nota de crédito en este turno. Se resta porque ese dinero debe haber salido de la caja.') : null), h('span.v', money(d.devoluciones))) : null,
     h('div.calc-fila.total', h('span', h('span.op', '='), 'Debe haber en caja'), h('span.v', money(d.esperado))),
+    // Si lo que salió es más que lo que entró, la cifra sale negativa: se explica con palabras (y solo se ofrece anular donde se puede)
+    cents(d.esperado) < 0 ? h('p.tenue-linea.calc-negativo', { role: 'note' }, alAnularSalida
+      ? 'Las salidas anotadas suman más que el efectivo que entró a la caja, por eso la cifra sale negativa. Si alguna salida quedó anotada de más, se puede anular en la lista de salidas.'
+      : 'En este turno las salidas anotadas sumaron más que el efectivo que entró a la caja, por eso la cifra es negativa.') : null,
     extra);
 }
 
