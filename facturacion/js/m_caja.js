@@ -1411,12 +1411,23 @@ export default {
         const aplicados = r.aplicados.map((p) => (p.medio === 'efectivo' ? { medio: p.medio, monto: p.monto, referencia: p.referencia, recibido: p.recibido } : { medio: p.medio, monto: p.monto, referencia: p.referencia }));
         let comp = null;
         try {
-          // Si la base dice que es la copia de un comprobante anulado, se cobra como reemplazo; si no se pudo saber (o no lo es), como siempre
-          const rep = (await reemplazoListo).reemplaza ? reemplazo : null;
+          // Si la base dice que es la copia de un comprobante anulado, se cobra como reemplazo; si dice que no lo es, como siempre.
+          // Si no se pudo saber, se pregunta otra vez sin el tope de 5 s y, si tampoco se puede, NO se cobra a ciegas: un reemplazo cobrado como venta normal no se puede corregir después.
+          let info = await reemplazoListo;
+          if (!info || !info.ok) {
+            info = await reemplazoInfo(ventaId);
+            if (info && info.ok && info.reemplaza) reemplazo = info;
+          }
+          if (!info || !info.ok) {
+            const sin = new Error('No se pudo comprobar si esta venta reemplaza a una factura anulada. Revise la conexión y toque «Cobrar» otra vez. No se cobró nada.');
+            sin.sinCobrar = true; throw sin;
+          }
+          const rep = info.reemplaza ? reemplazo : null;
           comp = rep
             ? await cobrarReemplazo(ventaId, rep.original_id, aplicados, cliente ? cliente.id : null, app.terminal, cliente ? actividadFactura : null)
             : await api.cobrar(ventaId, aplicados, cliente ? cliente.id : null, app.terminal, cliente ? actividadFactura : null);
         } catch (e) {
+          if (e && e.sinCobrar) { cobrando = false; ventasEnCobro.delete(ventaId); if (!vivo || !m) return; actualizar(); conErr(e.message); return; }
           const v = await verificarCobro();
           if (v.estado === 'cobrado') {
             // Solo se habla de conexión si de verdad fue un problema de conexión; si el servidor dijo que la cuenta ya estaba cobrada, se dice eso

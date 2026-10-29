@@ -304,6 +304,10 @@ function estadoImpreso(m) {
   return h('div.estado.pend', h('b', 'Pendiente de validación'), h('span', 'Hacienda aún no confirma este comprobante'));
 }
 
+// Rótulo de los pagos: en la anulación total (código 01) son los del documento original; en una devolución o corrección de monto son
+// el dinero de ESA nota, y en una nota de débito es lo que se paga de diferencia.
+const etiquetaPagos = (m) => (m.tipo === '03' ? ((m.codigoRef || '01') === '01' ? 'Pagos del documento original' : 'Cómo se devuelve el dinero') : m.tipo === '02' ? 'Cómo se paga la diferencia' : 'Pagos');
+
 function nodoTiquete(m, { papel, logo, copia }) {
   const pre = m.clase === 'prefactura';
   const nc = m.tipo === '03';
@@ -377,7 +381,7 @@ function nodoTiquete(m, { papel, logo, copia }) {
   raiz.append(h('div.fila-tq.total', h('span', nc ? 'TOTAL ACREDITADO' : 'TOTAL'), h('span.v', money(m.total))));
   if (m.pagos.length) {
     raiz.append(linea());
-    raiz.append(h('div.etq-chica', nc ? 'Pagos del documento original' : 'Pagos'));
+    raiz.append(h('div.etq-chica', etiquetaPagos(m)));
     for (const p of m.pagos) {
       raiz.append(fila(MEDIOS[p.medio] || p.medio, money(p.monto)));
       if (p.referencia) raiz.append(h('div.dato.izq', 'Ref. ' + p.referencia));
@@ -479,7 +483,7 @@ function nodoCarta(m, { logo, copia }) {
   raiz.append(h('div.ct-nota-precio', 'Los precios unitarios y los totales de cada línea incluyen el IVA.'));
 
   // Pagos y totales
-  const pagos = h('div.ct-pagos', h('div.ct-etq', nc ? 'Pagos del documento original' : 'Pagos'));
+  const pagos = h('div.ct-pagos', h('div.ct-etq', etiquetaPagos(m)));
   if (m.pagos.length) {
     for (const p of m.pagos) {
       pagos.append(h('div.ct-fila', h('span', (MEDIOS[p.medio] || p.medio) + (p.referencia ? ' (ref. ' + p.referencia + ')' : '')), h('span.v', money(p.monto))));
