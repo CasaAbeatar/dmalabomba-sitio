@@ -231,7 +231,9 @@ export function modal({ titulo, contenido, botones = [], ancho = 520, alCerrar, 
     document.removeEventListener('keydown', teclas);
     const i = pilaModales.indexOf(fondo); if (i >= 0) pilaModales.splice(i, 1);
     if (!pilaModales.length && conHistorial !== false) soltarEntrada();
-    if (previo && previo.isConnected && typeof previo.focus === 'function' && !pilaModales.length) { try { previo.focus({ preventScroll: true }); } catch { /* nada */ } }
+    // El foco vuelve al botón que abrió la ventana: si ya no queda ninguna ventana, o si ese botón está dentro de la ventana que queda abajo (por ejemplo, «Devolver parte» dentro del detalle de un documento)
+    const debajo = pilaModales[pilaModales.length - 1];
+    if (previo && previo.isConnected && typeof previo.focus === 'function' && (!pilaModales.length || debajo.contains(previo))) { try { previo.focus({ preventScroll: true }); } catch { /* nada */ } }
     alCerrar?.();
   };
   const caja = h('div.modal', { style: `max-width:${ancho}px`, role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': idTitulo },
