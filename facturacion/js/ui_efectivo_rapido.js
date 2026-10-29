@@ -224,15 +224,18 @@ export function crearZonaEfectivo({ turnoId = null, alAbrirCaja } = {}) {
       if (texto) campo.setAttribute('aria-invalid', 'true'); else campo.removeAttribute('aria-invalid');
     };
     const limpiarErrores = () => { marcarError(monto, msgMonto, ''); marcarError(motivo, msgMotivo, ''); msgGeneral.hidden = true; msgGeneral.textContent = ''; };
+    // Los botones de motivo se crean una sola vez; después solo cambia aria-pressed (así el teclado no pierde el foco)
+    const botonesChip = T.motivos.map((t) => h('button.efz-chip', { type: 'button', 'aria-pressed': 'false', onclick: () => {
+      if (t === OTRO) { motivo.value = ''; borradores[tipo].motivo = ''; motivo.focus(); } else { motivo.value = t; borradores[tipo].motivo = t; marcarError(motivo, msgMotivo, ''); }
+      pintarChips();
+    } }, t));
+    chips.replaceChildren(...botonesChip);
     const pintarChips = () => {
       const v = motivo.value.trim();
-      chips.replaceChildren(...T.motivos.map((t) => {
+      T.motivos.forEach((t, i) => {
         const activo = t === OTRO ? (v !== '' && !T.motivos.some((x) => x !== OTRO && x === v)) : v === t;
-        return h('button.efz-chip', { type: 'button', 'aria-pressed': String(activo), onclick: () => {
-          if (t === OTRO) { motivo.value = ''; borradores[tipo].motivo = ''; motivo.focus(); } else { motivo.value = t; borradores[tipo].motivo = t; marcarError(motivo, msgMotivo, ''); }
-          pintarChips();
-        } }, t);
-      }));
+        botonesChip[i].setAttribute('aria-pressed', String(activo));
+      });
     };
     pintarChips();
 
@@ -293,9 +296,12 @@ export function crearZonaEfectivo({ turnoId = null, alAbrirCaja } = {}) {
     if (!tarjeta) return;
     const T = TIPOS[abierta];
     const b = tarjeta.guardarBtn;
+    const eraOcupado = b.disabled;
     b.disabled = enviando; tarjeta.cancelarBtn.disabled = enviando;
     b.setAttribute('aria-busy', String(enviando));
     b.textContent = enviando ? 'Guardando…' : duda && duda.tipo === abierta ? 'Revisar si quedó guardada' : T.guardar;
+    // Al apagarse, el botón pierde el foco: se le devuelve para que el teclado (y Escape) sigan funcionando en la tarjeta
+    if (!enviando && eraOcupado && (!document.activeElement || document.activeElement === document.body)) b.focus({ preventScroll: true });
   }
 
   const baseline = () => (datos ? new Set(datos.ids) : null);

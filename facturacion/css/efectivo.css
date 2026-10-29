@@ -34,7 +34,6 @@
 .efz-reintentar[hidden]{display:none}
 
 /* Sin turno abierto */
-.efz.sin-turno .efz-caja{opacity:.8}
 .efz-sin{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:.5rem .8rem;padding:.2rem .2rem .1rem}
 .efz-sin-txt{flex:1 1 200px;margin:0;font-size:1rem;font-weight:700}
 .efz-abrir{flex:0 0 auto}
@@ -85,7 +84,7 @@
 
 /* Pantalla ancha: la tarjeta se abre encima de la zona, sin mover nada de la cuenta */
 @media(min-width:980px){
-  .efz-tarjeta{position:absolute;top:0;left:0;right:0;z-index:30;box-shadow:0 14px 40px rgba(29,26,23,.22)}
+  .efz-tarjeta{position:absolute;top:0;left:0;right:0;z-index:30;box-shadow:0 14px 40px rgba(29,26,23,.22);max-height:calc(100vh - var(--cab-h,117px) - 23px);overflow-y:auto}
   .efz.con-tarjeta .efz-cajitas,.efz.con-tarjeta .efz-pie{visibility:hidden}
 }
 /* Pantalla baja: la zona se compacta para que la cuenta conserve su lugar */

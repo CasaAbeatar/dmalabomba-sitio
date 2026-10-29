@@ -149,7 +149,6 @@ const despertar = () => { const r = esperando; esperando = []; r.forEach((f) => 
 export const esperarHistorial = () => (atrasPendiente > 0 ? new Promise((ok) => { esperando.push(ok); }) : Promise.resolve());
 // true mientras se atiende un popstate que solo cerró una ventana: el enrutador (main.js) no debe cambiar de pantalla por eso
 export const popEsDeVentana = () => popDeVentana;
-export const hayVentanas = () => pilaModalesLen() > 0;
 function empujarEntrada() {
   if (entradaVentana) return;
   try { history.pushState({ ...(history.state || {}), fxVentana: 1 }, '', location.href); entradaVentana = true; hrefVentana = location.href; } catch { /* sin historial */ }
@@ -189,7 +188,6 @@ window.addEventListener('popstate', () => {
 // bloqueo (opcional): función que devuelve un texto mientras la ventana NO se puede cerrar (por ejemplo, con un cobro en camino) o algo vacío si sí.
 // Escape, tocar fuera, «Cerrar ✕» y el botón Atrás respetan el bloqueo y muestran ese texto; cerrar() desde el código siempre cierra.
 const pilaModales = [];
-const pilaModalesLen = () => pilaModales.length;
 let contadorModal = 0;
 const FOCOS = 'button:not([disabled]),[href],input:not([disabled]):not([type=hidden]),select:not([disabled]),textarea:not([disabled]),summary,[tabindex]:not([tabindex="-1"])';
 export function modal({ titulo, contenido, botones = [], ancho = 520, alCerrar, bloqueo }) {
