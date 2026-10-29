@@ -92,6 +92,8 @@ table.tabla{width:100%;border-collapse:collapse;font-size:.95rem}
 .pestanas button .pend{display:inline-block;margin-left:.45rem;padding:.05rem .55rem;border-radius:99px;border:1px solid #efd08f;background:var(--ambar-suave);color:#8a5a00;font-size:.8rem;font-weight:700;vertical-align:1px}
 .pestanas button .pend.urge{border-color:var(--rojo);background:var(--rojo);color:#fff}
 main#vista{max-width:1400px;margin:0 auto;padding:1rem}
+.btn.cab-anular{min-height:48px;border-color:var(--rojo);color:var(--rojo);font-weight:700;background:#fff}
+.btn.cab-anular:hover{background:var(--rojo);color:#fff}
 .usuario-caja{margin-left:auto;display:flex;align-items:center;gap:.5rem;font-size:.92rem}
 
 /* Inicio de sesión */
