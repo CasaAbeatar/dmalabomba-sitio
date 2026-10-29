@@ -1,5 +1,5 @@
 // Clientes: base de datos de receptores para las facturas electrónicas (por local).
-import { h, debounce, TIPOS_ID, nombreLocal, nombrePropio } from './util.js';
+import { h, debounce, TIPOS_ID, nombreLocal, nombrePropio, bloqueError } from './util.js';
 import { api } from './api.js';
 import { clientesTodos, clienteActivar } from './api_clientes.js';
 import { toast, conBoton } from './util.js';
@@ -53,7 +53,11 @@ export default {
         if (resto.length || !nuevosHoy.length) partes.push(resto.length ? h('div.mt-lista', resto.map(tarjeta)) : h('div.vacio', texto ? 'No se encontró ningún cliente con "' + texto + '". Puede agregarlo con el botón "Agregar cliente".' : 'Todavía no hay clientes en este local. Toque "Agregar cliente" para guardar el primero.'));
         lista.replaceChildren(...partes);
         resumen.textContent = r.length >= 60 ? 'Se muestran los primeros 60. Escriba en el buscador para encontrar a los demás.' : (r.length ? r.length + (r.length === 1 ? ' cliente' : ' clientes') + (texto ? ' encontrados.' : ' en total.') : '');
-      } catch (e) { if (mi === n) lista.replaceChildren(h('div.error-caja', e.message || 'No se pudo cargar la lista.')); }
+      } catch (e) {
+        if (mi !== n) return;
+        resumen.textContent = '';
+        lista.replaceChildren(bloqueError({ titulo: 'No se pudo cargar la lista de clientes', mensaje: e.message || 'No se pudo cargar la lista.', alReintentar: () => cargar() }));
+      }
     }
 
     q.addEventListener('input', debounce(cargar, 250));

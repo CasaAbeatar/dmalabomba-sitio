@@ -2,6 +2,8 @@
 
 /* ---------- Abrir caja ---------- */
 .caja-abrir{max-width:520px;margin:2.5rem auto;text-align:center;padding:1.6rem 1.4rem}
+.caja-sin-turno{max-width:520px;margin:1.5rem auto 0}
+.caja-sin-turno+.caja-abrir{margin-top:1rem}
 .caja-abrir h1{margin-bottom:.4rem}
 .caja-abrir p{color:var(--tinta2);margin:.2rem 0 1.2rem}
 .caja-abrir .etq{text-align:left}
@@ -32,6 +34,14 @@
 
 /* La cuenta es lo que más se mira: en tableta y escritorio tiene ancho de sobra para que cada línea quepa en UNA fila */
 .caja-cuerpo{display:grid;grid-template-columns:minmax(0,1fr) 480px;gap:1rem;align-items:start}
+
+/* Columna derecha: arriba la zona de efectivo (css/efectivo.css) y debajo la cuenta. Las dos se quedan a la vista al bajar por los productos. */
+.caja-der{display:flex;flex-direction:column;gap:.5rem;min-width:0}
+.caja-der>.efz{flex:0 0 auto}
+@media(min-width:980px){
+  body.fx-caja .caja-der{position:sticky;top:calc(var(--cab-h,117px) + 5px);max-height:calc(100vh - var(--cab-h,117px) - 23px)}
+  body.fx-caja .caja-der .caja-cuenta{position:static;top:auto;flex:1 1 auto;min-height:0;max-height:none}
+}
 
 /* ---------- Catálogo ---------- */
 .caja-catalogo{display:flex;flex-direction:column;gap:.8rem;min-width:0}
@@ -304,6 +314,8 @@
 .hist th{white-space:normal;min-width:84px}
 
 @media(max-width:979px){
+  .caja-der{display:contents}
+  .caja-der>.efz{order:-2}
   .caja-cuerpo{display:flex;flex-direction:column;align-items:stretch;gap:.7rem}
   .caja-cuerpo>*,.caja-izq>*{min-width:0;max-width:100%}
   .caja-izq{display:contents}

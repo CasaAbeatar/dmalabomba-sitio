@@ -4,6 +4,7 @@
 import { h, money, modal, toast, descargar, hoyCR, sumaDias, fechaHora, horaCorta, debounce, num, r2, nombrePropio, traducirHacienda, campoBusqueda, TIPOS_SERVICIO, MEDIOS, TIPOS_ID } from './util.js';
 import { documentos, ncDe, CORREO_ACTIVO, reenviarCorreo, alertaAtender, hacerVentaDeNuevo } from './api_documentos.js';
 import { anularDocumento } from './m_anular.js';
+import { sumarDocumentos, frasesDeLista, puenteConTurno } from './cuadre_turno.js';
 import { imprimirComprobante, reimprimirComprobante, formatoDireccion, formatoCedula, formatoTelefono, numeroCorto, NOMBRES_DOCUMENTO } from './imprimir.js';
 
 if (!document.querySelector('link[data-fx-documentos]')) document.head.append(h('link', { rel: 'stylesheet', href: new URL('../css/documentos.css', import.meta.url).href, 'data-fx-documentos': '1' }));
@@ -15,7 +16,6 @@ const diaTxt = (ymd) => { const t = fmtDia.format(new Date(ymd + 'T12:00:00Z'));
 const diaCortoTxt = (ymd) => fmtDiaCorto.format(new Date(ymd + 'T12:00:00Z'));
 const ymdDe = (iso) => new Intl.DateTimeFormat('en-CA', { timeZone: TZ }).format(new Date(iso));
 const norm = (s) => String(s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
-const centimos = (n) => Math.round((Number(n) || 0) * 100);
 
 const ETQ_ESTADO = { pendiente: 'En cola', enviado: 'Enviado', aceptado: 'Aceptado', rechazado: 'Rechazado', error: 'Con error' };
 const CLASE_ESTADO = { pendiente: 'espera', enviado: 'espera', aceptado: 'ok', rechazado: 'mal', error: 'mal' };
@@ -29,7 +29,8 @@ export default {
   id: 'anular',
   titulo: 'Anular y reimprimir',
   async mount(root, app) {
-    const est = { rango: 'hoy', desde: hoyCR(), hasta: hoyCR(), q: '', filtro: 'todos', lista: [], cargando: false, error: null };
+    const est = { rango: 'hoy', desde: hoyCR(), hasta: hoyCR(), q: '', filtro: 'todos', lista: [], cargando: false, error: null, turnoEstado: null, firma: null };
+    let nCarga = 0; // cada carga lleva su número: si llega tarde la respuesta de una anterior (por ejemplo «Ayer» y enseguida «Hoy»), se descarta
     // «Este turno» es el primer filtro (desde la hora en que se abrió la caja). Si el turno abierto empezó antes de hoy (cruzó la medianoche), es el que se abre por omisión.
     const turnoAbierto = () => app.turno || null;
     if (turnoAbierto() && ymdDe(turnoAbierto().abierto_en) < hoyCR()) { est.rango = 'turno'; est.desde = ymdDe(turnoAbierto().abierto_en); }
@@ -70,12 +71,13 @@ export default {
     const buscadorFila = campoBusqueda(buscador, () => { est.q = ''; pintar(); });
     const refrescar = h('button.btn', { type: 'button', onclick: async () => { refrescar.disabled = true; await cargar(); refrescar.disabled = false; } }, 'Actualizar');
     const zonaResumen = h('div');
+    const zonaCuadre = h('div.doc-cuadre-zona');
     const zonaFiltros = h('div.doc-filtros');
     const zonaLista = h('div.doc-lista');
 
     root.append(h('div.doc-mod',
       h('div.doc-buscar', buscadorFila),
-      botonesRango, h('div.doc-fecha-fila', titulo, refrescar), cajaFechas, zonaResumen, zonaFiltros,
+      botonesRango, h('div.doc-fecha-fila', titulo, refrescar), cajaFechas, zonaResumen, zonaCuadre, zonaFiltros,
       h('p.doc-ayuda', 'Toque una fila para ver el detalle. «Anular» crea una nota de crédito: el documento original no se borra.'),
       zonaLista));
 
@@ -99,16 +101,25 @@ export default {
 
     /* ---------- carga ---------- */
     async function cargar(silencioso = false) {
+      const mi = ++nCarga;
       pintarControles();
-      if (!silencioso) { est.cargando = true; est.error = null; pintar(); }
+      if (!silencioso) { est.cargando = true; est.error = null; est.firma = null; pintar(); }
       try {
         // Lo más reciente va arriba (igual que en «Anular factura»): lo último que hizo la cajera se ve sin bajar
         if (est.rango === 'turno' && !turnoAbierto()) { est.rango = 'hoy'; [est.desde, est.hasta] = rangoDe('hoy'); pintarControles(); } // la caja se cerró mientras tanto
         const desdeTurno = est.rango === 'turno' ? new Date(turnoAbierto().abierto_en).getTime() : 0;
-        est.lista = (await documentos(app.soc.id, est.desde, est.hasta)).filter((d) => !desdeTurno || new Date(d.fecha_emision).getTime() >= desdeTurno)
-          .sort((a, b) => new Date(b.fecha_emision) - new Date(a.fecha_emision));
+        // En «Este turno» también se lee el estado del turno, para mostrar cómo cuadra esta cifra con la de «Apertura y cierre de caja» (si no se puede leer, solo falta esa explicación)
+        const turnoId = est.rango === 'turno' ? turnoAbierto()?.id : null;
+        const [filas, turno] = await Promise.all([documentos(app.soc.id, est.desde, est.hasta), turnoId ? app.api.turnoEstado(turnoId).catch(() => null) : null]);
+        if (mi !== nCarga) return; // llegó tarde: ya se pidió otra cosa
+        const lista = filas.filter((d) => !desdeTurno || new Date(d.fecha_emision).getTime() >= desdeTurno).sort((a, b) => new Date(b.fecha_emision) - new Date(a.fecha_emision));
+        // En el refresco automático solo se vuelve a pintar si algo cambió; así no se pierde lo que la cajera esté escribiendo ni se mueve la pantalla
+        est.lista = lista; est.turnoEstado = turno;
+        const firma = JSON.stringify([lista, turno]) + '|' + lista.filter(esProblema).length; // esProblema cambia con el reloj (más de 15 minutos esperando a Hacienda)
+        if (silencioso && !est.error && est.firma && firma === est.firma) { ultimaCarga = Date.now(); return; }
+        est.firma = firma;
         est.error = null;
-      } catch (e) { if (!silencioso) est.error = e.message || String(e); }
+      } catch (e) { if (mi !== nCarga) return; if (!silencioso) est.error = e.message || String(e); }
       est.cargando = false; ultimaCarga = Date.now();
       pintar();
     }
@@ -136,9 +147,9 @@ export default {
 
     function pintar() {
       pintarControles();
-      if (est.cargando && !est.lista.length) { zonaResumen.replaceChildren(); zonaFiltros.replaceChildren(); zonaLista.replaceChildren(h('p.cargando', 'Cargando los documentos…')); return; }
+      if (est.cargando && !est.lista.length) { zonaResumen.replaceChildren(); zonaCuadre.replaceChildren(); zonaFiltros.replaceChildren(); zonaLista.replaceChildren(h('p.cargando', 'Cargando los documentos…')); return; }
       if (est.error) {
-        zonaResumen.replaceChildren(); zonaFiltros.replaceChildren();
+        zonaResumen.replaceChildren(); zonaCuadre.replaceChildren(); zonaFiltros.replaceChildren();
         zonaLista.replaceChildren(h('div.vacio', h('p', 'No se pudieron cargar los documentos.'), h('p.tenue', est.error), h('button.btn.primario', { onclick: () => cargar() }, 'Intentar de nuevo')));
         return;
       }
@@ -153,17 +164,32 @@ export default {
     }
 
     function pintarResumen() {
-      let ventas = 0, anul = 0, iva = 0, nVentas = 0, nNC = 0;
-      for (const d of est.lista) {
-        if (d.estado === 'rechazado') continue; // un documento rechazado no existe para Hacienda
-        if (d.tipo_doc === '03') { anul += centimos(d.total); iva -= centimos(d.total_iva); nNC++; }
-        else if (esVenta(d)) { ventas += centimos(d.total); iva += centimos(d.total_iva); nVentas++; }
-      }
-      const neto = (ventas - anul) / 100;
+      const s = sumarDocumentos(est.lista);
       const una = est.desde === est.hasta;
       zonaResumen.replaceChildren(h('div.doc-resumen',
-        h('div.doc-neto', h('span.doc-etq', est.rango === 'turno' ? 'Total de este turno' : una ? (est.rango === 'hoy' ? 'Total de hoy' : 'Total del día') : 'Total de las fechas elegidas'), h('b.doc-gran', money(neto))),
-        h('span.doc-det-res', `${nVentas} ${nVentas === 1 ? 'venta' : 'ventas'}`, nNC ? `, ${nNC} ${nNC === 1 ? 'anulación' : 'anulaciones'}` : '', ` · IVA incluido ${money(iva / 100)}`)));
+        h('div.doc-neto', h('span.doc-etq', est.rango === 'turno' ? 'Total de este turno' : una ? (est.rango === 'hoy' ? 'Total de hoy' : 'Total del día') : 'Total de las fechas elegidas'), h('b.doc-gran', money(s.neto))),
+        h('span.doc-det-res', `${s.nVentas} ${s.nVentas === 1 ? 'venta' : 'ventas'}`, s.nNC ? `, ${s.nNC} ${s.nNC === 1 ? 'anulación' : 'anulaciones'}` : '', ` · IVA incluido ${money(s.iva / 100)}`)));
+      pintarCuadre(s);
+    }
+
+    // Qué no suma y qué sí suma este total, y cómo cuadra con «Apertura y cierre de caja» (mismas frases y montos que en esa pantalla)
+    function pintarCuadre(s) {
+      const frases = frasesDeLista(s);
+      const p = est.rango === 'turno' ? puenteConTurno(s, est.turnoEstado) : null;
+      const partes = frases.map((t) => h('p.doc-cuadre-frase', t));
+      if (p && p.coincide && !p.turnoRech && !p.sin) partes.push(h('p.doc-cuadre-frase.ok', `Coincide con el total vendido de «Apertura y cierre de caja» (${money(p.turnoNeto / 100)}).`));
+      else if (p) {
+        const fila = (txt, monto, clase = '') => h('div.doc-cuadre-fila' + clase, h('span', txt), h('b', money(monto / 100)));
+        partes.push(h('details.doc-cuadre',
+          h('summary.btn', `Comparar con «Apertura y cierre de caja» (${money(p.turnoNeto / 100)})`),
+          h('div.doc-cuadre-cuerpo',
+            fila('Total vendido en «Apertura y cierre de caja», sin las ventas anuladas', p.turnoNeto),
+            p.turnoRech ? fila('Menos las ventas cuyo documento Hacienda no aceptó (allá sí se suman)', p.turnoRech) : null,
+            p.sin ? fila(`Más ${p.sinN === 1 ? '1 documento sin cuenta de caja' : p.sinN + ' documentos sin cuenta de caja'} (allá no se suman)`, p.sin) : null,
+            p.otras ? fila('Otras diferencias, por ejemplo notas de crédito de ventas de otro turno', p.otras) : null,
+            fila('Total de esta lista', p.lista, '.total'))));
+      }
+      zonaCuadre.replaceChildren(...(partes.length ? [h('div.doc-cuadre-caja', partes)] : []));
     }
 
     function pintarLista(visibles) {
@@ -180,7 +206,7 @@ export default {
       const out = [];
       for (const [dia, docs] of dias) {
         if (multi) {
-          let t = 0; for (const d of docs) if (d.estado !== 'rechazado') t += signo(d) * centimos(d.total);
+          let t = 0; for (const d of docs) if (d.estado !== 'rechazado') t += signo(d) * Math.round((Number(d.total) || 0) * 100);
           out.push(h('div.doc-dia', h('b', diaTxt(dia)), h('span', `${docs.length} ${docs.length === 1 ? 'documento' : 'documentos'}, total ${money(t / 100)}`)));
         }
         out.push(h('div.doc-cabeza', h('div.doc-cabeza-cols', h('span', 'Hora'), h('span', 'Documento'), h('span', 'Cliente'), h('span.der', 'Total'), h('span', 'Estado')), h('span.doc-cabeza-acc', 'Acciones')));
@@ -200,7 +226,7 @@ export default {
       if (esVenta(d)) {
         if (anulado) segundo = null;
         else if (d.estado === 'aceptado') segundo = h('button.btn.peligro.doc-bot', { type: 'button', 'aria-label': 'Anular ' + quien, onclick: () => anularDocumento(app, d, { alTerminar: () => cargar(true), alVerNC: (n) => abrirDetalle(n.id) }) }, 'Anular');
-        else if (d.estado === 'rechazado' || d.estado === 'error') segundo = h('button.btn.doc-bot', { type: 'button', 'aria-label': 'Ver y atender ' + quien, onclick: () => abrirDetalle(d.id) }, d.atendida ? 'Ver detalle' : 'Ver y atender');
+        else if (d.estado === 'rechazado' || d.estado === 'error') segundo = h('button.btn.doc-bot', { type: 'button', 'aria-label': (d.atendida ? 'Ver detalle de ' : 'Ver y atender ') + quien, onclick: () => abrirDetalle(d.id) }, d.atendida ? 'Ver detalle' : 'Ver y atender'); // el nombre accesible empieza con el mismo texto que se ve
         else segundo = h('button.btn.peligro.doc-bot', { type: 'button', disabled: true, title: 'Se podrá anular cuando Hacienda lo acepte (casi siempre menos de un minuto)', 'aria-label': 'Anular ' + quien + '. Todavía no se puede: Hacienda no lo ha aceptado' }, 'Anular');
       }
       return h('div.doc-fila' + (nc ? '.nc' : '') + (anulado ? '.anulada' : ''),
@@ -219,13 +245,29 @@ export default {
     async function abrirDetalle(id) {
       const caja = h('div.doc-det', h('p.cargando', 'Cargando el documento…'));
       let vivo = true;
+      let firma = null; // lo último que se pintó; el refresco automático solo vuelve a pintar si el documento cambió
+      let nCarga = 0;
+      const borrador = { nota: '' }; // la nota que se está escribiendo no se pierde si la ventana se vuelve a pintar
       const m = modal({ titulo: 'Detalle del documento', contenido: caja, ancho: 780, alCerrar: () => { vivo = false; if (detalleActual?.caja === caja) detalleActual = null; } });
       const pintarDet = async (silencioso = false) => {
+        const mi = ++nCarga;
         try {
-          const [c, nc] = await Promise.all([app.api.comprobante(id), ncDe(id).catch(() => null)]);
-          if (!vivo) return;
-          caja.replaceChildren(vistaDetalle(c, nc, { repintar: pintarDet, cerrar: m.cerrar }));
-        } catch (e) { if (vivo && !silencioso) caja.replaceChildren(h('div.error-caja', e.message || String(e))); }
+          let falloNC = false;
+          const [c, nc] = await Promise.all([app.api.comprobante(id), ncDe(id).catch(() => { falloNC = true; return null; })]);
+          if (!vivo || mi !== nCarga) return;
+          if (silencioso && falloNC) return; // si no se pudo ver la nota de crédito, mejor no cambiar lo que ya se ve
+          const nueva = JSON.stringify([c, nc]);
+          if (silencioso && nueva === firma) return; // nada cambió: no se toca la pantalla (ni el cursor, ni el teclado del celular)
+          firma = nueva;
+          // Si había un campo con el cursor adentro, después de pintar vuelve a quedar ahí, en el mismo lugar
+          const foco = caja.contains(document.activeElement) && /^(INPUT|TEXTAREA)$/.test(document.activeElement.tagName)
+            ? { etiqueta: document.activeElement.getAttribute('aria-label'), ini: document.activeElement.selectionStart, fin: document.activeElement.selectionEnd } : null;
+          caja.replaceChildren(vistaDetalle(c, nc, { repintar: pintarDet, cerrar: m.cerrar, borrador }));
+          if (foco?.etiqueta) {
+            const campo = [...caja.querySelectorAll('input,textarea')].find((x) => x.getAttribute('aria-label') === foco.etiqueta);
+            if (campo) { campo.focus({ preventScroll: true }); try { campo.setSelectionRange(foco.ini, foco.fin); } catch { /* campo sin cursor */ } }
+          }
+        } catch (e) { if (vivo && mi === nCarga && !silencioso) caja.replaceChildren(h('div.error-caja', e.message || String(e))); }
       };
       detalleActual = { caja, repintar: pintarDet };
       await pintarDet();
@@ -387,7 +429,8 @@ export default {
         caja.append(h('div.doc-aviso.ref', h('div', h('b', 'Ya está marcado como atendido. '), 'Ya no sale en el aviso rojo, y el documento sigue en esta ventana y en Informes.',
           h('div.doc-motivo', [at.por ? 'Lo marcó ' + at.por + '. ' : '', at.en ? fechaHora(at.en) : '', at.nota ? '. Nota: ' + at.nota : ''].join('')))));
       } else {
-        const nota = h('input.campo', { type: 'text', maxlength: 300, placeholder: 'Por ejemplo: se hizo la venta de nuevo en Facturación', 'aria-label': 'Nota (opcional)', autocomplete: 'off' });
+        const nota = h('input.campo', { type: 'text', maxlength: 300, placeholder: 'Por ejemplo: se hizo la venta de nuevo en Facturación', 'aria-label': 'Nota (opcional)', autocomplete: 'off', value: ctx.borrador?.nota || '',
+          oninput: (e) => { if (ctx.borrador) ctx.borrador.nota = e.target.value; } });
         const ya = accion({ texto: 'Ya lo atendí', hint: 'Apaga el aviso rojo. El documento no se borra.', clase: 'primario.grande', onclick: async () => {
           await alertaAtender(c.id, nota.value);
           toast('Quedó anotado como atendido. El documento sigue en esta ventana y en Informes.');

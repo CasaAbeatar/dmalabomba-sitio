@@ -1,5 +1,5 @@
 // Caja: la pantalla que usa el cajero todo el día (abrir caja, cuentas, productos, prefactura y cobro).
-import { abrirSalidas } from './ui_salidas.js';
+import { crearZonaEfectivo } from './ui_efectivo_rapido.js';
 import { errorActividad, limpiarActividad } from './ui_cedula.js';
 import { selectorCliente } from './ui_cliente.js';
 import { apiM } from './api_mantenimiento.js';
@@ -107,6 +107,42 @@ const AYUDA_TIPO = {
 };
 const RAPIDOS = [1000, 2000, 5000, 10000, 20000];
 
+// Cuentas con un cobro en camino ahora mismo. Vale para todo el módulo (no solo para una ventana): así ninguna ventana nueva, ni la Caja montada otra vez,
+// puede enviar la misma venta dos veces.
+const ventasEnCobro = new Set();
+// Cuentas cuyo cobro se envió pero no se pudo confirmar (sin conexión): no se vuelve a cobrar hasta que se revise con «Revisar si se cobró».
+const ventasEnDuda = new Set();
+
+// Si el cobro termina cuando la Caja ya no está en pantalla (la persona cambió de pantalla con el cobro en camino), el resultado no se pierde de vista nunca:
+// sale una ventana con el número del documento, el estado y, si la impresión automática está encendida, se imprime igual.
+function avisoCobroSinCaja(comp, app, aviso) {
+  const aj = ajustesImp();
+  const num = numeroDoc(comp.consecutivo);
+  const nombreDoc = comp.tipo_doc === '01' ? 'factura' : 'tiquete';
+  const impEstado = h('p.tenue-linea', { role: 'status' });
+  const d = describirCobro(comp.estado, comp.mensaje);
+  const imprimir = async (fmt) => {
+    impEstado.className = 'tenue-linea'; impEstado.textContent = 'Enviando a la impresora…';
+    try {
+      await (await imp()).imprimirComprobante(comp.id, { formato: fmt, copias: aj.copias });
+      impEstado.textContent = 'Se abrió la impresión. Si no salió, toque el botón otra vez.';
+    } catch (e) { impEstado.className = 'tenue-linea msg-mal'; impEstado.textContent = 'No se pudo imprimir: ' + (e.message || e) + ' Toque el botón otra vez.'; }
+  };
+  const texto = 'Cobro registrado, ' + nombreDoc + (num ? ' N.° ' + num : '') + ' por ' + money(comp.total) + '.';
+  toast(texto, 'ok', 12000);
+  modal({ titulo: 'Cobro registrado', ancho: 480,
+    contenido: h('div.exito',
+      h('div.gran', '✓ ' + texto),
+      aviso ? h('div.error-caja', aviso) : null,
+      h('p.tenue-linea', 'El cobro terminó mientras estaba en otra pantalla. ' + d.texto),
+      impEstado,
+      h('div.botones',
+        h('button.btn.primario.grande', { type: 'button', onclick: () => imprimir(aj.formato === 'carta' ? 'carta' : 'tiquete') }, aj.formato === 'carta' ? 'Imprimir factura carta' : 'Imprimir tiquete'),
+        h('button.btn', { type: 'button', onclick: () => app.ir('anular') }, 'Ver en «Anular y reimprimir»'))),
+    botones: [{ texto: 'Listo', clase: 'primario', onclick: (c) => c() }] });
+  if (aj.auto) imprimir(aj.formato === 'carta' ? 'carta' : 'tiquete');
+}
+
 // Dirección del cliente incompleta (solo avisa si la base mandó esos datos: así no se asusta a nadie por una llave que no llegó)
 const direccionIncompleta = (c) => !!c && ('provincia' in c || 'otras_senas' in c) && (!c.provincia || !c.canton || !c.distrito || String(c.otras_senas || '').trim().length < 5);
 
@@ -179,6 +215,7 @@ export default {
     let turnoMostrado = null;
     let ocupadas = 0;
     let cola = Promise.resolve();
+    let zonaEfectivo = null; // las cajitas de entrada y salida de efectivo (arriba a la derecha); se actualizan solas, sin tocar la cuenta
     let buscador = null, asideCuenta = null, barraCuentas = null, barraExtras = null, gridProd = null, tabsCajon = null, barraMovil = null, cajaEl = null, buscadorWrap = null;
     const tarjetas = new Map(); // producto_id -> {badge}
     const tarjetasGrupo = new Map(); // clave de producto con modificadores -> badge con el total de sus modificadores en la cuenta
@@ -291,8 +328,10 @@ export default {
       });
       abrir.addEventListener('click', hacer);
       fondo.addEventListener('keydown', (e) => { if (e.key === 'Enter') hacer(); });
+      zonaEfectivo?.destruir();
+      zonaEfectivo = crearZonaEfectivo({ turnoId: null, alAbrirCaja: () => { try { fondo.scrollIntoView({ block: 'center' }); } catch { /* nada */ } fondo.focus(); } });
       const atajos = [0, 10000, 20000, 50000].map((n) => h('button.btn', { type: 'button', onclick: () => { fondo.value = String(n); fondo.focus(); } }, n === 0 ? 'Sin fondo (₡0)' : money0(n)));
-      root.replaceChildren(h('div.caja-abrir.tarjeta',
+      root.replaceChildren(h('div.caja-sin-turno', zonaEfectivo.el), h('div.caja-abrir.tarjeta',
         h('h1', 'Abrir caja'),
         h('p', 'La caja de ' + nombreLocal(app.soc) + ' está cerrada. Para empezar a vender, escriba solo el efectivo con que abre la caja.'),
         h('label.etq', 'Efectivo con que abre la caja (₡)', fondo),
@@ -312,12 +351,14 @@ export default {
       asideCuenta = h('aside.caja-cuenta', { 'aria-label': 'Cuenta activa' });
       barraMovil = h('div.barra-movil');
       barraAviso = h('div.avisos-caja');
+      zonaEfectivo?.destruir();
+      zonaEfectivo = crearZonaEfectivo({ turnoId: turnoMostrado });
       cajaEl = h('div.caja.v-' + vista,
         barraAviso,
         h('div.caja-cuerpo',
           h('div.caja-izq', barraCuentas, barraExtras, buscadorWrap,
             h('section.caja-catalogo', { 'aria-label': 'Productos' }, tabsCajon, gridProd)),
-          asideCuenta),
+          h('div.caja-der', zonaEfectivo.el, asideCuenta)),
         barraMovil);
       root.replaceChildren(cajaEl);
       buscador.inp.addEventListener('focus', () => { cajaEl.classList.add('bus-activo'); if (!fino()) setTimeout(irAlBuscador, 250); });
@@ -514,7 +555,6 @@ export default {
         pistaViva();
       });
       barraExtras.replaceChildren(
-        h('button.btn', { type: 'button', onclick: () => abrirSalidas({ api, turnoId: turnoMostrado }) }, 'Registrar salida de efectivo'),
         h('button.btn', { type: 'button', onclick: seguro(async () => { try { (await imp()).abrirAjustesImpresion(); } catch (e) { toast(e.message, 'error', 6000); } }) }, 'Impresora'));
     }
 
@@ -928,11 +968,20 @@ export default {
     }
 
     /* ---------- Cobro ---------- */
+    let cobroAbierto = false; // hay una ventana «Cobrar» abierta (o abriéndose): un Enter repetido no abre otra encima
     async function abrirCobro() {
+      if (cobroAbierto) return;
+      cobroAbierto = true;
+      let creada = false;
+      try { await abrirCobroVentana(() => { creada = true; }); }
+      finally { if (!creada) cobroAbierto = false; }
+    }
+    async function abrirCobroVentana(avisarCreada) {
       await cola;
       if (!cur || !cur.lineas.length || !(Number(cur.venta.total) > 0)) { toast('La cuenta está vacía. Agregue productos antes de cobrar.', 'error'); return; }
       let venta = cur.venta;
       const ventaId = venta.id;
+      if (ventasEnCobro.has(ventaId)) { toast('Esta cuenta tiene un cobro en camino. Espere unos segundos a que termine.', 'error'); return; }
       let totalC = cents(venta.total);
       let cliente = cur.cliente || null;
       let actividadFactura = null; // código de actividad pedido por el cliente solo para esta factura (null = la principal del cliente)
@@ -941,6 +990,8 @@ export default {
       let auto = true;
       let cobrando = false;
       let terminado = false;
+      let duda = ventasEnDuda.has(ventaId); // el cobro anterior de esta cuenta no se pudo confirmar
+      const abiertaEn = performance.now();
 
       const raiz = h('div');
       let m;
@@ -989,8 +1040,10 @@ export default {
       }
       const vigilaAjustes = new MutationObserver(() => pintarImp());
       vigilaAjustes.observe(document.body, { childList: true });
-      const btnVolver = h('button.btn', { type: 'button', onclick: () => m.cerrar() }, 'Volver');
-      const btnCobrar = h('button.btn.primario.grande.btn-confirmar-cobro', { type: 'button', onclick: confirmarCobro }, 'Cobrar');
+      const btnVolver = h('button.btn', { type: 'button', onclick: () => { if (!cobrando) m.cerrar(); } }, 'Volver');
+      // Un Enter que llega solo (tecla sostenida, o el Enter que acaba de abrir esta ventana) no cobra: el cobro necesita un toque o un Enter a propósito
+      const btnCobrar = h('button.btn.primario.grande.btn-confirmar-cobro', { type: 'button', onclick: (ev) => { if (ev.detail === 0 && performance.now() - abiertaEn < 500) return; confirmarCobro(); } }, 'Cobrar');
+      btnCobrar.addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.repeat) e.preventDefault(); });
       const vistaPago = h('div.cobro',
         h('div.cobro-total', h('div.et', 'Total a cobrar (IVA incluido)'), montoTotal),
         resumen,
@@ -1089,8 +1142,9 @@ export default {
         else if (r.ok) { resumen.classList.add('ok'); resumen.replaceChildren(h('span', 'Pago completo, sin vuelto'), h('span.grande', '✓')); }
         else { resumen.classList.add('falta'); resumen.replaceChildren(h('span', 'Falta por pagar'), h('span.grande', money(totalC / 100))); }
         btnCobrar.textContent = cobrando ? 'Cobrando…' : 'Cobrar ' + money(venta.total);
-        btnCobrar.disabled = cobrando || !r.ok || !!b.malo;
+        btnCobrar.disabled = cobrando || duda || !r.ok || !!b.malo;
         btnOtro.disabled = cobrando || !b.v || !!r.error;
+        btnVolver.disabled = cobrando;
       }
       function agregarOtro() {
         const b = borrador();
@@ -1103,7 +1157,8 @@ export default {
       }
       inpMonto.addEventListener('input', () => { auto = false; actualizar(); });
       [inpMonto, inpRef].forEach((i) => i.addEventListener('focus', () => llevarALaVista(i)));
-      inpMonto.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !btnCobrar.disabled) { e.preventDefault(); confirmarCobro(); } });
+      // Enter en el monto solo pasa el foco al botón «Cobrar» de la ventana; el cobro lo confirma otro toque o otro Enter
+      inpMonto.addEventListener('keydown', (e) => { if (e.key !== 'Enter') return; e.preventDefault(); if (!e.repeat && !btnCobrar.disabled) btnCobrar.focus(); });
       inpRef.addEventListener('input', actualizar);
 
       /* Cambiar la actividad que va en ESTA factura (no cambia al cliente salvo que se marque guardarla como principal) */
@@ -1191,16 +1246,19 @@ export default {
       }
       async function terminar(comp, aviso, vueltoLocal) {
         terminado = true;
+        duda = false; ventasEnDuda.delete(ventaId); ventasEnCobro.delete(ventaId);
         m.cerrar();
+        if (!vivo) { avisoCobroSinCaja(comp, app, aviso); return; } // la Caja ya no está en pantalla: se avisa igual
         try { sacarDeLista(ventaId); cur = null; await pasarALaSiguiente(); if (vivo) repintar(); } catch { /* la barra se refresca sola */ }
-        if (vivo) exito(comp, vueltoLocal, aviso);
+        if (vivo) zonaEfectivo?.refrescar(); // el cobro en efectivo cambia el «Efectivo esperado en caja»
+        if (vivo) exito(comp, vueltoLocal, aviso); else avisoCobroSinCaja(comp, app, aviso);
       }
       async function confirmarCobro() {
-        if (cobrando || terminado) return;
+        if (cobrando || terminado || duda || ventasEnCobro.has(ventaId)) return;
         const b = borrador();
         const r = calcularPagos(entradas(), totalC);
         if (b.malo || !r.ok) { conErr(r.error || 'Los pagos todavía no cubren el total.'); return; }
-        cobrando = true; btnRevisar.hidden = true; actualizar();
+        cobrando = true; ventasEnCobro.add(ventaId); btnRevisar.hidden = true; actualizar();
         // En efectivo se manda también "recibido" (lo que entregó el cliente): el servidor guarda el vuelto y lo imprime en el tiquete
         const aplicados = r.aplicados.map((p) => (p.medio === 'efectivo' ? { medio: p.medio, monto: p.monto, referencia: p.referencia, recibido: p.recibido } : { medio: p.medio, monto: p.monto, referencia: p.referencia }));
         let comp = null;
@@ -1208,8 +1266,14 @@ export default {
           comp = await api.cobrar(ventaId, aplicados, cliente ? cliente.id : null, app.terminal, cliente ? actividadFactura : null);
         } catch (e) {
           const v = await verificarCobro();
-          if (v.estado === 'cobrado') { await terminar(v.comp, 'Hubo un problema de conexión, pero el cobro SÍ quedó registrado. No lo repita.', r.vuelto / 100); return; }
+          if (v.estado === 'cobrado') {
+            // Solo se habla de conexión si de verdad fue un problema de conexión; si el servidor dijo que la cuenta ya estaba cobrada, se dice eso
+            const msg = esTransitorio(e) ? 'Hubo un problema de conexión, pero el cobro SÍ quedó registrado. No lo repita.' : 'Esta cuenta ya estaba cobrada. El cobro quedó registrado una sola vez; no lo repita.';
+            await terminar(v.comp, msg, r.vuelto / 100); return;
+          }
           cobrando = false;
+          if (v.estado === 'desconocido') { duda = true; ventasEnDuda.add(ventaId); }
+          ventasEnCobro.delete(ventaId);
           if (!vivo || !m) return;
           actualizar();
           if (v.estado === 'no') conErr('No se pudo cobrar: ' + (e.message || e) + ' No se cobró nada. Revise e intente de nuevo.');
@@ -1221,13 +1285,18 @@ export default {
       btnRevisar.addEventListener('click', () => conBoton(btnRevisar, async () => {
         const v = await verificarCobro();
         if (v.estado === 'cobrado') await terminar(v.comp, 'El cobro SÍ quedó registrado. No lo repita.', 0);
-        else if (v.estado === 'no') { btnRevisar.hidden = true; conErr('Confirmado: no se cobró nada. Puede tocar «Cobrar» de nuevo.'); }
+        else if (v.estado === 'no') { duda = false; ventasEnDuda.delete(ventaId); btnRevisar.hidden = true; actualizar(); conErr('Confirmado: no se cobró nada. Puede tocar «Cobrar» de nuevo.'); }
         else conErr('Todavía no hay conexión con el servidor. Espere unos segundos y toque «Revisar si se cobró» otra vez.');
       }));
 
-      m = modal({ titulo: 'Cobrar', contenido: raiz, ancho: 720, alCerrar: () => { vigilaAjustes.disconnect(); if (vivo && !terminado && buscador && fino()) buscador.inp.focus(); } });
+      // Con el cobro en camino la ventana no se puede cerrar (ni con Escape, ni tocando fuera, ni con «Volver», ni con el botón Atrás)
+      m = modal({ titulo: 'Cobrar', contenido: raiz, ancho: 720,
+        bloqueo: () => (cobrando ? 'El cobro va en camino. Espere a que termine; la ventana se cierra sola.' : ''),
+        alCerrar: () => { cobroAbierto = false; vigilaAjustes.disconnect(); if (vivo && !terminado && buscador && fino()) buscador.inp.focus(); } });
+      avisarCreada();
       mostrar(vistaPago);
       pintarCliente(); pintarImp(); sugerir(); actualizar();
+      if (duda) { conErr('El cobro anterior de esta cuenta no se pudo confirmar. No lo repita todavía: toque «Revisar si se cobró».'); btnRevisar.hidden = false; }
       inpMonto.focus(); inpMonto.select();
     }
 
@@ -1337,6 +1406,7 @@ export default {
       barraAviso.prepend(n);
     }
     async function iniciar() {
+      zonaEfectivo?.destruir(); zonaEfectivo = null;
       turnoMostrado = app.turno?.id || null;
       leerPedida();
       if (!turnoMostrado) { cur = null; pintarSinTurno(); return; }
@@ -1358,6 +1428,7 @@ export default {
       if (!buscador || e.ctrlKey || e.metaKey || e.altKey || e.key.length !== 1) return;
       if (document.querySelector('.modal-fondo')) return;
       const t = e.target;
+      if (t && t.closest && t.closest('.efz-tarjeta')) return; // escribiendo en la tarjeta de efectivo: el texto no se lleva al buscador
       if (t && (/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) || t.isContentEditable)) return;
       buscador.inp.focus();
     }
@@ -1398,6 +1469,7 @@ export default {
     return () => {
       vivo = false;
       timers.forEach(clearInterval);
+      zonaEfectivo?.destruir(); zonaEfectivo = null;
       document.removeEventListener('keydown', teclaGlobal);
       document.removeEventListener('app:cambio', alCambio);
       document.removeEventListener('visibilitychange', alVolver);

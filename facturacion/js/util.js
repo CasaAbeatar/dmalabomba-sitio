@@ -47,14 +47,41 @@ export const money = (n) => '₡' + nf.format(Number(n) || 0);
 export const money0 = (n) => '₡' + nf0.format(Number(n) || 0);
 export const num = (n, dec = 3) => new Intl.NumberFormat('es-CR', { maximumFractionDigits: dec }).format(Number(n) || 0);
 export const r2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
-// Interpreta lo que escribe una persona: "1 500,50", "1.500", "1500.5" -> número
+// Interpreta lo que escribe una persona: "1 500,50", "1.500", "1.500,25", "1500.5" -> número.
+// Solo acepta dígitos, espacios, punto, coma y ₡. Si el texto es ambiguo o no es un monto (letras, exponentes como 1e3, signos, más de
+// dos decimales, o una coma con tres dígitos como "12,345", que no se sabe si son miles o decimales) devuelve NaN y quien llama pide corregirlo.
+const MILES = (sep) => new RegExp('^\\d{1,3}(?:\\' + sep + '\\d{3})+$');
 export function leerNumero(s) {
-  s = String(s ?? '').trim().replace(/[₡\s]/g, '');
-  if (!s) return NaN;
-  if (s.includes(',') && s.includes('.')) s = s.lastIndexOf(',') > s.lastIndexOf('.') ? s.replace(/\./g, '').replace(',', '.') : s.replace(/,/g, '');
-  else if (s.includes(',')) s = /,\d{1,2}$/.test(s) ? s.replace(',', '.') : s.replace(/,/g, '');
-  else if ((s.match(/\./g) || []).length > 1 || /\.\d{3}$/.test(s)) s = s.replace(/\./g, '');
-  return Number(s);
+  s = String(s ?? '').trim();
+  if (!s || !/^[\d\s .,₡]+$/.test(s)) return NaN;
+  s = s.replace(/[₡\s ]/g, '');
+  if (!/\d/.test(s)) return NaN;
+  const puntos = (s.match(/\./g) || []).length, comas = (s.match(/,/g) || []).length;
+  let ent = s, dec = '';
+  if (puntos && comas) {
+    // El último separador es el decimal; el otro solo puede separar miles de tres en tres
+    const dec_ = s.lastIndexOf('.') > s.lastIndexOf(',') ? '.' : ',', otro = dec_ === '.' ? ',' : '.';
+    const partes = s.split(dec_);
+    if (partes.length !== 2) return NaN;
+    [ent, dec] = partes;
+    if (ent.includes(otro) ? !MILES(otro).test(ent) : !/^\d+$/.test(ent)) return NaN;
+    ent = ent.split(otro).join('');
+  } else if (comas || puntos) {
+    const sep = comas ? ',' : '.', n = comas || puntos;
+    if (n > 1) { // 1.234.567 o 1,234,567: solo valen como miles
+      if (!MILES(sep).test(s)) return NaN;
+      ent = s.split(sep).join('');
+    } else {
+      [ent, dec] = s.split(sep);
+      if (dec.length === 3 && sep === '.' && /^[1-9]\d{0,2}$/.test(ent)) { ent += dec; dec = ''; } // 1.500 = mil quinientos
+      else if (dec.length === 3) return NaN; // 12,345 o 0.005: no se sabe si son miles o decimales
+      else if (dec.length > 3) return NaN;
+      if (!/^\d*$/.test(ent)) return NaN;
+    }
+  }
+  if (!/^\d*$/.test(dec) || dec.length > 2) return NaN;
+  if (!ent && !dec) return NaN;
+  return Number((ent || '0') + (dec ? '.' + dec : ''));
 }
 
 // Fechas siempre en hora de Costa Rica
@@ -107,19 +134,73 @@ export function toast(msg, tipo = 'ok', ms = 3500) {
   setTimeout(() => { t.classList.add('fuera'); setTimeout(() => t.remove(), 300); }, ms);
 }
 
+/* ---------- Ventanas y botón Atrás ---------- */
+// Todas las ventanas abiertas comparten UNA entrada del historial del navegador: así el botón Atrás (o el gesto Atrás del celular) cierra primero la
+// ventana de arriba y no saca a la persona de la pantalla. Si quedan más ventanas abiertas, la entrada se vuelve a poner, así nunca se apilan entradas repetidas.
+// Al cerrar la última ventana con un botón, la entrada se quita con history.back(); hay que esperar a que el navegador avise (esperarHistorial)
+// antes de empujar otra entrada, para que las dos operaciones no se pisen.
+let entradaVentana = false; // hay una entrada del historial puesta por las ventanas
+let hrefVentana = '';
+let atrasPendiente = 0; // history.back() pedidos por nosotros que el navegador todavía no avisó
+let esperando = [];
+let popDeVentana = false;
+const despertar = () => { const r = esperando; esperando = []; r.forEach((f) => f()); };
+// Se resuelve cuando ya no hay un history.back() de ventana pendiente
+export const esperarHistorial = () => (atrasPendiente > 0 ? new Promise((ok) => { esperando.push(ok); }) : Promise.resolve());
+// true mientras se atiende un popstate que solo cerró una ventana: el enrutador (main.js) no debe cambiar de pantalla por eso
+export const popEsDeVentana = () => popDeVentana;
+export const hayVentanas = () => pilaModalesLen() > 0;
+function empujarEntrada() {
+  if (entradaVentana) return;
+  try { history.pushState({ ...(history.state || {}), fxVentana: 1 }, '', location.href); entradaVentana = true; hrefVentana = location.href; } catch { /* sin historial */ }
+}
+function soltarEntrada() {
+  if (!entradaVentana) return;
+  entradaVentana = false;
+  if (!(history.state && history.state.fxVentana)) return; // ya se salió de esa entrada: no hay nada que quitar
+  atrasPendiente++;
+  try { history.back(); } catch { atrasPendiente--; return; }
+  setTimeout(() => { if (atrasPendiente > 0) { atrasPendiente = 0; despertar(); } }, 700); // por si el navegador no avisa
+}
+try { if (history.state && history.state.fxVentana) { const limpio = { ...history.state }; delete limpio.fxVentana; history.replaceState(limpio, ''); } } catch { /* sin historial */ } // recarga con una ventana abierta
+window.addEventListener('popstate', () => {
+  popDeVentana = false;
+  if (atrasPendiente > 0) { atrasPendiente--; popDeVentana = true; setTimeout(() => { popDeVentana = false; }, 0); if (!atrasPendiente) despertar(); return; }
+  const estado = history.state;
+  if (estado && estado.fxVentana && !entradaVentana) { // Adelante hacia una entrada de ventana que ya no existe: se regresa sin que se note
+    popDeVentana = true; setTimeout(() => { popDeVentana = false; }, 0);
+    atrasPendiente++; try { history.back(); } catch { atrasPendiente--; }
+    return;
+  }
+  if (!entradaVentana || (estado && estado.fxVentana)) return;
+  entradaVentana = false; // el navegador ya quitó la entrada
+  if (location.href !== hrefVentana) { [...pilaModales].forEach((f) => { try { f._cerrar?.(false); } catch { /* nada */ } }); return; } // se fue a otra dirección: se cierran todas
+  popDeVentana = true; setTimeout(() => { popDeVentana = false; }, 0);
+  const arriba = pilaModales[pilaModales.length - 1];
+  if (!arriba) return;
+  const bloqueo = arriba._bloqueo?.();
+  if (bloqueo) { empujarEntrada(); toast(bloqueo, 'error', 5000); return; } // no se puede cerrar ahora: la entrada vuelve a quedar puesta
+  arriba._cerrar(false);
+  if (pilaModales.length) empujarEntrada();
+});
+
 // Ventana modal. Devuelve {cerrar, el}. contenido: nodo; botones: [{texto, clase, onclick(cerrar)}]
 // Con varias ventanas abiertas, Escape y Tab solo actúan en la de arriba; al cerrar, el foco vuelve a donde estaba.
+// bloqueo (opcional): función que devuelve un texto mientras la ventana NO se puede cerrar (por ejemplo, con un cobro en camino) o algo vacío si sí.
+// Escape, tocar fuera, «Cerrar ✕» y el botón Atrás respetan el bloqueo y muestran ese texto; cerrar() desde el código siempre cierra.
 const pilaModales = [];
+const pilaModalesLen = () => pilaModales.length;
 let contadorModal = 0;
 const FOCOS = 'button:not([disabled]),[href],input:not([disabled]):not([type=hidden]),select:not([disabled]),textarea:not([disabled]),summary,[tabindex]:not([tabindex="-1"])';
-export function modal({ titulo, contenido, botones = [], ancho = 520, alCerrar }) {
+export function modal({ titulo, contenido, botones = [], ancho = 520, alCerrar, bloqueo }) {
   const fondo = h('div.modal-fondo');
   const previo = document.activeElement;
   const idTitulo = titulo ? 'modal-tit-' + (++contadorModal) : null;
   let cerrado = false;
+  const intentar = () => { const b = bloqueo ? bloqueo() : ''; if (b) { toast(b, 'error', 5000); return; } cerrar(); };
   const teclas = (e) => {
     if (pilaModales[pilaModales.length - 1] !== fondo) return;
-    if (e.key === 'Escape') { e.preventDefault(); cerrar(); return; }
+    if (e.key === 'Escape') { e.preventDefault(); intentar(); return; }
     if (e.key !== 'Tab') return;
     const lista = [...caja.querySelectorAll(FOCOS)].filter((x) => x.offsetParent !== null);
     if (!lista.length) return;
@@ -128,25 +209,33 @@ export function modal({ titulo, contenido, botones = [], ancho = 520, alCerrar }
     else if (e.shiftKey && document.activeElement === primero) { e.preventDefault(); ultimo.focus(); }
     else if (!e.shiftKey && document.activeElement === ultimo) { e.preventDefault(); primero.focus(); }
   };
-  const cerrar = () => {
+  // conHistorial = false cuando el cierre viene del propio botón Atrás (el navegador ya quitó la entrada)
+  const cerrar = (conHistorial = true) => {
     if (cerrado) return;
     cerrado = true;
     fondo.remove();
     document.removeEventListener('keydown', teclas);
     const i = pilaModales.indexOf(fondo); if (i >= 0) pilaModales.splice(i, 1);
+    if (!pilaModales.length && conHistorial !== false) soltarEntrada();
     if (previo && previo.isConnected && typeof previo.focus === 'function' && !pilaModales.length) { try { previo.focus({ preventScroll: true }); } catch { /* nada */ } }
     alCerrar?.();
   };
   const caja = h('div.modal', { style: `max-width:${ancho}px`, role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': idTitulo },
-    titulo ? h('div.modal-tit', h('h2', { id: idTitulo }, titulo), h('button.cerrar', { type: 'button', onclick: cerrar }, 'Cerrar ✕')) : null,
+    titulo ? h('div.modal-tit', h('h2', { id: idTitulo }, titulo), h('button.cerrar', { type: 'button', onclick: intentar }, 'Cerrar ✕')) : null,
     h('div.modal-cuerpo', contenido),
     botones.length ? h('div.modal-pie', botones.map((b) => h('button.btn' + (b.clase ? '.' + b.clase : ''), { type: 'button', onclick: () => b.onclick?.(cerrar) }, b.texto))) : null);
   fondo.append(caja);
-  fondo._cerrar = cerrar; // para cerrarVentanas()
-  fondo.addEventListener('mousedown', (e) => { if (e.target === fondo) cerrar(); });
+  fondo._cerrar = cerrar; // para cerrarVentanas() y para el botón Atrás
+  fondo._bloqueo = bloqueo;
+  fondo.addEventListener('mousedown', (e) => { if (e.target === fondo) intentar(); });
   document.addEventListener('keydown', teclas);
   pilaModales.push(fondo);
   document.body.append(fondo);
+  // La entrada del historial se pone al abrir (si un history.back() anterior sigue pendiente, se espera a que termine)
+  if (!entradaVentana) {
+    if (atrasPendiente > 0) esperarHistorial().then(() => { if (!cerrado && pilaModales.length) empujarEntrada(); });
+    else empujarEntrada();
+  }
   // Foco inicial: un campo solo si ya se ve completo al abrir (si está más abajo, enfocarlo corre la ventana
   // y en el celular abre el teclado encima del contenido); si no, el botón principal o «Cerrar».
   const f = caja.querySelector('input:not([type=hidden]),select,textarea');
@@ -157,10 +246,14 @@ export function modal({ titulo, contenido, botones = [], ancho = 520, alCerrar }
   return { cerrar, el: caja };
 }
 
-// Cierra todas las ventanas abiertas (por ejemplo al cerrar la sesión), de la última a la primera
+// Cierra todas las ventanas abiertas (por ejemplo al cerrar la sesión o al cambiar de pantalla), de la última a la primera.
+// Devuelve una promesa que se cumple cuando el historial del navegador ya quedó en orden.
 export function cerrarVentanas() {
   [...pilaModales].reverse().forEach((f) => { try { f._cerrar?.(); } catch { /* nada */ } });
+  return esperarHistorial();
 }
+// Antes de empujar o recorrer el historial desde una pantalla: cierra las ventanas que haya y espera a que el historial se acomode
+export const asentarVentanas = () => (pilaModales.length ? cerrarVentanas() : esperarHistorial());
 
 export function confirmar(texto, { si = 'Sí, continuar', no = 'No, volver', peligro = false } = {}) {
   return new Promise((ok) => {

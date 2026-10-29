@@ -3,10 +3,11 @@
 //   Código de 6 dígitos CCPPMM = cajón + producto + modificador; "00" en el tercer par si se vende con un toque (sin opciones).
 //   Cada artículo guarda producto_nombre (el nombre del nivel 2) y modificador_nombre (el del nivel 3); Caja los usa para armar la cascada.
 // Precio siempre FINAL con IVA incluido. Nunca se borra: se desactiva.
-import { h, money, r2, leerNumero, toast, modal, confirmar, conBoton, debounce, descargar, fechaHora, hoyCR } from './util.js';
+import { h, money, r2, leerNumero, toast, modal, confirmar, conBoton, debounce, fechaHora, hoyCR, esqueleto, bloqueError } from './util.js';
 import { api } from './api.js';
 import { apiM } from './api_mantenimiento.js';
 import { cargarCss, norm, diaCR, aviso, campo, soloDigitos, casilla } from './ui_mant.js';
+import { csvBajar, quitarNeutralizado } from './csv.js';
 
 const TARIFAS = [13, 4, 2, 1, 0]; // las que el generador de XML sabe enviar
 const RESERVADOS = ['15', '16']; // cajones que Soda deja libres
@@ -44,7 +45,7 @@ function nombreGrupo(prods) {
 }
 
 /* ---------- CSV ---------- */
-const csvCelda = (v) => { const s = String(v ?? ''); return /[";\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+// La exportación usa csv.js, que le antepone una comilla simple a lo que empieza con = + - @ (o tab o retorno) para que Excel no lo tome como fórmula; al importar se deshace.
 function leerCsv(texto) {
   texto = texto.replace(/^﻿/, '');
   const primera = texto.split(/\r?\n/)[0] || '';
@@ -87,8 +88,8 @@ export default {
     /* ---------- Datos ---------- */
     async function verificarCabys() {
       const nuevos = [...new Set(cat.productos.map((p) => p.cabys))].filter((c) => !cabysPreguntados.has(c));
-      for (let i = 0; i < nuevos.length; i += 300) {
-        const trozo = nuevos.slice(i, i + 300);
+      for (let i = 0; i < nuevos.length; i += 200) {
+        const trozo = nuevos.slice(i, i + 200);
         try {
           const r = await apiM.cabysVerificar(trozo);
           r.forEach((x) => cabysEnCat.set(x.codigo, x));
@@ -101,9 +102,14 @@ export default {
     }
     let cargandoOtros = null;
     const asegurarOtros = () => (cargandoOtros ||= cargarOtros());
+    let nCat = 0; // cada carga lleva su número: si llega tarde la respuesta de una anterior (dos cambios seguidos), se descarta
     async function cargar() {
-      cat = await api.catalogo(soc.id, true);
+      const mi = ++nCat;
+      const nuevo = await api.catalogo(soc.id, true);
+      if (mi !== nCat) return;
+      cat = nuevo;
       await verificarCabys();
+      if (mi !== nCat) return;
       S.sel = new Set([...S.sel].filter((id) => cat.productos.some((p) => p.id === id)));
       pintar();
       refrescarHoy();
@@ -187,15 +193,18 @@ export default {
     selCajon.addEventListener('change', () => { S.cajon = selCajon.value; pintar(); });
     selVer.addEventListener('change', () => { S.ver = selVer.value; pintar(); });
 
+    let nHoy = 0;
     async function refrescarHoy() {
+      const mi = ++nHoy;
       try {
         const hist = await apiM.productoHistorial(soc.id, null, 500);
+        if (mi !== nHoy) return;
         const hoy = diaCR(new Date());
         const deHoy = hist.filter((x) => diaCR(x.cambiado_en) === hoy);
         const prods = new Set(deHoy.map((x) => x.producto_id)).size;
         hoyBox.replaceChildren(h('div.fila.sep', h('span', h('strong', 'Hoy: '), deHoy.length ? plural(prods, 'producto cambiado', 'productos cambiados') + ' (' + plural(deHoy.length, 'cambio', 'cambios') + ').' : 'todavía no se ha cambiado ningún producto.'),
           h('button.btn', { type: 'button', onclick: () => mostrarHistorial(null) }, 'Ver quién cambió qué')));
-      } catch { hoyBox.replaceChildren(h('div.fila.sep', h('span', 'Los cambios de productos quedan registrados con quién los hizo.'), h('button.btn', { type: 'button', onclick: () => mostrarHistorial(null) }, 'Ver quién cambió qué'))); }
+      } catch { if (mi !== nHoy) return; hoyBox.replaceChildren(h('div.fila.sep', h('span', 'Los cambios de productos quedan registrados con quién los hizo.'), h('button.btn', { type: 'button', onclick: () => mostrarHistorial(null) }, 'Ver quién cambió qué'))); }
     }
 
     function pasa(p) {
@@ -723,7 +732,7 @@ export default {
       const nombreCajon = new Map(cat.cajones.map((c) => [c.codigo, c.nombre]));
       const filas = [['Cajón', 'Código', 'Nombre', 'CABYS', 'Precio final (IVA incluido)', 'IVA %', 'Precio abierto', 'Activo', 'Nota', 'Nombre del producto (nivel 2)', 'Nombre de la opción (nivel 3)', 'Descripción libre']];
       [...cat.productos].sort((a, b) => a.codigo.localeCompare(b.codigo)).forEach((p) => filas.push([nombreCajon.get(p.codigo.slice(0, 2)) || '', p.codigo, p.nombre, p.cabys, String(r2(p.precio_final)).replace('.', ','), Number(p.tarifa_iva), p.precio_abierto ? 'Sí' : 'No', p.activo ? 'Sí' : 'No', p.nota || '', p.producto_nombre || '', p.modificador_nombre || '', p.descripcion_libre ? 'Sí' : 'No']));
-      descargar('productos ' + (soc.codigo || 'local') + ' ' + hoyCR() + '.csv', '﻿' + filas.map((f) => f.map(csvCelda).join(';')).join('\r\n'), 'text/csv;charset=utf-8');
+      csvBajar('productos ' + (soc.codigo || 'local') + ' ' + hoyCR(), filas[0], filas.slice(1));
       toast('Archivo descargado: ' + plural(cat.productos.length, 'producto', 'productos') + '. Se abre con Excel.');
     }
 
@@ -750,7 +759,7 @@ export default {
         const porCodigo = new Map(cat.productos.map((p) => [p.codigo, p]));
         const vistos = new Set();
         const plan = filas.slice(1).map((r, i) => {
-          const g = (k) => (C[k] >= 0 ? String(r[C[k]] ?? '').trim() : null);
+          const g = (k) => (C[k] >= 0 ? quitarNeutralizado(String(r[C[k]] ?? '').trim()) : null);
           let cod = (g('cod') || '').replace(/\D/g, ''); if (cod.length === 5) cod = '0' + cod;
           const it = { linea: i + 2, cod, estado: 'error', msg: '', cambios: [], cuerpo: null };
           if (!/^\d{6}$/.test(cod)) { it.msg = 'Código inválido'; return it; }
@@ -851,8 +860,19 @@ export default {
       h('p.mt-nota', 'Para cambiar varios precios a la vez, marque los productos con la casilla de la izquierda (o todo un grupo o cajón) y use la barra que aparece abajo.'),
       lista, barra);
 
-    try { await cargar(); } catch (e) { lista.replaceChildren(h('div.error-caja', e.message || 'No se pudo cargar el catálogo.')); }
-    asegurarOtros();
+    // Primera carga. Si falla (por ejemplo sin internet) se explica con palabras, se quita el aviso «Revisando los cambios de hoy…» y se ofrece «Intentar de nuevo»
+    async function iniciar() {
+      hoyBox.hidden = false;
+      lista.replaceChildren(esqueleto(4, 'Cargando los productos…'));
+      try { await cargar(); }
+      catch (e) {
+        hoyBox.hidden = true;
+        lista.replaceChildren(bloqueError({ titulo: 'No se pudieron cargar los productos', mensaje: e.message || 'No se pudo cargar el catálogo.', alReintentar: () => iniciar() }));
+        return;
+      }
+      asegurarOtros();
+    }
+    await iniciar();
     return () => document.documentElement.style.removeProperty('--alto-cab');
   },
 };
