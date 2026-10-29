@@ -7,6 +7,7 @@
 //   fx_venta_clonar(p_venta)                -> cuenta nueva abierta con las líneas de una venta anulada o rechazada; misma forma que fx_venta (contrato 2B)
 //   fx_venta_clonar_con_cliente(p_venta, p_cliente) -> lo mismo, pero la cuenta nueva queda con el cliente elegido (un tiquete no guarda cliente); sql/21h
 //   fx_comprobante_saldos(p_id)             -> qué se le puede hacer a una factura o tiquete (admite_anulacion, motivo_no_anulacion), sus notas (notas[], con viva) y sus saldos (CONTRATO_NC_SQL.md, sección 2.1)
+//   fx_nota_calcular, fx_nota_credito_devolucion, fx_nota_credito_monto, fx_nota_debito_monto, fx_nota_debito_sin_efecto -> notas parciales (CONTRATO_NC_SQL.md 2.2 a 2.6; las usa m_nota_parcial.js)
 //   fx_venta_reemplazo_info(p_venta)        -> si una cuenta abierta es la copia de un comprobante anulado ({reemplaza, original_id, consecutivo, estado_nota_credito})
 //   fx_cobrar_reemplazo(p_venta, p_original, p_pagos, ...) -> cobra esa copia y deja guardada la referencia 07 «Sustituye al comprobante»
 import { api, rpc, ErrorApi } from './api.js';
@@ -71,6 +72,25 @@ export async function anulacionDe(id) {
   if (saldos && Array.isArray(saldos.notas)) return { saldos, nc: anulacionDeSaldos(saldos) };
   return { saldos: null, nc: await ncDe(id) };
 }
+
+/* ---------- Notas parciales: devolver parte, corregir un monto y dejar sin efecto una anulación (CONTRATO_NC_SQL.md, secciones 2.2 a 2.6) ---------- */
+// Lectura estricta de los saldos: a diferencia de saldosDe, si falla lanza el error para que la pantalla ofrezca «Intentar de nuevo» (api.js ya repite una vez la consulta si falló la red).
+export async function saldosEstricto(id) {
+  const s = await rpc('fx_comprobante_saldos', { p_id: id });
+  if (!s || typeof s !== 'object' || Array.isArray(s)) throw new ErrorApi('No se pudo leer el documento. Intente de nuevo.');
+  return s;
+}
+// Calcula la nota sin guardar nada: { tipo_doc, codigo_referencia, total, total_iva, lineas[], pagos_sugeridos[] }. tipo '03' crédito o '02' débito; codigo '06', '02' o '01'.
+export const notaCalcular = (id, tipo, codigo, lineas = null) => rpc('fx_nota_calcular', { p_id: id, p_tipo: tipo, p_codigo: codigo, p_lineas: lineas });
+// Las cuatro funciones que SÍ guardan (crean la nota y la mandan a la cola de Hacienda). Nunca se repiten solas: api.js solo repite consultas.
+// lineas: devolución [{ linea, cantidad: '1.500' }]; corrección [{ linea, monto: '500.00' }]. pagos: [{ medio, monto: '1000.00' }] y debe sumar el total de la nota.
+export const notaDevolucion = (id, lineas, motivo, terminal = 1, pagos = null) => rpc('fx_nota_credito_devolucion', { p_id: id, p_lineas: lineas, p_motivo: motivo, p_terminal: terminal, p_pagos: pagos });
+export const notaCreditoMonto = (id, lineas, motivo, terminal = 1, pagos = null) => rpc('fx_nota_credito_monto', { p_id: id, p_lineas: lineas, p_motivo: motivo, p_terminal: terminal, p_pagos: pagos });
+export const notaDebitoMonto = (id, lineas, motivo, terminal = 1, pagos = null) => rpc('fx_nota_debito_monto', { p_id: id, p_lineas: lineas, p_motivo: motivo, p_terminal: terminal, p_pagos: pagos });
+// id = la NOTA DE CRÉDITO de anulación total (no la factura)
+export const notaDebitoSinEfecto = (id, motivo, terminal = 1, pagos = null) => rpc('fx_nota_debito_sin_efecto', { p_id: id, p_motivo: motivo, p_terminal: terminal, p_pagos: pagos });
+// La nota de débito viva que dejó sin efecto una anulación, si la hay. Se lee en los saldos de la NOTA DE CRÉDITO (la nota de débito cuelga de ella, no de la factura).
+export const sinEfectoDeSaldos = (s) => (s && Array.isArray(s.notas) ? s.notas.find((n) => n.tipo_doc === '02' && String(n.codigo_referencia) === '01' && n.viva !== false && n.estado !== 'rechazado') || null : null);
 
 /* ---------- Reemplazo: «Anular y hacer de nuevo» ---------- */
 // Pregunta si la cuenta abierta es la copia de un comprobante anulado. { ok: true, reemplaza: false } o
