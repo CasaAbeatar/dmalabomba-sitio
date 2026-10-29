@@ -1,6 +1,9 @@
 // CSV para Excel en español: UTF-8 con BOM, separador punto y coma, coma decimal.
 import { descargar } from './util.js';
 
+// Deshace lo que hace celda() para que un archivo exportado se pueda volver a importar sin que los nombres cambien: «'=SUMA» vuelve a ser «=SUMA»
+export const quitarNeutralizado = (t) => String(t ?? '').replace(/^'(?=[=+\-@\t\r])/, '');
+
 function celda(v) {
   if (v == null) return '';
   if (typeof v === 'number') return Number.isFinite(v) ? String(Math.round(v * 1000) / 1000).replace('.', ',') : '';

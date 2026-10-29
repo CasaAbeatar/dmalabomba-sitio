@@ -27,6 +27,19 @@
 .doc-det-res{color:var(--tinta2);font-size:.95rem}
 .doc-sub{color:var(--tinta2);font-size:.9rem}
 
+/* Qué suma y qué no suma el total, y cómo cuadra con «Apertura y cierre de caja» */
+.doc-cuadre-zona:empty{display:none}
+.doc-cuadre-caja{display:flex;flex-direction:column;gap:.45rem;padding:0 .2rem}
+.doc-cuadre-frase{margin:0;color:var(--tinta);font-size:.95rem}
+.doc-cuadre-frase.ok{color:var(--verde);font-weight:600}
+.doc-cuadre summary{list-style:none;display:flex;width:100%;max-width:34rem;padding-block:.35rem;text-align:center;line-height:1.25}
+.doc-cuadre summary::-webkit-details-marker{display:none}
+.doc-cuadre[open] summary{border-color:var(--tinta)}
+.doc-cuadre-cuerpo{display:flex;flex-direction:column;margin-top:.5rem;padding:.4rem 1rem;border:1px solid var(--linea2);border-radius:12px;background:var(--papel)}
+.doc-cuadre-fila{display:flex;justify-content:space-between;align-items:baseline;gap:.4rem 1rem;padding:.55rem 0;border-bottom:1px solid var(--linea);font-variant-numeric:tabular-nums}
+.doc-cuadre-fila b{white-space:nowrap}
+.doc-cuadre-fila.total{border-bottom:0;border-top:1px solid var(--tinta);margin-top:.1rem;font-size:1.08rem}
+
 /* Búsqueda y filtros */
 .doc-buscar .campo{min-height:56px;font-size:1.1rem}
 .doc-filtros{display:flex;flex-wrap:wrap;gap:.5rem}
@@ -120,6 +133,10 @@
 .doc-acc small{font-weight:400;font-size:.82rem;color:var(--tinta2)}
 .doc-acc.primario small{color:#fff}
 .doc-grupo.anular{border-top:1px dashed var(--linea2);padding-top:1rem}
+/* Acción apagada: se nota por el fondo y el borde punteado, no por la transparencia, así la frase que explica por qué no se puede sigue leyéndose bien (más de 4,5 a 1) */
+.btn.doc-acc[disabled]{opacity:1;background:#efe9dd;border-color:var(--linea2);border-style:dashed;color:#57514a;cursor:not-allowed}
+.btn.doc-acc[disabled]:hover{border-color:var(--linea2)}
+.btn.doc-acc[disabled] small{color:#57514a}
 
 /* Anular con nota de crédito */
 .doc-anular{display:flex;flex-direction:column;gap:.8rem}

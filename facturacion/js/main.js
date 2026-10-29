@@ -1,6 +1,6 @@
 // Arranque del facturador: inicio de sesión (código de empresa, usuario y PIN), cabecera, inicio con módulos, navegación por dirección (#) y avisos.
 import { sb, api, entrar, salir, consultarEmpresa, normalizarEmpresa, esTransitorio, esSesionVencida } from './api.js';
-import { h, toast, modal, conBoton, esqueleto, bloqueError, nombreLocal, cerrarVentanas, conPunto, pinDebil, tiempoFalta, horaCorta } from './util.js';
+import { h, toast, modal, conBoton, esqueleto, bloqueError, nombreLocal, cerrarVentanas, asentarVentanas, popEsDeVentana, conPunto, pinDebil, tiempoFalta, horaCorta } from './util.js';
 import { buscar, padreDe } from './modulos.js';
 import { pantallaInicio, pantallaAdmin, pintarInsignias } from './ui_inicio.js';
 
@@ -38,7 +38,8 @@ export const app = {
   // Abre un módulo por su id, su alias o su dirección (app.ir('caja'), app.ir('anular', { foco: 'buscar' }), app.ir('inicio')). Cambia la dirección (#) y el historial.
   ir(id, pedido) { this.pedido = pedido || null; ir(id); },
 };
-window.fx = app;
+// Para revisar el sistema desde las herramientas del navegador: solo si la dirección lleva ?depurar. En el uso normal no queda nada a la mano.
+try { if (new URLSearchParams(location.search).has('depurar')) window.fx = app; } catch { /* sin acceso a la dirección */ }
 
 // Ningún error se queda callado: si algo falla dentro de un botón y nadie lo avisó, sale un mensaje claro
 let ultimoAviso = { t: 0, m: '' };
@@ -115,7 +116,19 @@ function recordarEmpresa(e) {
 const infoEmpresa = (e) => ({ id: e.id || null, codigo: String(e.codigo_acceso || e.codigo || '').toLowerCase(), nombre: nombreLocal(e) || 'Su empresa', cedula: e.cedula || null });
 // 3102111943 -> 3-102-111943 (cédula jurídica)
 const cedulaJuridica = (c) => { const d = String(c ?? '').replace(/\D/g, ''); return d.length === 10 ? d[0] + '-' + d.slice(1, 4) + '-' + d.slice(4) : d; };
-const logoDe = (codigo) => 'img/logo-' + (codigo === 'soda' ? 'soda' : 'pollos') + '.svg';
+// Logo de cada empresa. Mientras no se sabe cuál es (pantalla de entrada, empresa que no está en la tabla) se usa un dibujo neutro que no es de ningún negocio.
+const LOGOS = { pollos: 'img/logo-pollos.svg', soda: 'img/logo-soda.svg' };
+const LOGO_NEUTRO = 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect x="4" y="4" width="56" height="56" rx="14" fill="#fbf8f2" stroke="#8f8672" stroke-width="3"/><path d="M20 16h24v34l-4-3-4 3-4-3-4 3-4-3-4 3z" fill="none" stroke="#B81622" stroke-width="3" stroke-linejoin="round"/><path d="M26 25h12M26 32h12" stroke="#B81622" stroke-width="3" stroke-linecap="round"/></svg>');
+const logoDe = (codigo) => LOGOS[String(codigo || '').toLowerCase()] || LOGO_NEUTRO;
+// Ícono de la pestaña del navegador: el de la empresa de la sesión, o el neutro mientras no se sabe
+function iconoPestana(codigo) {
+  let l = document.querySelector('link[rel~="icon"]');
+  if (!l) { l = document.createElement('link'); l.rel = 'icon'; document.head.append(l); }
+  l.type = 'image/svg+xml';
+  const href = logoDe(codigo);
+  if (l.getAttribute('href') !== href) l.setAttribute('href', href);
+}
+iconoPestana(null);
 
 function pantallaLogin(mensaje) {
   const emp = empresaRecordada();
@@ -303,8 +316,10 @@ function pintarCabecera() {
   cab.dataset.emp = emp;
   cab.querySelector('.cab-emp').textContent = nombreLocal(s);
   const logo = cab.querySelector('.marca img');
-  logo.src = 'img/logo-' + (emp === 'pollos' ? 'pollos' : 'soda') + '.svg';
+  const codigoReal = String(s.codigo_acceso || s.codigo || '').toLowerCase();
+  logo.src = logoDe(codigoReal);
   logo.alt = nombreLocal(s);
+  iconoPestana(codigoReal);
   const et = cab.querySelector('.estado-turno');
   et.className = 'estado-turno ' + (t ? 'abierto' : 'cerrado');
   et.textContent = t ? 'Caja abierta desde las ' + new Date(t.abierto_en).toLocaleTimeString('es-CR', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Costa_Rica' }) : 'Caja cerrada';
@@ -489,7 +504,10 @@ function destinoDe(clave) {
 }
 // Cada entrada del historial guarda de dónde se vino ({ de: 'admin' }): así «‹ Administración» e «‹ Inicio» usan el botón Atrás en lugar de apilar entradas repetidas
 const rutaActual = () => location.hash.replace(/^#/, '').toLowerCase();
-function ir(clave) {
+async function ir(clave) {
+  if (!cab) return;
+  // Si hay una ventana abierta (o el navegador todavía está quitando su entrada del historial) se cierra y se espera, para que no se pisen
+  await asentarVentanas();
   if (!cab) return;
   const dest = destinoDe(clave);
   if (rutaActual() === dest.ruta) {
@@ -501,12 +519,14 @@ function ir(clave) {
   mostrar(dest);
 }
 // Subir un nivel («‹ Inicio», «‹ Administración», Escape): si la pantalla anterior es justo esa, se retrocede en el historial; si no (se recargó la página, o se llegó por un aviso), se va a ella
-function subir(clave) {
+async function subir(clave) {
+  await asentarVentanas();
   const dest = destinoDe(clave);
   if (history.state && history.state.de === dest.ruta) { history.back(); return; }
   ir(clave);
 }
-const alCambiarDireccion = () => { if (cab && app.ctx) mostrar(destinoDe(location.hash)); };
+// Un popstate que solo cerró una ventana (botón Atrás con una ventana abierta) no cambia de pantalla: lo atiende util.js
+const alCambiarDireccion = () => { if (cab && app.ctx && !popEsDeVentana()) mostrar(destinoDe(location.hash)); };
 window.addEventListener('popstate', alCambiarDireccion);
 window.addEventListener('hashchange', alCambiarDireccion);
 
@@ -549,11 +569,13 @@ let irSeq = 0;
 // Muestra una pantalla. forzar = volver a armarla aunque ya sea la que se ve. opciones.sinFoco = no mover el foco (cuando solo se repinta).
 async function mostrar(dest, forzar = false, { sinFoco = false } = {}) {
   if (!cab) return;
+  // La dirección se corrige siempre (alias, rutas que no existen), aunque la pantalla ya sea la que se ve
+  if (location.hash.toLowerCase() !== '#' + dest.ruta) { try { history.replaceState(history.state, '', '#' + dest.ruta); } catch { /* sin historial */ } }
   if (!forzar && app.moduloActual?.id === dest.id) return;
   const mi = ++irSeq;
-  if (app.moduloActual && app.moduloActual.id !== dest.id) veniaDe = app.moduloActual.id;
+  // Al cambiar de pantalla no puede quedar ninguna ventana abierta encima (una ventana de «Cobrar» huérfana cobraría sin mostrar el tiquete)
+  if (app.moduloActual && app.moduloActual.id !== dest.id) { veniaDe = app.moduloActual.id; cerrarVentanas(); }
   app.moduloActual = dest;
-  if (location.hash.toLowerCase() !== '#' + dest.ruta) { try { history.replaceState(history.state, '', '#' + dest.ruta); } catch { /* sin historial */ } } // corrige alias y direcciones desconocidas
   pintarVista(dest);
   abrirMenu(false);
   try { limpieza?.(); } catch { /* nada */ }
@@ -662,7 +684,7 @@ async function cerrarSesion() {
     clearInterval(alTimer); alSeq++;
     try { limpieza?.(); } catch { /* nada */ }
     limpieza = null;
-    cerrarVentanas();
+    await cerrarVentanas();
     document.getElementById('sesion-vencida')?.remove();
     document.getElementById('impresion-resumen')?.remove();
     document.querySelectorAll('#toasts .toast').forEach((t) => t.remove());
@@ -671,6 +693,7 @@ async function cerrarSesion() {
     recepcionCache = null; recepcionHora = 0; veniaDe = null;
     cab = vista = alertaEl = redEl = menuEl = tituloEl = volverEl = inicioEl = null;
     document.body.classList.remove('fx-caja');
+    iconoPestana(null);
     const st = document.documentElement.style;
     ['--cab-h', '--bus-h', '--alto-cab', '--cab-alto'].forEach((v) => st.removeProperty(v));
     try { history.replaceState(null, '', location.pathname + location.search); } catch { /* sin historial */ } // la próxima persona no hereda la dirección

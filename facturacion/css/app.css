@@ -262,3 +262,6 @@ body:has(.modal-fondo) #toasts{bottom:6.2rem}
 /* Tabla «Turnos anteriores»: más compacta para que el botón «Ver resumen» se vea sin deslizar en escritorio */
 table.hist th,table.hist td{padding:.55rem .4rem;font-size:.9rem}
 table.hist th{min-width:0}
+
+/* Dato discreto de una sola línea (por ejemplo «Líneas con precio distinto del catálogo: 3» en el resumen del turno): línea fina arriba, sin color de alarma */
+.precios-cambiados{margin:.2rem 0 0;padding-top:.6rem;border-top:1px solid var(--linea);color:var(--tinta2);font-size:.95rem}

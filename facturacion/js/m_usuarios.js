@@ -1,7 +1,7 @@
 // Usuarios del facturador (solo administradores): crear, cambiar nombre, reiniciar PIN, activar o desactivar. Nunca se elimina.
 // Cada empresa tiene sus usuarios: el servidor (fx_usuarios) entrega solo los de la empresa de la sesión y un usuario nuevo queda en esa empresa.
 // fx_usuarios trae por usuario `empresas: [{ id, codigo, nombre_comercial }]`; de la fila del propio administrador salen las OTRAS empresas a las que él tiene acceso (casilla «También puede entrar a …»).
-import { h, modal, confirmar, pedir, conBoton, toast, fechaHora, horaCorta, pinDebil, conPunto, nombrePropio, nombreLocal } from './util.js';
+import { h, modal, confirmar, pedir, conBoton, toast, fechaHora, horaCorta, pinDebil, conPunto, nombrePropio, nombreLocal, bloqueError } from './util.js';
 import { api } from './api.js';
 import { cargarCss, aviso, campo, soloDigitos, diaCR } from './ui_mant.js';
 
@@ -31,8 +31,18 @@ export default {
     const otrasMias = () => otrasEmpresas(usuarios.find(esYo)); // empresas a las que el administrador también puede dar acceso
     const adminsActivos = () => usuarios.filter((u) => u.admin && u.activo).length;
 
+    let nCarga = 0; // cada carga lleva su número: si llega tarde la respuesta de una anterior (dos cambios seguidos), se descarta
     async function cargar() {
-      try { usuarios = await api.usuarios(); } catch (e) { lista.replaceChildren(h('div.error-caja', e.message || 'No se pudo cargar la lista de usuarios.')); return; }
+      const mi = ++nCarga;
+      let nuevos;
+      try { nuevos = await api.usuarios(); } catch (e) {
+        if (mi !== nCarga) return;
+        resumen.textContent = '';
+        lista.replaceChildren(bloqueError({ titulo: 'No se pudo cargar la lista de usuarios', mensaje: e.message || 'No se pudo cargar la lista de usuarios.', alReintentar: () => cargar() }));
+        return;
+      }
+      if (mi !== nCarga) return;
+      usuarios = nuevos;
       const hoy = diaCR(new Date());
       // Solo cuentan los usuarios activos, en los dos números de la frase y en la lista de arriba
       const hoyIng = (u) => u.activo && u.ultimo_ingreso && diaCR(u.ultimo_ingreso) === hoy;
