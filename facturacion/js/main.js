@@ -237,6 +237,8 @@ function armarApp() {
       h('div.soc-sel', { role: 'group', 'aria-label': 'Local' }),
       h('span.amb'),
       h('span.estado-turno'),
+      // Atajo siempre visible: anular una factura no debe esconderse dentro de otra pantalla
+      h('button.btn.cab-anular', { type: 'button', onclick: () => irA('anular') }, 'Anular factura'),
       h('div.usuario-caja', h('span', 'Sesión de ', h('strong', app.ctx.nombre || app.usuario)),
         h('button.btn.chico', { type: 'button', onclick: () => cambiarPinDialogo() }, 'Cambiar mi PIN'),
         h('button.btn.chico', { type: 'button', onclick: async () => { try { limpieza?.(); } catch { /* nada */ } limpieza = null; await salir().catch(() => {}); app.ctx = null; clearInterval(pendTimer); pantallaLogin(); } }, 'Cerrar sesión'))),

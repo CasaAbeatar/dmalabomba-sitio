@@ -85,9 +85,18 @@ function catalogoDe(soc, forzar) {
   return entrada.promesa;
 }
 
+// Locales que participan en esta etapa de pruebas. Por ahora solo Pollos La Bomba: Soda no aparece ni puede emitir desde
+// la pantalla. Para sumar a Soda más adelante basta agregar 'soda' a esta lista.
+export const LOCALES_EN_PRUEBA = ['pollos'];
+const soloLocalesEnPrueba = (c) => {
+  if (!c || !Array.isArray(c.sociedades)) return c;
+  const sociedades = c.sociedades.filter((s) => LOCALES_EN_PRUEBA.includes(s.codigo));
+  return sociedades.length ? { ...c, sociedades } : c;
+};
+
 export const api = {
   // Inicio
-  contexto: () => rpc('fx_contexto'), // {usuario,nombre,admin,debe_cambiar_pin,sociedades:[{id,codigo,nombre,nombre_comercial,cedula,ambiente,correo,telefono,provincia,canton,distrito,otras_senas,terminales:[{sucursal,terminal,nombre}],turno|null}]}
+  contexto: () => rpc('fx_contexto').then(soloLocalesEnPrueba), // {usuario,nombre,admin,debe_cambiar_pin,sociedades:[{id,codigo,nombre,nombre_comercial,cedula,ambiente,correo,telefono,provincia,canton,distrito,otras_senas,terminales:[{sucursal,terminal,nombre}],turno|null}]}
   // Usuarios (PIN de 4 dígitos)
   usuarios: () => rpc('fx_usuarios'),
   usuarioGuardar: (p) => rpc('fx_usuario_guardar', { p }), // {id?, usuario, nombre, admin, activo, pin?}

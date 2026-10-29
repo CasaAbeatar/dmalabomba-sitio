@@ -1033,7 +1033,8 @@ export default {
           h('button.btn.primario.grande', { type: 'button', onclick: () => { cerrarM(); nuevaCuenta(); } }, 'Nueva cuenta'),
           h('button.btn', { type: 'button', onclick: () => imprimir(fmtPrincipal) }, aj.auto ? 'Imprimir otra vez' : 'Imprimir ' + nombrePrincipal),
           h('button.btn', { type: 'button', onclick: () => imprimir(fmtPrincipal === 'carta' ? 'tiquete' : 'carta') }, fmtPrincipal === 'carta' ? 'Imprimir tiquete' : 'Imprimir factura carta'),
-          h('button.btn.suave', { type: 'button', onclick: () => cerrarM() }, 'Listo, cerrar')));
+          h('button.btn.suave', { type: 'button', onclick: () => cerrarM() }, 'Listo, cerrar'),
+          h('button.btn.cab-anular', { type: 'button', onclick: () => { cerrarM(); app.ir('anular'); } }, 'Me equivoqué: anular esta factura')));
       const mo = modal({ titulo: 'Cobro listo', contenido, ancho: 520, alCerrar: () => { abierto = false; if (vivo && buscador && fino()) buscador.inp.focus(); } });
       cerrarM = mo.cerrar;
       if (aj.auto) imprimir(fmtPrincipal);
