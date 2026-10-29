@@ -1,7 +1,10 @@
 // Cierre de caja: solo se cuenta el EFECTIVO. Debe haber en caja = fondo + ventas en efectivo + entradas de efectivo - salidas - devoluciones en efectivo por notas de crédito.
-import { h, money, leerNumero, r2, toast, modal, conBoton, fechaHora, fechaCorta, horaCorta, esqueleto, bloqueError, nombreLocal, conPistaDesliz, hoyCR, TIPOS_SERVICIO, MEDIOS } from './util.js';
+import { h, money, leerNumero, r2, toast, modal, fechaHora, fechaCorta, horaCorta, esqueleto, bloqueError, nombreLocal, conPistaDesliz, hoyCR, conPunto, TIPOS_SERVICIO, MEDIOS } from './util.js';
 import { esTransitorio } from './api.js';
-import { abrirSalidas, anularSalida, listaSalidas } from './ui_salidas.js';
+import { textoError } from './api_efectivo.js';
+import { anularSalida, anularEntrada, listaSalidas } from './ui_salidas.js';
+import { crearZonaEfectivo } from './ui_efectivo_rapido.js';
+import { crearFormularioApertura } from './ui_apertura.js';
 import { documentos } from './api_documentos.js';
 import { fraseParaTurno, docsDelTurno } from './cuadre_turno.js';
 
@@ -17,6 +20,7 @@ function cargarCss() {
 }
 
 const MAX_NOTAS = 200; // largo máximo de la nota del cierre que acepta el servidor
+const TOPE = 99999999.99; // el servidor no acepta un efectivo contado mayor
 const OTROS = ['tarjeta', 'sinpe', 'transferencia'];
 const TODOS = ['efectivo', 'tarjeta', 'sinpe', 'transferencia'];
 const cents = (n) => Math.round((Number(n) || 0) * 100);
@@ -79,18 +83,18 @@ function textoRechazadas(d) {
   return `Incluye ${d.rechazadasN} ${uno ? 'venta' : 'ventas'} (${money(d.rechazadasTotal)}) cuyo${uno ? '' : 's'} documento${uno ? '' : 's'} Hacienda no aceptó. Informes no ${uno ? 'la cuenta' : 'las cuenta'}.`;
 }
 
-// «Líneas con precio distinto del catálogo: 3» (discreto: es un dato para saber, no una alarma)
-const textoPreciosCambiados = (d) => 'Líneas con precio distinto del catálogo: ' + d.preciosCambiados;
+// «Productos cobrados con precio distinto del catálogo: 3» (discreto: es un dato para saber, no una alarma)
+const textoPreciosCambiados = (d) => 'Productos cobrados con precio distinto del catálogo: ' + d.preciosCambiados;
 
 // Filas de la cuenta: abrió + ventas + entradas - salidas - devoluciones = debe haber
-function bloqueCalculo(d, { alAnularSalida, extra } = {}) {
+function bloqueCalculo(d, { alAnularSalida, alAnularEntrada, extra } = {}) {
   return h('div.calc',
     h('div.calc-fila', h('span', h('span.op', ''), 'Efectivo con que abrió la caja'), h('span.v', money(d.fondo))),
     h('div.calc-fila', h('span', h('span.op', '+'), 'Ventas en efectivo'), h('span.v', money(d.efVentas))),
     d.totEnt > 0 || d.entradas.length ? h('div.calc-fila.entradas', h('span', h('span.op', '+'), 'Entradas de efectivo', h('small.calc-nota', 'Dinero que entró a la caja y no es una venta.')), h('span.v', money(d.totEnt))) : null,
-    d.entradas.length ? h('div.calc-sub', listaSalidas(d.entradas)) : null,
+    d.entradas.length ? h('div.calc-sub', listaSalidas(d.entradas, alAnularEntrada, 'entrada')) : null,
     h('div.calc-fila', h('span', h('span.op', '−'), 'Salidas de efectivo'), h('span.v', money(d.totSal))),
-    d.salidas.length || alAnularSalida ? h('div.calc-sub', listaSalidas(d.salidas, alAnularSalida)) : null,
+    d.salidas.length || alAnularSalida ? h('div.calc-sub', listaSalidas(d.salidas, alAnularSalida, 'salida')) : null,
     d.devoluciones != null ? h('div.calc-fila', h('span', h('span.op', '−'), 'Efectivo de ventas anuladas con nota de crédito', d.devoluciones > 0 ? h('small.calc-nota', 'Efectivo de ventas anuladas con nota de crédito en este turno. Se resta porque ese dinero debe haber salido de la caja.') : null), h('span.v', money(d.devoluciones))) : null,
     h('div.calc-fila.total', h('span', h('span.op', '='), 'Debe haber en caja'), h('span.v', money(d.esperado))),
     extra);
@@ -125,7 +129,7 @@ function nodoPantalla(d) {
       d.cerrado ? h('div.calc',
         h('div.calc-fila', h('span', 'Efectivo contado al cerrar'), h('span.v', money(d.contado))),
         h('div.calc-fila', h('span', 'Diferencia'), h('span.v', chipDif(d.dif)))) : null),
-    d.cerrado && d.discrepancia ? h('div.alerta-dif.' + (cents(d.dif) < 0 ? 'falta' : 'sobra'), 'Este cierre quedó con discrepancia: ' + textoDif(d.dif).toLowerCase() + '.') : null,
+    d.cerrado && d.discrepancia ? h('div.alerta-dif.' + (cents(d.dif) < 0 ? 'falta' : 'sobra'), 'Este cierre quedó con una diferencia: ' + textoDif(d.dif).toLowerCase() + '.') : null,
     t.notas ? h('div.dato', h('div.et', 'Notas del cierre'), h('div', t.notas)) : null);
 }
 
@@ -164,7 +168,7 @@ function nodoImpresion(d, soc) {
     fila('= Debe haber en caja', money(d.esperado)),
     d.cerrado ? fila('Efectivo contado', money(d.contado)) : null,
     d.cerrado ? fila('Diferencia', textoDif(d.dif)) : null,
-    d.cerrado && d.discrepancia ? h('div.c.g', 'CON DISCREPANCIA') : null,
+    d.cerrado && d.discrepancia ? h('div.c.g', 'CON DIFERENCIA') : null,
     t.notas ? h('div', h('hr'), h('div', 'Notas: ' + t.notas)) : null,
     h('div.firma', 'Firma de quien contó:'),
     h('div.c.p', 'Impreso ' + fechaHora(new Date())));
@@ -197,7 +201,7 @@ function imprimirNodo(nodo, titulo) {
     pg.textContent = `@page{size:80mm ${mm}mm;margin:0}`;
     d.head.append(pg);
     f.contentWindow.addEventListener('afterprint', () => f.remove());
-    try { f.contentWindow.focus(); f.contentWindow.print(); } catch (e) { toast('No se pudo abrir la impresión: ' + e.message, 'error'); f.remove(); }
+    try { f.contentWindow.focus(); f.contentWindow.print(); } catch { toast('No se pudo abrir la impresión. Revise la impresora e intente de nuevo.', 'error'); f.remove(); }
     setTimeout(() => f.remove(), 120000);
   }, 300);
 }
@@ -212,17 +216,25 @@ export default {
     const soc = app.soc;
     let vivo = true;
     let final = null; // resumen del cierre que se acaba de hacer
+    let finalAviso = null; // frase que acompaña al resumen cuando la caja ya estaba cerrada
     let turnoVisto = null;
     let est = null, abiertas = [], historial = [];
     let contadoTxt = '';
     let notas = '';
+    let zona = null; // zona de efectivo (entradas y salidas), la misma que usa Facturación
+    let refrescoActual = null; // pone al día solo las cifras del turno abierto, sin rehacer la pantalla
+    let errBox = null, botonCerrar = null;
+    let mensajeCierre = ''; // el último problema del cierre se queda a la vista hasta el siguiente intento
     const contenedor = h('div.turno');
     root.append(contenedor);
+
+    const soltarZona = () => { zona?.destruir(); zona = null; refrescoActual = null; errBox = null; botonCerrar = null; };
 
     let nCarga = 0; // cada lectura lleva su número: si llega tarde la respuesta de una anterior (dos toques seguidos en «Actualizar cifras»), se descarta
     async function cargar() {
       const mi = ++nCarga;
       turnoVisto = app.turno?.id || null;
+      soltarZona();
       contenedor.replaceChildren(esqueleto(4, 'Cargando el cierre de caja…'));
       try {
         const [e, ab, hist] = await Promise.all([
@@ -234,22 +246,34 @@ export default {
         est = e; abiertas = ab || []; historial = hist || [];
       } catch (e) {
         if (!vivo || mi !== nCarga) return;
-        contenedor.replaceChildren(bloqueError({ titulo: 'No se pudo cargar el cierre de caja', mensaje: e.message || String(e), alReintentar: () => cargar() }));
+        contenedor.replaceChildren(bloqueError({ titulo: 'No se pudo cargar el cierre de caja', mensaje: conPunto(textoError(e, 'Revise la conexión e intente de nuevo.')), alReintentar: () => sincronizar() }));
         return;
       }
       pintar();
     }
 
-    // Vuelve a leer solo el turno actual (después de registrar o anular una salida)
+    // Vuelve a preguntar si hay un turno abierto (otra persona pudo abrirlo o cerrarlo desde otro aparato) y lee todo de nuevo
+    async function sincronizar() {
+      const antes = turnoVisto;
+      try { await app.refrescar(); } catch { /* sin conexión: abajo se avisa si no se puede leer */ }
+      if (turnoVisto === antes) await cargar(); // si el turno cambió, 'app:cambio' ya volvió a cargar
+    }
+
+    // Vuelve a leer solo el turno actual (después de anotar o anular dinero) y cambia solo las cifras
     async function recargarTurno() {
       if (!turnoVisto) return;
       const mi = ++nCarga, id = turnoVisto;
-      try { const e = await api.turnoEstado(id); if (mi !== nCarga || id !== turnoVisto || final) return; est = e; } catch (e) { if (mi === nCarga) toast(e.message || String(e), 'error'); return; }
-      pintar();
+      let e;
+      try { e = await api.turnoEstado(id); } catch (er) { if (mi === nCarga) toast(conPunto(textoError(er, 'No se pudieron actualizar las cifras. Toque «Actualizar cifras».')), 'error'); return; }
+      if (mi !== nCarga || id !== turnoVisto || final) return;
+      if (e?.turno?.cerrado_en) { await sincronizar(); return; } // otra persona cerró la caja mientras tanto
+      est = e;
+      if (refrescoActual) refrescoActual(e); else pintar();
     }
 
     function pintar() {
       if (!vivo) return;
+      soltarZona();
       contenedor.replaceChildren(
         h('p.tenue.mt-intro', nombreLocal(soc) + '. Un turno no es el día: empieza cuando se abre la caja y termina cuando se cierra, aunque cruce la medianoche.'),
         final ? seccionFinal() : (turnoVisto && est ? seccionActual() : seccionSinTurno()),
@@ -261,20 +285,35 @@ export default {
       const d = datosResumen(final);
       return h('section.resumen-final',
         h('h2', '✓ Caja cerrada'),
+        finalAviso ? h('div.aviso-abiertas', { role: 'note' }, h('span', finalAviso)) : null,
         nodoPantalla(d),
         h('div.fila',
           h('button.btn.primario.grande', { type: 'button', onclick: () => imprimirNodo(nodoImpresion(d, soc)) }, 'Imprimir resumen del cierre'),
           h('button.btn.grande', { type: 'button', onclick: () => app.ir('caja') }, 'Abrir una caja nueva')));
     }
 
+    /* ---------- Sin turno: abrir la caja aquí mismo ---------- */
     function seccionSinTurno() {
-      return h('section.tarjeta', h('h2', 'La caja está cerrada'), h('p', 'No hay un turno abierto en este local. Para vender hay que abrir la caja.'),
-        h('button.btn.primario.grande', { type: 'button', onclick: () => app.ir('caja') }, 'Abrir la caja'));
+      // Lo que se contó al cerrar el último turno se ofrece como botón; nunca se escribe solo
+      const ultimo = historial.find((x) => x.cerrado_en && x.contado_efectivo != null);
+      const form = crearFormularioApertura({
+        api, socId, terminal: app.terminal, local: nombreLocal(soc),
+        sugerido: ultimo ? { monto: Number(ultimo.contado_efectivo), cuando: ultimo.cerrado_en } : null,
+        alAbrir: async (res, monto) => {
+          try { await app.refrescar(); } catch { toast('La caja se abrió, pero no se pudo actualizar la pantalla. Revise la conexión y toque «Abrir caja» otra vez: el sistema no abre otra.', 'error', 9000); return; }
+          if (res && res.ya_abierto) toast('La caja ya estaba abierta (la abrió ' + (res.abierto_por || 'otra persona') + ') con ' + money(res.fondo_inicial ?? 0) + '. No se cambió el efectivo con que abrió.', 'ok', 9000);
+          else toast('Caja abierta con ' + money(monto) + '.');
+        },
+      });
+      return h('section.col',
+        h('h2', 'La caja está cerrada'),
+        h('p.tenue', 'No hay un turno abierto en ' + nombreLocal(soc) + '. Para vender hay que abrir la caja: escriba el efectivo con que empieza.'),
+        form.el);
     }
 
     /* ---------- Turno abierto: conteo del efectivo ---------- */
     function seccionActual() {
-      const d = datosResumen(est);
+      let d = datosResumen(est);
       const t = d.t;
       const inp = h('input.campo.monto-grande', { type: 'text', inputmode: 'decimal', placeholder: '0', value: contadoTxt, autocomplete: 'off', 'aria-label': 'Efectivo que hay en la caja ahora' });
       const difBox = h('div');
@@ -282,7 +321,7 @@ export default {
         const txt = contadoTxt.trim();
         if (txt === '') return null;
         const v = leerNumero(txt);
-        return Number.isFinite(v) && v >= 0 ? v : NaN;
+        return Number.isFinite(v) && v >= 0 && v <= TOPE ? v : NaN;
       };
       function recalcular() {
         const v = leer();
@@ -297,20 +336,43 @@ export default {
       const contar = () => { contador.textContent = txtNotas.value.length + ' de ' + MAX_NOTAS; };
       txtNotas.addEventListener('input', () => { notas = txtNotas.value.slice(0, MAX_NOTAS); contar(); });
       contar();
-      const err = h('div.error-caja', { hidden: true });
+      const err = h('div.error-caja', { hidden: !mensajeCierre, role: 'alert' }, mensajeCierre);
+      errBox = err;
       const btn = h('button.btn.primario.grande', { type: 'button' }, 'Cerrar caja');
-      btn.addEventListener('click', () => conBoton(btn, async () => {
-        err.hidden = true;
+      botonCerrar = btn;
+      btn.addEventListener('click', async () => {
+        if (btn.disabled || cerrando) return;
+        err.hidden = true; mensajeCierre = '';
         const v = leer();
         if (v == null) { err.textContent = 'Escriba cuánto efectivo hay en la caja ahora. Si no hay nada, escriba 0.'; err.hidden = false; inp.focus(); return; }
         if (Number.isNaN(v)) { err.textContent = 'Ese monto no es válido. Escriba solo números, por ejemplo 15000.'; err.hidden = false; inp.focus(); return; }
-        await prepararCierre(d, v, notas.trim().slice(0, MAX_NOTAS));
-      }));
+        ocupadoCierre(true, 'Revisando la caja…');
+        try { await prepararCierre(d, v, notas.trim().slice(0, MAX_NOTAS)); }
+        catch (e) {
+          errorCierre(esTransitorio(e)
+            ? 'No hay conexión para revisar la caja. No se cerró nada. Revise internet y toque «Cerrar caja» otra vez.'
+            : conPunto(textoError(e, 'No se pudo revisar la caja. No se cerró nada. Intente de nuevo; si sigue igual, avise a la persona encargada.')));
+        } finally { ocupadoCierre(false); }
+      });
       const avisoAbiertas = abiertas.length ? h('div.aviso-abiertas',
         h('strong', 'Hay ' + abiertas.length + (abiertas.length === 1 ? ' cuenta abierta sin cobrar' : ' cuentas abiertas sin cobrar')),
         h('span', 'Antes de cerrar hay que cobrarlas o anularlas.'),
         h('div.fila', h('button.btn', { type: 'button', onclick: () => app.ir('caja') }, 'Volver a Facturación a cobrarlas'))) : null;
-      const alAnular = async (s) => { if (await anularSalida(api, s)) await recargarTurno(); };
+      // Un turno que viene de otro día suele ser una caja que se olvidó cerrar
+      const deOtroDia = ymdDe(t.abierto_en) < hoyCR();
+      const avisoOtroDia = deOtroDia ? h('div.aviso-abiertas', { role: 'note' },
+        h('strong', 'Esta caja se abrió el ' + fechaCorta(t.abierto_en) + ' y sigue abierta'),
+        h('span', 'Si ya terminó el trabajo de ese día, cuente el efectivo y ciérrela. Si todavía sigue vendiendo en el mismo turno, no hace falta cerrarla.')) : null;
+      // Anular dinero anotado: la misma ventana con motivo que usa Facturación
+      const alAnular = (anular) => async (m) => { if (await anular(m)) { await recargarTurno(); zona?.refrescar(); } };
+      const calcSlot = h('div');
+      const pintarCalculo = () => calcSlot.replaceChildren(bloqueCalculo(d, { alAnularSalida: alAnular(anularSalida), alAnularEntrada: alAnular(anularEntrada) }));
+      pintarCalculo();
+      refrescoActual = (nuevo) => { d = datosResumen(nuevo); pintarCalculo(); recalcular(); };
+      // La zona de efectivo es la misma de Facturación: entradas y salidas se anotan igual en las dos pantallas
+      zona = crearZonaEfectivo({ turnoId: turnoVisto, conPie: false, enFlujo: true,
+        motivos: { entrada: app.ctx?.motivos_entrada_efectivo, salida: app.ctx?.motivos_salida_efectivo },
+        alCambiar: () => recargarTurno() });
       // La misma cuenta que se ve en «Anular y reimprimir», dicha desde aquí: qué documentos suma y cuáles no. Si no se puede leer, esta línea simplemente no sale.
       const notaDocs = h('p.tenue-linea.nota-docs', { hidden: true });
       const idTurno = turnoVisto;
@@ -321,7 +383,8 @@ export default {
       }).catch(() => { /* sin esta explicación el resto sigue igual */ });
 
       const sec = h('section.col',
-        h('h2', 'Turno abierto'),
+        h('div.fila.sep', h('h2', 'Turno abierto'), h('button.btn', { type: 'button', onclick: () => app.ir('caja') }, 'Ir a Facturación a vender')),
+        avisoOtroDia,
         h('div.turno-datos',
           h('div.dato', h('div.et', 'Abrió'), h('div.val', fechaPartida(t.abierto_en)), h('div.det', (t.abierto_por || '') + ' · lleva ' + duracion(t.abierto_en, new Date()))),
           h('div.dato', h('div.et', 'Notas de crédito'), h('div.val', money(d.notasCredito)), h('div.det', 'Durante el turno')),
@@ -331,27 +394,65 @@ export default {
         bloqueVentas(d, { nota: notaDocs, alVer: () => app.ir('anular', { filtro: 'problemas', desde: ymdDe(t.abierto_en) < hoyCR() ? ymdDe(t.abierto_en) : null }) }),
         h('div.tarjeta',
           h('h3', 'Cuánto efectivo debe haber'),
-          bloqueCalculo(d, { alAnularSalida: alAnular }),
-          h('div.fila', { style: 'margin-top:.8rem' },
-            h('button.btn.grande', { type: 'button', onclick: () => abrirSalidas({ api, turnoId: turnoVisto, alCambiar: recargarTurno }) }, 'Registrar salida de efectivo')),
+          calcSlot,
+          h('div.mt-efectivo',
+            h('h4', 'Dinero que entra o sale de la caja'),
+            h('p.tenue-linea', 'Anote aquí el dinero que entra o sale y no es una venta ni un vuelto: sencillo, pago a un proveedor, compra de hielo. Si se devuelve dinero por una nota de crédito, no lo anote aquí: el sistema ya lo descuenta.'),
+            zona.el),
           h('div.contado-caja',
             h('label.etq', 'Efectivo que hay en la caja ahora (₡)', h('small', 'Cuente los billetes y monedas y escriba el total.'), inp),
             difBox)),
         h('label.etq', 'Notas del cierre (opcional)', txtNotas, contador),
         err,
-        h('div.fila', btn, h('button.btn', { type: 'button', onclick: cargar }, 'Actualizar cifras')));
+        h('div.fila', btn, h('button.btn', { type: 'button', onclick: () => sincronizar() }, 'Actualizar cifras')));
       recalcular();
       return sec;
     }
 
-    /* ---------- Cerrar: revisar cuentas abiertas, discrepancia y cerrar ---------- */
+    /* ---------- Cerrar: revisar cuentas abiertas, diferencia y cerrar ---------- */
+    let cerrando = false;
+    function ocupadoCierre(si, texto) {
+      if (!botonCerrar || !botonCerrar.isConnected) return;
+      botonCerrar.disabled = si;
+      if (si) { botonCerrar.setAttribute('aria-busy', 'true'); botonCerrar.textContent = texto || 'Cerrando la caja…'; }
+      else { botonCerrar.removeAttribute('aria-busy'); botonCerrar.textContent = 'Cerrar caja'; }
+    }
+    // El problema se queda escrito en la pantalla (un aviso que desaparece se puede perder justo cuando importa)
+    function errorCierre(texto) {
+      mensajeCierre = texto;
+      if (errBox && errBox.isConnected) { errBox.textContent = texto; errBox.hidden = false; try { errBox.scrollIntoView({ block: 'center' }); } catch { /* nada */ } }
+      toast(texto, 'error', 9000);
+    }
+    // Otra persona (u otro aparato) ya cerró la caja: se muestra el cierre que quedó guardado, no el conteo que se acaba de escribir
+    function avisoYaCerrada(res, contado, { propio = false } = {}) {
+      const t = res.turno || {};
+      const guardado = Number(res.contado_efectivo ?? t.contado_efectivo ?? 0);
+      const mismo = cents(guardado) === cents(contado);
+      if (propio && mismo && t.cerrado_por && t.cerrado_por === app.usuario) return null; // su cierre sí salió; solo no llegó la respuesta
+      return 'Esta caja ya estaba cerrada' + (t.cerrado_por ? ': la cerró ' + t.cerrado_por : '') + ' el ' + fechaHora(t.cerrado_en) + ' con ' + money(guardado) + ' contados.'
+        + (mismo ? '' : ' Usted había escrito ' + money(contado) + ' y eso no cambió el cierre guardado. Si el conteo guardado no es el correcto, avise a la persona encargada.');
+    }
+    async function terminarCierre(res, aviso) {
+      final = res; finalAviso = aviso || null; mensajeCierre = '';
+      contadoTxt = ''; notas = '';
+      try { await app.refrescar(); } catch { /* la cabecera se actualiza sola luego */ }
+      turnoVisto = null; est = null; abiertas = [];
+      try { historial = (await api.turnos(socId, 30)) || []; } catch { /* queda el anterior */ }
+      pintar();
+      window.scrollTo({ top: 0 });
+      toast(aviso ? 'Esta caja ya estaba cerrada.' : 'Caja cerrada.');
+    }
+
     async function prepararCierre(dMostrado, contado, notasTxt) {
-      // Se leen las cifras otra vez por si hubo ventas o salidas mientras se contaba
+      // Se leen las cifras otra vez por si hubo ventas, salidas o un cierre desde otro aparato mientras se contaba
       const [fresco, lista] = await Promise.all([api.turnoEstado(turnoVisto), api.ventasAbiertas(socId)]);
+      if (fresco?.turno?.cerrado_en) { await terminarCierre(fresco, avisoYaCerrada(fresco, contado)); return; }
       const d2 = datosResumen(fresco);
+      d2.leidoEn = Date.now();
       if (cents(d2.esperado) !== cents(dMostrado.esperado)) {
-        est = fresco; abiertas = lista || []; pintar();
-        toast('El efectivo esperado cambió (hubo ventas o salidas mientras contaba). Revise la cifra y vuelva a tocar «Cerrar caja».', 'error', 9000);
+        est = fresco; abiertas = lista || [];
+        mensajeCierre = 'Lo que debe haber en caja cambió (hubo ventas o dinero anotado mientras contaba). Revise la cifra y vuelva a tocar «Cerrar caja».';
+        pintar(); toast(mensajeCierre, 'error', 9000);
         return;
       }
       if ((lista || []).length) { avisarAbiertas(lista, d2, contado, notasTxt); return; }
@@ -371,61 +472,91 @@ export default {
 
     function anularTodas(lista, d, contado, notasTxt) {
       let corriendo = false;
+      const esperan = lista.filter((c) => c.estado === 'prefacturada' || c.tipo_servicio === 'espera').length;
       modal({ titulo: 'Confirme', ancho: 460,
-        contenido: h('p.conf', 'Se anularán ' + lista.length + (lista.length === 1 ? ' cuenta' : ' cuentas') + ' por un total de ' + money(lista.reduce((s, c) => s + Number(c.total), 0)) + '. No se puede deshacer. ¿Anular y seguir con el cierre?'),
+        contenido: h('div.col',
+          h('p.conf', 'Se anularán ' + lista.length + (lista.length === 1 ? ' cuenta' : ' cuentas') + ' por un total de ' + money(lista.reduce((s, c) => s + Number(c.total), 0)) + '. No se puede deshacer.'),
+          esperan ? h('p.conf', esperan === 1 ? 'Una de ellas es de un cliente en espera o con prefactura que todavía no ha pagado.' : esperan + ' de ellas son de clientes en espera o con prefactura que todavía no han pagado.') : null,
+          h('p.conf', '¿Anular y seguir con el cierre?')),
         botones: [{ texto: 'No, volver', onclick: (c) => c() }, { texto: 'Sí, anular', clase: 'peligro', onclick: async (c) => {
           if (corriendo) return; corriendo = true; c();
-          try {
-            for (const v of lista) await api.ventaAnular(v.id, 'Cierre de caja: cuenta sin cobrar');
-            abiertas = (await api.ventasAbiertas(socId)) || [];
-            toast('Cuentas anuladas.');
-            if (abiertas.length) { avisarAbiertas(abiertas, d, contado, notasTxt); return; }
-            await revisarDiferencia(d, contado, notasTxt);
-          } catch (e) { toast(e.message || String(e), 'error', 7000); cargar(); }
+          toast('Anulando las cuentas…', 'ok', 2500);
+          let cortado = false;
+          // Cada cuenta se anula aparte: si una ya se cobró desde otro aparato, las demás se siguen anulando
+          for (const v of lista) {
+            try { await api.ventaAnular(v.id, 'Cierre de caja: cuenta sin cobrar'); }
+            catch (e) { if (esTransitorio(e)) { cortado = true; break; } }
+          }
+          try { abiertas = (await api.ventasAbiertas(socId)) || []; }
+          catch { errorCierre('No hay conexión para comprobar las cuentas. No se cerró la caja. Revise internet y vuelva a tocar «Cerrar caja».'); return; }
+          if (abiertas.length) {
+            toast(cortado ? 'Se cortó la conexión. Quedan ' + abiertas.length + (abiertas.length === 1 ? ' cuenta abierta.' : ' cuentas abiertas.') : 'No se pudieron anular todas. Quedan ' + abiertas.length + (abiertas.length === 1 ? ' cuenta abierta.' : ' cuentas abiertas.'), 'error', 7000);
+            avisarAbiertas(abiertas, d, contado, notasTxt); return;
+          }
+          toast('Cuentas anuladas.');
+          await revisarDiferencia(d, contado, notasTxt);
         } }] });
     }
 
     // Si no cuadra, avisa ANTES de cerrar; siempre se permite cerrar
     async function revisarDiferencia(d, contado, notasTxt) {
       const dif = r2(contado - d.esperado);
-      if (cents(dif) === 0) { await cerrarYa(contado, notasTxt); return; }
+      if (cents(dif) === 0) { await cerrarYa(d, contado, notasTxt); return; }
       const falta = cents(dif) < 0;
+      const enorme = Math.abs(cents(dif)) >= 100000 && Math.abs(cents(dif)) * 2 >= Math.max(cents(d.esperado), cents(contado));
       let decidido = false;
       modal({ titulo: 'Revise el conteo', ancho: 540, alCerrar: () => {},
         contenido: h('div.col',
           h('div.alerta-dif.' + (falta ? 'falta' : 'sobra'),
-            'Hay una discrepancia: ' + (falta ? 'faltan ' : 'sobran ') + money(Math.abs(cents(dif)) / 100) + '.',
+            'Hay una diferencia: ' + (falta ? 'faltan ' : 'sobran ') + money(Math.abs(cents(dif)) / 100) + '.',
             h('small', 'Debe haber ' + money(d.esperado) + ' en la caja y usted contó ' + money(contado) + '.')),
+          enorme ? h('p.conf', 'La diferencia es muy grande. Revise que escribió bien el total: puede faltar un cero o sobrar uno.') : null,
           h('p.tenue-linea', 'Puede contar otra vez o cerrar así. Si cierra, la diferencia queda registrada en el cierre.')),
         botones: [
-          { texto: 'Cerrar de todos modos', clase: 'peligro', onclick: async (c) => { if (decidido) return; decidido = true; c(); await cerrarYa(contado, notasTxt); } },
+          { texto: 'Cerrar de todos modos', clase: 'peligro', onclick: async (c) => { if (decidido) return; decidido = true; c(); await cerrarYa(d, contado, notasTxt); } },
           { texto: 'Volver a contar', clase: 'primario', onclick: (c) => c() }] });
     }
 
-    let cerrando = false;
-    async function cerrarYa(contado, notasTxt) {
+    async function cerrarYa(d, contado, notasTxt) {
       if (cerrando) return;
       cerrando = true;
+      ocupadoCierre(true, 'Cerrando la caja…');
       try {
+        // Última revisión: entre el conteo y el toque final pudo entrar una cuenta, una venta o un cierre desde otro aparato.
+        // Lo que la persona aprobó en pantalla tiene que ser lo que se guarda.
+        if (Date.now() - (d.leidoEn || 0) > 4000) {
+          let fresco, lista;
+          try { [fresco, lista] = await Promise.all([api.turnoEstado(turnoVisto), api.ventasAbiertas(socId)]); }
+          catch (e) { errorCierre(esTransitorio(e) ? 'No hay conexión para revisar la caja antes de cerrar. No se cerró nada. Revise internet y toque «Cerrar caja» otra vez.' : conPunto(textoError(e, 'No se pudo revisar la caja antes de cerrar. No se cerró nada. Intente de nuevo.'))); return; }
+          if (fresco?.turno?.cerrado_en) { await terminarCierre(fresco, avisoYaCerrada(fresco, contado)); return; }
+          const d2 = datosResumen(fresco);
+          if ((lista || []).length) { abiertas = lista; cerrando = false; avisarAbiertas(lista, d2, contado, notasTxt); return; }
+          if (cents(d2.esperado) !== cents(d.esperado)) {
+            est = fresco; abiertas = lista || [];
+            mensajeCierre = 'Lo que debe haber en caja cambió mientras se revisaba el conteo. No se cerró nada. Revise la cifra y vuelva a tocar «Cerrar caja».';
+            pintar(); toast(mensajeCierre, 'error', 9000);
+            return;
+          }
+        }
         let res;
         try { res = await api.turnoCerrar(turnoVisto, { efectivo: contado, notas: notasTxt || null }); }
         catch (e) {
-          // Si falló la red, se revisa si la caja igual quedó cerrada (así no se cierra dos veces ni se pierde el resumen)
-          res = null;
-          let sabe = !esTransitorio(e); // un rechazo del servidor (regla de negocio) significa que no se cerró
-          if (esTransitorio(e)) { try { const t = await api.turnoEstado(turnoVisto); sabe = true; if (t?.turno?.cerrado_en) res = t; } catch { /* sin conexión: se avisa abajo */ } }
-          if (!res) throw new Error((e.message || String(e)) + (sabe ? ' La caja sigue abierta; toque «Cerrar caja» para intentarlo de nuevo.' : ' No se pudo confirmar si la caja se cerró. Cuando vuelva la conexión toque «Actualizar cifras» para revisar.'));
+          // Cerrar no se repite solo. Si falló, se mira cómo quedó la caja antes de decir nada, para no cerrar dos veces ni perder el resumen.
+          const yaCerrada = /ya est[aá] cerrado/i.test(e.message || ''); // otra pantalla ya la cerró
+          let cerrada = null, sabe = !esTransitorio(e);
+          if (yaCerrada || esTransitorio(e)) {
+            try { const t = await api.turnoEstado(turnoVisto); sabe = true; if (t?.turno?.cerrado_en) cerrada = t; } catch { /* sin conexión: se avisa abajo */ }
+          }
+          if (cerrada) { await terminarCierre(cerrada, avisoYaCerrada(cerrada, contado, { propio: !yaCerrada })); return; }
+          errorCierre(!sabe
+            ? 'No hay conexión y no se pudo comprobar si la caja quedó cerrada. No se pierde nada. Cuando vuelva internet toque «Cerrar caja» otra vez: si ya estaba cerrada, el sistema se lo dirá.'
+            : esTransitorio(e)
+              ? 'No se pudo cerrar la caja por la conexión. La caja sigue abierta. Revise internet y toque «Cerrar caja» otra vez.'
+              : conPunto('No se pudo cerrar la caja. ' + textoError(e, 'Intente de nuevo; si sigue igual, avise a la persona encargada.')) + ' La caja sigue abierta.');
+          return;
         }
-        final = res;
-        contadoTxt = ''; notas = '';
-        try { await app.refrescar(); } catch { /* la cabecera se actualiza sola luego */ }
-        turnoVisto = null; est = null; abiertas = [];
-        try { historial = (await api.turnos(socId, 30)) || []; } catch { /* queda el anterior */ }
-        pintar();
-        window.scrollTo({ top: 0 });
-        toast('Caja cerrada.');
-      } catch (e) { toast('No se pudo cerrar la caja: ' + (e.message || e), 'error', 8000); }
-      finally { cerrando = false; }
+        await terminarCierre(res, null);
+      } finally { cerrando = false; ocupadoCierre(false); }
     }
 
     /* ---------- Historial ---------- */
@@ -453,7 +584,7 @@ export default {
           h('td.der', money(t.fondo_inicial)),
           h('td.der', abierto ? h('span.tenue', 'Al cerrar') : sinDato ? h('span.tenue', 'Sin dato') : money(t.esperado_efectivo)),
           h('td.der', abierto ? h('span.tenue', 'Al cerrar') : money(t.contado_efectivo)),
-          h('td', abierto ? h('span.tenue', 'En curso') : sinDato ? h('span.tenue', 'Sin dato') : [chipDif(dif), (t.discrepancia || (dif != null && cents(dif) !== 0)) ? h('div', h('span.chip.espera', 'Con discrepancia')) : null]),
+          h('td', abierto ? h('span.tenue', 'En curso') : sinDato ? h('span.tenue', 'Sin dato') : [chipDif(dif), (t.discrepancia || (dif != null && cents(dif) !== 0)) ? h('div', h('span.chip.espera', 'Con diferencia')) : null]),
           ...ventasFila(t, abierto, sinDato),
           h('td', h('button.btn.chico', { type: 'button', 'aria-label': 'Ver resumen del turno del ' + fechaHora(t.abierto_en), onclick: () => verDetalle(t) }, 'Ver resumen')));
       });
@@ -461,13 +592,13 @@ export default {
         h('h2', 'Turnos anteriores'),
         h('p.tenue', 'Del más reciente al más antiguo. Las horas son de Costa Rica. Lo vendido por cada medio lo registra el sistema; solo el efectivo se cuenta a mano.'),
         conPistaDesliz(h('div.tabla-caja', h('table.tabla.hist',
-          h('thead', h('tr', ['Abrió', 'Cerró', 'Abierta por', 'Fondo', 'Debía haber en caja', 'Contado', 'Diferencia', 'Vendido en efectivo', 'Vendido con tarjeta', 'Vendido por SINPE', 'Vendido por transferencia', 'Total vendido', ''].map((x, i) => h('th' + (i === 3 || i === 4 || i === 5 || i >= 7 && i <= 11 ? '.der' : ''), x)))),
+          h('thead', h('tr', ['Abrió', 'Cerró', 'Abierta por', 'Fondo', 'Debe haber en caja', 'Contado', 'Diferencia', 'Vendido en efectivo', 'Vendido con tarjeta', 'Vendido por SINPE', 'Vendido por transferencia', 'Total vendido', ''].map((x, i) => h('th' + (i === 3 || i === 4 || i === 5 || i >= 7 && i <= 11 ? '.der' : ''), x)))),
           h('tbody', filas))), 'Deslice la tabla hacia los lados para ver más columnas: lo vendido por cada medio, el total y el botón «Ver resumen».'));
     }
 
     async function verDetalle(t) {
       let e;
-      try { e = await api.turnoEstado(t.id); } catch (er) { toast(er.message || String(er), 'error'); return; }
+      try { e = await api.turnoEstado(t.id); } catch (er) { toast(conPunto(textoError(er, 'No se pudo abrir el resumen de ese turno. Revise la conexión e intente de nuevo.')), 'error'); return; }
       const d = datosResumen(e);
       modal({ titulo: 'Resumen del turno', ancho: 760, contenido: nodoPantalla(d),
         botones: [{ texto: 'Cerrar', onclick: (c) => c() }, { texto: 'Imprimir resumen', clase: 'primario', onclick: () => imprimirNodo(nodoImpresion(d, soc)) }] });
@@ -477,6 +608,6 @@ export default {
     document.addEventListener('app:cambio', alCambio);
 
     await cargar();
-    return () => { vivo = false; document.removeEventListener('app:cambio', alCambio); };
+    return () => { vivo = false; soltarZona(); document.removeEventListener('app:cambio', alCambio); };
   },
 };

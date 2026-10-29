@@ -1,7 +1,7 @@
 // Usuarios del facturador (solo administradores): crear, cambiar nombre, reiniciar PIN, activar o desactivar. Nunca se elimina.
 // Cada empresa tiene sus usuarios: el servidor (fx_usuarios) entrega solo los de la empresa de la sesión y un usuario nuevo queda en esa empresa.
 // fx_usuarios trae por usuario `empresas: [{ id, codigo, nombre_comercial }]`; de la fila del propio administrador salen las OTRAS empresas a las que él tiene acceso (casilla «También puede entrar a …»).
-import { h, modal, confirmar, pedir, conBoton, toast, fechaHora, horaCorta, pinDebil, conPunto, nombrePropio, nombreLocal, bloqueError } from './util.js';
+import { h, modal, confirmar, pedir, conBoton, toast, fechaHora, pinDebil, conPunto, nombrePropio, nombreLocal, bloqueError, textoDeError } from './util.js';
 import { api } from './api.js';
 import { cargarCss, aviso, campo, soloDigitos, diaCR } from './ui_mant.js';
 
@@ -38,7 +38,7 @@ export default {
       try { nuevos = await api.usuarios(); } catch (e) {
         if (mi !== nCarga) return;
         resumen.textContent = '';
-        lista.replaceChildren(bloqueError({ titulo: 'No se pudo cargar la lista de usuarios', mensaje: e.message || 'No se pudo cargar la lista de usuarios.', alReintentar: () => cargar() }));
+        lista.replaceChildren(bloqueError({ titulo: 'No se pudo cargar la lista de usuarios', mensaje: textoDeError(e), alReintentar: () => cargar() }));
         return;
       }
       if (mi !== nCarga) return;
@@ -60,7 +60,6 @@ export default {
     const guardar = (btn, datos, mensaje) => conBoton(btn, async () => { await api.usuarioGuardar(datos); if (mensaje) toast(mensaje); await cargar(); return true; });
 
     function tarjeta(u) {
-      const bloqueado = u.bloqueado_hasta && new Date(u.bloqueado_hasta) > new Date();
       const yo = esYo(u);
       const ultimo = u.ultimo_ingreso ? 'Último ingreso: ' + fechaHora(u.ultimo_ingreso) : 'Todavía no ha ingresado';
       const btnNombre = h('button.btn', { type: 'button', onclick: () => cambiarNombre(u) }, 'Cambiar nombre');
@@ -77,7 +76,6 @@ export default {
             h('span.chip' + (u.admin ? '.ok' : '.gris'), u.admin ? 'Administrador' : 'Usuario normal'),
             u.activo ? null : h('span.chip.mal', 'Desactivado: no puede entrar'),
             otrasEmpresas(u).map((e) => h('span.chip.gris', 'También entra a ' + nombreLocal(e))),
-            bloqueado ? h('span.chip.mal', 'Bloqueado hasta las ' + horaCorta(u.bloqueado_hasta)) : null,
             u.debe_cambiar_pin ? h('span.chip.espera', 'Debe cambiar su PIN al entrar') : null)),
         h('div.mt-btns', btnNombre, btnPin, btnAdmin, btnActivo));
     }
@@ -90,7 +88,7 @@ export default {
     }
 
     async function reiniciarPin(u, btn) {
-      const ok = await confirmar('¿Reiniciar el PIN de ' + (u.nombre || u.usuario) + '? Se le dará un PIN temporal y tendrá que cambiarlo al entrar. Si estaba bloqueado, queda libre.', { si: 'Sí, reiniciar el PIN', no: 'No, volver' });
+      const ok = await confirmar('¿Reiniciar el PIN de ' + (u.nombre || u.usuario) + '? Se le dará un PIN temporal y tendrá que cambiarlo al entrar.', { si: 'Sí, reiniciar el PIN', no: 'No, volver' });
       if (!ok) return;
       const pin = pinAzar();
       const hecho = await guardar(btn, { id: u.id, pin });
@@ -167,16 +165,17 @@ export default {
       h('div.mt-cab',
         h('div', h('p', 'Las personas que pueden entrar al facturador de ', h('strong', miEmpresa), '. Nunca se elimina a nadie: se desactiva.')),
         h('div.mt-acciones', h('button.btn.primario.grande', { type: 'button', onclick: agregar }, 'Agregar usuario'))),
-      h('div.tarjeta', { style: 'margin-bottom:1rem' },
-        h('h3', 'Cómo funciona el PIN'),
+      resumen, lista,
+      // Lo de hoy primero (quién ingresó hoy); la explicación del PIN va al final y se abre con un botón grande
+      h('details.tarjeta', { style: 'margin-top:1.2rem' },
+        h('summary', 'Cómo funciona el PIN'),
         h('ul', { style: 'margin:.4rem 0 0;padding-left:1.2rem;display:grid;gap:.3rem' },
           h('li', 'El PIN son 4 números que solo conoce cada persona. Se usa junto con el código de la empresa y el usuario para entrar.'),
-          h('li', 'Si alguien se equivoca 5 veces seguidas, el usuario se bloquea durante 15 minutos. Después puede intentar de nuevo.'),
-          h('li', 'Si alguien olvida su PIN, use "Reiniciar PIN": se le da uno temporal que tendrá que cambiar apenas entre. Eso también quita el bloqueo.'),
+          h('li', 'Si alguien se equivoca de PIN, puede intentar de nuevo de inmediato. El ingreso no se bloquea.'),
+          h('li', 'Si alguien olvida su PIN, use «Reiniciar PIN»: se le da uno temporal que tendrá que cambiar apenas entre.'),
           h('li', 'Nadie puede ver el PIN de otra persona, ni siquiera un administrador.'),
           h('li', 'Cada persona entra solo a la empresa que se le dio. Aquí se ven y se crean los usuarios de ' + miEmpresa + '.'),
-          h('li', 'Dentro de la empresa todos los usuarios tienen acceso a todo. Solo esta pantalla de Usuarios es exclusiva de los administradores.'))),
-      resumen, lista);
+          h('li', 'Dentro de la empresa todos los usuarios tienen acceso a todo. Solo esta pantalla de Usuarios es exclusiva de los administradores.'))));
     await cargar();
   },
 };

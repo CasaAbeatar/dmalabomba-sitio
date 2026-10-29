@@ -1,6 +1,8 @@
 // Arranque del facturador: inicio de sesión (código de empresa, usuario y PIN), cabecera, inicio con módulos, navegación por dirección (#) y avisos.
+// Nunca se muestra dentro de otra página (un marco): GitHub Pages no deja poner cabeceras y una etiqueta meta no admite frame-ancestors, así que se corta aquí.
+if (window.top !== window.self) { document.documentElement.replaceChildren(); throw new Error('El facturador no se muestra dentro de otra página.'); }
 import { sb, api, entrar, salir, consultarEmpresa, normalizarEmpresa, esTransitorio, esSesionVencida } from './api.js';
-import { h, toast, modal, conBoton, esqueleto, bloqueError, nombreLocal, cerrarVentanas, asentarVentanas, popEsDeVentana, conPunto, pinDebil, tiempoFalta, horaCorta } from './util.js';
+import { h, toast, modal, conBoton, esqueleto, bloqueError, nombreLocal, cerrarVentanas, asentarVentanas, popEsDeVentana, conPunto, pinDebil, textoDeError, MSG_SIN_INTERNET } from './util.js';
 import { buscar, padreDe } from './modulos.js';
 import { pantallaInicio, pantallaAdmin, pintarInsignias } from './ui_inicio.js';
 
@@ -9,7 +11,8 @@ const pausa = (ms) => new Promise((r) => setTimeout(r, ms));
 
 const guardar = (k, v) => { try { localStorage.setItem('fx_' + k, v); } catch { /* sin almacenamiento */ } };
 const leer = (k) => { try { return localStorage.getItem('fx_' + k); } catch { return null; } };
-const SESION_INVALIDA = /venci|sin acceso|JWT|not authenticated/i;
+// Una sesión que ya no sirve se reconoce por su clase de error (api.js), no por palabras. Única excepción: fx_chk contesta «Sin acceso al facturador» cuando el usuario fue desactivado.
+const esSinAcceso = (e) => !!e && (e.estado === 403 || /sin acceso al facturador/i.test(e.message || ''));
 const PIN_FACIL = 'Elija un PIN menos obvio. ';
 
 // Estado compartido con los módulos
@@ -38,8 +41,8 @@ export const app = {
   // Abre un módulo por su id, su alias o su dirección (app.ir('caja'), app.ir('anular', { foco: 'buscar' }), app.ir('inicio')). Cambia la dirección (#) y el historial.
   ir(id, pedido) { this.pedido = pedido || null; ir(id); },
 };
-// Para revisar el sistema desde las herramientas del navegador: solo si la dirección lleva ?depurar. En el uso normal no queda nada a la mano.
-try { if (new URLSearchParams(location.search).has('depurar')) window.fx = app; } catch { /* sin acceso a la dirección */ }
+// Para revisar el sistema desde las herramientas del navegador: solo en la computadora de pruebas (localhost) y si la dirección lleva ?depurar. En la página publicada no existe.
+try { if (/^(localhost|127\.0\.0\.1)$/.test(location.hostname) && new URLSearchParams(location.search).has('depurar')) window.fx = app; } catch { /* sin acceso a la dirección */ }
 
 // Ningún error se queda callado: si algo falla dentro de un botón y nadie lo avisó, sale un mensaje claro
 let ultimoAviso = { t: 0, m: '' };
@@ -48,7 +51,7 @@ window.addEventListener('unhandledrejection', (ev) => {
   if (e?.name === 'AbortError') return;
   if (esSesionVencida(e)) return; // ya sale la ventana «Entrar de nuevo»
   console.error(e);
-  const m = (e && e.message && !/^(TypeError|ReferenceError|SyntaxError)/.test(String(e.message))) ? e.message : 'Algo no salió como se esperaba. Intente de nuevo; si sigue igual, avise a la persona encargada.';
+  const m = textoDeError(e); // un error del sistema trae su frase clara; uno de programa o de red sale con la frase general o la de «sin internet»
   if (m === ultimoAviso.m && Date.now() - ultimoAviso.t < 2500) return;
   ultimoAviso = { t: Date.now(), m };
   toast(m, 'error', 7000);
@@ -78,23 +81,19 @@ function crearPad({ antes, alCompletar, textoEntrar = 'Entrar' }) {
   };
 }
 
-// Texto del error de acceso. Un bloqueo dice a qué hora termina y cuánto falta; los demás mensajes siempre terminan en punto.
-function textoErrorAcceso(e) {
-  const m = (e && e.message) || 'No se pudo entrar. Revise la conexión e intente de nuevo.';
-  const hasta = e && e.hasta ? new Date(e.hasta) : null;
-  if (e && e.estado === 429 && hasta && !Number.isNaN(+hasta)) {
-    const falta = tiempoFalta(hasta);
-    if (!falta) return 'Ya puede intentar de nuevo.';
-    const quien = e.motivo === 'empresa' ? 'Demasiados intentos para esta empresa.'
-      : e.motivo === 'empresa_desconocida' ? 'Demasiados intentos con un código de empresa que no existe.'
-      : (e.motivo === 'ip' || /conexi[oó]n/i.test(m)) ? 'Demasiados intentos desde esta conexión.'
-      : 'Demasiados intentos. Por seguridad este usuario queda bloqueado.';
-    const deUsuario = quien.includes('este usuario');
-    return quien + ' Podrá intentar de nuevo a las ' + horaCorta(hasta) + ' (faltan ' + falta + ').' + (deUsuario ? ' Si no quiere esperar, pida a un administrador que le reinicie el PIN.' : '');
+// Texto del error de acceso. El ingreso NUNCA se bloquea: no hay esperas, ni hora de desbloqueo, ni intentos que se acaban; siempre se puede probar de nuevo en seguida.
+// Un usuario o un PIN que no coinciden se dicen con palabras claras (sin revelar cuál de los dos falló). cambiarEmpresa = false en la ventana «Su sesión venció», donde la empresa y el usuario no se cambian.
+function textoErrorAcceso(e, { cambiarEmpresa = true } = {}) {
+  if (e && (e.motivo === 'empresa_desconocida' || e.motivo === 'empresa_no_habilitada')) return conPunto(e.message);
+  if (e && e.motivo === 'sin_acceso_empresa') return 'Ese usuario no tiene acceso a esta empresa.' + (cambiarEmpresa ? ' Si trabaja en otro negocio, toque «Cambiar de empresa».' : ' Avise a la persona encargada.');
+  if (e && e.estado === 401) {
+    return cambiarEmpresa
+      ? 'El usuario o el PIN no coinciden. Revise que el usuario sea el suyo y escriba el PIN otra vez; puede intentarlo de nuevo ahora mismo. Si entra a otro negocio, toque «Cambiar de empresa».'
+      : 'El PIN no coincide. Escríbalo otra vez con cuidado; puede intentarlo de nuevo ahora mismo.';
   }
-  return conPunto(m);
+  return conPunto((e && e.message) || 'No se pudo entrar. Revise la conexión e intente de nuevo.');
 }
-// Los errores esperados del acceso (PIN incorrecto, bloqueo) no son fallas: no se anotan en la consola
+// Los errores esperados del acceso (usuario o PIN que no coinciden, empresa no reconocida) no son fallas: no se anotan en la consola
 const esErrorEsperado = (e) => !!e && [400, 401, 403, 404, 429].includes(e.estado);
 
 /* ---------- Inicio de sesión: código de empresa, usuario y PIN ---------- */
@@ -114,6 +113,7 @@ function recordarEmpresa(e) {
 }
 // La respuesta del servicio de acceso (o un registro de sociedad) a lo que se guarda y se muestra
 const infoEmpresa = (e) => ({ id: e.id || null, codigo: String(e.codigo_acceso || e.codigo || '').toLowerCase(), nombre: nombreLocal(e) || 'Su empresa', cedula: e.cedula || null });
+const limpiarUsuario = (v) => normalizarEmpresa(v).slice(0, 30);
 // 3102111943 -> 3-102-111943 (cédula jurídica)
 const cedulaJuridica = (c) => { const d = String(c ?? '').replace(/\D/g, ''); return d.length === 10 ? d[0] + '-' + d.slice(1, 4) + '-' + d.slice(4) : d; };
 // Logo de cada empresa. Mientras no se sabe cuál es (pantalla de entrada, empresa que no está en la tabla) se usa un dibujo neutro que no es de ningún negocio.
@@ -151,7 +151,7 @@ function pantallaCodigo({ mensaje = '', error = '', aviso: avisoInicial = '', co
     mostrar('');
     ocupado = true; seguir.disabled = true; campo.disabled = true; seguir.textContent = 'Buscando su empresa…';
     try {
-      const e = await consultarEmpresa(campo.value, { alReintentar: () => { seguir.textContent = 'El servidor tardó. Reintentando…'; } });
+      const e = await consultarEmpresa(campo.value, { alReintentar: () => { seguir.textContent = 'La respuesta tardó. Intentando de nuevo…'; } });
       const info = infoEmpresa(e);
       recordarEmpresa(info);
       pantallaUsuario(info);
@@ -181,34 +181,32 @@ function pantallaCodigo({ mensaje = '', error = '', aviso: avisoInicial = '', co
 // Paso 2
 function pantallaUsuario(emp, mensaje) {
   raiz.replaceChildren();
-  const usuario = h('input.campo', { type: 'text', autocomplete: 'username', autocapitalize: 'none', autocorrect: 'off', spellcheck: 'false', placeholder: 'Su usuario', 'aria-label': 'Usuario', value: leer('usuario') || '' });
+  const recordado = leer('usuario') || '';
+  const usuario = h('input.campo', { type: 'text', autocomplete: 'username', autocapitalize: 'none', autocorrect: 'off', spellcheck: 'false', placeholder: 'Su usuario', 'aria-label': 'Usuario', value: recordado });
+  // En un aparato que usan varias personas el usuario de la vez anterior aparece escrito: se avisa con palabras y, al tocar el campo, queda seleccionado para escribir encima
+  const notaUsuario = recordado ? h('small.tenue.usr-nota', 'Es el último usuario que entró en este aparato. Si usted es otra persona, escriba el suyo.') : null;
   const err = h('div.error-caja', { hidden: true, role: 'alert' });
   const estado = h('div.entrando', { hidden: true, role: 'status', 'aria-live': 'polite' });
-  let reloj = null;
   const mostrarError = (m) => { err.textContent = m; err.hidden = !m; };
   const mostrarEstado = (m) => { estado.textContent = m; estado.hidden = !m; };
-  const alertar = (e) => {
-    clearInterval(reloj);
-    mostrarError(textoErrorAcceso(e));
-    if (e && e.estado === 429 && e.hasta) reloj = setInterval(() => { if (!err.isConnected) return clearInterval(reloj); mostrarError(textoErrorAcceso(e)); }, 15000); // la cuenta regresiva se actualiza sola
-  };
+  const alertar = (e) => mostrarError(textoErrorAcceso(e));
   let ocupado = false;
   const pad = crearPad({
     // Sin usuario no se acepta ningún número: así el PIN nunca queda lleno y «atascado»
     antes: () => { if (usuario.value.trim()) return true; mostrarError('Primero escriba su usuario.'); usuario.focus(); return false; },
     alCompletar: () => intentar(),
   });
-  const cambiar = h('button.btn.emp-cambiar', { type: 'button', onclick: () => { if (!ocupado) { clearInterval(reloj); pantallaCodigo({}); } } }, 'Cambiar de empresa');
+  const cambiar = h('button.btn.emp-cambiar', { type: 'button', onclick: () => { if (!ocupado) pantallaCodigo({ codigo: emp.codigo }); } }, 'Cambiar de empresa'); // el código queda escrito y seleccionado: si fue un toque sin querer, basta «Continuar»
   const bloquear = (si) => { ocupado = si; pad.bloquear(si); usuario.disabled = si; cambiar.disabled = si; };
   async function intentar() {
     if (ocupado) return;
     if (!usuario.value.trim()) { pad.limpiar(); mostrarError('Escriba su usuario.'); usuario.focus(); return; }
     if (pad.valor().length < 4) { mostrarError('El PIN tiene 4 números.'); return; }
-    clearInterval(reloj); mostrarError('');
+    mostrarError('');
     bloquear(true); mostrarEstado('Entrando…');
     try {
-      const u = usuario.value.trim().toLowerCase();
-      const j = await entrar(emp.codigo, u, pad.valor(), { alReintentar: () => mostrarEstado('El servidor tardó en responder. Reintentando…') });
+      const u = limpiarUsuario(usuario.value); // «María », «MARIA» y «ma ria» entran como «maria»: un usuario válido nunca lleva mayúsculas, tildes ni espacios
+      const j = await entrar(emp.codigo, u, pad.valor(), { alReintentar: () => mostrarEstado('La respuesta tardó. Intentando de nuevo…') });
       guardar('usuario', u);
       // El servicio de acceso nuevo devuelve la empresa de la sesión. Si todavía no la devuelve, vale la que se reconoció en el paso 1 (respaldo temporal).
       recordarEmpresa(j && j.empresa ? infoEmpresa(j.empresa) : emp);
@@ -224,7 +222,8 @@ function pantallaUsuario(emp, mensaje) {
       bloquear(false);
     }
   }
-  usuario.addEventListener('input', () => { clearInterval(reloj); mostrarError(''); });
+  usuario.addEventListener('input', () => { mostrarError(''); if (notaUsuario) notaUsuario.hidden = true; });
+  usuario.addEventListener('focus', () => { if (usuario.value) usuario.select(); });
   document.onkeydown = (e) => {
     if (document.activeElement === usuario) { if (e.key === 'Enter') { e.preventDefault(); usuario.blur(); } return; }
     if (e.ctrlKey || e.metaKey || e.altKey) return;
@@ -243,7 +242,7 @@ function pantallaUsuario(emp, mensaje) {
       cambiar),
     h('p.sub', 'Escriba su usuario y su PIN de 4 números'),
     mensaje ? h('div.error-caja', { role: 'alert' }, mensaje) : null,
-    h('label.etq', 'Usuario', usuario),
+    h('label.etq', 'Usuario', usuario, notaUsuario),
     pad.dots, estado, err, pad.teclado)));
   if (!usuario.value) usuario.focus();
 }
@@ -270,7 +269,7 @@ function pantallaCambioPin() {
     mostrar('');
     const p = problemaPinNuevo(actual.value, nuevo.value, otra.value);
     if (p) return mostrar(p);
-    try { await api.pinCambiar(actual.value, nuevo.value); toast('PIN cambiado.'); await arrancar(); } catch (e) { mostrar(conPunto(e.message)); }
+    try { await api.pinCambiar(actual.value, nuevo.value); toast('PIN cambiado.'); await arrancar(); } catch (e) { mostrar(conPunto(textoDeError(e))); }
   }) }, 'Guardar mi PIN nuevo');
   raiz.append(h('div.pantalla-centro', h('div.login.tarjeta.col',
     h('h1', 'Elija su PIN'),
@@ -294,7 +293,7 @@ function cambiarPinDialogo() {
       err.hidden = true;
       const p = problemaPinNuevo(a.value, n.value, r.value);
       if (p) { err.textContent = p; err.hidden = false; return; }
-      try { await api.pinCambiar(a.value, n.value); toast('PIN cambiado.'); c(); } catch (e) { err.textContent = conPunto(e.message); err.hidden = false; }
+      try { await api.pinCambiar(a.value, n.value); toast('PIN cambiado.'); c(); } catch (e) { err.textContent = conPunto(textoDeError(e)); err.hidden = false; }
     } }] });
 }
 
@@ -363,12 +362,12 @@ function aplicarAlertas(a) {
   if (!r && !p) { alertaEl.hidden = true; sincronizarAlturas(); document.dispatchEvent(new CustomEvent('app:alertas-cambio', { detail: a })); return; }
   const docs = (n) => (n === 1 ? '1 documento' : n + ' documentos');
   const titulo = pantallaBaja.matches
-    ? (r && p ? 'Hacienda no aceptó ' + docs(r) + ' y ' + p + (p === 1 ? ' no ha llegado.' : ' no han llegado.')
+    ? (r && p ? 'Hacienda no aceptó ' + docs(r) + ' y ' + (p === 1 ? '1 todavía no llegó a Hacienda.' : p + ' todavía no llegaron a Hacienda.')
       : r ? 'Hacienda no aceptó ' + docs(r) + '.' : docs(p) + (p === 1 ? ' no ha llegado a Hacienda.' : ' no han llegado a Hacienda.'))
     : [r ? 'Hacienda no aceptó ' + docs(r) + '.' : '', p ? (p === 1 ? '1 documento todavía no llegó a Hacienda.' : p + ' documentos todavía no llegaron a Hacienda.') : ''].filter(Boolean).join(' ');
   const u = a.ultimos && a.ultimos[0];
   const motivo = u ? sinAvisoUbicacion(u.mensaje) : '';
-  const detalle = motivo ? (u.numero ? 'N.° ' + u.numero + ': ' : '') + conPunto(motivo) : 'Toque «Ver» para revisar qué pasó y qué hay que hacer.';
+  const detalle = motivo ? (u.numero ? 'N.° ' + u.numero + ': ' : '') + conPunto(motivo) : 'Toque «Ver cuáles son» para revisar qué pasó y qué hay que hacer.';
   alertaEl.querySelector('strong').textContent = titulo;
   alertaEl.querySelector('.alerta-detalle').textContent = detalle;
   alertaEl.hidden = false;
@@ -426,6 +425,36 @@ window.addEventListener('online', async () => {
   try { await app.refrescar(); mostrarRed(false); } catch { /* se queda el aviso hasta que haya conexión de verdad */ }
 });
 
+// Qué hacer (y qué no) cuando se cae el internet, según CONTINGENCIA.md. La ventana solo dice qué hacer: no afirma nada que la página no pueda saber
+// (si un cobro en camino se hizo o no, o si lo último que se agregó llegó a guardarse).
+function abrirAyudaSinRed() {
+  const bloque = (titulo, items, clase = '') => h('section.ayuda-red-bloque' + (clase ? '.' + clase : ''), h('h3', titulo), h('ul', items.map((t) => h('li', t))));
+  modal({
+    titulo: 'Si no hay internet', ancho: 600,
+    contenido: h('div.ayuda-red',
+      h('p.ayuda-red-intro', 'Deje esta pantalla abierta. Cuando la conexión vuelva, el aviso amarillo se quita; si tarda, toque «Revisar ahora».'),
+      bloque('Qué hacer', [
+        'Si el local tiene un segundo internet (los datos de un celular o el otro router), conecte la caja a ese y toque «Revisar ahora».',
+        'Si no hay ninguna forma de conectarse, anote cada venta en el cuaderno de contingencia: hora, productos, monto, forma de pago y, si el cliente pide factura, su cédula y su correo.',
+        'Cuando vuelva la conexión, facture en orden lo que anotó y avise a la persona encargada.',
+      ]),
+      bloque('Qué NO hacer', [
+        'No cobre otra vez una cuenta si no está segura de que no se cobró. Un cobro que iba en camino puede haberse hecho aunque la pantalla no lo muestre.',
+        'No anule una factura solo porque se cayó el internet.',
+        'No recargue la página ni cierre la sesión mientras no haya conexión: lo que está en pantalla se conserva mientras siga abierta.',
+      ], 'no'),
+      bloque('Las cuentas abiertas', [
+        'Las cuentas que ya estaban abiertas se guardan en el sistema, no en este aparato. Lo último que agregó justo cuando se cayó el internet podría no haberse guardado: revíselo cuando vuelva la conexión.',
+      ]),
+      bloque('Cómo saber si ya se cobró', [
+        'Cuando vuelva la conexión, vea si la cuenta sigue entre las cuentas abiertas: si sigue ahí, no se cobró.',
+        'Si ya no está, abra «Anular o reimprimir» y busque la venta: si aparece con su número, sí se cobró.',
+        'Si la cuenta dice que el cobro quedó en duda, toque «Revisar si se cobró» en esa cuenta antes de volver a cobrar.',
+      ])),
+    botones: [{ texto: 'Entendido', clase: 'primario', onclick: (c) => c() }],
+  });
+}
+
 document.addEventListener('app:sesion-vencida', () => mostrarSesionVencida());
 // Ventana «Su sesión venció»: se queda encima de todo y no cierra nada de lo que hay detrás (cuentas abiertas, ventanas, textos escritos).
 function mostrarSesionVencida() {
@@ -437,14 +466,14 @@ function mostrarSesionVencida() {
   previos.forEach((x) => { x.inert = true; });
   const cuerpo = h('div.modal-cuerpo');
   const fondo = h('div#sesion-vencida.modal-fondo.sesion-fondo', { role: 'alertdialog', 'aria-modal': 'true', 'aria-labelledby': 'sv-tit' }, h('div.modal.sesion-caja', { style: 'max-width:420px' }, cuerpo));
-  let reloj = null;
-  const cerrar = () => { clearInterval(reloj); document.onkeydown = null; document.removeEventListener('keydown', alTeclear); fondo.remove(); previos.forEach((x) => { x.inert = false; }); };
+  const cerrar = () => { document.onkeydown = null; document.removeEventListener('keydown', alTeclear); fondo.remove(); previos.forEach((x) => { x.inert = false; }); };
   const paso1 = () => {
     cuerpo.replaceChildren(h('div.col',
       h('h2#sv-tit', 'Su sesión venció'),
       h('p', 'Por seguridad hay que volver a entrar con su PIN. Lo que tiene en pantalla no se cierra, y las cuentas que ya estaban guardadas siguen ahí.'),
       h('button.btn.primario.grande', { type: 'button', onclick: paso2 }, 'Entrar de nuevo'),
-      h('button.btn.suave', { type: 'button', onclick: () => { cerrar(); cerrarSesion(); } }, 'Cerrar sesión y salir')));
+      h('button.btn.suave', { type: 'button', onclick: () => { cerrar(); cerrarSesion(); } }, 'Cerrar sesión y salir'),
+      h('small.tenue', 'Si cierra la sesión, lo que escribió y todavía no se guardó se pierde.')));
     cuerpo.querySelector('.primario').focus();
   };
   const err = h('div.error-caja', { hidden: true, role: 'alert' });
@@ -453,7 +482,7 @@ function mostrarSesionVencida() {
   const mostrarError = (m) => { err.textContent = m; err.hidden = !m; };
   async function reentrar() {
     if (pad.valor().length < 4) { mostrarError('El PIN tiene 4 números.'); return; }
-    clearInterval(reloj); mostrarError('');
+    mostrarError('');
     pad.bloquear(true); estado.textContent = 'Entrando…'; estado.hidden = false;
     try {
       await entrar(emp.codigo, codigo, pad.valor());
@@ -465,8 +494,7 @@ function mostrarSesionVencida() {
       if (vista && vista.textContent.includes('Su sesión venció')) vista.querySelectorAll('button').forEach((b) => { if (b.textContent.trim() === 'Intentar de nuevo') b.click(); });
     } catch (e) {
       if (!esErrorEsperado(e)) console.error(e);
-      pad.limpiar(); mostrarError(textoErrorAcceso(e)); estado.hidden = true; pad.bloquear(false);
-      if (e && e.estado === 429 && e.hasta) reloj = setInterval(() => { if (!err.isConnected) return clearInterval(reloj); mostrarError(textoErrorAcceso(e)); }, 15000);
+      pad.limpiar(); mostrarError(textoErrorAcceso(e, { cambiarEmpresa: false })); estado.hidden = true; pad.bloquear(false);
     }
   }
   function paso2() {
@@ -606,8 +634,9 @@ async function mostrar(dest, forzar = false, { sinFoco = false } = {}) {
     if (mi !== irSeq) return;
     if (!esSesionVencida(e)) console.error(e);
     vista.replaceChildren(bloqueError({
-      titulo: 'Esta ventana no se pudo abrir',
-      mensaje: esTransitorio(e) || esSesionVencida(e) ? (e.message || '') : ((e && e.message) || String(e)),
+      titulo: 'Esta pantalla no se pudo abrir',
+      // Un error del sistema ya trae su frase; el de red del navegador («Failed to fetch» al cargar la pantalla) y cualquier otro se explican con palabras de la cajera
+      mensaje: e && typeof e.tipo === 'string' ? e.message : (esTransitorio(e) ? MSG_SIN_INTERNET + ' Si sigue igual, recargue la página.' : 'Revise la conexión e intente de nuevo; si sigue igual, recargue la página.'),
       alReintentar: () => mostrar(dest, true),
     }));
   } finally {
@@ -635,10 +664,13 @@ function armarApp(reciente = false) {
   vista = h('main#vista');
   alertaEl = h('div.alerta-cab', { role: 'alert', hidden: true },
     h('div.alerta-in', h('div.alerta-texto', h('strong'), h('span.alerta-detalle')),
-      h('button.btn.alerta-ver', { type: 'button', 'aria-label': 'Ver los documentos con problemas', onclick: verAlertas }, 'Ver')));
+      h('button.btn.alerta-ver', { type: 'button', 'aria-label': 'Ver cuáles son los documentos con problemas', onclick: verAlertas }, 'Ver cuáles son')));
   redEl = h('div.sin-red', { role: 'status', hidden: true },
-    h('div.sin-red-in', h('span', 'Sin conexión con el servidor. Lo que está en pantalla se conserva y todo sigue solo cuando vuelva internet.'),
-      h('button.btn.chico', { type: 'button', onclick: (e) => conBoton(e.currentTarget, async () => { await app.refrescar(); mostrarRed(false); toast('Conexión recuperada.'); }) }, 'Revisar ahora')));
+    h('div.sin-red-in',
+      h('span.sin-red-txt', h('strong', 'Sin conexión a internet. '), h('span.sin-red-mas', 'Lo que está en pantalla se conserva y el sistema seguirá solo cuando vuelva la conexión. '), 'Si un cobro quedó en duda, no lo repita: primero revise si ya se cobró.'),
+      h('div.sin-red-btns',
+        h('button.btn.chico', { type: 'button', onclick: abrirAyudaSinRed }, 'Qué hacer y qué no hacer'),
+        h('button.btn.chico', { type: 'button', onclick: (e) => conBoton(e.currentTarget, async () => { await app.refrescar(); mostrarRed(false); toast('Conexión recuperada.'); }) }, 'Revisar ahora'))));
   menuEl = h('div.cab-usuario',
     h('button.btn.cab-menu', { type: 'button', 'aria-haspopup': 'true', 'aria-expanded': 'false', 'aria-controls': 'cab-panel', onclick: () => abrirMenu(!menuEl.classList.contains('abierto')) }, 'Menú ▾'),
     h('div#cab-panel.cab-panel',
@@ -656,7 +688,7 @@ function armarApp(reciente = false) {
       tituloEl,
       h('div.cab-estado', h('span.estado-turno')),
       // Atajo siempre visible: anular una factura no debe esconderse dentro de otra pantalla. Lleva a «Anular y reimprimir» con el cursor en el buscador.
-      h('button.btn.cab-anular', { type: 'button', onclick: irAAnular }, 'Anular factura'),
+      h('button.btn.cab-anular', { type: 'button', onclick: irAAnular }, 'Anular o reimprimir'),
       menuEl),
     alertaEl, redEl);
   raiz.append(cab, vista);
@@ -709,7 +741,7 @@ async function cerrarSesion() {
 async function cargarContexto(reciente) {
   try { return await api.contexto(); }
   catch (e) {
-    if (reciente && SESION_INVALIDA.test(e?.message || '')) { await pausa(700); return await api.contexto(); }
+    if (reciente && (esSesionVencida(e) || esSinAcceso(e))) { await pausa(700); return await api.contexto(); }
     throw e;
   }
 }
@@ -721,14 +753,14 @@ async function arrancar(reciente = false) {
   try {
     app.ctx = await cargarContexto(reciente);
   } catch (e) {
-    if (SESION_INVALIDA.test(e?.message || '')) {
+    if (esSesionVencida(e) || esSinAcceso(e)) {
       await salir().catch(() => {});
-      return pantallaLogin('Ingrese de nuevo.');
+      return pantallaLogin(esSinAcceso(e) && !esSesionVencida(e) ? 'Su usuario ya no tiene acceso al facturador. Hable con la persona encargada.' : 'Su sesión ya no está abierta. Entre de nuevo.');
     }
     // Falla momentánea de red o del servicio: no se cierra la sesión, se ofrece reintentar
     raiz.replaceChildren(h('div.pantalla-centro', h('div.login.tarjeta.col',
       h('h1', 'Sin conexión por un momento'),
-      h('p.sub', (esTransitorio(e) && e.message ? e.message + ' ' : '') + 'Su sesión sigue abierta.'),
+      h('p.sub', (e && typeof e.tipo === 'string' && e.message ? conPunto(e.message) + ' ' : '') + 'No se cerró su sesión.'),
       h('button.btn.primario.grande', { type: 'button', onclick: (ev) => conBoton(ev.currentTarget, () => arrancar()) }, 'Intentar de nuevo'),
       h('button.btn.suave', { type: 'button', onclick: async () => { await salir().catch(() => {}); pantallaLogin(); } }, 'Salir'))));
     return;

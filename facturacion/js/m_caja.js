@@ -1,5 +1,6 @@
 // Caja: la pantalla que usa el cajero todo el día (abrir caja, cuentas, productos, prefactura y cobro).
 import { crearZonaEfectivo } from './ui_efectivo_rapido.js';
+import { crearFormularioApertura } from './ui_apertura.js';
 import { errorActividad, limpiarActividad } from './ui_cedula.js';
 import { selectorCliente } from './ui_cliente.js';
 import { apiM } from './api_mantenimiento.js';
@@ -7,7 +8,7 @@ import { esTransitorio } from './api.js';
 import { TARIFAS_IVA, tarifaDeLinea, desgloseIva, tarifaHabitual } from './iva.js';
 import { infoActividad, textoActividad } from './actividades.js';
 import { ordenarMenu } from './orden_menu.js';
-import { h, money, money0, num, leerNumero, toast, modal, pedir, confirmar, conBoton, esqueleto, bloqueError, nombreLocal, TIPOS_SERVICIO, TIPOS_DOC, TIPOS_ID, MEDIOS, describirEstado, traducirHacienda, numeroDoc, nombrePropio } from './util.js';
+import { h, money, money0, num, leerNumero, toast, modal, pedir, confirmar, conBoton, esqueleto, bloqueError, nombreLocal, textoDeError, TIPOS_SERVICIO, TIPOS_DOC, TIPOS_ID, MEDIOS, describirEstado, traducirHacienda, numeroDoc, nombrePropio } from './util.js';
 
 const CSS_URL = new URL('../css/caja.css', import.meta.url).href;
 function cargarCss() {
@@ -60,7 +61,7 @@ function llevarALaVista(el) {
   }, { once: true });
 }
 // Envuelve lo que hace un botón: si algo falla, se avisa en palabras en vez de dejar un error sin atender en la consola
-const seguro = (fn) => (...a) => Promise.resolve().then(() => fn(...a)).catch((e) => { console.error(e); toast((e && e.message) || 'Algo no salió bien. Intente de nuevo.', 'error', 7000); });
+const seguro = (fn) => (...a) => Promise.resolve().then(() => fn(...a)).catch((e) => { console.error(e); toast(textoDeError(e), 'error', 7000); });
 // Motivos que se tocan de un solo toque al anular una cuenta abierta
 const MOTIVOS_ANULAR = ['El cliente se fue', 'Error al digitar', 'El cliente no recogió el pedido', 'Cuenta repetida'];
 let moduloImp = null;
@@ -127,7 +128,7 @@ function avisoCobroSinCaja(comp, app, aviso) {
     try {
       await (await imp()).imprimirComprobante(comp.id, { formato: fmt, copias: aj.copias });
       impEstado.textContent = 'Se abrió la impresión. Si no salió, toque el botón otra vez.';
-    } catch (e) { impEstado.className = 'tenue-linea msg-mal'; impEstado.textContent = 'No se pudo imprimir: ' + (e.message || e) + ' Toque el botón otra vez.'; }
+    } catch (e) { impEstado.className = 'tenue-linea msg-mal'; impEstado.textContent = 'No se pudo imprimir: ' + textoDeError(e) + ' Toque el botón otra vez.'; }
   };
   const texto = 'Cobro registrado, ' + nombreDoc + (num ? ' N.° ' + num : '') + ' por ' + money(comp.total) + '.';
   toast(texto, 'ok', 12000);
@@ -211,15 +212,18 @@ export default {
     let abiertas = [];
     let cur = null; // respuesta de fx_venta de la cuenta activa
     let cajonSel = null;
-    let grupoSel = null; // nivel 3: clave de 4 dígitos (cajón + producto) cuyos modificadores se están viendo; null = nivel 2
+    let grupoSel = null; // clave de 4 dígitos (cajón + producto) cuyas opciones están abiertas en el panel de opciones; null = panel cerrado
     let vista = 'productos'; // celular: productos | cuenta
     let turnoMostrado = null;
     let ocupadas = 0;
     let cola = Promise.resolve();
     let zonaEfectivo = null; // las cajitas de entrada y salida de efectivo (arriba a la derecha); se actualizan solas, sin tocar la cuenta
-    let buscador = null, asideCuenta = null, barraCuentas = null, barraExtras = null, gridProd = null, tabsCajon = null, barraMovil = null, cajaEl = null, buscadorWrap = null;
-    const tarjetas = new Map(); // producto_id -> {badge}
+    let buscador = null, asideCuenta = null, barraCuentas = null, gridProd = null, tabsCajon = null, panelOpc = null, medioCat = null, barraMovil = null, cajaEl = null, buscadorWrap = null;
+    const tarjetas = new Map(); // producto_id -> badge (productos que se cobran con un toque)
+    const tarjetasMod = new Map(); // producto_id -> badge (opciones del producto abierto)
     const tarjetasGrupo = new Map(); // clave de producto con modificadores -> badge con el total de sus modificadores en la cuenta
+    const btnsGrupo = new Map(); // clave de producto con modificadores -> su mosaico (para marcar el que tiene las opciones abiertas)
+    const gruposActuales = new Map(); // clave -> grupo del cajón que se está viendo
     const timers = [];
 
     // Las acciones sobre la cuenta se hacen una tras otra para que dos toques rápidos no se pisen.
@@ -237,7 +241,7 @@ export default {
         await accion(fn);
       }));
       avisoEl = h('div.aviso-red', { role: 'alert' },
-        h('div.aviso-red-txt', h('strong', 'El último cambio no se guardó. '), (e.message || '') + ' Su cuenta sigue en pantalla.'),
+        h('div.aviso-red-txt', h('strong', 'El último cambio no se guardó. '), textoDeError(e) + ' Su cuenta sigue en pantalla.'),
         h('div.fila', intentar, h('button.btn', { type: 'button', onclick: quitarAviso }, 'Dejar la cuenta como está')));
       barraAviso?.replaceChildren(avisoEl);
     }
@@ -251,7 +255,7 @@ export default {
         catch (e) {
           if (estado) estado.error = e;
           if (esTransitorio(e) && idCuenta) avisoDeRed(e, fn, antes, idCuenta);
-          else toast(e.message || String(e), 'error', 7000);
+          else toast(textoDeError(e), 'error', 7000);
           // Alguien desactivó ese producto desde otro aparato: se vuelve a pedir el menú para que ya no aparezca
           if (/desactivado y no se puede vender/i.test(e?.message || '')) setTimeout(revisarCatalogo, 500);
           if (cur && asideCuenta) pintarCuenta();
@@ -303,7 +307,7 @@ export default {
     function sincronizarBarra() {
       if (!cur) return;
       const v = cur.venta;
-      const fila = { id: v.id, numero: v.numero, estado: v.estado, tipo_servicio: v.tipo_servicio, referencia: v.referencia, telefono: v.telefono, prefactura_numero: v.prefactura_numero, total: v.total, creado_en: v.creado_en, cliente_id: v.cliente_id, lineas: cur.lineas.length };
+      const fila = { id: v.id, numero: v.numero, estado: v.estado, tipo_servicio: v.tipo_servicio, referencia: v.referencia, telefono: v.telefono, prefactura_numero: v.prefactura_numero, prefactura_vigente: v.prefactura_vigente, prefactura_revision: v.prefactura_revision, total: v.total, creado_en: v.creado_en, cliente_id: v.cliente_id, lineas: cur.lineas.length };
       const i = abiertas.findIndex((a) => a.id === v.id);
       if (i >= 0) abiertas[i] = fila; else abiertas.push(fila);
       abiertas.sort((a, b) => (a.creado_en < b.creado_en ? -1 : 1));
@@ -314,52 +318,46 @@ export default {
     }
 
     /* ---------- Sin turno: abrir caja ---------- */
-    function pintarSinTurno() {
-      const fondo = h('input.campo.monto-grande', { type: 'text', inputmode: 'decimal', placeholder: '0', 'aria-label': 'Efectivo con que abre la caja', autocomplete: 'off' });
-      const err = h('div.error-caja', { hidden: true });
-      const abrir = h('button.btn.primario.grande', { type: 'button', style: 'width:100%' }, 'Abrir caja');
-      const hacer = () => conBoton(abrir, async () => {
-        err.hidden = true;
-        const txt = fondo.value.trim();
-        const v = txt === '' ? 0 : leerNumero(txt);
-        if (!Number.isFinite(v) || v < 0) { err.textContent = 'Escriba cuánto efectivo hay en la caja al empezar, por ejemplo 20000. Si no hay, escriba 0.'; err.hidden = false; fondo.focus(); return; }
-        await api.turnoAbrir(socId, app.terminal, v);
-        await app.refrescar();
-        if ((app.turno?.id || null) !== turnoMostrado) await iniciar();
-      });
-      abrir.addEventListener('click', hacer);
-      fondo.addEventListener('keydown', (e) => { if (e.key === 'Enter') hacer(); });
+    async function pintarSinTurno() {
+      // Mismo formulario que «Apertura y cierre de caja»: atajos de un toque, lectura «Abrirá la caja con ₡X» y sin abrir en ₡0 por descuido.
+      // La sugerencia es lo contado al cerrar el último turno; solo se escribe si la persona la toca.
+      let sugerido = null;
+      try {
+        const t = ((await api.turnos(socId, 5)) || []).find((x) => x.cerrado_en && x.contado_efectivo != null);
+        if (t) sugerido = { monto: Number(t.contado_efectivo), cuando: t.cerrado_en };
+      } catch { /* la sugerencia es opcional */ }
+      if (!vivo) return;
+      const form = crearFormularioApertura({ api, socId, terminal: app.terminal, local: nombreLocal(app.soc), sugerido,
+        alAbrir: async () => { await app.refrescar(); if ((app.turno?.id || null) !== turnoMostrado) await iniciar(); } });
       zonaEfectivo?.destruir();
-      zonaEfectivo = crearZonaEfectivo({ turnoId: null, alAbrirCaja: () => { try { fondo.scrollIntoView({ block: 'center' }); } catch { /* nada */ } fondo.focus(); } });
-      const atajos = [0, 10000, 20000, 50000].map((n) => h('button.btn', { type: 'button', onclick: () => { fondo.value = String(n); fondo.focus(); } }, n === 0 ? 'Sin fondo (₡0)' : money0(n)));
+      zonaEfectivo = crearZonaEfectivo({ turnoId: null, alAbrirCaja: () => form.enfocar(), motivos: { entrada: app.ctx?.motivos_entrada_efectivo, salida: app.ctx?.motivos_salida_efectivo } });
       root.replaceChildren(h('div.caja-sin-turno', zonaEfectivo.el), h('div.caja-abrir.tarjeta',
         h('h1', 'Abrir caja'),
-        h('p', 'La caja de ' + nombreLocal(app.soc) + ' está cerrada. Para empezar a vender, escriba solo el efectivo con que abre la caja.'),
-        h('label.etq', 'Efectivo con que abre la caja (₡)', fondo),
-        h('div.atajos', atajos),
-        err, abrir));
-      fondo.focus();
+        h('p', 'La caja de ' + nombreLocal(app.soc) + ' está cerrada. Para empezar a vender, abra la caja.'),
+        form.el));
+      form.enfocar();
     }
 
     /* ---------- Estructura de la caja con turno abierto ---------- */
     function armarCaja() {
       barraCuentas = h('div.cuentas-bar');
-      barraExtras = h('div.cuentas-extras');
       buscador = crearBuscador({ alElegir: (p) => agregarProducto(p), enLinea: false });
       buscadorWrap = h('div.buscador', buscador.el);
       tabsCajon = h('div.cajones', { role: 'group', 'aria-label': 'Cajones de productos', onscroll: bordeCajones });
       if (typeof ResizeObserver === 'function') new ResizeObserver(bordeCajones).observe(tabsCajon);
-      gridProd = h('div.productos');
+      gridProd = h('div.productos', { role: 'group', 'aria-label': 'Productos del cajón' });
+      panelOpc = h('aside.opciones', { 'aria-label': 'Opciones del producto elegido', hidden: true });
+      medioCat = h('div.catalogo-medio', gridProd, panelOpc);
       asideCuenta = h('aside.caja-cuenta', { 'aria-label': 'Cuenta activa' });
       barraMovil = h('div.barra-movil');
       barraAviso = h('div.avisos-caja');
       zonaEfectivo?.destruir();
-      zonaEfectivo = crearZonaEfectivo({ turnoId: turnoMostrado });
+      zonaEfectivo = crearZonaEfectivo({ turnoId: turnoMostrado, motivos: { entrada: app.ctx?.motivos_entrada_efectivo, salida: app.ctx?.motivos_salida_efectivo } });
       cajaEl = h('div.caja.v-' + vista,
         barraAviso,
         h('div.caja-cuerpo',
-          h('div.caja-izq', barraCuentas, barraExtras, buscadorWrap,
-            h('section.caja-catalogo', { 'aria-label': 'Productos' }, tabsCajon, gridProd)),
+          h('div.caja-izq', barraCuentas, buscadorWrap,
+            h('section.caja-catalogo', { 'aria-label': 'Productos' }, tabsCajon, medioCat)),
           h('div.caja-der', zonaEfectivo.el, asideCuenta)),
         barraMovil);
       root.replaceChildren(cajaEl);
@@ -375,6 +373,17 @@ export default {
       const cab = document.querySelector('.cabecera');
       if (cab) document.documentElement.style.setProperty('--cab-h', (window.matchMedia('(max-width:979px)').matches ? 0 : cab.offsetHeight) + 'px');
       if (buscadorWrap) document.documentElement.style.setProperty('--bus-h', buscadorWrap.offsetHeight + 'px');
+      // En pantalla grande la parte izquierda mide justo lo que queda de pantalla: los cajones siempre arriba y solo se desplazan los productos y las opciones por dentro
+      const izq = cajaEl?.querySelector('.caja-izq');
+      if (izq) {
+        if (window.matchMedia('(min-width:980px)').matches) {
+          const arriba = izq.getBoundingClientRect().top + window.scrollY;
+          izq.style.setProperty('--caja-alto', Math.max(0, Math.floor(window.innerHeight - arriba - 18)) + 'px');
+        } else izq.style.removeProperty('--caja-alto');
+      }
+      if (tabsCajon) document.documentElement.style.setProperty('--cajones-h', tabsCajon.offsetHeight + 'px');
+      // Celular: el panel de opciones queda fijo sobre la barra de abajo; su alto se reserva al final de la lista para que ningún producto quede tapado
+      document.documentElement.style.setProperty('--opc-h', (panelOpc && !panelOpc.hidden && window.matchMedia('(max-width:979px)').matches ? panelOpc.offsetHeight : 0) + 'px');
     }
     // En celular deja el buscador arriba de la pantalla (la cabecera de la app sube y se va)
     function irAlBuscador() {
@@ -439,29 +448,39 @@ export default {
     }
 
     /* ---------- Cajones y productos ---------- */
-    // Desvanecido al pie de la caja de cajones mientras haya más filas por ver (avisa que se puede bajar)
+    // Los cajones están siempre arriba. En pantalla ancha se ven los 16 a la vez; en pantalla angosta son una tira que se desliza de lado,
+    // y un desvanecido en el borde avisa que hay más cajones hacia ese lado.
     function bordeCajones() {
       if (!tabsCajon) return;
-      tabsCajon.classList.toggle('mas-abajo', tabsCajon.scrollHeight - tabsCajon.scrollTop - tabsCajon.clientHeight > 4);
+      const sobra = tabsCajon.scrollWidth - tabsCajon.clientWidth;
+      tabsCajon.classList.toggle('mas-der', sobra > 6 && sobra - tabsCajon.scrollLeft > 6);
+      tabsCajon.classList.toggle('mas-izq', sobra > 6 && tabsCajon.scrollLeft > 6);
     }
+    // Alto de lo que queda pegado arriba en el celular (buscador + tira de cajones): hasta ahí hay que bajar la lista para que no quede tapada
+    const altoPegado = () => {
+      const bus = buscadorWrap?.offsetHeight || 0, caj = tabsCajon?.offsetHeight || 0;
+      return bus + caj + 8;
+    };
     function pintarCajones() {
-      // Cada cajón es un mosaico del mismo tamaño que los productos y los modificadores, numerado con su código (01, 02…), que es también el comienzo del código de sus productos
+      // Cada cajón es un mosaico del mismo alto que los productos y las opciones, numerado con su código (01, 02…), que es también el comienzo del código de sus productos
       tabsCajon.replaceChildren(...catalogo.cajones.map((c) => h('button.cajon-btn.mos.mos-1', {
         type: 'button', title: c.nombre, 'aria-pressed': String(c.id === cajonSel),
+        'aria-label': 'Cajón ' + c.codigo + ', ' + c.nombre,
         onclick: () => {
           cajonSel = c.id; grupoSel = null; pintarCajones(); pintarProductos();
-          // En teléfono y tableta vertical los productos quedan debajo de la caja de cajones: se lleva la vista hasta ellos
-          if (window.matchMedia?.('(max-width:979px)').matches) requestAnimationFrame(() => gridProd.scrollIntoView?.({ block: 'start', behavior: 'smooth' }));
+          // Celular: si la página estaba bajada, la lista nueva se muestra desde su primer producto (sin tocar nada si ya se ve)
+          if (window.matchMedia?.('(max-width:979px)').matches) requestAnimationFrame(() => {
+            if (medioCat.getBoundingClientRect().top < altoPegado() - 2) window.scrollTo({ top: Math.max(0, medioCat.getBoundingClientRect().top + window.scrollY - altoPegado()), behavior: 'smooth' });
+          });
         },
-      }, h('span.mos-cab', h('span.mos-num', { 'aria-hidden': 'true' }, c.codigo)), h('span.mos-nombre', c.nombre))));
-      requestAnimationFrame(bordeCajones);
-      // La caja de cajones muestra poco más de dos filas: el cajón elegido se deja siempre a la vista dentro de ella (sin mover la página)
-      const elegido = tabsCajon.querySelector('[aria-pressed=true]');
-      if (elegido && tabsCajon.clientHeight) {
-        const arriba = elegido.offsetTop, abajo = arriba + elegido.offsetHeight;
-        if (arriba < tabsCajon.scrollTop) tabsCajon.scrollTop = Math.max(0, arriba - 8);
-        else if (abajo > tabsCajon.scrollTop + tabsCajon.clientHeight) tabsCajon.scrollTop = abajo - tabsCajon.clientHeight + 8;
-      }
+      }, h('span.mos-nombre', h('span.mos-num', { 'aria-hidden': 'true' }, c.codigo), c.nombre))));
+      requestAnimationFrame(() => {
+        // En la tira, el cajón elegido se deja en el centro (solo se mueve la tira, no la página)
+        const elegido = tabsCajon.querySelector('[aria-pressed=true]');
+        if (elegido && tabsCajon.scrollWidth > tabsCajon.clientWidth + 6) tabsCajon.scrollLeft = Math.max(0, elegido.offsetLeft - (tabsCajon.clientWidth - elegido.offsetWidth) / 2);
+        bordeCajones();
+        midePegajosos();
+      });
     }
     // Cascada de 3 niveles, igual que Prisma: cajón (nivel 1) → producto (nivel 2) → modificador (nivel 3).
     // Un artículo con modificador_nombre pertenece a un producto con opciones (código CCPPMM, mismo CCPP).
@@ -478,58 +497,94 @@ export default {
       return salida;
     }
     const sonido = (b) => { b.classList.add('tocado'); setTimeout(() => b.classList.remove('tocado'), 180); };
-    // Mosaico de un artículo. numero = su lugar en la lista que se ve; nivel 2 = producto (ámbar), nivel 3 = modificador (verde azulado).
-    function tarjetaArticulo(p, nombre, alAgregar, numero, nivel = 2) {
+    // Precio corto para el mosaico: sin «,00» cuando es un monto entero, para que quepa en una línea
+    const precioCorto = (n) => (Number.isInteger(Number(n)) ? money0(n) : money(n));
+    const textoPrecioCorto = (p) => (p.descripcion_libre ? 'Detalle y precio' : p.precio_abierto ? 'Precio abierto' : precioCorto(p.precio_final));
+    // Mosaico de un artículo que se cobra con un toque. numero = su lugar en la lista que se ve; nivel 2 = producto (ámbar), nivel 3 = opción (verde azulado).
+    // El número va pegado al nombre y el pie lleva el código a la izquierda y el precio a la derecha: no queda espacio en blanco dentro del mosaico.
+    function tarjetaArticulo(p, nombre, alAgregar, numero, nivel = 2, registro = tarjetas) {
       const badge = h('span.prod-cuenta', { hidden: true, 'aria-hidden': 'true' });
       const btn = h('button.prod.mos.mos-' + nivel, {
-        type: 'button', title: nombre, 'aria-label': 'Agregar ' + p.nombre + ', ' + (p.descripcion_libre ? 'se escribe el detalle y el precio' : p.precio_abierto ? 'precio abierto' : money(p.precio_final)),
+        type: 'button', title: nombre + ' · código ' + p.codigo, 'aria-label': 'Agregar ' + p.nombre + ', ' + (p.descripcion_libre ? 'se escribe el detalle y el precio' : p.precio_abierto ? 'precio abierto' : money(p.precio_final)),
         onclick: (e) => { sonido(e.currentTarget); alAgregar?.(); agregarProducto(p); },
-      }, h('span.mos-cab', h('span.mos-num', { 'aria-hidden': 'true' }, String(numero ?? '')), h('span.prod-cod', p.codigo)),
-      h('span.prod-nombre.mos-nombre', nombre),
-      h('span.prod-pie', h('span.prod-precio' + (p.precio_abierto || p.descripcion_libre ? '.abierto' : ''), textoPrecio(p))), badge);
-      tarjetas.set(p.id, badge);
+      }, h('span.prod-nombre.mos-nombre', h('span.mos-num', { 'aria-hidden': 'true' }, String(numero ?? '')), nombre),
+      h('span.prod-pie', h('span.prod-cod', p.codigo), h('span.prod-precio' + (p.precio_abierto || p.descripcion_libre ? '.abierto' : ''), textoPrecioCorto(p))), badge);
+      registro.set(p.id, badge);
       return btn;
     }
+    // Mosaico de un producto con opciones: al tocarlo se abre su panel de opciones al lado (o debajo) y queda marcado; los productos siguen a la vista.
     function tarjetaGrupo(g, numero) {
       const precios = g.opciones.filter((p) => !p.precio_abierto && !p.descripcion_libre && Number(p.precio_final) > 0).map((p) => Number(p.precio_final));
       const min = precios.length ? Math.min(...precios) : null, max = precios.length ? Math.max(...precios) : null;
       const n = g.opciones.length;
-      const resumen = min == null ? 'Precio abierto' : min === max ? money(min) : 'desde ' + money(min);
+      const resumen = min == null ? 'Precio abierto' : min === max ? precioCorto(min) : 'desde ' + precioCorto(min);
       const badge = h('span.prod-cuenta', { hidden: true, 'aria-hidden': 'true' });
       const btn = h('button.prod.prod-grupo.mos.mos-2', {
-        type: 'button', title: g.nombre, 'aria-label': 'Abrir ' + g.nombre + ', ' + n + (n === 1 ? ' opción' : ' opciones') + ', ' + resumen,
-        onclick: (e) => { sonido(e.currentTarget); grupoSel = g.clave; pintarProductos(); gridProd.scrollTop = 0; },
-      }, h('span.mos-cab', h('span.mos-num', { 'aria-hidden': 'true' }, String(numero ?? '')), h('span.prod-opciones', n + (n === 1 ? ' opción ›' : ' opciones ›'))),
-      h('span.prod-nombre.mos-nombre', g.nombre),
-      h('span.prod-pie', min != null && min !== max ? h('span.prod-precio', h('small.prod-desde', 'desde '), money(min)) : h('span.prod-precio' + (min == null ? '.abierto' : ''), resumen)), badge);
+        type: 'button', title: g.nombre + ' · ' + n + (n === 1 ? ' opción' : ' opciones'), 'aria-pressed': String(g.clave === grupoSel),
+        'aria-label': 'Ver las ' + n + (n === 1 ? ' opción' : ' opciones') + ' de ' + g.nombre + ', ' + (min == null ? 'precio abierto' : min === max ? money(min) : 'desde ' + money(min)),
+        onclick: (e) => { sonido(e.currentTarget); abrirGrupo(g); },
+      }, h('span.prod-nombre.mos-nombre', h('span.mos-num', { 'aria-hidden': 'true' }, String(numero ?? '')), g.nombre),
+      h('span.prod-pie', h('span.prod-precio' + (min == null ? '.abierto' : ''), resumen), h('span.prod-flecha', { 'aria-hidden': 'true' }, '›')), badge);
       tarjetasGrupo.set(g.clave, badge);
+      btnsGrupo.set(g.clave, btn);
       return btn;
     }
+    function marcarGrupo() {
+      for (const [clave, b] of btnsGrupo) b.setAttribute('aria-pressed', String(clave === grupoSel));
+    }
+    function abrirGrupo(g) {
+      grupoSel = g.clave;
+      marcarGrupo();
+      pintarPanel(g);
+      panelOpc.querySelector('.opciones-grid')?.scrollTo?.(0, 0);
+      // Celular: la lista de productos sube hasta quedar justo debajo de la tira de cajones, así se ve la mayor parte posible entre la tira y el panel de opciones;
+      // si el producto elegido quedara tapado por el panel, la página sube hasta que él quede arriba de la franja
+      if (window.matchMedia?.('(max-width:979px)').matches) requestAnimationFrame(() => {
+        const b = btnsGrupo.get(g.clave);
+        if (!b || panelOpc.hidden) return;
+        const arriba = altoPegado(), abajo = panelOpc.getBoundingClientRect().top - 6;
+        const lista = gridProd.getBoundingClientRect(), r = b.getBoundingClientRect();
+        let sube = lista.top - arriba;
+        if (r.bottom - sube > abajo) sube = r.top - arriba;
+        if (Math.abs(sube) > 2) window.scrollTo({ top: Math.max(0, window.scrollY + sube), behavior: 'smooth' });
+      });
+    }
+    function cerrarPanel() {
+      grupoSel = null;
+      marcarGrupo();
+      pintarPanel(null);
+    }
+    // Panel de opciones (nivel 3): sin «Volver». Los productos y los cajones se quedan a la vista; el panel se cambia tocando otro producto y se cierra con «Cerrar opciones».
+    function pintarPanel(g) {
+      tarjetasMod.clear();
+      medioCat.classList.toggle('con-opciones', !!g);
+      panelOpc.hidden = !g;
+      if (!g) { panelOpc.replaceChildren(); midePegajosos(); return; }
+      panelOpc.replaceChildren(
+        h('div.opciones-cab',
+          h('div.opciones-tit', h('strong', g.nombre), h('small', 'Toque la opción que desea agregar a la cuenta')),
+          h('button.btn.cerrar-opc', { type: 'button', onclick: cerrarPanel, 'aria-label': 'Cerrar las opciones de ' + g.nombre }, 'Cerrar opciones')),
+        h('div.opciones-grid', { role: 'group', 'aria-label': 'Opciones de ' + g.nombre }, ...g.opciones.map((p, i) => tarjetaArticulo(p, p.modificador_nombre, null, i + 1, 3, tarjetasMod))));
+      actualizarInsignias();
+      midePegajosos();
+    }
+    // Tres zonas a la vez: cajones (arriba), productos del cajón y, al lado, las opciones del producto elegido.
+    // Sin «Volver»: tocar otro cajón o otro producto cambia lo que se ve sin pasos intermedios.
     function pintarProductos() {
-      tarjetas.clear(); tarjetasGrupo.clear();
-      tabsCajon.hidden = false;
+      tarjetas.clear(); tarjetasGrupo.clear(); btnsGrupo.clear(); gruposActuales.clear();
       const lista = productos.filter((p) => p.cajon_id === cajonSel);
-      if (!lista.length) { gridProd.replaceChildren(h('div.vacio', { style: 'grid-column:1/-1' }, 'Este cajón no tiene productos activos.')); return; }
-      // Productos de la A a la Z, con los adicionales al final y de últimos el adicional extra y las porciones extra
-      const niveles = ordenarMenu(nivelesDelCajon(lista), (x) => (x.grupo ? x.grupo.nombre : x.directo.nombre));
-      const abierto = grupoSel && niveles.map((x) => x.grupo).find((g) => g && g.clave === grupoSel);
-      if (grupoSel && !abierto) grupoSel = null; // el catálogo cambió y ese producto ya no existe
-      tabsCajon.hidden = !!abierto; // en el nivel 3 solo se ven las opciones; «Volver» regresa al nivel 2
-      gridProd.classList.toggle('nivel-3', !!abierto); // la caja de modificadores lleva su propio color
-      if (abierto) {
-        // Nivel 3: modificadores del producto elegido, cada uno con su precio final. Al tocar uno se agrega y se vuelve al nivel 2.
-        const cajon = catalogo.cajones.find((c) => c.id === cajonSel);
-        const volver = () => { grupoSel = null; pintarProductos(); gridProd.scrollTop = 0; };
-        gridProd.replaceChildren(
-          h('div.nivel3-cab',
-            h('button.btn.volver', { type: 'button', onclick: volver, 'aria-label': 'Volver a ' + (cajon?.nombre || 'los productos') }, '‹ Volver'),
-            h('div.nivel3-tit', h('strong', abierto.nombre), h('small', 'Toque la opción que desea agregar a la cuenta'))),
-          ...abierto.opciones.map((p, i) => tarjetaArticulo(p, p.modificador_nombre, volver, i + 1, 3)));
-        actualizarInsignias();
-        gridProd.querySelector('.nivel3-cab')?.scrollIntoView({ block: 'nearest' });
+      if (!lista.length) {
+        gridProd.replaceChildren(h('div.vacio', { style: 'grid-column:1/-1' }, 'Este cajón no tiene productos activos.'));
+        grupoSel = null; pintarPanel(null);
         return;
       }
+      // Productos de la A a la Z, con los adicionales al final y de últimos el adicional extra y las porciones extra
+      const niveles = ordenarMenu(nivelesDelCajon(lista), (x) => (x.grupo ? x.grupo.nombre : x.directo.nombre));
+      niveles.forEach((x) => { if (x.grupo) gruposActuales.set(x.grupo.clave, x.grupo); });
+      const abierto = grupoSel ? gruposActuales.get(grupoSel) || null : null;
+      if (grupoSel && !abierto) grupoSel = null; // el catálogo cambió y ese producto ya no existe
       gridProd.replaceChildren(...niveles.map((x, i) => (x.grupo ? tarjetaGrupo(x.grupo, i + 1) : tarjetaArticulo(x.directo, x.directo.nombre, null, i + 1, 2))));
+      pintarPanel(abierto);
       actualizarInsignias();
     }
     function actualizarInsignias() {
@@ -540,10 +595,12 @@ export default {
         const p = prodPorId.get(l.producto_id);
         if (p?.modificador_nombre) { const k = p.codigo.slice(0, 4); porGrupo.set(k, (porGrupo.get(k) || 0) + n); }
       });
-      for (const [id, badge] of tarjetas) {
-        const n = cuenta.get(id);
-        badge.hidden = !n;
-        if (n) badge.textContent = num(n, 3);
+      for (const registro of [tarjetas, tarjetasMod]) {
+        for (const [id, badge] of registro) {
+          const n = cuenta.get(id);
+          badge.hidden = !n;
+          if (n) badge.textContent = num(n, 3);
+        }
       }
       for (const [clave, badge] of tarjetasGrupo) {
         const n = porGrupo.get(clave);
@@ -559,7 +616,7 @@ export default {
         return h('button.cuenta-btn' + (c.estado === 'prefacturada' ? '.prefact' : ''), {
           type: 'button', 'aria-pressed': String(!!act), 'data-id': c.id,
           onclick: () => { if (!act) accion(async () => { cur = await api.venta(c.id); guardarActiva(); repintar(); }); cambiarVista('cuenta'); },
-        }, h('span.c-tipo', (TIPOS_SERVICIO[c.tipo_servicio] || c.tipo_servicio) + (c.estado === 'prefacturada' ? ' · prefactura' : '')),
+        }, h('span.c-tipo', (TIPOS_SERVICIO[c.tipo_servicio] || c.tipo_servicio) + (c.estado === 'prefacturada' ? (c.prefactura_vigente === false ? ' · cambió, imprima otra prefactura' : ' · prefactura') : '')),
         h('span.c-ref', c.referencia || numCuenta(c.numero)),
         h('span.c-tot', c.lineas + (Number(c.lineas) === 1 ? ' producto · ' : ' productos · ') + money(c.total)));
       });
@@ -573,14 +630,14 @@ export default {
         envoltura.classList.toggle('mas-izq', lista.scrollLeft > 6);
       };
       lista.addEventListener('scroll', pistaViva, { passive: true });
-      barraCuentas.replaceChildren(envoltura, h('button.btn.primario', { type: 'button', onclick: seguro(nuevaCuenta) }, 'Nueva cuenta'));
+      // «Impresora» va en la misma fila que «Nueva cuenta» (antes ocupaba una fila entera casi vacía)
+      barraCuentas.replaceChildren(envoltura, h('button.btn.primario', { type: 'button', onclick: seguro(nuevaCuenta) }, 'Nueva cuenta'),
+        h('button.btn.btn-impresora', { type: 'button', onclick: seguro(async () => { try { (await imp()).abrirAjustesImpresion(); } catch (e) { toast(textoDeError(e), 'error', 6000); } }) }, 'Impresora'));
       // La cuenta activa se deja a la vista y se revisa si quedan cuentas escondidas hacia un lado
       requestAnimationFrame(() => {
         lista.querySelector('.cuenta-btn[aria-pressed=true]')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
         pistaViva();
       });
-      barraExtras.replaceChildren(
-        h('button.btn', { type: 'button', onclick: seguro(async () => { try { (await imp()).abrirAjustesImpresion(); } catch (e) { toast(e.message, 'error', 6000); } }) }, 'Impresora'));
     }
 
     /* ---------- Ventana de datos de cuenta ---------- */
@@ -755,7 +812,7 @@ export default {
           if (cents(r.pr) !== cents(linea.precio_final)) cambios.precio = r.pr;
           if (cambioTarifa) cambios.codigoTarifa = cambioTarifa;
           if (!Object.keys(cambios).length) { m.cerrar(); toast('No hubo cambios en la línea.'); return; }
-          await accion(async () => { cur = await api.lineaEditar(linea.id, cambios); repintar(); toast('Línea actualizada.'); }, st);
+          await accion(async () => { cur = await api.lineaEditar(linea.id, cambios); repintar(); toast('Producto actualizado.'); }, st);
         }
         // Si el servidor rechazó lo escrito, la ventana sigue abierta para corregir; si fue la red, el aviso «Intentar de nuevo» se encarga
         if (st.error && !esTransitorio(st.error)) { guardar.disabled = false; return; }
@@ -885,7 +942,7 @@ export default {
         const ids = cur.lineas.filter((l) => tarifaDeLinea(l).codigo !== t.codigo).map((l) => l.id);
         for (const idl of ids) cur = await api.lineaEditar(idl, { codigoTarifa: t.codigo });
         repintar();
-        if (ids.length) toast('Listo: ' + t.texto + ' en ' + ids.length + (ids.length === 1 ? ' línea' : ' líneas') + '. El precio final de cada una no cambia.');
+        if (ids.length) toast('Listo: ' + t.texto + ' en ' + ids.length + (ids.length === 1 ? ' producto' : ' productos') + '. El precio final de cada una no cambia.');
       }, st);
       return !st.error;
     }
@@ -937,7 +994,7 @@ export default {
       const detalle = [v.referencia, v.telefono].filter(Boolean).join(' · ');
       // Clientes en espera, para llevar y express pueden pedir ver su cuenta antes de pagar: la prefactura NO es un comprobante
       const prefBtn = (v.tipo_servicio === 'espera' || v.tipo_servicio === 'llevar' || v.tipo_servicio === 'express')
-        ? h('button.btn.ambar', { type: 'button', disabled: !cur.lineas.length, onclick: (e) => prefacturar(e.currentTarget) }, v.estado === 'prefacturada' ? 'Imprimir prefactura otra vez' : 'Prefactura (no es factura)')
+        ? h('button.btn.ambar', { type: 'button', disabled: !cur.lineas.length, onclick: (e) => prefacturar(e.currentTarget) }, v.estado === 'prefacturada' ? (v.prefactura_vigente === false ? 'Imprimir prefactura nueva' : 'Imprimir prefactura otra vez') : 'Prefactura (no es factura)')
         : null;
       // El cliente y su aviso de tarifa van dentro de la parte que se desliza: así nunca le quitan lugar a las líneas
       const lineas = h('div.cuenta-lineas', panelCliente(),
@@ -948,7 +1005,8 @@ export default {
           h('button.btn.chico', { type: 'button', onclick: editarDatos }, 'Cambiar datos de la cuenta')),
         lineas,
         h('div.cuenta-pie',
-          v.estado === 'prefacturada' ? h('div.aviso-pref', h('strong', 'PREFACTURA N.° ' + (v.prefactura_numero || '')), 'No es una factura: es solo para que el cliente revise su cuenta.') : null,
+          v.estado === 'prefacturada' ? h('div.aviso-pref' + (v.prefactura_vigente === false ? '.vieja' : ''), h('strong', 'PREFACTURA N.° ' + (v.prefactura_numero || '') + (Number(v.prefactura_revision) > 1 ? ' · revisión ' + v.prefactura_revision : '')),
+            v.prefactura_vigente === false ? 'La cuenta cambió después de imprimir la prefactura. Imprima una nueva para que el cliente vea el total correcto.' : 'No es una factura: es solo para que el cliente revise su cuenta.') : null,
           h('div.pie-cobro',
             h('div.total-fila', h('span.et', 'Total a pagar (IVA incluido)'), h('div.total-monto', { 'aria-live': 'polite' }, money(v.total))),
             h('button.btn.primario.grande.btn-cobrar-aside', { type: 'button', disabled: !puede, onclick: seguro(abrirCobro) }, 'Cobrar')),
@@ -982,13 +1040,14 @@ export default {
       if (!cur || !cur.lineas.length) return;
       const id = cur.venta.id;
       await conBoton(btn, async () => {
-        if (cur.venta.estado !== 'prefacturada') {
+        // Si la cuenta ya tenía prefactura pero cambió después, se pide de nuevo: el servidor conserva el número y sube la revisión
+        if (cur.venta.estado !== 'prefacturada' || cur.venta.prefactura_vigente === false) {
           const st = {};
           await accion(async () => { cur = await api.prefacturar(id); repintar(); }, st);
           if (st.error) return; // no se pudo crear: no se imprime nada que parezca prefactura
         }
         try { await (await imp()).imprimirPrefactura(id); toast('Se abrió la impresión de la prefactura. Recuerde: esto no es una factura.'); }
-        catch (e) { toast('La prefactura quedó creada pero no se pudo imprimir: ' + (e.message || e) + ' Toque «Imprimir prefactura otra vez».', 'error', 8000); }
+        catch (e) { toast('La prefactura quedó creada pero no se pudo imprimir: ' + textoDeError(e) + ' Toque «Imprimir prefactura otra vez».', 'error', 8000); }
       });
     }
 
@@ -1051,7 +1110,7 @@ export default {
       const btnRevisar = h('button.btn', { type: 'button', hidden: true }, 'Revisar si se cobró');
       // Impresión: se usan los ajustes de este aparato (botón «Impresora»); aquí solo se muestran y se pueden abrir para cambiarlos
       const resImp = h('div.cobro-imp');
-      const abrirAjustes = async () => { try { (await imp()).abrirAjustesImpresion(); } catch (e) { toast(e.message, 'error', 6000); } };
+      const abrirAjustes = async () => { try { (await imp()).abrirAjustesImpresion(); } catch (e) { toast(textoDeError(e), 'error', 6000); } };
       let claveImp = '';
       function pintarImp() {
         const a = ajustesImp();
@@ -1213,7 +1272,7 @@ export default {
               actividadFactura = null;
               toast('Quedó como actividad principal del cliente.');
             } else actividadFactura = cod === (cliente.actividad_codigo || '') ? null : cod;
-          } catch (e) { ocupado = false; err.textContent = e.message || String(e); err.hidden = false; return; }
+          } catch (e) { ocupado = false; err.textContent = textoDeError(e); err.hidden = false; return; }
           ocupado = false;
           pintarCliente(); actualizar(); mostrar(vistaPago);
         }
@@ -1301,8 +1360,8 @@ export default {
           ventasEnCobro.delete(ventaId);
           if (!vivo || !m) return;
           actualizar();
-          if (v.estado === 'no') conErr('No se pudo cobrar: ' + (e.message || e) + ' No se cobró nada. Revise e intente de nuevo.');
-          else { conErr('No se pudo confirmar si el cobro quedó registrado (' + (e.message || e) + '). No lo repita todavía: cuando vuelva la conexión toque «Revisar si se cobró».'); btnRevisar.hidden = false; }
+          if (v.estado === 'no') conErr('No se pudo cobrar: ' + textoDeError(e) + ' No se cobró nada. Revise e intente de nuevo.');
+          else { conErr('No se pudo confirmar si el cobro quedó registrado (' + textoDeError(e) + '). No lo repita todavía: cuando vuelva la conexión toque «Revisar si se cobró».'); btnRevisar.hidden = false; }
           return;
         }
         await terminar(comp, '', r.vuelto / 100);
@@ -1356,7 +1415,7 @@ export default {
             : 'Se abrió la impresión del tiquete de ' + aj.papel + ' mm (' + aj.copias + (aj.copias === 1 ? ' copia' : ' copias') + '). Si no salió, toque «Imprimir otra vez».';
         } catch (e) {
           impEstado.className = 'tenue-linea msg-mal';
-          impEstado.textContent = 'No se pudo imprimir: ' + (e.message || e) + ' Toque el botón de imprimir otra vez o revise el botón «Impresora».';
+          impEstado.textContent = 'No se pudo imprimir: ' + textoDeError(e) + ' Toque el botón de imprimir otra vez o revise el botón «Impresora».';
         }
       }
       // Pagos, efectivo recibido y vuelto: salen de lo que guardó el servidor
@@ -1441,7 +1500,7 @@ export default {
         if (pedida) await abrirPedida(); else await elegirInicial();
       } catch (e) {
         if (!vivo) return;
-        root.replaceChildren(bloqueError({ titulo: 'No se pudo cargar la caja', mensaje: e.message || String(e), alReintentar: () => iniciar() }));
+        root.replaceChildren(bloqueError({ titulo: 'No se pudo cargar la caja', mensaje: textoDeError(e), alReintentar: () => iniciar() }));
         return;
       }
       armarCaja();
@@ -1471,10 +1530,11 @@ export default {
     async function refrescoSilencioso() {
       if (!vivo || document.hidden || !cajaEl || ocupadas > 0 || document.querySelector('.modal-fondo')) return;
       try {
-        const antes = JSON.stringify(abiertas.map((a) => [a.id, a.total, a.estado, a.lineas, a.referencia]));
+        const huella = (l) => JSON.stringify(l.map((a) => [a.id, a.total, a.estado, a.lineas, a.referencia, a.prefactura_vigente, a.prefactura_revision]));
+        const antes = huella(abiertas);
         const nuevas = (await api.ventasAbiertas(socId)) || [];
         if (ocupadas > 0 || !vivo) return;
-        if (JSON.stringify(nuevas.map((a) => [a.id, a.total, a.estado, a.lineas, a.referencia])) === antes) return;
+        if (huella(nuevas) === antes) return;
         abiertas = nuevas;
         const enUso = document.activeElement && asideCuenta?.contains(document.activeElement) && /INPUT|TEXTAREA/.test(document.activeElement.tagName);
         const mia = cur && abiertas.find((a) => a.id === cur.venta.id);
@@ -1483,7 +1543,8 @@ export default {
         pintarBarra(); pintarCuenta(); pintarMovil(); actualizarInsignias();
       } catch { /* sin conexión: se intenta de nuevo luego */ }
     }
-    timers.push(setInterval(refrescoSilencioso, 30000));
+    // Cada 10 s con la pantalla visible: un pedido tomado en otro aparato (celular, otra caja) aparece pronto en la barra de cuentas
+    timers.push(setInterval(refrescoSilencioso, 10000));
     timers.push(setInterval(revisarCatalogo, 5 * 60 * 1000));
     imp().catch(() => {}); // deja listo el módulo de impresión para leer sus ajustes al cobrar
     const alVolver = () => { if (!document.hidden) refrescoSilencioso(); };

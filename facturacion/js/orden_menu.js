@@ -1,13 +1,13 @@
 // Orden del menú en la Caja: de la A a la Z (sin fijarse en tildes ni mayúsculas) y, al final, los adicionales.
-// Rango 0: productos normales. Rango 1: los adicionales. Rango 2: lo último de todo (adicional extra, porciones extra y cualquier «extra»).
-// Dentro de cada rango el orden es alfabético, así «Adicional extra» queda antes que «Porciones extra».
+// Rango 0: productos normales. Rango 1: los adicionales y las porciones. Rango 2: lo último de todo, los comodines (adicional extra, porción extra y cualquier «extra»).
+// Dentro de cada rango el orden es alfabético.
 const sinTildes = (s) => String(s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
 const alfabeto = new Intl.Collator('es', { sensitivity: 'base', numeric: true });
 
 export function rangoMenu(nombre) {
   const n = sinTildes(nombre);
-  if (/(^|[^a-z])extras?([^a-z]|$)/.test(n) || /^porcion(es)?([^a-z]|$)/.test(n)) return 2;
-  if (/^adicional(es)?([^a-z]|$)/.test(n)) return 1;
+  if (/(^|[^a-z])extras?([^a-z]|$)/.test(n)) return 2;
+  if (/^adicional(es)?([^a-z]|$)/.test(n) || /^porcion(es)?([^a-z]|$)/.test(n)) return 1;
   return 0;
 }
 

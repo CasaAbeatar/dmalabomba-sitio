@@ -68,7 +68,7 @@
 .rec-ayuda{margin:.8rem 0 0;padding-left:1.1rem;color:var(--tinta2);font-size:.9rem}
 .rec-ok{padding:.7rem .9rem;border:1px solid #a8d5bd;background:var(--verde-suave);border-radius:var(--r);color:#14583a;font-weight:600;margin:.4rem 0}
 .rec-tecnico{margin-top:1rem;font-size:.88rem}
-.rec-tecnico summary{cursor:pointer;min-height:40px;display:flex;align-items:center;font-weight:600}
+.rec-tecnico summary{cursor:pointer;min-height:48px;display:flex;align-items:center;font-weight:600}
 .rec-tecnico code{overflow-wrap:anywhere;font-size:.8rem}
 
 /* Aviso numérico en la pestaña */

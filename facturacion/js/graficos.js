@@ -63,7 +63,7 @@ function tituloEjeY(svg, texto, cy, alto) {
 // opciones: {ancho, alto, tituloX, tituloY, color: 'rojo'|'ambar', seleccionado (índice), alSeleccionar(d, i), descripcion}
 export function graficoColumnas(datos, o = {}) {
   const W = Math.max(300, Math.round(o.ancho || 640)), H = o.alto || 270;
-  const M = { l: 70, r: 12, t: 16, b: 58 };
+  const M = { l: 84, r: 12, t: 16, b: 58 }; // 84 px a la izquierda: el título del eje (hasta 2 renglones) no pisa los valores en colones
   const pw = W - M.l - M.r, ph = H - M.t - M.b;
   const vals = datos.map((d) => d.valor);
   const sc = escala(Math.min(0, ...vals), Math.max(0, ...vals));

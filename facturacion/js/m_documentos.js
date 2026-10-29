@@ -2,8 +2,9 @@
 // y en cada fila los botones «Reimprimir» y «Anular». Tocar la fila abre el detalle (estado en Hacienda, «Ya lo atendí», archivos, reenvíos).
 // La anulación con nota de crédito es la de m_anular.js; la impresión es la de imprimir.js.
 import { h, money, modal, toast, descargar, hoyCR, sumaDias, fechaHora, horaCorta, debounce, num, r2, nombrePropio, traducirHacienda, campoBusqueda, TIPOS_SERVICIO, MEDIOS, TIPOS_ID } from './util.js';
-import { documentos, ncDe, CORREO_ACTIVO, reenviarCorreo, alertaAtender, hacerVentaDeNuevo } from './api_documentos.js';
-import { anularDocumento } from './m_anular.js';
+import { documentos, ncDe, correoActivo, reenviarCorreo, alertaAtender, hacerVentaDeNuevo, mensajeAmable } from './api_documentos.js';
+import { anularDocumento, cambiarCliente, textoCodigoNota, codigoDeNota, sustituyeSoportado, TEXTO_07 } from './m_anular.js';
+import { selectorCliente } from './ui_cliente.js';
 import { sumarDocumentos, frasesDeLista, puenteConTurno } from './cuadre_turno.js';
 import { imprimirComprobante, reimprimirComprobante, formatoDireccion, formatoCedula, formatoTelefono, numeroCorto, NOMBRES_DOCUMENTO } from './imprimir.js';
 
@@ -17,7 +18,8 @@ const diaCortoTxt = (ymd) => fmtDiaCorto.format(new Date(ymd + 'T12:00:00Z'));
 const ymdDe = (iso) => new Intl.DateTimeFormat('en-CA', { timeZone: TZ }).format(new Date(iso));
 const norm = (s) => String(s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 
-const ETQ_ESTADO = { pendiente: 'En cola', enviado: 'Enviado', aceptado: 'Aceptado', rechazado: 'Rechazado', error: 'Con error' };
+// Mismos nombres que en el aviso del cobro: «Por enviar a Hacienda», «Enviado a Hacienda», «Aceptado», «Rechazado», «No se pudo enviar»
+const ETQ_ESTADO = { pendiente: 'Por enviar a Hacienda', enviado: 'Enviado a Hacienda', aceptado: 'Aceptado', rechazado: 'Rechazado', error: 'No se pudo enviar' };
 const CLASE_ESTADO = { pendiente: 'espera', enviado: 'espera', aceptado: 'ok', rechazado: 'mal', error: 'mal' };
 const NOMBRE_TIPO = { ...NOMBRES_DOCUMENTO, '01': 'Factura', '03': 'Nota de crédito', '04': 'Tiquete' }; // nombres cortos para la lista
 const esVenta = (d) => d.tipo_doc === '01' || d.tipo_doc === '04';
@@ -41,6 +43,7 @@ export default {
       if (pedido.desde && /^\d{4}-\d{2}-\d{2}$/.test(pedido.desde) && pedido.desde < est.hasta) { est.rango = 'otro'; est.desde = pedido.desde; }
     }
     const alFinal = pedido?.foco === 'buscar'; // el botón rojo «Anular factura» del encabezado trae el cursor al buscador
+    const verDocumento = typeof pedido?.comprobante === 'string' ? pedido.comprobante : null; // «Me equivoqué» del cobro abre el documento recién emitido
     let detalleActual = null;
     let ultimaCarga = 0;
 
@@ -78,7 +81,7 @@ export default {
     root.append(h('div.doc-mod',
       h('div.doc-buscar', buscadorFila),
       botonesRango, h('div.doc-fecha-fila', titulo, refrescar), cajaFechas, zonaResumen, zonaCuadre, zonaFiltros,
-      h('p.doc-ayuda', 'Toque una fila para ver el detalle. «Anular» crea una nota de crédito: el documento original no se borra.'),
+      h('p.doc-ayuda', 'Toque una fila para ver el detalle. «Anular» crea una nota de crédito (código 01, anulación total): el documento original no se borra.'),
       zonaLista));
 
     function elegirRango(r) {
@@ -119,7 +122,7 @@ export default {
         if (silencioso && !est.error && est.firma && firma === est.firma) { ultimaCarga = Date.now(); return; }
         est.firma = firma;
         est.error = null;
-      } catch (e) { if (mi !== nCarga) return; if (!silencioso) est.error = e.message || String(e); }
+      } catch (e) { if (mi !== nCarga) return; if (!silencioso) est.error = mensajeAmable(e); }
       est.cargando = false; ultimaCarga = Date.now();
       pintar();
     }
@@ -150,7 +153,7 @@ export default {
       if (est.cargando && !est.lista.length) { zonaResumen.replaceChildren(); zonaCuadre.replaceChildren(); zonaFiltros.replaceChildren(); zonaLista.replaceChildren(h('p.cargando', 'Cargando los documentos…')); return; }
       if (est.error) {
         zonaResumen.replaceChildren(); zonaCuadre.replaceChildren(); zonaFiltros.replaceChildren();
-        zonaLista.replaceChildren(h('div.vacio', h('p', 'No se pudieron cargar los documentos.'), h('p.tenue', est.error), h('button.btn.primario', { onclick: () => cargar() }, 'Intentar de nuevo')));
+        zonaLista.replaceChildren(h('div.vacio', h('p', 'No se pudieron cargar los documentos.'), h('p.tenue', est.error), h('button.btn.primario', { type: 'button', onclick: () => cargar() }, 'Intentar de nuevo')));
         return;
       }
       pintarResumen();
@@ -168,7 +171,7 @@ export default {
       const una = est.desde === est.hasta;
       zonaResumen.replaceChildren(h('div.doc-resumen',
         h('div.doc-neto', h('span.doc-etq', est.rango === 'turno' ? 'Total de este turno' : una ? (est.rango === 'hoy' ? 'Total de hoy' : 'Total del día') : 'Total de las fechas elegidas'), h('b.doc-gran', money(s.neto))),
-        h('span.doc-det-res', `${s.nVentas} ${s.nVentas === 1 ? 'venta' : 'ventas'}`, s.nNC ? `, ${s.nNC} ${s.nNC === 1 ? 'anulación' : 'anulaciones'}` : '', ` · IVA incluido ${money(s.iva / 100)}`)));
+        h('span.doc-det-res', `${s.nVentas} ${s.nVentas === 1 ? 'venta' : 'ventas'}`, s.nNC ? `, ${s.nNC} ${s.nNC === 1 ? 'anulación' : 'anulaciones'}` : '', ` · de los cuales ${money(s.iva / 100)} son IVA`)));
       pintarCuadre(s);
     }
 
@@ -184,8 +187,8 @@ export default {
           h('summary.btn', `Comparar con «Apertura y cierre de caja» (${money(p.turnoNeto / 100)})`),
           h('div.doc-cuadre-cuerpo',
             fila('Total vendido en «Apertura y cierre de caja», sin las ventas anuladas', p.turnoNeto),
-            p.turnoRech ? fila('Menos las ventas cuyo documento Hacienda no aceptó (allá sí se suman)', p.turnoRech) : null,
-            p.sin ? fila(`Más ${p.sinN === 1 ? '1 documento sin cuenta de caja' : p.sinN + ' documentos sin cuenta de caja'} (allá no se suman)`, p.sin) : null,
+            p.turnoRech ? fila('Menos las ventas que Hacienda no aceptó (el cierre de caja sí las cuenta)', p.turnoRech) : null,
+            p.sin ? fila(`Más ${p.sinN === 1 ? '1 documento que no salió' : p.sinN + ' documentos que no salieron'} de una cuenta cobrada en Facturación (el cierre de caja no los cuenta)`, p.sin) : null,
             p.otras ? fila('Otras diferencias, por ejemplo notas de crédito de ventas de otro turno', p.otras) : null,
             fila('Total de esta lista', p.lista, '.total'))));
       }
@@ -225,10 +228,12 @@ export default {
       let segundo = null;
       if (esVenta(d)) {
         if (anulado) segundo = null;
-        else if (d.estado === 'aceptado') segundo = h('button.btn.peligro.doc-bot', { type: 'button', 'aria-label': 'Anular ' + quien, onclick: () => anularDocumento(app, d, { alTerminar: () => cargar(true), alVerNC: (n) => abrirDetalle(n.id) }) }, 'Anular');
+        else if (d.estado === 'aceptado') segundo = h('button.btn.peligro.doc-bot', { type: 'button', 'aria-label': 'Anular ' + quien, onclick: () => abrirAnular(d, { alTerminar: () => cargar(true), alVerNC: (n) => abrirDetalle(n.id) }) }, 'Anular');
         else if (d.estado === 'rechazado' || d.estado === 'error') segundo = h('button.btn.doc-bot', { type: 'button', 'aria-label': (d.atendida ? 'Ver detalle de ' : 'Ver y atender ') + quien, onclick: () => abrirDetalle(d.id) }, d.atendida ? 'Ver detalle' : 'Ver y atender'); // el nombre accesible empieza con el mismo texto que se ve
-        else segundo = h('button.btn.peligro.doc-bot', { type: 'button', disabled: true, title: 'Se podrá anular cuando Hacienda lo acepte (casi siempre menos de un minuto)', 'aria-label': 'Anular ' + quien + '. Todavía no se puede: Hacienda no lo ha aceptado' }, 'Anular');
       }
+      // Todavía no hay nada que anular (Hacienda no ha aceptado el documento): se dice a la vista, no solo al pasar el mouse
+      const espera = esVenta(d) && !anulado && (d.estado === 'pendiente' || d.estado === 'enviado')
+        ? h('div.doc-espera', { role: 'note' }, h('b', 'Esperando a Hacienda. '), 'Todavía no se puede anular: podrá hacerlo cuando Hacienda lo acepte. Toque la fila para ver qué significa y qué hacer.') : null;
       return h('div.doc-fila' + (nc ? '.nc' : '') + (anulado ? '.anulada' : ''),
         h('button.doc-ver', { type: 'button', onclick: () => abrirDetalle(d.id), 'aria-label': `${tipo} número ${numeroCorto(d.consecutivo)}, ${money(d.total)}. Toque para ver el detalle` },
           h('span.c-hora', horaCorta(d.fecha_emision)),
@@ -238,7 +243,13 @@ export default {
           h('span.c-cli', d.cliente ? nombrePropio(d.cliente) : h('span.tenue', 'Consumidor final'), h('span.sub', mediosTxt(d.medios) || (nc ? '' : 'Sin pago'))),
           h('span.c-total.der', (nc ? '−' : '') + money(d.total)),
           h('span.c-est', h('span.chip.' + (CLASE_ESTADO[d.estado] || ''), ETQ_ESTADO[d.estado] || d.estado), anulado ? h('span.chip.anulado', 'Anulado') : null, d.atendida && d.estado === 'rechazado' ? h('span.chip.anulado', 'Atendido') : null)),
-        h('div.doc-fbot' + (segundo ? '' : '.una'), reimprimir, segundo));
+        h('div.doc-fbot' + (segundo ? '' : '.una'), reimprimir, segundo),
+        espera);
+    }
+
+    // Una sola puerta para anular: el motivo «Error en el cliente» ofrece el camino guiado «Cambiar el cliente y hacer la venta de nuevo»
+    function abrirAnular(doc, ctx = {}) {
+      return anularDocumento(app, doc, { ...ctx, alCambiarCliente: () => cambiarCliente(app, doc, { alTerminar: ctx.alTerminar }) });
     }
 
     /* ---------- detalle de un documento ---------- */
@@ -247,14 +258,18 @@ export default {
       let vivo = true;
       let firma = null; // lo último que se pintó; el refresco automático solo vuelve a pintar si el documento cambió
       let nCarga = 0;
+      let estadoVisto = null; // el estado del documento en la última lectura: si Hacienda todavía no responde, la ventana se actualiza más seguido
       const borrador = { nota: '' }; // la nota que se está escribiendo no se pierde si la ventana se vuelve a pintar
-      const m = modal({ titulo: 'Detalle del documento', contenido: caja, ancho: 780, alCerrar: () => { vivo = false; if (detalleActual?.caja === caja) detalleActual = null; } });
+      const m = modal({ titulo: 'Detalle del documento', contenido: caja, ancho: 780, alCerrar: () => { vivo = false; clearInterval(rapido); if (detalleActual?.caja === caja) detalleActual = null; } });
+      // Mientras el documento esté por enviarse o enviado, se vuelve a leer cada 5 segundos para que «Anular» se habilite solo cuando Hacienda lo acepte
+      const rapido = setInterval(() => { if (vivo && !document.hidden && (estadoVisto === 'pendiente' || estadoVisto === 'enviado')) pintarDet(true); }, 5000);
       const pintarDet = async (silencioso = false) => {
         const mi = ++nCarga;
         try {
           let falloNC = false;
           const [c, nc] = await Promise.all([app.api.comprobante(id), ncDe(id).catch(() => { falloNC = true; return null; })]);
           if (!vivo || mi !== nCarga) return;
+          estadoVisto = c?.estado || null;
           if (silencioso && falloNC) return; // si no se pudo ver la nota de crédito, mejor no cambiar lo que ya se ve
           const nueva = JSON.stringify([c, nc]);
           if (silencioso && nueva === firma) return; // nada cambió: no se toca la pantalla (ni el cursor, ni el teclado del celular)
@@ -267,7 +282,7 @@ export default {
             const campo = [...caja.querySelectorAll('input,textarea')].find((x) => x.getAttribute('aria-label') === foco.etiqueta);
             if (campo) { campo.focus({ preventScroll: true }); try { campo.setSelectionRange(foco.ini, foco.fin); } catch { /* campo sin cursor */ } }
           }
-        } catch (e) { if (vivo && mi === nCarga && !silencioso) caja.replaceChildren(h('div.error-caja', e.message || String(e))); }
+        } catch (e) { if (vivo && mi === nCarga && !silencioso) caja.replaceChildren(h('div.error-caja', mensajeAmable(e))); }
       };
       detalleActual = { caja, repintar: pintarDet };
       await pintarDet();
@@ -283,10 +298,15 @@ export default {
       const raiz = h('div.doc-det');
 
       // Avisos de vínculo
-      if (nc) raiz.append(h('div.doc-aviso.anulado', h('div', h('b', 'Anulado por la nota de crédito N.° ' + numeroCorto(nc.consecutivo) + '. '), 'Este documento ya no vale.' + (nc.estado !== 'aceptado' ? ' La nota de crédito todavía está esperando la respuesta de Hacienda.' : '')),
+      if (nc) raiz.append(h('div.doc-aviso.anulado', h('div', h('b', 'Anulado por la nota de crédito N.° ' + numeroCorto(nc.consecutivo) + '. '), 'Este documento ya no vale.' + (nc.estado !== 'aceptado' ? ' La nota de crédito todavía está esperando la respuesta de Hacienda.' : ''),
+          textoCodigoNota(codigoDeNota(nc)) ? h('div.doc-motivo', 'Tipo de nota: ' + textoCodigoNota(codigoDeNota(nc)) + '.' + (sustituyeSoportado(c) ? ' Si se hace la venta de nuevo, la venta nueva llevará el ' + TEXTO_07 + '.' : '')) : null),
         h('button.btn', { type: 'button', onclick: () => { ctx.cerrar(); abrirDetalle(nc.id); } }, 'Ver la nota de crédito')));
-      if (esNC && c.original) raiz.append(h('div.doc-aviso.ref', h('div', h('b', `Referencia a ${(NOMBRES_DOCUMENTO[c.original.tipo_doc] || 'documento').toLowerCase()} N.° ${numeroCorto(c.original.consecutivo)}. `), 'Esta nota de crédito anula ese documento.', c.motivo ? h('div.doc-motivo', 'Motivo: ' + c.motivo) : null),
+      if (esNC && c.original) raiz.append(h('div.doc-aviso.ref', h('div', h('b', `Referencia a ${(NOMBRES_DOCUMENTO[c.original.tipo_doc] || 'documento').toLowerCase()} N.° ${numeroCorto(c.original.consecutivo)}. `), 'Esta nota de crédito anula ese documento.', textoCodigoNota(codigoDeNota(c)) ? h('div.doc-motivo', 'Tipo de nota: ' + textoCodigoNota(codigoDeNota(c)) + '.') : null, c.motivo ? h('div.doc-motivo', 'Motivo: ' + c.motivo) : null),
         h('button.btn', { type: 'button', onclick: () => { ctx.cerrar(); abrirDetalle(c.original.id); } }, 'Ver el documento original')));
+
+      // Una venta nueva que sustituye a un documento anulado (solo cuando la base guarda la referencia, código 07)
+      if (c.reemplaza_a) raiz.append(h('div.doc-aviso.ref', h('div', h('b', 'Este documento sustituye a uno que se anuló. '), 'Tipo de referencia: ' + TEXTO_07 + '.'),
+        h('button.btn', { type: 'button', onclick: () => { ctx.cerrar(); abrirDetalle(c.reemplaza_a); } }, 'Ver el documento anulado')));
 
       // Encabezado y estado
       raiz.append(h('div.doc-encab',
@@ -298,9 +318,9 @@ export default {
       const dato = (e, v, extra) => h('div.doc-dato', h('span.doc-etq', e), h('div' + (extra ? '.' + extra : ''), v));
       raiz.append(h('div.doc-datos',
         dato('Número completo', c.consecutivo, 'mono'),
-        dato('Venta', [c.venta?.numero, c.venta?.tipo_servicio ? TIPOS_SERVICIO[c.venta.tipo_servicio] || c.venta.tipo_servicio : null, c.venta?.referencia].filter(Boolean).join(' · ') || 'Sin datos'),
+        dato('Cuenta', [c.venta?.numero, c.venta?.tipo_servicio ? TIPOS_SERVICIO[c.venta.tipo_servicio] || c.venta.tipo_servicio : null, c.venta?.referencia].filter(Boolean).join(' · ') || 'Sin datos'),
         dato('Condición de venta', 'Contado'),
-        dato('Correo al cliente', c.correo_enviado_en ? `Enviado a ${c.correo_para || 'el cliente'} el ${fechaHora(c.correo_enviado_en)}` : c.correo_error ? 'No se pudo enviar: ' + c.correo_error : 'Todavía no se ha enviado'),
+        dato('Correo al cliente', c.correo_enviado_en ? `Enviado a ${c.correo_para || 'el cliente'} el ${fechaHora(c.correo_enviado_en)}` : c.correo_error ? correoAmable(c.correo_error) : 'Todavía no se ha enviado'),
         dato('Clave numérica de 50 dígitos', c.clave, 'mono')));
 
       // Cliente
@@ -324,7 +344,7 @@ export default {
         h('div.doc-sumas',
           h('div.doc-fila-t', h('span', 'Subtotal sin IVA'), h('span', money(r2(total - iva)))),
           h('div.doc-fila-t', h('span', 'IVA'), h('span', money(iva))),
-          h('div.doc-fila-t.gran', h('span', esNC ? 'Total acreditado' : 'Total'), h('b', money(total))))));
+          h('div.doc-fila-t.gran', h('span', esNC ? 'Total que se anula' : 'Total'), h('b', money(total))))));
 
       raiz.append(acciones(c, nc, ctx, hechoHace));
       return raiz;
@@ -333,11 +353,11 @@ export default {
     function textoEstado(c) {
       const th = traducirHacienda(c.mensaje);
       const t = {
-        pendiente: 'Está en cola y se enviará a Hacienda en el próximo minuto. No tiene que hacer nada.',
-        enviado: 'Ya se envió a Hacienda y se espera su respuesta. Normalmente tarda menos de un minuto.',
+        pendiente: 'Está por enviarse a Hacienda. No tiene que hacer nada.',
+        enviado: 'Ya se envió a Hacienda y se espera su respuesta. Esta ventana se actualiza sola.',
         aceptado: 'Hacienda lo aceptó: el documento es válido.' + (c.ambiente !== 'produccion' ? ' Como estamos en modo de pruebas, no tiene validez tributaria.' : ''),
         rechazado: 'Hacienda no aceptó este documento, así que no es válido y no necesita nota de crédito. Si fue una venta real, hay que hacerla de nuevo en Facturación.',
-        error: 'Todavía no se pudo enviar a Hacienda (por ejemplo, por falta de internet). El sistema vuelve a intentarlo solo; también puede tocar «Reenviar a Hacienda».',
+        error: 'Todavía no se pudo enviar a Hacienda (por ejemplo, por falta de internet). El sistema lo intentará de nuevo solo; también puede tocar «Reenviar a Hacienda».',
       }[c.estado] || '';
       // Lo que dice Hacienda, en palabras simples. Si el documento fue aceptado, lo que trae es un aviso y no impide nada.
       const motivos = th.items.length
@@ -356,7 +376,7 @@ export default {
     /* ---------- acciones ---------- */
     async function ejecutar(b, fn) {
       b.disabled = true; b.dataset.ocupado = '1';
-      try { return await fn(); } catch (e) { toast(e.message || String(e), 'error', 7000); } finally { b.disabled = false; delete b.dataset.ocupado; }
+      try { return await fn(); } catch (e) { toast(mensajeAmable(e), 'error', 7000); } finally { b.disabled = false; delete b.dataset.ocupado; }
     }
     function accion({ texto, hint, clase = '', disabled = false, onclick }) {
       const b = h('button.btn.doc-acc' + (clase ? '.' + clase : ''), { type: 'button', disabled }, h('span.t', texto), hint ? h('small', hint) : null);
@@ -364,6 +384,13 @@ export default {
       return b;
     }
     // Nombre del archivo: sin tildes (algunos navegadores lo descartan) y con guiones, no guiones bajos
+    // El texto que deja la función de correo puede traer palabras técnicas: aquí se dice en palabras simples qué pasó y qué hacer (el texto original no se pierde: queda en la base)
+    function correoAmable(t) {
+      const x = String(t || '');
+      if (/^\s*(ENVIANDO|SIN CONFIRMAR)/i.test(x)) return 'No se sabe si el correo salió. Revise la carpeta de enviados de la cuenta de correo de la empresa antes de reenviarlo.';
+      if (/token|mail\.send|graph|40[13]|permiso|acceso de la aplicaci/i.test(x)) return 'No se pudo enviar el correo: el sistema no tiene permiso para usar la cuenta de correo de la empresa. Avise a la persona encargada.';
+      return 'No se pudo enviar el correo al cliente. Revise que el correo del cliente esté bien escrito o avise a la persona encargada.';
+    }
     const nombreArchivo = (c, sufijo) => `${norm(NOMBRES_DOCUMENTO[c.tipo_doc] || 'comprobante').replace(/\s+/g, '-')}-${c.consecutivo}-${sufijo}.xml`;
 
     function acciones(c, nc, ctx, hechoHace) {
@@ -373,6 +400,7 @@ export default {
         descargar(nombreArchivo(c, sufijo), xml);
       };
       const conCorreo = !!c.cliente_snapshot?.correo;
+      const hayCorreo = correoActivo(app);
       const recuperable = c.estado === 'rechazado' && /conexi|timeout|temporal|no disponible|token|intente de nuevo/i.test(c.mensaje || '');
       const puedeReenviar = c.estado === 'error' || recuperable || ((c.estado === 'pendiente' || c.estado === 'enviado') && hechoHace > 3);
 
@@ -389,13 +417,13 @@ export default {
         puedeReenviar
           ? accion({ texto: 'Reenviar a Hacienda', onclick: async () => {
             const r = await app.api.reenviar(c.id);
-            toast(r?.estado === 'aceptado' ? 'Hacienda ya lo tiene aceptado.' : 'Listo, se mandó a reenviar. En unos segundos cambiará el estado.');
+            toast(r?.estado === 'aceptado' ? 'Hacienda ya lo tiene aceptado.' : 'Se pidió reenviar el documento a Hacienda. Su estado cambiará solo.');
             await ctx.repintar(true); await cargar(true);
           } })
-          : accion({ texto: 'Reenviar a Hacienda', disabled: true, hint: c.estado === 'aceptado' ? 'No hace falta: Hacienda ya lo aceptó' : c.estado === 'rechazado' ? 'Un documento rechazado no se reenvía' : 'Se envía solo; si tarda más de 3 minutos aparecerá este botón' }),
-        CORREO_ACTIVO && conCorreo
-          ? accion({ texto: 'Reenviar al cliente por correo', onclick: async () => { await reenviarCorreo(c.id); toast('Listo, se envió el correo al cliente.'); await ctx.repintar(true); } })
-          : accion({ texto: 'Reenviar al cliente por correo', disabled: true, hint: !CORREO_ACTIVO ? 'Disponible cuando se active el correo' : 'Este cliente no tiene correo' })));
+          : accion({ texto: 'Reenviar a Hacienda', disabled: true, hint: c.estado === 'aceptado' ? 'No hace falta: Hacienda ya lo aceptó' : c.estado === 'rechazado' ? 'Un documento rechazado no se reenvía' : 'Se envía solo; si tarda, aparecerá este botón' }),
+        hayCorreo && conCorreo
+          ? accion({ texto: 'Reenviar al cliente por correo', onclick: async () => { await reenviarCorreo(c.id); toast('Se pidió enviar el correo al cliente. Si no le llega, revise que su correo esté bien escrito.'); await ctx.repintar(true); } })
+          : accion({ texto: 'Reenviar al cliente por correo', disabled: true, hint: !hayCorreo ? 'Disponible cuando se active el correo' : 'Este cliente no tiene correo' })));
 
       const grupos = [impr, arch, env];
       if (esVenta(c)) grupos.push(bloqueAnular(c, nc, ctx));
@@ -404,21 +432,38 @@ export default {
 
     function bloqueAnular(c, nc, ctx) {
       const g = h('div.doc-grupo.anular', h('h3', 'Corregir o anular'));
+      const repintar = async () => { await ctx.repintar(true); await cargar(true); };
+      const doc = { ...c, cliente: c.cliente_snapshot?.nombre || '' };
       if (nc) {
-        g.append(h('p.tenue', `Este documento ya fue anulado con la nota de crédito N.° ${numeroCorto(nc.consecutivo)}. No se puede anular dos veces.`));
+        g.append(h('p.tenue', `Este documento ya fue anulado con la nota de crédito N.° ${numeroCorto(nc.consecutivo)}. No se puede anular dos veces.`),
+          c.venta_id ? h('div.doc-botones',
+            accion({ texto: 'Hacer la venta de nuevo en Facturación', hint: 'Copia los productos a una cuenta nueva y abre Facturación.', onclick: async () => { ctx.cerrar(); await hacerVentaDeNuevo(app, c.venta_id, toast); } }),
+            accion({ texto: 'Hacer la venta de nuevo con otro cliente', hint: 'Primero elige al cliente; después abre Facturación.', onclick: async () => { selectorCliente(app, { titulo: 'Elegir el cliente de la venta nueva', alElegir: async (cl) => { ctx.cerrar(); await hacerVentaDeNuevo(app, c.venta_id, toast, cl?.id); } }); } })) : null);
         return g;
       }
       if (c.estado === 'aceptado') {
-        g.append(h('p.tenue', 'Si la venta se hizo mal, se anula con una nota de crédito. El documento original no se borra: queda guardado y enlazado a la nota.'),
-          h('div.doc-botones', accion({ texto: 'Anular con nota de crédito', clase: 'peligro', onclick: () => anularDocumento(app, { ...c, cliente: c.cliente_snapshot?.nombre || '' }, { alTerminar: async () => { await ctx.repintar(true); await cargar(true); }, alVerNC: (n) => { ctx.cerrar(); abrirDetalle(n.id); } }) })));
+        const esTiquete = c.tipo_doc === '04';
+        g.append(h('p.tenue', 'Si la venta se hizo mal, se anula con una nota de crédito (código 01, anulación total). El documento original no se borra: queda guardado y enlazado a la nota.'),
+          h('div.doc-botones',
+            accion({ texto: esTiquete ? 'El cliente pide factura' : 'Corregir el cliente de la factura', hint: esTiquete ? 'Elige al cliente, anula el tiquete y deja la factura lista para cobrar.' : 'Elige al cliente correcto, anula y deja la venta lista para cobrar.', clase: 'primario', onclick: async () => { cambiarCliente(app, doc, { alTerminar: repintar }); } }),
+            accion({ texto: 'Anular con nota de crédito', clase: 'peligro', onclick: async () => { abrirAnular(doc, { alTerminar: repintar, alVerNC: (n) => { ctx.cerrar(); abrirDetalle(n.id); } }); } })));
       } else if (c.estado === 'rechazado') {
         g.append(h('p.tenue', 'Hacienda rechazó este documento, así que ya no vale y no necesita nota de crédito.'), bloqueAtender(c, ctx));
       } else {
-        g.append(h('p.tenue', 'Para anularlo hay que esperar a que Hacienda lo acepte (normalmente menos de un minuto). Cierre esta ventana y vuelva a abrirla en un momento.'),
-          h('div.doc-botones', accion({ texto: 'Anular con nota de crédito', clase: 'peligro', disabled: true, hint: 'Primero debe estar aceptado por Hacienda' })));
+        // pendiente, enviado o con error: todavía no hay nada que anular. Se explica qué significa y qué hacer, sin prometer cuánto tarda Hacienda.
+        const pend = c.estado === 'pendiente' || c.estado === 'enviado';
+        g.append(h('div.doc-espera-caja',
+          h('p', h('b', pend ? 'Todavía no se puede anular: Hacienda debe aceptar este documento primero.' : 'Todavía no se puede anular: este documento no ha llegado a Hacienda.')),
+          h('p', 'Qué significa: una nota de crédito solo se puede hacer sobre un documento que Hacienda ya aceptó.'),
+          h('p', pend ? 'Qué hacer mientras tanto: deje esta ventana abierta, se actualiza sola y el botón se habilitará cuando Hacienda lo acepte. También puede cerrarla, seguir atendiendo y volver más tarde.'
+            : 'Qué hacer mientras tanto: toque «Reenviar a Hacienda» (arriba, en «Enviar»). Cuando Hacienda lo acepte podrá anularlo. Si pasa mucho tiempo, avise a la persona encargada.')),
+          h('div.doc-botones',
+            accion({ texto: 'Anular con nota de crédito', clase: 'peligro', disabled: true, hint: 'Primero debe estar aceptado por Hacienda' }),
+            accion({ texto: esTiqueteTxt(c), disabled: true, hint: 'Primero debe estar aceptado por Hacienda' })));
       }
       return g;
     }
+    const esTiqueteTxt = (c) => (c.tipo_doc === '04' ? 'El cliente pide factura' : 'Corregir el cliente de la factura');
 
     /* ---------- documento rechazado: «Ya lo atendí» y rehacer la venta ---------- */
     // «Ya lo atendí» saca el documento del aviso rojo del encabezado (fx_alerta_atender). El documento NO se borra: sigue en esta ventana y en Informes.
@@ -439,7 +484,9 @@ export default {
         } });
         caja.append(h('label.etq', 'Nota (opcional)', h('small', 'Sirve para que otra persona sepa qué se hizo.'), nota), ya);
       }
-      if (esVenta(c) && c.venta_id) caja.append(h('div.doc-botones', accion({ texto: 'Hacer la venta de nuevo en Facturación', hint: 'Copia las líneas a una cuenta nueva y abre Facturación.', onclick: async () => { ctx.cerrar(); await hacerVentaDeNuevo(app, c.venta_id, toast); } })));
+      if (esVenta(c) && c.venta_id) caja.append(h('div.doc-botones',
+        accion({ texto: 'Hacer la venta de nuevo en Facturación', hint: 'Copia los productos a una cuenta nueva y abre Facturación.', onclick: async () => { ctx.cerrar(); await hacerVentaDeNuevo(app, c.venta_id, toast); } }),
+        accion({ texto: 'Hacer la venta de nuevo con otro cliente', hint: 'Primero elige al cliente; después abre Facturación.', onclick: async () => { selectorCliente(app, { titulo: 'Elegir el cliente de la venta nueva', alElegir: async (cl) => { ctx.cerrar(); await hacerVentaDeNuevo(app, c.venta_id, toast, cl?.id); } }); } })));
       return caja;
     }
 
@@ -447,6 +494,7 @@ export default {
     pintarControles();
     await cargar();
     if (alFinal) buscador.focus(); // desde el botón rojo «Anular factura»: el cursor queda en el buscador
+    if (verDocumento) abrirDetalle(verDocumento); // desde «Me equivoqué» del cobro: se abre el documento recién emitido
     // Los documentos cambian de estado solos (en cola, enviado, aceptado): se actualiza la lista cada 20 segundos
     const reloj = setInterval(() => {
       if (document.hidden || !root.isConnected) return;

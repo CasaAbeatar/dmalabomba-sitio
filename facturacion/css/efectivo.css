@@ -115,3 +115,30 @@
   .efz-agregar{font-size:.92rem;padding-inline:.3rem}
   .efz-guardar{font-size:1rem}
 }
+
+/* Zona de efectivo dentro de «Apertura y cierre de caja»: la tarjeta para anotar se abre en su lugar, no encima, y no hay pie con «Debe haber en caja» (esa pantalla ya lo muestra) */
+.efz.efz-flujo{box-shadow:none;background:transparent;padding:0;border:0}
+.efz.efz-flujo .efz-tarjeta{position:static;max-height:none;box-shadow:none}
+.efz.efz-flujo.con-tarjeta .efz-cajitas{visibility:visible}
+.mt-efectivo{display:flex;flex-direction:column;gap:.55rem;margin:1rem 0;padding:1rem 0;border-top:1px solid var(--linea);border-bottom:1px solid var(--linea)}
+.mt-efectivo h4{margin:0;font-size:1.05rem}
+
+/* Abrir la caja (ui_apertura.js): mismo formulario en Apertura y cierre de caja y, cuando se use, en Facturación */
+.apertura{display:flex;flex-direction:column;gap:.7rem;max-width:520px;padding:1.2rem 1.1rem;background:var(--papel);border:1px solid var(--linea);border-radius:14px;box-shadow:var(--sombra)}
+.apertura .etq small{font-weight:400}
+.apertura .monto-grande{font-size:1.9rem;font-weight:600;min-height:64px;text-align:right;font-variant-numeric:tabular-nums}
+.apertura-lectura{margin:0;min-height:1.5em;font-size:1rem;font-weight:600;color:var(--tinta2)}
+.apertura-lectura.ok{color:var(--tinta);font-size:1.15rem}
+.apertura-lectura.mal{color:var(--rojo-osc)}
+.apertura-atajos{display:flex;flex-wrap:wrap;gap:.5rem}
+.apertura-atajo{flex:1 1 100px;min-height:48px;background:#fff}
+.apertura-ultimo .apertura-atajo{flex:0 0 auto;width:100%}
+.apertura-atajo[aria-pressed=true]{background:var(--tinta);border-color:var(--tinta);color:#fff}
+.apertura-atajo[aria-pressed=true]::before{content:"✓ "}
+.apertura-ultimo{display:flex;flex-direction:column;gap:.35rem}
+.apertura-ultimo small{color:var(--tinta2);line-height:1.35}
+.apertura-abrir{width:100%}
+@media(max-width:420px){
+  .apertura{padding:1rem .85rem}
+  .apertura-atajo{flex:1 1 calc(50% - .5rem)}
+}

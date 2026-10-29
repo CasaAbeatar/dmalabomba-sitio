@@ -2,6 +2,7 @@
 // Plazo: 8 días hábiles desde que la factura llegó al correo. Datos: fx_recibidas / fx_recibida (solo lectura, ver sql/06_recepcion.sql).
 import { h, money, num, fechaHora, debounce, modal, confirmar, pedir, conBoton, toast, nombrePropio, nombreLocal, campoBusqueda } from './util.js';
 import { recibidas, recibida, responder, consultarRespuesta, revisarCorreo } from './api_recepcion.js';
+import { mensajeAmable } from './api_documentos.js';
 import { selectorPeriodo, textoRango, fechaDMA } from './periodo.js';
 import { csvBajar } from './csv.js';
 
@@ -19,7 +20,7 @@ export function estadoFila(f) {
   const rec = f.receptor_estado, hac = f.hacienda_estado;
   if (!f.requiere) return { texto: 'No necesita respuesta', clase: '', sub: 'Los tiquetes y facturas de compra no se aceptan ni se rechazan.' };
   if (hac === '3') return { texto: 'Rechazada por Hacienda', clase: 'mal', sub: 'Hacienda no la aceptó; no hay que responderla.' };
-  const cuando = (f.receptor_en ? 'El ' + fechaHora(f.receptor_en) : '') + (f.receptor_envio === 'enviado' ? ' · Hacienda la está procesando' : '');
+  const cuando = (f.receptor_en ? 'El ' + fechaHora(f.receptor_en) : '') + (f.receptor_envio === 'enviado' ? ' · Enviada a Hacienda, falta que Hacienda la confirme' : '');
   if (rec === '1') return { texto: 'Aceptada', clase: 'ok', sub: cuando };
   if (rec === '2') return { texto: 'Aceptada parcialmente', clase: 'espera', sub: cuando };
   if (rec === '3') return { texto: 'Rechazada por usted', clase: 'mal', sub: cuando };
@@ -66,14 +67,14 @@ export default {
         const sum = (k) => bz.reduce((a, b) => a + (+b[k] || 0), 0);
         const errs = bz.flatMap((b) => b.errores || []);
         estadoCorreo.className = 'rec-correo-estado ' + (errs.length ? 'aviso' : 'ok');
-        estadoCorreo.textContent = `Listo. Se revisaron ${plural(sum('correos'), 'correo', 'correos')} de ${plural(bz.length, 'buzón', 'buzones')}; ${plural(sum('comprobantes'), 'comprobante leído', 'comprobantes leídos')} y ${plural(sum('mensajes_hacienda'), 'respuesta de Hacienda', 'respuestas de Hacienda')}.` + (errs.length ? ` Hubo ${plural(errs.length, 'aviso', 'avisos')}: ${errs[0]}` : '');
+        estadoCorreo.textContent = `Se revisaron ${plural(sum('correos'), 'correo', 'correos')} de ${plural(bz.length, 'buzón', 'buzones')}; ${plural(sum('comprobantes'), 'comprobante leído', 'comprobantes leídos')} y ${plural(sum('mensajes_hacienda'), 'respuesta de Hacienda', 'respuestas de Hacienda')}.` + (errs.length ? ` ${errs.length === 1 ? 'Un correo no se pudo leer' : errs.length + ' correos no se pudieron leer'}. Avise a la persona encargada.` : '');
         if (vivo) await cargar();
       } catch (e) {
         const sinPuente = /failed to fetch|networkerror|load failed/i.test(String(e.message || e));
         estadoCorreo.className = 'rec-correo-estado ' + (sinPuente ? 'aviso' : 'error');
         estadoCorreo.textContent = sinPuente
-          ? 'La revisión manual del correo todavía no se puede hacer desde esta pantalla. No pasa nada: el sistema revisa solo los correos de contabilidad cinco veces al día (6:00, 8:00, 13:00, 17:00 y 20:00) y las facturas nuevas aparecen aquí. Lo que ya estaba guardado se sigue viendo.'
-          : 'No se pudo revisar el correo ahora: ' + (e.message || e) + '. Las facturas que ya estaban guardadas se siguen viendo.';
+          ? 'La revisión manual del correo todavía no se puede hacer desde esta pantalla. No pasa nada: el sistema revisa solo los correos de contabilidad varias veces al día y las facturas nuevas aparecen aquí. Lo que ya estaba guardado se sigue viendo.'
+          : 'No se pudo revisar el correo ahora. Las facturas que ya estaban guardadas se siguen viendo. Intente de nuevo en unos minutos.';
       } finally { btnCorreo.textContent = 'Buscar facturas nuevas en el correo'; }
     }
 
@@ -96,7 +97,7 @@ export default {
         marcarPestana(d.conteo);
       } catch (e) {
         if (mia !== ficha) return;
-        lista.replaceChildren(h('div.vacio', h('p', 'No se pudieron traer las facturas.'), h('p.tenue', e.message || String(e)), h('button.btn', { type: 'button', onclick: () => cargar() }, 'Intentar de nuevo')));
+        lista.replaceChildren(h('div.vacio', h('p', 'No se pudieron traer las facturas.'), h('p.tenue', mensajeAmable(e, 'Revise la conexión e intente de nuevo.')), h('button.btn', { type: 'button', onclick: () => cargar() }, 'Intentar de nuevo')));
       }
     }
 
@@ -118,7 +119,7 @@ export default {
       const c = est.conteo || {};
       const venc = (c.vencidas_recientes || 0) + (c.vencidas_antiguas || 0);
       const b = (id, t, n) => h('button.btn.rec-vista', { type: 'button', 'aria-pressed': String(est.vista === id), onclick: () => { if (est.vista === id) return; est.per[est.vista] = periodo.id(); est.vista = id; const p = est.per[id]; if (p && p !== 'otro' && p !== periodo.id()) periodo.elegir(p); else cargar(); } }, t, n != null ? h('span.rec-n', num(n, 0)) : null);
-      tabs.replaceChildren(b('pendientes', 'Pendientes de registrar', c.pendientes_en_plazo ?? null), b('todas', 'Todas las facturas', null), b('vencidas', 'Plazo vencido', venc || null));
+      tabs.replaceChildren(b('pendientes', 'Pendientes de responder', c.pendientes_en_plazo ?? null), b('todas', 'Todas las facturas', null), b('vencidas', 'Plazo vencido', venc || null));
     }
 
     /* ---------- lista ---------- */
@@ -150,7 +151,7 @@ export default {
       const e = estadoFila(f); const nota = f.tipo === 'NotaCreditoElectronica';
       return h('button.rec-fila' + (e.nivel ? '.' + e.nivel : ''), { type: 'button', onclick: () => abrirDetalle(f.clave), 'aria-label': `Ver detalle de la factura ${f.consecutivo || ''} de ${nomProv(f.emisor_nombre)}` },
         h('span.rec-fecha', h('strong', diaSemana(f.llego)), h('small', fechaHora(f.llego).slice(-5))),
-        h('span.rec-prov', h('strong', nomProv(f.emisor_nombre)), h('small', `${nombreTipo(f.tipo)} ${f.consecutivo ? '· ' + f.consecutivo.slice(-10) : ''} · cédula ${f.emisor_cedula || 's/d'}`)),
+        h('span.rec-prov', h('strong', nomProv(f.emisor_nombre)), h('small', `${nombreTipo(f.tipo)} ${f.consecutivo ? '· ' + f.consecutivo.slice(-10) : ''} · cédula ${f.emisor_cedula || 'sin dato'}`)),
         h('span.rec-monto.der', h('small.rec-et', 'Total'), (nota ? '−' : '') + money(f.total)),
         h('span.rec-monto.der', h('small.rec-et', 'IVA'), (nota ? '−' : '') + money(f.iva)),
         h('span.rec-estado', h('span.chip' + (e.clase ? '.' + e.clase : ''), e.texto), e.sub ? h('small', e.sub) : null),
@@ -174,7 +175,7 @@ export default {
     }
     async function pintarDetalle(cuerpo, clave, aviso) {
       let d;
-      try { d = await recibida(clave); } catch (e) { cuerpo.replaceChildren(h('div.error-caja', 'No se pudo abrir la factura: ' + (e.message || e))); return; }
+      try { d = await recibida(clave); } catch (e) { cuerpo.replaceChildren(h('div.error-caja', 'No se pudo abrir la factura. ' + mensajeAmable(e, 'Revise la conexión e intente de nuevo.'))); return; }
       const f = d.factura, nota = f.tipo === 'NotaCreditoElectronica', sg = nota ? '−' : '';
       const e = estadoFila({ ...d, ...f, requiere: d.requiere, dias_restantes: d.dias_restantes });
       const dato = (t, v) => h('div.rec-dato', h('small', t), h('div', v));
@@ -185,11 +186,11 @@ export default {
       pintarRespuesta(respuesta, d, clave, cuerpo, e);
       cuerpo.replaceChildren(
         ...(aviso ? [h('div.rec-ok', aviso)] : []),
-        h('div.rec-detalle-cab', h('div', h('h2', nomProv(f.emisor_nombre)), h('p.tenue', `${nombreTipo(f.tipo)} · consecutivo ${f.consecutivo || 's/d'} · cédula del proveedor ${f.emisor_cedula || 's/d'}`)),
+        h('div.rec-detalle-cab', h('div', h('h2', nomProv(f.emisor_nombre)), h('p.tenue', `${nombreTipo(f.tipo)} · consecutivo ${f.consecutivo || 'sin dato'} · cédula del proveedor ${f.emisor_cedula || 'sin dato'}`)),
           h('span.chip' + (e.clase ? '.' + e.clase : ''), e.texto)),
         h('div.rec-datos',
-          dato('Emitida', fechaHora(f.fecha)), dato('Llegó al correo', fechaHora(f.llego)), dato('Correo', f.buzon || 's/d'),
-          dato('Compra para', d.local ? d.local.nombre : (f.receptor_nombre || 's/d')), dato('Cédula del receptor', f.receptor_cedula || 's/d'), dato('Condición de venta', { '01': 'Contado', '02': 'Crédito' }[f.condicion_venta] || f.condicion_venta || 's/d'),
+          dato('Emitida', fechaHora(f.fecha)), dato('Llegó al correo', fechaHora(f.llego)), dato('Correo', f.buzon || 'sin dato'),
+          dato('Compra para', d.local ? d.local.nombre : (f.receptor_nombre || 'sin dato')), dato('Cédula del receptor', f.receptor_cedula || 'sin dato'), dato('Condición de venta', { '01': 'Contado', '02': 'Crédito' }[f.condicion_venta] || f.condicion_venta || 'sin dato'),
           dato('Respuesta de Hacienda al proveedor', hacTxt), moneda ? dato('Moneda', `${f.moneda}, tipo de cambio ${num(f.tipo_cambio, 5)}`) : null),
         h('h3', 'Líneas de la factura'),
         lineas.length ? h('div.tabla-caja', h('table.tabla', h('thead', h('tr', h('th', '#'), h('th', 'Detalle'), h('th.der', 'Cantidad'), h('th.der', 'Precio unitario'), h('th.der', 'Sin IVA'), h('th.der', 'IVA'), h('th.der', 'Total'))),
@@ -201,7 +202,7 @@ export default {
           h('div.total', h('span', nota ? 'Total de la nota de crédito (resta de lo que se debe)' : 'Total de la factura con IVA'), h('strong.cifra', sg + money(f.total))),
           moneda ? h('small.tenue', `Montos convertidos a colones. En ${f.moneda} el total es ${num(f.total_orig, 2)}.`) : null),
         respuesta,
-        h('details.rec-tecnico', h('summary', 'Datos técnicos'), h('p.tenue', 'Clave numérica: ', h('code', f.clave)), (d.mensajes || []).map((x) => h('p.tenue', `${x.tipo} · estado ${x.estado || 's/d'} · ${x.recibido ? fechaHora(x.recibido) : ''}${x.detalle && x.detalle !== '.' ? ' · ' + x.detalle : ''}`))));
+        h('details.rec-tecnico', h('summary', 'Datos técnicos'), h('p.tenue', 'Clave numérica: ', h('code', f.clave)), (d.mensajes || []).map((x) => h('p.tenue', `${x.tipo} · estado ${x.estado || 'sin dato'} · ${x.recibido ? fechaHora(x.recibido) : ''}${x.detalle && x.detalle !== '.' ? ' · ' + x.detalle : ''}`))));
     }
 
     function pintarRespuesta(caja, d, clave, cuerpo, e) {
@@ -217,11 +218,11 @@ export default {
         const procesando = d.receptor_envio === 'enviado';
         const btnConsulta = h('button.btn.grande', { type: 'button', onclick: () => conBoton(btnConsulta, async () => {
           const r = await consultarRespuesta(clave);
-          await pintarDetalle(cuerpo, clave, r.estado === 'aceptado' ? 'Hacienda ya recibió y aceptó su respuesta.' : 'Hacienda todavía está procesando su respuesta. Vuelva a revisar en un momento.');
+          await pintarDetalle(cuerpo, clave, r.estado === 'aceptado' ? 'Hacienda ya recibió y aceptó su respuesta.' : 'Su respuesta se envió. Vuelva a revisar en un momento para ver si Hacienda ya la confirmó.');
           if (vivo) cargar();
         }) }, 'Revisar si Hacienda ya la procesó');
         caja.append(...[h('h3', 'Respuesta a Hacienda'), h('p.rec-ok', t + (d.receptor_en ? ' El ' + fechaHora(d.receptor_en) + '.' : '')),
-          procesando ? h('p.tenue', 'Su respuesta ya se envió. Hacienda todavía la está procesando.') : h('p.tenue', d.receptor_envio === 'aceptado' ? 'Hacienda ya recibió y aceptó su respuesta.' : 'Su respuesta quedó guardada en este sistema.'),
+          procesando ? h('p.tenue', 'Su respuesta ya se envió. Falta que Hacienda la confirme.') : h('p.tenue', d.receptor_envio === 'aceptado' ? 'Hacienda ya recibió y aceptó su respuesta.' : 'Su respuesta quedó guardada en este sistema.'),
           procesando ? btnConsulta : null].filter(Boolean));
         return;
       }
@@ -233,7 +234,7 @@ export default {
           const r = await responder(clave, accion, motivo, extra);
           if (r && r.ok === false) throw new Error('Hacienda no aceptó su respuesta' + (r.detalle ? ': ' + r.detalle : '.') + ' Puede intentarlo de nuevo.');
           toast('Respuesta enviada: ' + ({ aceptar: 'factura aceptada', parcial: 'aceptada parcialmente', rechazar: 'factura rechazada' }[accion]) + '.');
-          await pintarDetalle(cuerpo, clave, r?.estado === 'aceptado' ? 'Listo. Hacienda recibió y aceptó su respuesta.' : 'Listo. Su respuesta se envió y Hacienda todavía la está procesando. Si el estado sigue como pendiente, vuelva a abrir esta factura en un minuto.');
+          await pintarDetalle(cuerpo, clave, r?.estado === 'aceptado' ? 'Hacienda recibió y aceptó su respuesta.' : 'Su respuesta se envió. Falta que Hacienda la confirme: vuelva a abrir esta factura en un momento para ver si ya quedó.');
           if (vivo) cargar();
         } catch (ex) {
           err.textContent = ex.message || String(ex); err.hidden = false; err.scrollIntoView({ block: 'nearest' });
