@@ -93,9 +93,10 @@ export default {
     });
     const conBase = (que, tabla) => ({ ...baseDescarga(que), ...tabla });
     const redondea = (n, d = 2) => { const k = 10 ** d; return Math.round((+n || 0) * k) / k; };
-    const NOTA_NETAS = 'Montos con IVA incluido, sin las ventas anuladas con nota de crédito. Las devoluciones parciales no se restan aquí';
-    // Estos desgloses (hora, medio de pago, servicio y producto) muestran la venta original completa: no restan devoluciones parciales ni suman notas de débito.
-    const AVISO_PARCIALES = ' Las devoluciones parciales no se restan aquí.';
+    const NOTA_NETAS = 'Montos con IVA incluido, sin las ventas anuladas con nota de crédito. Se restan las devoluciones parciales y se suman las notas de débito por monto, en el día en que se hizo cada nota';
+    // Estos desgloses (hora, medio de pago, servicio y producto) ya restan las devoluciones parciales y suman las notas de débito por monto (fx_listados2, migración fx_23a):
+    // cada nota cae en la fila de la venta original, salvo el medio de pago, que usa el de la propia nota.
+    const AVISO_PARCIALES = ' Ya restan las devoluciones parciales y suman las notas de débito por monto.';
     const kpi = (titulo, valor, nota, extra) => h('div.tarjeta.kpi' + (extra ? '.' + extra : ''), h('div.kpi-t', titulo), h('div.kpi-v.cifra', valor), h('div.kpi-n', nota));
 
     function tablaSimple(cols, filas, pie) {
@@ -119,6 +120,8 @@ export default {
     /* ---------- pintar todo ---------- */
     function pintar() {
       const d = est.datos, r = d.resumen;
+      // Lo que suman los desgloses: el total de cada hora (ya neto de devoluciones parciales y notas de débito). Si el servidor no trae horas, se usa el total de ventas vigentes de siempre.
+      const sumaDesglose = Array.isArray(d.por_hora) ? d.por_hora.reduce((a, x) => a + (Number(x.total) || 0), 0) : (r.vigentes_total || 0);
       resumenEl.replaceChildren(); cuerpo.replaceChildren();
       const rech = d.rechazados || { n: r.rechazados_n || 0, total: r.rechazados_total || 0, lista: [] };
       if (!r.docs_emitidos && !r.notas_credito_n && !r.notas_debito_n) {
@@ -146,7 +149,7 @@ export default {
           kpi('Promedio por venta', money(ticket), 'Ventas netas entre el número de ventas vigentes. Con IVA incluido.')),
         rech.n > 0 ? avisoRechazados(rech) : null,
         r.sin_aceptar_n > 0 ? h('p.lis-aviso', `${r.sin_aceptar_n} ${r.sin_aceptar_n === 1 ? 'documento todavía no está aceptado' : 'documentos todavía no están aceptados'} por Hacienda (por enviar o con problemas para enviar). Cuentan en las cifras igual que los aceptados.`) : null,
-        Math.abs((r.vigentes_total || 0) - (r.ventas_netas || 0)) > 0.005 ? h('p.lis-aviso', `Los desgloses de abajo suman ${money(r.vigentes_total)} y las ventas netas ${money(r.ventas_netas)}. La diferencia puede venir de notas de crédito de este periodo que corrigen ventas de otro periodo, de devoluciones parciales o de notas de débito. Los desgloses por hora, medio de pago, tipo de servicio y producto muestran la venta completa, sin esos ajustes.`) : null,
+        Math.abs(sumaDesglose - (r.ventas_netas || 0)) > 0.005 ? h('p.lis-aviso', `Los desgloses de abajo suman ${money(sumaDesglose)} y las ventas netas ${money(r.ventas_netas)}. La diferencia puede venir de una venta anulada en un periodo distinto al de la venta, o de documentos que no tienen una venta de caja detrás. Las devoluciones parciales y las notas de débito por monto ya están incluidas en los desgloses.`) : null,
       ].filter(Boolean));
 
       cuerpo.append(seccionDias(d), seccionHoras(d), seccionMedios(d), seccionServicio(d), seccionTarifas(d), seccionProductos(d));
