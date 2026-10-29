@@ -555,6 +555,8 @@ export default {
       panelOpc.querySelector('.opciones-grid')?.scrollTo?.(0, 0);
       // Celular: la lista de productos sube hasta quedar justo debajo de la tira de cajones, así se ve la mayor parte posible entre la tira y el panel de opciones;
       // si el producto elegido quedara tapado por el panel, la página sube hasta que él quede arriba de la franja
+      // Celular acostado: el panel corre con la página; se trae a la vista, justo arriba de la barra de abajo, para que «Cerrar opciones» y las opciones se alcancen sin buscar
+      if (window.matchMedia?.('(max-width:979px) and (max-height:520px)').matches) { requestAnimationFrame(() => { if (!panelOpc.hidden) panelOpc.scrollIntoView({ block: 'start', behavior: 'smooth' }); }); return; }
       if (window.matchMedia?.('(max-width:979px)').matches) requestAnimationFrame(() => {
         const b = btnsGrupo.get(g.clave);
         if (!b || panelOpc.hidden) return;

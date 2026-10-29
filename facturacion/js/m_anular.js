@@ -101,7 +101,7 @@ async function emitirNota(app, d, razon) {
       if (nc) return { nc, yaExistia: false };
       throw new FalloNota('No hubo conexión y no se anuló nada. Puede intentarlo de nuevo.');
     }
-    if (/debe estar aceptado|no est[aá] aceptado/i.test(msg)) throw new FalloNota('Hacienda todavía no acepta este documento, así que no se puede anular. Espere a que aparezca como «Aceptado».');
+    if (/debe estar aceptado|no est[aá] aceptado/i.test(msg)) throw new FalloNota('Hacienda todavía no acepta este documento, así que no se puede anular. Espere a que aparezca como «Aceptado por Hacienda».');
     throw new FalloNota(msg);
   }
 }

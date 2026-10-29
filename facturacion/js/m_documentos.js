@@ -121,7 +121,7 @@ export default {
         titulo.replaceChildren(mesTxt(est.desde), h('span.tenue', ` (del ${Number(est.desde.slice(8))} al ${Number(est.hasta.slice(8))})`));
         return;
       }
-      titulo.textContent = !una ? `Del ${diaCortoTxt(est.desde)} al ${diaCortoTxt(est.hasta)}` : est.rango === 'hoy' ? 'Hoy, ' + fmtDia.format(new Date(est.desde + 'T12:00:00Z')) : diaTxt(est.desde);
+      titulo.textContent = !una ? `Del ${est.desde.slice(0, 7) === est.hasta.slice(0, 7) ? Number(est.desde.slice(8)) : diaCortoTxt(est.desde)} al ${diaCortoTxt(est.hasta)}` : est.rango === 'hoy' ? 'Hoy, ' + fmtDia.format(new Date(est.desde + 'T12:00:00Z')) : diaTxt(est.desde);
     }
 
     /* ---------- carga ---------- */
@@ -290,11 +290,15 @@ export default {
       const desde = (est.pagina - 1) * ps, trozo = visibles.slice(desde, desde + ps);
       const out = [];
       let diaActual = null;
+      const enEstaPagina = new Map(); for (const d of trozo) { const k = ymdDe(d.fecha_emision); enEstaPagina.set(k, (enEstaPagina.get(k) || 0) + 1); }
       for (const d of trozo) {
         const k = ymdDe(d.fecha_emision);
         if (k !== diaActual) {
           diaActual = k;
-          if (multi) { const x = porDia.get(k); out.push(h('div.doc-dia', h('b', diaTxt(k)), h('span', `${x.n} ${x.n === 1 ? 'documento' : 'documentos'}, total ${money(x.t / 100)}`))); }
+          if (multi) {
+            const x = porDia.get(k), partido = enEstaPagina.get(k) < x.n; // el día sigue en la página anterior o en la siguiente: el total es el de todo el día
+            out.push(h('div.doc-dia', h('b', diaTxt(k)), h('span', `${x.n} ${x.n === 1 ? 'documento' : 'documentos'}${partido ? ' en el día' : ''}, total ${money(x.t / 100)}` + (partido ? `. En esta página: ${enEstaPagina.get(k)}` : ''))));
+          }
           out.push(h('div.doc-cabeza', h('div.doc-cabeza-cols', h('span', 'Hora'), h('span', 'Documento'), h('span', 'Cliente'), h('span.der', 'Total'), h('span', 'Estado')), h('span.doc-cabeza-acc', 'Acciones')));
         }
         out.push(fila(d));
@@ -459,6 +463,8 @@ export default {
       return raiz;
     }
 
+    // Algunos avisos traen la frase «el documento sigue siendo válido»; en un documento rechazado o anulado contradice el estado. El título de la lista ya dice «sigue siendo válido» cuando corresponde.
+    const sinFrasePorEstado = (t) => String(t || '').replace(/\s*Es solo un aviso y el documento sigue siendo válido\./, '').replace(/\s{2,}/g, ' ').trim();
     function textoEstado(c, anulado = false) {
       const th = traducirHacienda(c.mensaje);
       const t = {
@@ -471,7 +477,7 @@ export default {
       // Lo que dice Hacienda, en palabras simples. Si el documento fue aceptado, lo que trae es un aviso y no impide nada.
       const motivos = th.items.length
         ? h('div.doc-motivos', h('b', c.estado === 'aceptado' ? (anulado ? 'Aviso de Hacienda:' : 'Aviso de Hacienda (el documento sigue siendo válido):') : 'Qué dice Hacienda:'),
-          h('ul', th.items.map((i) => h('li', i.texto))))
+          h('ul', th.items.map((i) => h('li', sinFrasePorEstado(i.texto)))))
         : null;
       // El texto original queda plegado, con las comillas y corchetes quitados, por si alguien de soporte lo necesita
       const tecnico = c.mensaje
