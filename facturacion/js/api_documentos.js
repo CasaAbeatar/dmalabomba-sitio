@@ -65,12 +65,32 @@ export function anulacionDeSaldos(s) {
 }
 // Las demás notas vivas del documento: devoluciones y correcciones de crédito (03) y notas de débito (02)
 export const otrasNotas = (s) => (s && Array.isArray(s.notas) ? s.notas.filter((n) => n.viva !== false && n.estado !== 'rechazado' && !esAnulacionTotal(n)) : []);
-// La anulación total de un comprobante: { saldos, nc }. Con saldos, nc es solo una anulación total (una devolución parcial NO es una anulación); sin saldos se usa fx_comprobante_nc, como antes.
-// Si ni siquiera eso se puede leer, lanza el error (quien llama decide qué decir).
+// La anulación total de un comprobante: { saldos, nc, ncAnulacion, saldosNC, sinEfecto }.
+//   nc: la anulación que sigue VIGENTE (solo código 01 o 13; una devolución parcial NO es una anulación). Es null si no hay anulación o si se dejó sin efecto.
+//   ncAnulacion: la nota de crédito de anulación total aunque ya se haya dejado sin efecto; saldosNC: los saldos de esa nota; sinEfecto: la nota de débito 01 viva que la dejó sin efecto.
+//   La nota de débito 01 cuelga de la nota de crédito (no de la factura), por eso se leen los saldos de la nota de crédito: con la anulación sin efecto, el documento vuelve a valer.
+// Sin los saldos se usa fx_comprobante_nc, que devuelve la última nota de crédito de CUALQUIER código y sin su código: entonces se lee la nota para saber de qué clase es.
+// Si no se puede saber (falla la lectura), lanza un error con una frase lista para mostrar: nunca se da por anulado un documento que solo tiene una devolución, ni al revés.
 export async function anulacionDe(id) {
   const saldos = await saldosDe(id);
-  if (saldos && Array.isArray(saldos.notas)) return { saldos, nc: anulacionDeSaldos(saldos) };
-  return { saldos: null, nc: await ncDe(id) };
+  let vigente;
+  if (saldos && Array.isArray(saldos.notas)) vigente = anulacionDeSaldos(saldos);
+  else {
+    const nota = await ncDe(id);
+    vigente = null;
+    if (nota) {
+      let codigo = 'codigo_referencia' in nota ? nota.codigo_referencia : undefined;
+      if (codigo === undefined) {
+        try { const c = await rpc('fx_comprobante', { p_id: nota.id }); codigo = c && typeof c === 'object' ? (c.codigo_referencia ?? null) : undefined; } catch { codigo = undefined; }
+      }
+      if (codigo === undefined) throw new ErrorApi('No se pudo comprobar si este documento está anulado. Revise la conexión e intente de nuevo.');
+      if (['01', '13'].includes(String(codigo || '01'))) vigente = nota; // una nota sin código guardado se lee como 01
+    }
+  }
+  if (!vigente) return { saldos: saldos && Array.isArray(saldos.notas) ? saldos : null, nc: null, ncAnulacion: null, saldosNC: null, sinEfecto: null };
+  const saldosNC = await saldosDe(vigente.id);
+  const sinEfecto = sinEfectoDeSaldos(saldosNC);
+  return { saldos: saldos && Array.isArray(saldos.notas) ? saldos : null, nc: sinEfecto ? null : vigente, ncAnulacion: vigente, saldosNC, sinEfecto };
 }
 
 /* ---------- Notas parciales: devolver parte, corregir un monto y dejar sin efecto una anulación (CONTRATO_NC_SQL.md, secciones 2.2 a 2.6) ---------- */
