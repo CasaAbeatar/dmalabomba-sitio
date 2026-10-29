@@ -124,6 +124,7 @@ export function modal({ titulo, contenido, botones = [], ancho = 520, alCerrar }
     h('div.modal-cuerpo', contenido),
     botones.length ? h('div.modal-pie', botones.map((b) => h('button.btn' + (b.clase ? '.' + b.clase : ''), { type: 'button', onclick: () => b.onclick?.(cerrar) }, b.texto))) : null);
   fondo.append(caja);
+  fondo._cerrar = cerrar; // para cerrarVentanas()
   fondo.addEventListener('mousedown', (e) => { if (e.target === fondo) cerrar(); });
   document.addEventListener('keydown', teclas);
   pilaModales.push(fondo);
@@ -136,6 +137,11 @@ export function modal({ titulo, contenido, botones = [], ancho = 520, alCerrar }
   if (f && vis(f)) f.focus({ preventScroll: true });
   else caja.querySelector('.modal-pie .primario, .modal-pie button, .cerrar')?.focus({ preventScroll: true });
   return { cerrar, el: caja };
+}
+
+// Cierra todas las ventanas abiertas (por ejemplo al cerrar la sesión), de la última a la primera
+export function cerrarVentanas() {
+  [...pilaModales].reverse().forEach((f) => { try { f._cerrar?.(); } catch { /* nada */ } });
 }
 
 export function confirmar(texto, { si = 'Sí, continuar', no = 'No, volver', peligro = false } = {}) {
@@ -172,4 +178,118 @@ export async function conBoton(btn, fn) {
 export function descargar(nombre, texto, tipo = 'application/xml') {
   const a = h('a', { href: URL.createObjectURL(new Blob([texto], { type: tipo })), download: nombre });
   document.body.append(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+}
+
+/* ---------- Texto para mostrar ---------- */
+
+// Pone punto final si el mensaje no termina en un signo (los mensajes de pantalla siempre cierran la frase)
+export const conPunto = (m) => { const t = String(m ?? '').trim(); return t && !/[.!?:…]$/.test(t) ? t + '.' : t; };
+
+// Nombres propios en mayúsculas sostenidas ("CORPORACION DMA COSTA RICA SOCIEDAD DE RESPONSABILIDAD LIMITADA") se muestran como
+// "Corporación DMA Costa Rica Sociedad de Responsabilidad Limitada". SOLO es para mostrar: lo que va en el XML no se toca.
+// Un nombre que ya trae mayúsculas y minúsculas se deja igual.
+const SIGLAS = new Set(['SA', 'SRL', 'SAS', 'SL', 'DMA', 'CR', 'ICE', 'CCSS', 'INS', 'UNA', 'UCR', 'UTN', 'TEC', 'BCR', 'BAC', 'BN', 'CNFL', 'ICT', 'IMAS', 'MEP', 'MAG', 'AYA', 'CGR', 'TSE', 'JPS', 'ICAFE', 'CONAVI', 'COSEVI', 'MOPT', 'RECOPE', 'JASEC', 'ESPH', 'INA', 'INVU', 'CNP', 'ICODER', 'DIMEX', 'NITE', 'KFC', 'BBQ', 'TV', 'PC', 'USA', 'EEUU', 'II', 'III', 'IV', 'VI', 'VII', 'VIII', 'IX', 'XI', 'XII']);
+const ENLACES = new Set(['de', 'del', 'la', 'las', 'los', 'el', 'y', 'e', 'o', 'u', 'en', 'con', 'por', 'para', 'al', 'sin']);
+const sinTilde = (x) => x.replace(/[áÁ]/g, 'A').replace(/[éÉ]/g, 'E').replace(/[íÍ]/g, 'I').replace(/[óÓ]/g, 'O').replace(/[úÚüÜ]/g, 'U').replace(/[ñÑ]/g, 'N').toUpperCase();
+const ACENTOS = Object.fromEntries(('Corporación Administración Distribución Comercialización Construcción Inversión Tecnología Tecnologías Panadería Carnicería Ferretería Librería Pulpería Pizzería Zapatería Repostería Cafetería Marisquería Lavandería Peluquería Papelería Joyería Consultoría Asesoría Compañía Compañías Mecánica Eléctrica Electrónica Electrónicos Telefonía Agrícola Económica Anónima Pública Público Médica Médico Clínica Química Químicos Logística Vehículos Turística Alimentación Marítima Centroamérica América Niño Niños Año Muñoz Núñez Zúñiga Acuña Peña Ibáñez Castañeda Señor Señora Diseño Café Plásticos Electrodomésticos Máquinas Artículos Escazú Limón Tibás José María Jesús Andrés Adrián Sebastián Julián Ángel Óscar Raúl Saúl Rubén Héctor Víctor Néstor Mónica Verónica Rocío Lucía Sofía Álvaro Elías Tomás Matías Joaquín Fabián César Martínez Rodríguez González Fernández Hernández Pérez López Ramírez Sánchez Gómez Jiménez Álvarez Domínguez Vásquez Vázquez Díaz García Méndez Chávez Gutiérrez Guzmán Solís Céspedes Bermúdez Márquez Velásquez Velázquez Benítez Juárez Suárez Ordóñez Córdoba León Morán Román Briceño Agüero Alpízar Chacón Umaña Zeledón Jarquín Baltodano Calderón Marín Quirós Camacho Sandoval Peralta Saborío Araúz Lizano Monge Brenes Ugalde Cubero Vílchez Aguilar Montoya Mejía Carvajal Cascante Cerdas').split(' ')
+  .map((p) => [sinTilde(p), p]));
+const LETRAS = 'A-Za-zÁÉÍÓÚÜÑáéíóúüñ';
+function pieza(core, primera) {
+  if (!core || /^\d/.test(core)) return core;
+  const up = core.toUpperCase(), low = core.toLowerCase();
+  if (SIGLAS.has(up)) return up;
+  if (ACENTOS[sinTilde(up)]) return ACENTOS[sinTilde(up)];
+  if (/[ÁÉÍÓÚÜÑ]/.test(up)) return low.charAt(0).toUpperCase() + low.slice(1); // ya trae su tilde
+  if (!primera && ENLACES.has(low)) return low;
+  const base = /(c|s)ion$/.test(low) && low.length > 5 ? low.replace(/(c|s)ion$/, '$1ión') : low;
+  return base.charAt(0).toUpperCase() + base.slice(1);
+}
+export function nombrePropio(s) {
+  const t = String(s ?? '').trim().replace(/\s+/g, ' ');
+  if (!t) return '';
+  const letras = t.replace(new RegExp('[^' + LETRAS + ']', 'g'), '');
+  if (letras.length < 3) return t;
+  if (letras.replace(/[^A-ZÁÉÍÓÚÜÑ]/g, '').length / letras.length < 0.8) return t; // ya viene con mayúsculas y minúsculas
+  return t.split(' ').map((p, i) => {
+    if (/^([A-ZÑ]\.)+[A-ZÑ]?\.?$/.test(p)) return p; // S.A., S.R.L.
+    const m = p.match(new RegExp('^([^' + LETRAS + '0-9]*)(.*?)([^' + LETRAS + '0-9]*)$'));
+    const partes = m[2].split(/([-/])/).map((x, k) => (k % 2 ? x : pieza(x, i === 0 && k === 0)));
+    return m[1] + partes.join('') + m[3];
+  }).join(' ');
+}
+
+// PIN demasiado fácil de adivinar: devuelve el motivo en palabras, o '' si sirve. La misma regla debe vivir en el servidor (fx_pin_cambiar).
+export function pinDebil(p) {
+  if (!/^\d{4}$/.test(String(p))) return '';
+  const d = [...String(p)].map(Number);
+  if (d.every((x) => x === d[0])) return 'No use el mismo número cuatro veces, como 1111.';
+  const paso = (i) => (d[i + 1] - d[i] + 10) % 10;
+  if ([0, 1, 2].every((i) => paso(i) === 1)) return 'No use números seguidos hacia arriba, como 1234.';
+  if ([0, 1, 2].every((i) => paso(i) === 9)) return 'No use números seguidos hacia abajo, como 4321.';
+  if (d[0] === d[2] && d[1] === d[3]) return 'No repita una pareja de números, como 1212.';
+  if (d[0] === d[1] && d[2] === d[3]) return 'No use dos parejas seguidas, como 1122.';
+  if (['2580', '0852'].includes(String(p))) return 'No use una línea recta del teclado, como 2580.';
+  if (['1357', '2468', '1379', '1004'].includes(String(p))) return 'Ese PIN es de los primeros que se adivinan, como 2468 o 1357.';
+  if (/^(19\d\d|20[0-3]\d)$/.test(String(p))) return 'No use un año, como 1990.';
+  return '';
+}
+
+// "unos 12 minutos" / "menos de un minuto" hasta una hora futura
+export function tiempoFalta(hasta) {
+  const ms = new Date(hasta).getTime() - Date.now();
+  if (!Number.isFinite(ms)) return '';
+  if (ms <= 0) return '';
+  const min = Math.ceil(ms / 60000);
+  return min <= 1 ? 'menos de un minuto' : 'unos ' + min + ' minutos';
+}
+
+/* ---------- Respuesta de Hacienda en palabras simples ---------- */
+const CODIGOS_HACIENDA = {
+  '-37': 'La provincia, el cantón o el distrito del emisor no coinciden con lo que Hacienda tiene registrado. Es solo un aviso y no impide que el documento valga, pero hay que actualizar esos datos en Hacienda.',
+  '-60': 'La firma del documento no corresponde a quien lo emite: el certificado de firma es de otro contribuyente.',
+  '-99': 'Ese número de comprobante ya existe en Hacienda.',
+  '-410': 'El código de actividad económica del cliente no está registrado en Hacienda. Revise la actividad del cliente.',
+};
+const limpiarHacienda = (x) => String(x ?? '').replace(/"{2,}/g, '"').replace(/[\[\]]/g, ' ').replace(/^[\s"']+|[\s"']+$/g, '').replace(/\s+/g, ' ').trim();
+// Devuelve { items:[{codigo, texto, original}], pruebas, resumen, crudo }. El texto crudo se conserva para mostrarlo plegado.
+export function traducirHacienda(crudo) {
+  const t = String(crudo ?? '');
+  const items = [];
+  const re = /(-?\d{1,4})\s*,\s*"{1,3}([\s\S]*?)"{1,3}\s*,\s*\d+\s*,\s*\d+/g;
+  let m;
+  while ((m = re.exec(t))) {
+    const original = limpiarHacienda(m[2]);
+    items.push({ codigo: m[1], original, texto: CODIGOS_HACIENDA[m[1]] || conPunto(original) });
+  }
+  const pruebas = /ambiente de pruebas/i.test(t);
+  if (!items.length) {
+    const sinNota = limpiarHacienda(t.replace(/Este comprobante fue recibido en el ambiente de pruebas, por lo cual no tiene validez para fines tributarios\.?/i, '').replace(/El comprobante electr[oó]nico tiene los siguientes errores:?/i, ''));
+    if (sinNota) items.push({ codigo: '', original: sinNota, texto: conPunto(sinNota) });
+  }
+  return { items, pruebas, resumen: items.map((i) => i.texto).join(' '), crudo: t };
+}
+
+// Estado de un comprobante para mostrar a la cajera. Nunca dice que algo "ya está" si la base no lo sabe.
+// Devuelve { estado, final, clase:'ok'|'espera'|'mal', chip, texto, motivo }
+export function describirEstado(estado, mensaje) {
+  const e = estado || 'pendiente';
+  const motivo = mensaje ? traducirHacienda(mensaje).resumen : '';
+  const ESTADOS_TXT = {
+    pendiente: { final: false, clase: 'espera', chip: 'En cola', texto: 'Cobro registrado. Se está enviando a Hacienda. Este aviso cambia solo cuando Hacienda responda.' },
+    enviado: { final: false, clase: 'espera', chip: 'Enviado a Hacienda', texto: 'Cobro registrado. Ya se envió a Hacienda y se espera su respuesta. Este aviso cambia solo.' },
+    aceptado: { final: true, clase: 'ok', chip: 'Aceptado', texto: 'Cobro registrado. Hacienda aceptó el comprobante.' },
+    rechazado: { final: true, clase: 'mal', chip: 'Rechazado', texto: 'Cobro registrado, pero Hacienda no aceptó el comprobante.' + (motivo ? ' Motivo: ' + motivo : '') + ' Avise a la persona encargada; el documento queda en «Documentos del día».' },
+    error: { final: false, clase: 'mal', chip: 'Con error', texto: 'Cobro registrado, pero todavía no se pudo enviar a Hacienda.' + (motivo ? ' Motivo: ' + motivo : '') + ' El sistema vuelve a intentarlo solo.' },
+  };
+  return { estado: e, motivo, ...(ESTADOS_TXT[e] || ESTADOS_TXT.pendiente) };
+}
+
+// Número corto de un comprobante: 00100001040000008000 -> 8000 (los últimos 10 dígitos sin ceros a la izquierda). Es el mismo que usa la impresión.
+export const numeroDoc = (cons) => { const n = parseInt(String(cons || '').slice(-10), 10); return Number.isFinite(n) ? String(n) : ''; };
+
+// Campo de búsqueda con un botón escrito «Borrar búsqueda» (reemplaza la «x» pequeña que pone el navegador). alBorrar() vuelve a pintar la lista.
+export function campoBusqueda(input, alBorrar) {
+  const borrar = h('button.btn', { type: 'button', hidden: true, onclick: () => { input.value = ''; borrar.hidden = true; alBorrar?.(); input.focus(); } }, 'Borrar búsqueda');
+  input.addEventListener('input', () => { borrar.hidden = !input.value; });
+  return h('div.buscar-fila', input, borrar);
 }

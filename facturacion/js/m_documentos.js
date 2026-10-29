@@ -1,5 +1,5 @@
 // Documentos del día: lista de comprobantes (hoy primero), detalle, impresión, descargas, reenvío y anulación con nota de crédito.
-import { h, money, modal, toast, confirmar, descargar, hoyCR, sumaDias, fechaHora, horaCorta, debounce, num, r2, TIPOS_SERVICIO, MEDIOS, TIPOS_ID } from './util.js';
+import { h, money, modal, toast, confirmar, descargar, hoyCR, sumaDias, fechaHora, horaCorta, debounce, num, r2, nombrePropio, traducirHacienda, campoBusqueda, TIPOS_SERVICIO, MEDIOS, TIPOS_ID } from './util.js';
 import { documentos, ncDe, CORREO_ACTIVO, reenviarCorreo } from './api_documentos.js';
 import { imprimirComprobante, formatoDireccion, formatoCedula, formatoTelefono, numeroCorto, NOMBRES_DOCUMENTO } from './imprimir.js';
 
@@ -34,6 +34,12 @@ export default {
   titulo: 'Documentos del día',
   async mount(root, app) {
     const est = { rango: 'hoy', desde: hoyCR(), hasta: hoyCR(), q: '', filtro: 'todos', lista: [], cargando: false, error: null };
+    // Si otra pantalla pidió ver los problemas (el aviso rojo del encabezado), se abre con ese filtro y con las mismas fechas del aviso
+    const pedido = app.pedido; app.pedido = null;
+    if (pedido?.filtro === 'problemas') {
+      est.filtro = 'problemas';
+      if (pedido.desde && /^\d{4}-\d{2}-\d{2}$/.test(pedido.desde) && pedido.desde < est.hasta) { est.rango = 'otro'; est.desde = pedido.desde; }
+    }
     let detalleActual = null;
     let ultimaCarga = 0;
 
@@ -60,6 +66,7 @@ export default {
       h('div.rejilla.dos', h('label.etq', 'Desde', inDesde), h('label.etq', 'Hasta', inHasta)), verFechas);
     const buscador = h('input.campo', { type: 'search', placeholder: 'Buscar por número, cliente o monto', 'aria-label': 'Buscar documento', autocomplete: 'off',
       oninput: debounce((e) => { est.q = e.target.value; pintar(); }, 150) });
+    const buscadorFila = campoBusqueda(buscador, () => { est.q = ''; pintar(); });
     const refrescar = h('button.btn', { type: 'button', onclick: async () => { refrescar.disabled = true; await cargar(); refrescar.disabled = false; } }, 'Actualizar la lista');
     const zonaResumen = h('div');
     const zonaFiltros = h('div.doc-filtros');
@@ -68,7 +75,7 @@ export default {
     root.append(h('div.doc-mod',
       h('div.fila.sep', h('h2', 'Documentos del día'), refrescar),
       titulo, botonesRango, cajaFechas, zonaResumen,
-      h('div.doc-buscar', buscador), zonaFiltros, zonaLista));
+      h('div.doc-buscar', buscadorFila), zonaFiltros, zonaLista));
 
     function elegirRango(r) {
       est.rango = r;
@@ -92,7 +99,8 @@ export default {
       pintarControles();
       if (!silencioso) { est.cargando = true; est.error = null; pintar(); }
       try {
-        est.lista = (await documentos(app.soc.id, est.desde, est.hasta)).slice().sort((a, b) => new Date(a.fecha_emision) - new Date(b.fecha_emision));
+        // Lo más reciente va arriba (igual que en «Anular factura»): lo último que hizo la cajera se ve sin bajar
+        est.lista = (await documentos(app.soc.id, est.desde, est.hasta)).slice().sort((a, b) => new Date(b.fecha_emision) - new Date(a.fecha_emision));
         est.error = null;
       } catch (e) { if (!silencioso) est.error = e.message || String(e); }
       est.cargando = false; ultimaCarga = Date.now();
@@ -110,8 +118,13 @@ export default {
       const t = Number(d.total) || 0;
       return String(Math.trunc(t)).includes(dig) || t.toFixed(2).replace('.', '').includes(dig) || String(d.consecutivo).includes(dig);
     }
-    const esProblema = (d) => d.estado === 'error' || d.estado === 'rechazado';
     const esPendiente = (d) => d.estado === 'pendiente' || d.estado === 'enviado';
+    // «Con problemas» = lo mismo que cuenta el aviso rojo: rechazados (salvo los que solo traen un aviso o ya se rehicieron bien), con error, o que llevan más de 15 minutos esperando a Hacienda
+    const soloAviso = (d) => { const it = traducirHacienda(d.mensaje).items; return it.length > 0 && it.every((x) => x.codigo === '-37'); };
+    const reemplazado = (d) => est.lista.some((n) => n.id !== d.id && n.tipo_doc === d.tipo_doc && ['aceptado', 'pendiente', 'enviado'].includes(n.estado) && new Date(n.fecha_emision) > new Date(d.fecha_emision)
+      && ((d.venta_numero && n.venta_numero === d.venta_numero) || (d.comprobante_ref && n.comprobante_ref === d.comprobante_ref)));
+    const esProblema = (d) => ((d.estado === 'error' || d.estado === 'rechazado') && !(d.estado === 'rechazado' && soloAviso(d)) && !reemplazado(d))
+      || (esPendiente(d) && Date.now() - new Date(d.fecha_emision).getTime() > 15 * 60000);
 
     function pintar() {
       pintarControles();
@@ -184,7 +197,7 @@ export default {
           anulado ? h('span.sub.anul', `Anulado por la nota de crédito N.° ${numeroCorto(d.nc_consecutivo)}`) : null,
           nc && d.ref_consecutivo ? h('span.sub', `Referencia a ${(NOMBRE_TIPO[d.ref_tipo] || 'documento').toLowerCase()} N.° ${numeroCorto(d.ref_consecutivo)}`) : null,
           null),
-        h('span.c-cli', d.cliente || h('span.tenue', 'Consumidor final')),
+        h('span.c-cli', d.cliente ? nombrePropio(d.cliente) : h('span.tenue', 'Consumidor final')),
         h('span.c-pago', mediosTxt(d.medios) || h('span.tenue', 'Sin pago')),
         h('span.c-total.der', (nc ? '−' : '') + money(d.total)),
         h('span.c-est', h('span.chip.' + (CLASE_ESTADO[d.estado] || ''), ETQ_ESTADO[d.estado] || d.estado), anulado ? h('span.chip.anulado', 'Anulado') : null));
@@ -238,8 +251,8 @@ export default {
 
       // Cliente
       raiz.append(h('div.doc-seccion', h('h3', 'Cliente'),
-        cliente ? h('div.doc-cliente', h('b', cliente.nombre || ''),
-          cliente.nombre_comercial ? h('div', cliente.nombre_comercial) : null,
+        cliente ? h('div.doc-cliente', h('b', nombrePropio(cliente.nombre || '')),
+          cliente.nombre_comercial ? h('div', nombrePropio(cliente.nombre_comercial)) : null,
           cliente.identificacion ? h('div', (TIPOS_ID[cliente.tipo_id] || 'Identificación') + ' ' + formatoCedula(cliente.identificacion, cliente.tipo_id)) : null,
           cliente.correo ? h('div', 'Correo: ' + cliente.correo) : null,
           cliente.telefono ? h('div', 'Teléfono: ' + formatoTelefono(cliente.telefono)) : null,
@@ -264,15 +277,26 @@ export default {
     }
 
     function textoEstado(c) {
+      const th = traducirHacienda(c.mensaje);
       const t = {
         pendiente: 'Está en cola y se enviará a Hacienda en el próximo minuto. No tiene que hacer nada.',
-        enviado: 'Ya se envió a Hacienda y estamos esperando su respuesta. Normalmente tarda menos de un minuto.',
+        enviado: 'Ya se envió a Hacienda y se espera su respuesta. Normalmente tarda menos de un minuto.',
         aceptado: 'Hacienda lo aceptó: el documento es válido.' + (c.ambiente !== 'produccion' ? ' Como estamos en modo de pruebas, no tiene validez tributaria.' : ''),
         rechazado: 'Hacienda no aceptó este documento, así que no es válido y no necesita nota de crédito. Si fue una venta real, hay que hacerla de nuevo en Caja.',
-        error: 'No se ha podido enviar a Hacienda (por ejemplo, por falta de internet). Se reintenta solo; también puede tocar "Reenviar a Hacienda".',
+        error: 'Todavía no se pudo enviar a Hacienda (por ejemplo, por falta de internet). El sistema vuelve a intentarlo solo; también puede tocar «Reenviar a Hacienda».',
       }[c.estado] || '';
-      return h('div.doc-estado.' + (CLASE_ESTADO[c.estado] || ''), h('p', t),
-        c.mensaje ? h('details', h('summary.btn', 'Ver el mensaje completo de Hacienda'), h('pre', c.mensaje)) : null);
+      // Lo que dice Hacienda, en palabras simples. Si el documento fue aceptado, lo que trae es un aviso y no impide nada.
+      const motivos = th.items.length
+        ? h('div.doc-motivos', h('b', c.estado === 'aceptado' ? 'Aviso de Hacienda (el documento sigue siendo válido):' : 'Qué dice Hacienda:'),
+          h('ul', th.items.map((i) => h('li', i.texto))))
+        : null;
+      // El texto original queda plegado, con las comillas y corchetes quitados, por si alguien de soporte lo necesita
+      const tecnico = c.mensaje
+        ? h('details', h('summary.btn', 'Ver el texto original de Hacienda'),
+          h('div.doc-tecnico', th.items.map((i) => h('p', (i.codigo ? `Código ${i.codigo}: ` : '') + i.original)),
+            h('details.doc-crudo', h('summary.btn', 'Texto técnico sin cambios'), h('pre', String(c.mensaje)))))
+        : null;
+      return h('div.doc-estado.' + (CLASE_ESTADO[c.estado] || ''), h('p', t), motivos, tecnico);
     }
 
     /* ---------- acciones ---------- */
@@ -380,8 +404,9 @@ export default {
           h('div.doc-etq', 'Motivo (obligatorio)'),
           h('div.doc-atajos', btnAtajos),
           h('label.etq', 'Motivo que quedará escrito en la nota de crédito', campo),
-          error,
-          h('div.doc-pie-anular', volver, seguir)) });
+          ) });
+      // Los dos botones quedan fuera de la parte que se desplaza: se ven siempre, aunque la ventana sea más alta que la pantalla
+      m.el.append(h('div.modal-pie.doc-pie-anular', error, volver, seguir));
     }
 
     function mostrarResultadoNC(original, nc, ctx) {
@@ -390,7 +415,7 @@ export default {
       const r = modal({ titulo: 'Documento anulado', ancho: 560, contenido: h('div.doc-resultado',
         h('div.doc-aviso.ref', h('div', h('b', `Listo. Se creó la nota de crédito N.° ${numeroCorto(nc.consecutivo)}.`), h('div', `Está enlazada ${conArticulo(original.tipo_doc, true)} N.° ${numeroCorto(original.consecutivo)}, que ahora aparece como "Anulado por la nota de crédito N.° ${numeroCorto(nc.consecutivo)}".`))),
         h('p', `Estado de la nota de crédito: ${ETQ_ESTADO[nc.estado] || nc.estado}. ` + (nc.estado === 'aceptado' ? 'Hacienda ya la aceptó.' : 'Se enviará a Hacienda en el próximo minuto y su estado cambiará solo.')),
-        h('div.doc-botones', imp, ver, h('button.btn', { type: 'button', onclick: () => r.cerrar() }, 'Cerrar'))) });
+        h('div.doc-botones.res', imp, ver, h('button.btn', { type: 'button', onclick: () => r.cerrar() }, 'Cerrar'))) });
     }
 
     /* ---------- arranque y actualización automática ---------- */

@@ -1,6 +1,6 @@
 // Recepción de facturas de proveedores: lo que llega a los correos de contabilidad, y su respuesta a Hacienda (MensajeReceptor 1 aceptar, 2 aceptar parcialmente, 3 rechazar).
 // Plazo: 8 días hábiles desde que la factura llegó al correo. Datos: fx_recibidas / fx_recibida (solo lectura, ver sql/06_recepcion.sql).
-import { h, money, num, fechaHora, debounce, modal, confirmar, pedir, conBoton, toast } from './util.js';
+import { h, money, num, fechaHora, debounce, modal, confirmar, pedir, conBoton, toast, nombrePropio, nombreLocal, campoBusqueda } from './util.js';
 import { recibidas, recibida, responder, consultarRespuesta, revisarCorreo } from './api_recepcion.js';
 import { selectorPeriodo, textoRango, fechaDMA } from './periodo.js';
 import { csvBajar } from './csv.js';
@@ -9,6 +9,8 @@ const cssUrl = new URL('../css/recepcion.css', import.meta.url).href;
 const TIPOS = { FacturaElectronica: 'Factura electrónica', TiqueteElectronico: 'Tiquete electrónico', NotaCreditoElectronica: 'Nota de crédito', NotaDebitoElectronica: 'Nota de débito', FacturaElectronicaCompra: 'Factura de compra', FacturaElectronicaExportacion: 'Factura de exportación' };
 const nombreTipo = (t) => TIPOS[t] || t || 'Comprobante';
 const limpiarNombre = (n) => String(n || 'Proveedor sin nombre').replace(/\s*\(([^()]*)\)\s*$/, (m, a) => (n.toUpperCase().startsWith(a.toUpperCase()) ? '' : m));
+// Para mostrar: sin mayúsculas sostenidas (el archivo y el CSV conservan el nombre tal como viene en la factura)
+const nomProv = (n) => nombrePropio(limpiarNombre(n));
 const diaSemana = (ymd) => new Intl.DateTimeFormat('es-CR', { timeZone: 'UTC', weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric' }).format(new Date(String(ymd).slice(0, 10) + 'T12:00:00Z'));
 const plural = (n, u, p) => `${n} ${Math.abs(n) === 1 ? u : p}`;
 
@@ -33,7 +35,7 @@ export default {
   id: 'recepcion', titulo: 'Recepción',
   async mount(root, app) {
     if (!document.getElementById('css-recepcion')) document.head.append(h('link', { id: 'css-recepcion', rel: 'stylesheet', href: cssUrl }));
-    const soc = app.soc; const nomLocal = soc?.nombre_comercial || soc?.nombre || '';
+    const soc = app.soc; const nomLocal = nombreLocal(soc);
     let ficha = 0, vivo = true;
     const est = { vista: 'pendientes', q: '', datos: null, conteo: null, per: { pendientes: 'hoy', todas: 'hoy', vencidas: 'mes' } };
 
@@ -52,7 +54,7 @@ export default {
       h('div.rec-cab', h('div', h('h1', 'Facturas de proveedores'),
         h('p.tenue', 'Facturas que llegaron a los correos de contabilidad a nombre de ', h('strong', nomLocal), soc?.cedula ? ` (cédula ${soc.cedula})` : '', '. Aquí no aparecen las facturas que emiten nuestros propios negocios.')),
         h('div.rec-cab-botones', btnCorreo)),
-      estadoCorreo, kpis, tabs, periodoCaja, h('label.etq.rec-buscar', 'Buscar', buscar), rotulo, resumen, lista);
+      estadoCorreo, kpis, tabs, periodoCaja, h('label.etq.rec-buscar', 'Buscar', campoBusqueda(buscar, () => { est.q = ''; cargar(); })), rotulo, resumen, lista);
 
     /* ---------- revisar el correo ---------- */
     async function buscarCorreo() {
@@ -98,14 +100,8 @@ export default {
       }
     }
 
-    // Contador visible también en la pestaña "Recepción"
-    function marcarPestana(c) {
-      const b = document.querySelector('.pestanas button[data-id="recepcion"]'); if (!b || !c) return;
-      let t = b.querySelector('.tab-badge');
-      if (!c.pendientes_en_plazo) { t?.remove(); return; }
-      if (!t) { t = h('span.tab-badge'); b.append(t); }
-      t.textContent = c.pendientes_en_plazo; t.title = `${c.pendientes_en_plazo} facturas de proveedores sin responder dentro del plazo`;
-    }
+    // La insignia de la pestaña «Recepción» la dibuja el encabezado (main.js), con la misma cifra que esta pantalla y el aviso de arriba
+    const marcarPestana = (c) => app.alertas?.fijarRecepcion?.(c);
 
     function pintarKpis() {
       const c = est.conteo || {}; const venc = (c.vencidas_recientes || 0) + (c.vencidas_antiguas || 0);
@@ -152,9 +148,9 @@ export default {
     }
     function fila(f) {
       const e = estadoFila(f); const nota = f.tipo === 'NotaCreditoElectronica';
-      return h('button.rec-fila' + (e.nivel ? '.' + e.nivel : ''), { type: 'button', onclick: () => abrirDetalle(f.clave), 'aria-label': `Ver detalle de la factura ${f.consecutivo || ''} de ${limpiarNombre(f.emisor_nombre)}` },
+      return h('button.rec-fila' + (e.nivel ? '.' + e.nivel : ''), { type: 'button', onclick: () => abrirDetalle(f.clave), 'aria-label': `Ver detalle de la factura ${f.consecutivo || ''} de ${nomProv(f.emisor_nombre)}` },
         h('span.rec-fecha', h('strong', diaSemana(f.llego)), h('small', fechaHora(f.llego).slice(-5))),
-        h('span.rec-prov', h('strong', limpiarNombre(f.emisor_nombre)), h('small', `${nombreTipo(f.tipo)} ${f.consecutivo ? '· ' + f.consecutivo.slice(-10) : ''} · cédula ${f.emisor_cedula || 's/d'}`)),
+        h('span.rec-prov', h('strong', nomProv(f.emisor_nombre)), h('small', `${nombreTipo(f.tipo)} ${f.consecutivo ? '· ' + f.consecutivo.slice(-10) : ''} · cédula ${f.emisor_cedula || 's/d'}`)),
         h('span.rec-monto.der', h('small.rec-et', 'Total'), (nota ? '−' : '') + money(f.total)),
         h('span.rec-monto.der', h('small.rec-et', 'IVA'), (nota ? '−' : '') + money(f.iva)),
         h('span.rec-estado', h('span.chip' + (e.clase ? '.' + e.clase : ''), e.texto), e.sub ? h('small', e.sub) : null),
@@ -189,7 +185,7 @@ export default {
       pintarRespuesta(respuesta, d, clave, cuerpo, e);
       cuerpo.replaceChildren(
         ...(aviso ? [h('div.rec-ok', aviso)] : []),
-        h('div.rec-detalle-cab', h('div', h('h2', limpiarNombre(f.emisor_nombre)), h('p.tenue', `${nombreTipo(f.tipo)} · consecutivo ${f.consecutivo || 's/d'} · cédula del proveedor ${f.emisor_cedula || 's/d'}`)),
+        h('div.rec-detalle-cab', h('div', h('h2', nomProv(f.emisor_nombre)), h('p.tenue', `${nombreTipo(f.tipo)} · consecutivo ${f.consecutivo || 's/d'} · cédula del proveedor ${f.emisor_cedula || 's/d'}`)),
           h('span.chip' + (e.clase ? '.' + e.clase : ''), e.texto)),
         h('div.rec-datos',
           dato('Emitida', fechaHora(f.fecha)), dato('Llegó al correo', fechaHora(f.llego)), dato('Correo', f.buzon || 's/d'),
@@ -211,7 +207,7 @@ export default {
     function pintarRespuesta(caja, d, clave, cuerpo, e) {
       caja.replaceChildren();
       const f = d.factura;
-      const quien = `la factura ${f.consecutivo || ''} de ${limpiarNombre(f.emisor_nombre)}`;
+      const quien = `la factura ${f.consecutivo || ''} de ${nomProv(f.emisor_nombre)}`;
       const err = h('div.error-caja', { hidden: true });
       if (d.propia) { caja.append(h('p.tenue', 'Este comprobante lo emitió uno de nuestros propios negocios; no es una compra a un proveedor.')); return; }
       if (!d.requiere) { caja.append(h('h3', 'Respuesta a Hacienda'), h('p', 'Este tipo de comprobante no necesita que usted lo acepte ni lo rechace.')); return; }
@@ -225,7 +221,7 @@ export default {
           if (vivo) cargar();
         }) }, 'Revisar si Hacienda ya la procesó');
         caja.append(...[h('h3', 'Respuesta a Hacienda'), h('p.rec-ok', t + (d.receptor_en ? ' El ' + fechaHora(d.receptor_en) + '.' : '')),
-          procesando ? h('p.tenue', 'Su respuesta ya se envió. Hacienda todavía la está procesando.') : h('p.tenue', 'Hacienda ya recibió su respuesta.'),
+          procesando ? h('p.tenue', 'Su respuesta ya se envió. Hacienda todavía la está procesando.') : h('p.tenue', d.receptor_envio === 'aceptado' ? 'Hacienda ya recibió y aceptó su respuesta.' : 'Su respuesta quedó guardada en este sistema.'),
           procesando ? btnConsulta : null].filter(Boolean));
         return;
       }

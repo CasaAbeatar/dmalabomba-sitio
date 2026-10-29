@@ -1,5 +1,6 @@
 :root{--fondo:#fbf8f2;--papel:#fff;--tinta:#1d1a17;--tinta2:#6b645b;--linea:#e2dacb;--linea2:#cfc5b2;--rojo:#b81622;--rojo-osc:#8f101a;--rojo-suave:#fbeceb;--ambar:#f3a62c;--ambar-suave:#fdf2dc;--verde:#1f7a4d;--verde-suave:#e6f4ec;--azul:#2a5fa8;--r:10px;--sombra:0 1px 0 rgba(29,26,23,.04),0 6px 24px rgba(29,26,23,.06)}
 *{box-sizing:border-box}
+[hidden]{display:none!important}
 html{-webkit-text-size-adjust:100%}
 body{margin:0;background:var(--fondo);color:var(--tinta);font:16px/1.45 Figtree,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;-webkit-tap-highlight-color:transparent}
 h1,h2,h3{margin:0;font-weight:600;letter-spacing:-.01em}
@@ -72,29 +73,67 @@ table.tabla{width:100%;border-collapse:collapse;font-size:.95rem}
 
 /* Estructura general */
 .pantalla-centro{min-height:100vh;display:grid;place-items:center;padding:1.2rem}
-.cabecera{position:sticky;top:0;z-index:20;background:rgba(251,248,242,.94);backdrop-filter:blur(8px);border-bottom:1px solid var(--linea)}
-.cab-fila{display:flex;align-items:center;gap:.8rem;padding:.6rem 1rem;max-width:1400px;margin:0 auto;flex-wrap:wrap}
+.cabecera{position:sticky;top:0;z-index:20;background:rgba(251,248,242,.96);backdrop-filter:blur(8px);border-bottom:1px solid var(--linea)}
+.cab-fila{display:flex;align-items:center;gap:.5rem .8rem;padding:.5rem 1rem;max-width:1400px;margin:0 auto;flex-wrap:wrap}
 .marca{display:flex;align-items:center;gap:.6rem;font-weight:700}
 .marca img{height:34px;width:auto;display:block}
+.cab-estado{display:contents}
 .soc-sel{display:flex;border:1px solid var(--linea2);border-radius:var(--r);overflow:hidden;background:#fff}
 .soc-sel button{min-height:48px;padding:.4rem 1rem;border:0;background:transparent;cursor:pointer;font-weight:600}
 .soc-sel button+button{border-left:1px solid var(--linea2)}
 .soc-sel button[aria-pressed=true]{background:var(--rojo);color:#fff}
+.soc-sel.uno{border:0;background:transparent;overflow:visible}
+.soc-nombre{font-weight:700;font-size:1.08rem;padding:0 .2rem;white-space:nowrap}
 .estado-turno{font-size:.88rem;padding:.3rem .7rem;border-radius:99px;border:1px solid var(--linea2);background:#fff}
 .estado-turno.abierto{border-color:#a8d5bd;background:var(--verde-suave);color:var(--verde)}
 .estado-turno.cerrado{border-color:#efd08f;background:var(--ambar-suave);color:#8a5a00}
 .amb-prueba{font-size:.78rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#8a5a00;background:var(--ambar-suave);border:1px solid #efd08f;border-radius:6px;padding:.1rem .45rem}
 .amb-prod{color:#fff;background:var(--rojo);border-color:var(--rojo)}
-.pestanas{display:flex;gap:.25rem;padding:0 1rem;max-width:1400px;margin:0 auto;overflow-x:auto;scrollbar-width:none}
+.btn.cab-anular{min-height:48px;border-color:var(--rojo);color:var(--rojo);font-weight:700;background:#fff}
+.btn.cab-anular:hover{background:var(--rojo);color:#fff}
+
+/* Sesión: en pantalla ancha va a la vista; en angosta se junta en el botón «Menú» */
+.cab-usuario{margin-left:auto;position:relative;display:flex;align-items:center}
+.cab-menu{display:none}
+.cab-panel{display:flex;align-items:center;gap:.5rem;font-size:.92rem}
+.cab-sesion{margin-right:.2rem}
+@media(max-width:1099px){
+  .cab-menu{display:inline-flex}
+  .cab-panel{display:none;position:absolute;right:0;top:calc(100% + 6px);z-index:40;flex-direction:column;align-items:stretch;gap:.5rem;width:min(300px,calc(100vw - 1.4rem));padding:.9rem;background:#fff;border:1px solid var(--linea2);border-radius:14px;box-shadow:0 14px 40px rgba(29,26,23,.2)}
+  .cab-usuario.abierto .cab-panel{display:flex}
+  .cab-panel .btn{width:100%}
+  .cab-sesion{margin:0 0 .2rem;font-size:1rem}
+}
+
+/* Aviso rojo: documentos que Hacienda no aceptó o que no han llegado */
+.alerta-cab{background:var(--rojo);color:#fff}
+.alerta-cab[hidden],.sin-red[hidden]{display:none}
+.alerta-in{max-width:1400px;margin:0 auto;padding:.5rem 1rem;display:flex;align-items:center;gap:.5rem 1rem}
+.alerta-texto{flex:1 1 auto;min-width:0}
+.alerta-texto strong{display:block;font-size:1rem;line-height:1.3}
+.alerta-detalle{display:block;font-size:.88rem;opacity:.96;overflow-wrap:anywhere;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}
+.alerta-cab .btn.alerta-ver{flex:0 0 auto;background:#fff;color:var(--rojo);border-color:#fff;min-width:84px}
+.alerta-cab .btn.alerta-ver:hover{background:var(--rojo-suave)}
+.alerta-cab :focus-visible,.sesion-fondo :focus-visible{outline-color:#fff}
+.sin-red{background:var(--ambar-suave);border-bottom:1px solid #efd08f;color:#5c3d00}
+.sin-red-in{max-width:1400px;margin:0 auto;padding:.35rem 1rem;display:flex;align-items:center;gap:.4rem 1rem;flex-wrap:wrap;font-size:.92rem}
+.sin-red-in span{flex:1 1 16rem}
+
+/* Pestañas: se deslizan; el degradado y «Más» avisan que hay más a un lado */
+.pest-caja{position:relative;max-width:1400px;margin:0 auto}
+.pestanas{display:flex;gap:.25rem;padding:0 1rem;overflow-x:auto;scrollbar-width:none;overscroll-behavior-x:contain}
 .pestanas::-webkit-scrollbar{display:none}
 .pestanas button{flex:0 0 auto;min-height:48px;padding:.5rem 1rem;border:0;border-bottom:3px solid transparent;background:transparent;cursor:pointer;font-weight:600;color:var(--tinta2)}
 .pestanas button[aria-selected=true]{color:var(--rojo);border-bottom-color:var(--rojo)}
 .pestanas button .pend{display:inline-block;margin-left:.45rem;padding:.05rem .55rem;border-radius:99px;border:1px solid #efd08f;background:var(--ambar-suave);color:#8a5a00;font-size:.8rem;font-weight:700;vertical-align:1px}
 .pestanas button .pend.urge{border-color:var(--rojo);background:var(--rojo);color:#fff}
+.pest-mas{display:none;position:absolute;right:0;top:0;bottom:0;z-index:2;min-width:88px;padding:0 .9rem 0 2.4rem;border:0;background:linear-gradient(90deg,rgba(251,248,242,0),#fbf8f2 58%);color:var(--rojo);font-weight:700;cursor:pointer}
+.pest-caja.hay-mas .pest-mas{display:block}
+.pest-caja.hay-antes::before{content:'';position:absolute;left:0;top:0;bottom:0;width:26px;z-index:2;pointer-events:none;background:linear-gradient(270deg,rgba(251,248,242,0),#fbf8f2)}
 main#vista{max-width:1400px;margin:0 auto;padding:1rem}
-.btn.cab-anular{min-height:48px;border-color:var(--rojo);color:var(--rojo);font-weight:700;background:#fff}
-.btn.cab-anular:hover{background:var(--rojo);color:#fff}
-.usuario-caja{margin-left:auto;display:flex;align-items:center;gap:.5rem;font-size:.92rem}
+
+/* En Caja (pantalla ancha) el panel de la cuenta se pega justo debajo del encabezado, sea cual sea su alto */
+@media(min-width:980px){body.fx-caja .caja-cuenta{top:calc(var(--cab-h,117px) + 5px);max-height:calc(100vh - var(--cab-h,117px) - 23px)}}
 
 /* Inicio de sesión */
 .login{width:100%;max-width:380px}
@@ -113,6 +152,14 @@ main#vista{max-width:1400px;margin:0 auto;padding:1rem}
 .teclado button:disabled{opacity:.5;cursor:wait}
 .error-caja{margin:.6rem 0;padding:.7rem .9rem;border:1px solid #e9b3b7;background:var(--rojo-suave);border-radius:var(--r);color:var(--rojo-osc);font-weight:500}
 
+/* Buscadores: sin la «x» pequeña del navegador; el borrado se hace con el botón escrito «Borrar búsqueda» */
+input[type=search]::-webkit-search-cancel-button,input[type=search]::-webkit-search-decoration,input[type=search]::-webkit-search-results-button,input[type=search]::-webkit-search-results-decoration{-webkit-appearance:none;appearance:none;display:none}
+input[type=search]{-webkit-appearance:none;appearance:none}
+.buscar-fila{display:flex;gap:.5rem;align-items:center}
+.buscar-fila>.campo{flex:1 1 auto;min-width:0}
+.buscar-fila>.btn{flex:0 0 auto}
+.buscar-fila>.btn[hidden]{display:none}
+
 /* Ventanas y avisos */
 .modal-fondo{position:fixed;inset:0;z-index:100;background:rgba(29,26,23,.45);display:grid;place-items:center;padding:1rem;overflow:auto}
 .modal{width:100%;background:var(--papel);border-radius:16px;border:1px solid var(--linea);box-shadow:0 20px 60px rgba(0,0,0,.25);max-height:calc(100vh - 2rem);display:flex;flex-direction:column}
@@ -127,5 +174,35 @@ body:has(.modal-fondo) #toasts{bottom:6.2rem}
 .toast{padding:.8rem 1rem;border-radius:var(--r);background:var(--tinta);color:#fff;box-shadow:var(--sombra);transition:opacity .3s}
 .toast.error{background:var(--rojo)}.toast.fuera{opacity:0}
 
-@media(max-width:700px){main#vista{padding:.7rem}.cab-fila{padding:.5rem .7rem}.usuario-caja{margin-left:0;width:100%;justify-content:space-between}}
+@media(max-width:700px){
+  main#vista{padding:.7rem}
+  /* Celular: una fila con logo, «Anular factura» y «Menú»; debajo, una línea de estado; y las pestañas */
+  .cab-fila{padding:.4rem .7rem;gap:.3rem .5rem}
+  .marca img{height:36px}
+  .btn.cab-anular{order:2;flex:1 1 auto}
+  .cab-usuario{order:3;margin-left:0}
+  .cab-estado{display:flex;order:4;flex:1 1 100%;flex-wrap:wrap;align-items:center;gap:.3rem .45rem}
+  .soc-sel.uno{display:none}
+  .estado-turno{font-size:.82rem;padding:.15rem .6rem}
+  .amb-prueba{font-size:.7rem}
+  .alerta-in{padding:.4rem .7rem}
+  .alerta-texto strong{font-size:.95rem}
+  .alerta-detalle{-webkit-line-clamp:1}
+  .pestanas{padding:0 .5rem}
+}
+/* Ventana «Su sesión venció» */
+.sesion-fondo{z-index:150;background:rgba(29,26,23,.62)}
+.sesion-caja .modal-cuerpo{padding:1.4rem}
+.sesion-caja h2{font-size:1.35rem}
+.sesion-caja p{margin:0}
+.sesion-caja p.sub{color:var(--tinta2)}
+.sesion-caja .entrando{text-align:center;color:var(--tinta2);font-weight:600}
 @media print{body>#app,#toasts,.modal-fondo{display:none!important}}
+
+/* Cierre de caja: nota pequeña bajo una fila de la cuenta */
+.calc-nota{display:block;margin:.1rem 0 0 1.4rem;font-size:.82rem;font-weight:400;color:var(--tinta2)}
+/* Cierre de caja en celular: el total vendido ocupa todo el ancho y no parte la cifra */
+@media(max-width:640px){.ventas-medios .dato.total{grid-column:1/-1}.dato .val{overflow-wrap:normal;white-space:nowrap}}
+/* Tabla «Turnos anteriores»: más compacta para que el botón «Ver resumen» se vea sin deslizar en escritorio */
+table.hist th,table.hist td{padding:.55rem .4rem;font-size:.9rem}
+table.hist th{min-width:0}

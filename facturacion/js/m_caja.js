@@ -4,8 +4,9 @@ import { errorActividad, limpiarActividad } from './ui_cedula.js';
 import { selectorCliente } from './ui_cliente.js';
 import { apiM } from './api_mantenimiento.js';
 import { esTransitorio } from './api.js';
-import { TARIFAS_IVA, tarifaDeLinea, desgloseIva } from './iva.js';
-import { h, money, money0, num, leerNumero, toast, modal, pedir, conBoton, esqueleto, bloqueError, nombreLocal, TIPOS_SERVICIO, TIPOS_DOC, MEDIOS, ESTADOS } from './util.js';
+import { TARIFAS_IVA, tarifaDeLinea, desgloseIva, tarifaHabitual } from './iva.js';
+import { infoActividad, textoActividad } from './actividades.js';
+import { h, money, money0, num, leerNumero, toast, modal, pedir, confirmar, conBoton, esqueleto, bloqueError, nombreLocal, TIPOS_SERVICIO, TIPOS_DOC, TIPOS_ID, MEDIOS, describirEstado, numeroDoc } from './util.js';
 
 const CSS_URL = new URL('../css/caja.css', import.meta.url).href;
 function cargarCss() {
@@ -29,6 +30,10 @@ const plano = (n) => String(Number(n)); // para campos de texto: sin separador d
 // Lo que se muestra en lugar del precio: el genérico pide detalle y precio al agregarlo
 const textoPrecio = (p) => (p.descripcion_libre ? 'Detalle y precio' : p.precio_abierto ? 'Precio abierto' : money(p.precio_final));
 const fino = () => window.matchMedia?.('(pointer:fine)').matches ?? true;
+// Envuelve lo que hace un botón: si algo falla, se avisa en palabras en vez de dejar un error sin atender en la consola
+const seguro = (fn) => (...a) => Promise.resolve().then(() => fn(...a)).catch((e) => { console.error(e); toast((e && e.message) || 'Algo no salió bien. Intente de nuevo.', 'error', 7000); });
+// Motivos que se tocan de un solo toque al anular una cuenta abierta
+const MOTIVOS_ANULAR = ['El cliente se fue', 'Error al digitar', 'El cliente no recogió el pedido', 'Cuenta repetida'];
 let moduloImp = null;
 const imp = async () => {
   try { moduloImp = await import('./imprimir.js'); return moduloImp; }
@@ -53,6 +58,9 @@ const AYUDA_TIPO = {
   express: 'Pedido express: nombre y teléfono',
 };
 const RAPIDOS = [1000, 2000, 5000, 10000, 20000];
+
+// Dirección del cliente incompleta (solo avisa si la base mandó esos datos: así no se asusta a nadie por una llave que no llegó)
+const direccionIncompleta = (c) => !!c && ('provincia' in c || 'otras_senas' in c) && (!c.provincia || !c.canton || !c.distrito || String(c.otras_senas || '').trim().length < 5);
 
 // Busca por palabras parciales en cualquier orden, sin tildes ni mayúsculas; por código completo o por prefijo
 function buscarEn(productos, q) {
@@ -158,6 +166,8 @@ export default {
           if (estado) estado.error = e;
           if (esTransitorio(e) && idCuenta) avisoDeRed(e, fn, antes, idCuenta);
           else toast(e.message || String(e), 'error', 7000);
+          // Alguien desactivó ese producto desde otro aparato: se vuelve a pedir el menú para que ya no aparezca
+          if (/desactivado y no se puede vender/i.test(e?.message || '')) setTimeout(revisarCatalogo, 500);
           if (cur && asideCuenta) pintarCuenta();
         }
         finally { ocupadas--; }
@@ -438,12 +448,25 @@ export default {
         h('span.c-ref', c.referencia || numCuenta(c.numero)),
         h('span.c-tot', c.lineas + (Number(c.lineas) === 1 ? ' producto · ' : ' productos · ') + money(c.total)));
       });
-      barraCuentas.replaceChildren(
-        h('div.cuentas-lista', { role: 'group', 'aria-label': 'Cuentas abiertas' }, botones.length ? botones : h('span.cuentas-vacio', 'No hay cuentas abiertas. Toque un producto para empezar una.')),
-        h('button.btn.primario', { type: 'button', onclick: nuevaCuenta }, 'Nueva cuenta'));
+      // La tira se desliza de lado a lado: un degradado en el borde y un texto avisan que hay más cuentas fuera de la pantalla
+      const lista = h('div.cuentas-lista', { role: 'group', 'aria-label': 'Cuentas abiertas' }, botones.length ? botones : h('span.cuentas-vacio', 'No hay cuentas abiertas. Toque un producto para empezar una.'));
+      const pista = h('div.cuentas-pista', { 'aria-hidden': 'true' }, 'Hay ' + abiertas.length + ' cuentas abiertas. Deslice hacia los lados para ver todas ›');
+      const envoltura = h('div.cuentas-envoltura', lista, h('span.cuentas-borde.izq', { 'aria-hidden': 'true' }), h('span.cuentas-borde.der', { 'aria-hidden': 'true' }), pista);
+      const pistaViva = () => {
+        const mas = lista.scrollWidth - lista.clientWidth - lista.scrollLeft > 6;
+        envoltura.classList.toggle('mas-der', mas);
+        envoltura.classList.toggle('mas-izq', lista.scrollLeft > 6);
+      };
+      lista.addEventListener('scroll', pistaViva, { passive: true });
+      barraCuentas.replaceChildren(envoltura, h('button.btn.primario', { type: 'button', onclick: seguro(nuevaCuenta) }, 'Nueva cuenta'));
+      // La cuenta activa se deja a la vista y se revisa si quedan cuentas escondidas hacia un lado
+      requestAnimationFrame(() => {
+        lista.querySelector('.cuenta-btn[aria-pressed=true]')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+        pistaViva();
+      });
       barraExtras.replaceChildren(
         h('button.btn', { type: 'button', onclick: () => abrirSalidas({ api, turnoId: turnoMostrado }) }, 'Registrar salida de efectivo'),
-        h('button.btn', { type: 'button', onclick: async () => { try { (await imp()).abrirAjustesImpresion(); } catch (e) { toast(e.message, 'error', 6000); } } }, 'Impresora'));
+        h('button.btn', { type: 'button', onclick: seguro(async () => { try { (await imp()).abrirAjustesImpresion(); } catch (e) { toast(e.message, 'error', 6000); } }) }, 'Impresora'));
     }
 
     /* ---------- Ventana de datos de cuenta ---------- */
@@ -500,16 +523,24 @@ export default {
     }
     function anularCuenta() {
       if (!cur) return;
-      const v = cur.venta, id = v.id;
-      const motivo = h('textarea.campo', { rows: 3, placeholder: 'Ej. el cliente se fue, error al digitar' });
-      modal({ titulo: 'Anular cuenta', ancho: 460,
-        contenido: h('div.col', h('p.conf', 'Va a anular la cuenta ' + (TIPOS_SERVICIO[v.tipo_servicio] || '') + ' ' + (v.referencia || numCuenta(v.numero)) + ' por ' + money(v.total) + '. No se puede deshacer.'), h('label.etq', 'Motivo (obligatorio)', motivo)),
+      const v = cur.venta, id = v.id, n = cur.lineas.length;
+      const nombreCuenta = (TIPOS_SERVICIO[v.tipo_servicio] || '') + ' ' + (v.referencia || numCuenta(v.numero));
+      const motivo = h('textarea.campo', { rows: 3, maxlength: 200, placeholder: 'Ej. el cliente se fue, error al digitar', 'aria-label': 'Motivo de la anulación' });
+      const err = h('div.error-caja', { hidden: true, role: 'alert' });
+      const rapidos = h('div.fila', MOTIVOS_ANULAR.map((t) => h('button.btn.chico', { type: 'button', onclick: () => { motivo.value = t; err.hidden = true; motivo.focus(); } }, t)));
+      modal({ titulo: 'Anular cuenta', ancho: 480,
+        contenido: h('div.col',
+          h('p.conf', 'Va a anular la cuenta ' + nombreCuenta.trim() + (n ? ' con ' + n + (n === 1 ? ' producto' : ' productos') + ' por ' + money(v.total) : ' (está vacía)') + '. No se cobra nada y no se puede deshacer.'),
+          v.estado === 'prefacturada' ? h('p.tenue-linea', 'Esta cuenta ya tenía prefactura. La prefactura no es una factura, así que no hay nada que anular en Hacienda.') : null,
+          h('label.etq', 'Motivo (obligatorio)', motivo),
+          h('div.etq', 'O toque uno de estos:'), rapidos, err),
         botones: [{ texto: 'No, volver', onclick: (c) => c() }, { texto: 'Sí, anular esta cuenta', clase: 'peligro', onclick: (c) => {
-          const m = motivo.value.trim();
-          if (m.length < 3) { toast('Escriba el motivo de la anulación.', 'error'); return; }
+          const txt = motivo.value.trim();
+          if (txt.length < 3) { err.textContent = 'Escriba el motivo de la anulación (por ejemplo: el cliente se fue).'; err.hidden = false; motivo.focus(); return; }
           c();
-          accion(async () => { await api.ventaAnular(id, m); sacarDeLista(id); await pasarALaSiguiente(); repintar(); toast('Cuenta anulada.'); });
+          accion(async () => { await api.ventaAnular(id, txt); sacarDeLista(id); await pasarALaSiguiente(); repintar(); toast('Cuenta anulada.'); });
         } }] });
+      motivo.focus();
     }
 
     /* ---------- Productos en la cuenta ---------- */
@@ -656,6 +687,10 @@ export default {
       b.inp.focus();
     }
 
+    // Cada línea se ve compacta (nombre, total, cantidad y precio). «Opciones» abre la nota, el detalle e IVA, cambiar producto y quitar.
+    const lineasAbiertas = new Set();
+    // Lo que se lee bajo el nombre de una línea cuya tarifa no es la normal
+    const rotuloIva = (t) => t.pct > 0 ? 'IVA ' + String(t.pct).replace('.', ',') + ' %' : t.codigo === '01' ? 'IVA 0 % (no sujeto)' : t.codigo === '11' ? 'IVA 0 % sin derecho a crédito' : 'Exenta de IVA';
     function filaLinea(l) {
       const prod = prodPorId.get(l.producto_id);
       const editada = !!prod && !prod.precio_abierto && cents(l.precio_final) !== cents(prod.precio_final);
@@ -666,7 +701,7 @@ export default {
       const editar = (cambio, aviso) => accion(async () => { cur = await api.lineaEditar(l.id, cambio); repintar(); if (aviso) toast(aviso); });
       qty.addEventListener('change', () => {
         const v = leerCant(qty.value);
-        if (!(v > 0) || !Number.isFinite(v)) { toast('La cantidad tiene que ser mayor que cero. Para sacar el producto use «Quitar».', 'error'); qty.value = plano(cantidad); return; }
+        if (!(v > 0) || !Number.isFinite(v)) { toast('La cantidad tiene que ser mayor que cero. Para sacar el producto use «Quitar» (dentro de «Opciones»).', 'error'); qty.value = plano(cantidad); return; }
         if (r3(v) !== cantidad) editar({ cantidad: r3(v) });
       });
       precio.addEventListener('change', () => {
@@ -679,20 +714,87 @@ export default {
       const tar = tarifaDeLinea(l);
       const detalleCambiado = !!prod && !prod.descripcion_libre && l.descripcion !== prod.nombre;
       const tarifaCambiada = !!prod && Number(l.tarifa_iva) !== Number(prod.tarifa_iva);
-      return h('div.linea' + (editada ? '.editada' : '') + (detalleCambiado || tarifaCambiada ? '.personalizada' : ''), { 'data-linea': l.id },
+      const abierta = lineasAbiertas.has(l.id);
+      // Solo se rotula lo que sale de lo normal: otra tarifa, otro detalle u otro precio que el del menú
+      const marcas = [];
+      if (tarifaCambiada || tar.pct !== 13) marcas.push(h('span' + (tarifaCambiada ? '.amb' : ''), rotuloIva(tar)));
+      if (detalleCambiado) marcas.push(h('span.amb', 'Detalle cambiado'));
+      if (editada) marcas.push(h('span.amb', 'Precio cambiado (el menú dice ' + money(prod.precio_final) + ')'));
+      if (l.nota && !abierta) marcas.push(h('span.nota-vista', 'Nota: ' + l.nota));
+      const mas = h('button.btn.chico.mas-btn', { type: 'button', 'aria-expanded': String(abierta), 'aria-label': (abierta ? 'Cerrar las opciones de ' : 'Abrir más opciones de ') + l.descripcion,
+        onclick: () => { if (abierta) lineasAbiertas.delete(l.id); else lineasAbiertas.add(l.id); pintarCuenta(); } }, abierta ? 'Cerrar' : 'Opciones');
+      return h('div.linea' + (editada ? '.editada' : '') + (detalleCambiado || tarifaCambiada ? '.personalizada' : '') + (abierta ? '.abierta' : ''), { 'data-linea': l.id },
         h('div.linea-top', h('span.linea-nombre', l.descripcion), h('span.linea-total', money(l.total_linea))),
-        h('div.linea-iva' + (tarifaCambiada ? '.cambiada' : ''), 'IVA ' + tar.nombre + (detalleCambiado ? ' · Detalle cambiado' : '')),
+        marcas.length ? h('div.linea-sub', marcas) : null,
         h('div.linea-ctrl',
           h('div.cant',
             h('button.mm', { type: 'button', disabled: cantidad - 1 <= 0, 'aria-label': 'Quitar una unidad de ' + l.descripcion, onclick: () => editar({ cantidad: r3(cantidad - 1) }) }, '−'),
             qty,
             h('button.mm', { type: 'button', 'aria-label': 'Agregar una unidad de ' + l.descripcion, onclick: () => editar({ cantidad: r3(cantidad + 1) }) }, '+')),
-          h('label.precio-et', 'Precio de cada uno, con IVA', precio)),
-        editada ? h('div.etiqueta-cambio', h('span.chip.espera', 'Precio cambiado'), ' El menú dice ' + money(prod.precio_final)) : null,
-        h('div.linea-pie', nota,
+          h('label.precio-et', 'Precio c/u con IVA', precio),
+          mas),
+        abierta ? h('div.linea-pie', nota,
           h('button.btn.chico.suave', { type: 'button', onclick: () => dialogoLinea({ linea: l }) }, 'Editar detalle e IVA'),
           h('button.btn.chico.suave', { type: 'button', onclick: () => cambiarProducto(l) }, 'Cambiar producto'),
-          h('button.btn.chico.peligro', { type: 'button', 'aria-label': 'Quitar ' + l.descripcion + ' de la cuenta', onclick: () => accion(async () => { cur = await api.lineaQuitar(l.id); repintar(); toast('Quitado: ' + l.descripcion); }) }, 'Quitar')));
+          h('button.btn.chico.peligro', { type: 'button', 'aria-label': 'Quitar ' + l.descripcion + ' de la cuenta', onclick: () => accion(async () => { cur = await api.lineaQuitar(l.id); lineasAbiertas.delete(l.id); repintar(); toast('Quitado: ' + l.descripcion); }) }, 'Quitar')) : null);
+    }
+
+    /* ---------- Cliente de la cuenta y tarifa de IVA habitual ---------- */
+    // El cliente se puede elegir ANTES de cobrar (aquí) o dentro de la ventana de cobro; en los dos casos queda guardado en la cuenta.
+    const sinAviso = new Set(); // 'cuenta:cliente' donde la cajera pidió dejar el IVA normal: no se vuelve a insistir en esa cuenta
+    async function asignarCliente(cl) {
+      if (!cur) return false;
+      const id = cur.venta.id, st = {};
+      await accion(async () => {
+        cur = await api.ventaDatos(id, cl ? { cliente: cl.id } : { quitarCliente: true });
+        repintar();
+        toast(cl ? 'Cliente elegido: ' + (cl.nombre || '') + '. Se emitirá una factura electrónica a su nombre.' : 'Cliente quitado. Se emitirá un tiquete electrónico.');
+      }, st);
+      return !st.error;
+    }
+    function elegirClienteCuenta() { selectorCliente(app, { alElegir: (cl) => { asignarCliente(cl); } }); }
+    // Pone la tarifa del cliente en todas las líneas que todavía no la llevan. El precio final de cada línea no cambia: el IVA se calcula hacia atrás.
+    async function aplicarTarifaCliente(t) {
+      const st = {};
+      await accion(async () => {
+        const ids = cur.lineas.filter((l) => tarifaDeLinea(l).codigo !== t.codigo).map((l) => l.id);
+        for (const idl of ids) cur = await api.lineaEditar(idl, { codigoTarifa: t.codigo });
+        repintar();
+        if (ids.length) toast('Listo: ' + t.texto + ' en ' + ids.length + (ids.length === 1 ? ' línea' : ' líneas') + '. El precio final de cada una no cambia.');
+      }, st);
+      return !st.error;
+    }
+    // Aviso con palabras claras y botón grande. No aplica nada solo. alAplicar() se llama con la tarifa del cliente.
+    function avisoTarifaCliente(cl, alAplicar, alRepintar = () => repintar()) {
+      const t = tarifaHabitual(cl);
+      if (!t || !cur) return null;
+      const llave = cur.venta.id + ':' + cl.id;
+      const pend = cur.lineas.filter((l) => tarifaDeLinea(l).codigo !== t.codigo);
+      const frase = 'Este cliente normalmente ' + t.frase + '.';
+      if (!cur.lineas.length) return h('div.aviso-tarifa', h('strong', frase), h('small', 'Cuando agregue productos aparecerá un botón para aplicarla a todas las líneas. No se aplica sola.'));
+      if (!pend.length) return h('div.aviso-tarifa.lista', h('strong', 'Todas las líneas llevan ' + t.texto + '.'), h('small', 'El precio final de cada línea no cambió: solo cambia cuánto del precio es IVA.'));
+      if (sinAviso.has(llave)) return h('div.aviso-tarifa.suave', h('div', h('strong', frase), h('small', 'En esta cuenta se dejó el IVA normal.')),
+        h('button.btn.chico', { type: 'button', onclick: () => { sinAviso.delete(llave); alRepintar(); } }, 'Ver la opción otra vez'));
+      return h('div.aviso-tarifa', { role: 'group', 'aria-label': 'Tarifa de IVA habitual del cliente' },
+        h('strong', frase),
+        h('small', 'No se aplica sola. El precio final de cada línea no cambia: solo cambia cuánto del precio es IVA.'),
+        h('div.aviso-botones',
+          h('button.btn.primario', { type: 'button', onclick: (e) => conBoton(e.currentTarget, () => alAplicar(t)) }, t.boton + (pend.length < cur.lineas.length ? ' (' + pend.length + ' de ' + cur.lineas.length + ')' : '')),
+          h('button.btn.chico', { type: 'button', onclick: () => { sinAviso.add(llave); alRepintar(); } }, 'No, dejar el IVA normal')));
+    }
+    function panelCliente() {
+      const cl = cur.cliente || null;
+      if (!cl) {
+        return h('div.cuenta-cliente',
+          h('div.cc-fila',
+            h('div.cc-txt', h('strong', 'Sin cliente'), h('small', 'Sale tiquete electrónico')),
+            h('button.btn.chico', { type: 'button', onclick: elegirClienteCuenta }, 'Elegir cliente')));
+      }
+      return h('div.cuenta-cliente.con',
+        h('div.cc-fila',
+          h('div.cc-txt', h('strong', 'Factura a nombre de ' + (cl.nombre || '')), h('small', (TIPOS_ID[cl.tipo_id] || 'Identificación') + ' ' + (cl.identificacion || ''))),
+          h('div.fila', h('button.btn.chico', { type: 'button', onclick: elegirClienteCuenta }, 'Cambiar cliente'), h('button.btn.chico', { type: 'button', onclick: seguro(() => asignarCliente(null)) }, 'Quitar cliente'))),
+        avisoTarifaCliente(cl, aplicarTarifaCliente));
     }
 
     function pintarCuenta(irAlFinal) {
@@ -702,27 +804,30 @@ export default {
         asideCuenta.replaceChildren(h('div.vacio-cuenta',
           h('h2', 'No hay cuenta abierta'),
           h('p', 'Toque un producto o búsquelo arriba para empezar una cuenta de Buffet. Si es para esperar, para llevar o express, use «Nueva cuenta».'),
-          h('button.btn.primario.grande', { type: 'button', onclick: nuevaCuenta }, 'Nueva cuenta')));
+          h('button.btn.primario.grande', { type: 'button', onclick: seguro(nuevaCuenta) }, 'Nueva cuenta')));
         return;
       }
       const v = cur.venta;
       const puede = cur.lineas.length > 0 && Number(v.total) > 0;
       const detalle = [v.referencia, v.telefono].filter(Boolean).join(' · ');
-      const prefBtn = (v.tipo_servicio === 'llevar' || v.tipo_servicio === 'express')
+      // Clientes en espera, para llevar y express pueden pedir ver su cuenta antes de pagar: la prefactura NO es un comprobante
+      const prefBtn = (v.tipo_servicio === 'espera' || v.tipo_servicio === 'llevar' || v.tipo_servicio === 'express')
         ? h('button.btn.ambar', { type: 'button', disabled: !cur.lineas.length, onclick: (e) => prefacturar(e.currentTarget) }, v.estado === 'prefacturada' ? 'Imprimir prefactura otra vez' : 'Prefactura (no es factura)')
         : null;
-      const lineas = h('div.cuenta-lineas', cur.lineas.length ? cur.lineas.map(filaLinea) : h('div.vacio', { style: 'margin:.8rem 0' }, 'La cuenta está vacía. Toque un producto o búsquelo arriba.'));
+      // El cliente y su aviso de tarifa van dentro de la parte que se desliza: así nunca le quitan lugar a las líneas
+      const lineas = h('div.cuenta-lineas', panelCliente(),
+        h('div.cuenta-items', cur.lineas.length ? cur.lineas.map(filaLinea) : h('div.vacio', { style: 'margin:.8rem 0' }, 'La cuenta está vacía. Toque un producto o búsquelo arriba.')));
       asideCuenta.replaceChildren(
         h('div.cuenta-cab',
           h('div', h('h2', (TIPOS_SERVICIO[v.tipo_servicio] || v.tipo_servicio) + ' ' + numCuenta(v.numero)), h('div.sub', detalle || (v.tipo_servicio === 'buffet' ? 'Sin nombre' : 'Falta el nombre'))),
           h('button.btn.chico', { type: 'button', onclick: editarDatos }, 'Cambiar datos de la cuenta')),
         lineas,
         h('div.cuenta-pie',
-          v.estado === 'prefacturada' ? h('div.aviso-pref', h('strong', 'PREFACTURA N° ' + (v.prefactura_numero || '')), 'Esto no es una factura. Sirve para que el cliente revise su cuenta. Para cobrar toque «Cobrar».') : null,
+          v.estado === 'prefacturada' ? h('div.aviso-pref', h('strong', 'PREFACTURA N.° ' + (v.prefactura_numero || '')), 'No es una factura: es solo para que el cliente revise su cuenta.') : null,
           h('div.total-fila', h('div', h('span.et', 'Total a pagar'), h('small', 'IVA incluido')), h('div.total-monto', { 'aria-live': 'polite' }, money(v.total))),
-          h('button.btn.primario.grande.btn-cobrar-aside', { type: 'button', disabled: !puede, onclick: abrirCobro }, 'Cobrar'),
-          h('div.acciones-cuenta', prefBtn, h('button.btn.peligro' + (prefBtn ? '' : '.ancho'), { type: 'button', onclick: anularCuenta }, 'Anular cuenta')),
-          prefBtn && v.estado !== 'prefacturada' ? h('p.nota-pref', 'La prefactura es solo para que el cliente revise su cuenta. No es una factura.') : null));
+          h('button.btn.primario.grande.btn-cobrar-aside', { type: 'button', disabled: !puede, onclick: seguro(abrirCobro) }, 'Cobrar'),
+          h('div.acciones-cuenta', prefBtn, h('button.btn.peligro' + (prefBtn ? '' : '.ancho'), { type: 'button', onclick: anularCuenta }, 'Anular esta cuenta')),
+          null));
       const nuevo = asideCuenta.querySelector('.cuenta-lineas');
       nuevo.scrollTop = irAlFinal ? nuevo.scrollHeight : scroll;
     }
@@ -737,7 +842,7 @@ export default {
       } else {
         barraMovil.replaceChildren(
           h('button.btn', { type: 'button', onclick: () => cambiarVista('productos') }, 'Agregar productos'),
-          h('button.btn.primario', { type: 'button', disabled: !puede, onclick: abrirCobro }, cur ? 'Cobrar ' + total : 'Cobrar'));
+          h('button.btn.primario', { type: 'button', disabled: !puede, onclick: seguro(abrirCobro) }, cur ? 'Cobrar ' + total : 'Cobrar'));
       }
     }
 
@@ -748,10 +853,12 @@ export default {
       const id = cur.venta.id;
       await conBoton(btn, async () => {
         if (cur.venta.estado !== 'prefacturada') {
-          await accion(async () => { cur = await api.prefacturar(id); repintar(); });
+          const st = {};
+          await accion(async () => { cur = await api.prefacturar(id); repintar(); }, st);
+          if (st.error) return; // no se pudo crear: no se imprime nada que parezca prefactura
         }
-        try { await (await imp()).imprimirPrefactura(id); toast('Prefactura lista. Recuerde: esto no es una factura.'); }
-        catch (e) { toast('La prefactura quedó creada pero no se pudo imprimir: ' + (e.message || e), 'error', 8000); }
+        try { await (await imp()).imprimirPrefactura(id); toast('Se abrió la impresión de la prefactura. Recuerde: esto no es una factura.'); }
+        catch (e) { toast('La prefactura quedó creada pero no se pudo imprimir: ' + (e.message || e) + ' Toque «Imprimir prefactura otra vez».', 'error', 8000); }
       });
     }
 
@@ -759,8 +866,9 @@ export default {
     async function abrirCobro() {
       await cola;
       if (!cur || !cur.lineas.length || !(Number(cur.venta.total) > 0)) { toast('La cuenta está vacía. Agregue productos antes de cobrar.', 'error'); return; }
-      const venta = cur.venta, ventaId = venta.id;
-      const totalC = cents(venta.total);
+      let venta = cur.venta;
+      const ventaId = venta.id;
+      let totalC = cents(venta.total);
       let cliente = cur.cliente || null;
       let actividadFactura = null; // código de actividad pedido por el cliente solo para esta factura (null = la principal del cliente)
       let pagos = [];
@@ -776,15 +884,22 @@ export default {
       /* Vista principal de pago */
       const docTxt = h('span.doc'), cliTxt = h('span.cli');
       // Elegir o crear cliente: la ventana completa de Clientes (ui_cliente.js). Al crear uno nuevo trae los 4 correos, la dirección y la verificación en Hacienda.
-      const elegirCliente = (c) => { cliente = c; actividadFactura = null; pintarCliente(); actualizar(); };
+      // El cliente también queda guardado en la cuenta (así se ve igual en cualquier aparato y en la prefactura)
+      const elegirCliente = (c) => {
+        cliente = c; actividadFactura = null; pintarCliente(); actualizar();
+        asignarCliente(c).then((ok) => { if (ok && !terminado && cur?.cliente?.id === c.id) { cliente = cur.cliente; pintarCliente(); } });
+      };
       const btnElegir = h('button.btn', { type: 'button', onclick: () => selectorCliente(app, { alElegir: elegirCliente }) }, 'Elegir cliente (factura)');
-      const btnQuitarCli = h('button.btn.suave', { type: 'button', onclick: () => { cliente = null; actividadFactura = null; pintarCliente(); } }, 'Quitar cliente');
+      const btnQuitarCli = h('button.btn.suave', { type: 'button', onclick: () => { cliente = null; actividadFactura = null; pintarCliente(); asignarCliente(null); } }, 'Quitar cliente');
       const actEl = h('div.cobro-act', { hidden: true });
+      const tarEl = h('div.cobro-tarifa', { hidden: true });
+      const montoTotal = h('div.monto', money(venta.total));
       const mediosBtns = Object.entries(MEDIOS).map(([k, v]) => h('button.medio-btn', { type: 'button', dataset: { medio: k }, onclick: () => { medio = k; auto = true; sugerir(); actualizar(); inpMonto.focus(); inpMonto.select(); } }, v));
       const inpMonto = h('input.campo.monto-grande', { type: 'text', inputmode: 'decimal', autocomplete: 'off', 'aria-label': 'Monto' });
       const lblMonto = h('span');
       const inpRef = h('input.campo', { type: 'text', maxlength: 60, autocomplete: 'off' });
-      const refEtq = h('label.etq', 'Referencia o número de comprobante (opcional)', inpRef);
+      const refTxt = h('span');
+      const refEtq = h('label.etq', refTxt, inpRef);
       const rapidos = h('div.rapidos',
         h('button.btn', { type: 'button', onclick: () => { auto = true; sugerir(); actualizar(); } }, 'Exacto'),
         RAPIDOS.map((n) => h('button.btn', { type: 'button', onclick: () => { inpMonto.value = String(n); auto = false; actualizar(); } }, money0(n))));
@@ -812,13 +927,15 @@ export default {
       const btnVolver = h('button.btn', { type: 'button', onclick: () => m.cerrar() }, 'Volver');
       const btnCobrar = h('button.btn.primario.grande.btn-confirmar-cobro', { type: 'button', onclick: confirmarCobro }, 'Cobrar');
       const vistaPago = h('div.cobro',
-        h('div.cobro-total', h('div.et', 'Total a cobrar (IVA incluido)'), h('div.monto', money(venta.total))),
+        h('div.cobro-total', h('div.et', 'Total a cobrar (IVA incluido)'), montoTotal),
         resumen,
+        listaPagos,
         h('div.cobro-doc', h('div', h('div', docTxt), h('div', cliTxt)), h('div.fila', btnElegir, btnQuitarCli)),
+        tarEl,
         actEl,
         h('div.col', h('strong', 'Forma de pago'), h('div.medios', mediosBtns)),
         h('label.etq', lblMonto, inpMonto),
-        rapidos, refEtq, btnOtro, listaPagos, errEl, btnRevisar,
+        rapidos, refEtq, btnOtro, errEl, btnRevisar,
         resImp,
         h('div.cobro-pie', btnVolver, btnCobrar));
 
@@ -846,31 +963,42 @@ export default {
         cliTxt.textContent = cliente ? 'Cliente: ' + cliente.nombre + ' · ' + cliente.identificacion : 'Si el cliente pide factura con su nombre, toque «Elegir cliente».';
         btnElegir.textContent = cliente ? 'Cambiar cliente' : 'Elegir cliente (factura)';
         btnQuitarCli.hidden = !cliente;
+        pintarTarifa();
         pintarActividad();
+      }
+      // Tarifa de IVA habitual del cliente: avisa con palabras claras y ofrece aplicarla (nunca la aplica sola)
+      async function aplicarEnCobro(t) {
+        const ok = await aplicarTarifaCliente(t);
+        if (!ok || !cur || terminado) return;
+        venta = cur.venta; totalC = cents(venta.total); montoTotal.textContent = money(venta.total);
+        pintarTarifa(); sugerir(); actualizar();
+      }
+      function pintarTarifa() {
+        const a = cliente && cur ? avisoTarifaCliente(cliente, aplicarEnCobro, pintarTarifa) : null;
+        tarEl.hidden = !a;
+        tarEl.replaceChildren(...(a ? [a] : []));
       }
 
       /* Actividad del cliente para esta factura: la principal del cliente, o la que pida para esta factura */
       const codigoActividad = () => actividadFactura || cliente?.actividad_codigo || '';
-      const descripcionActividad = (cod) => {
-        const a = (cliente?.actividades || []).find((x) => x.codigo === cod);
-        return !a ? '' : a.manual ? 'escrita a mano' : (a.descripcion || '');
-      };
+      const manualActividad = (cod) => !!(cliente?.actividades || []).find((x) => x.codigo === cod && x.manual);
       function pintarActividad() {
         actEl.hidden = !cliente;
         if (!cliente) { actEl.replaceChildren(); return; }
         const cod = codigoActividad();
-        const desc = descripcionActividad(cod);
         const lista = cliente.actividades || [];
         const fueraDeLista = !!cod && !!cliente.verificado && lista.some((x) => !x.manual) && !lista.some((x) => x.codigo === cod && !x.manual);
         actEl.replaceChildren(...[
           h('div.act-fila',
             h('div.act-txt', h('span.et', 'Actividad del cliente para esta factura: '),
-              cod ? h('strong', cod + (desc ? ' - ' + desc : '')) : h('strong', 'sin código de actividad'),
+              cod ? h('strong', textoActividad(cod, lista)) : h('strong', 'sin actividad económica'),
+              cod && manualActividad(cod) ? h('span.chip', 'Escrita a mano') : null,
               actividadFactura ? h('span.chip.espera', 'Solo para esta factura') : null),
             h('button.btn', { type: 'button', onclick: () => vistaActividad() }, 'Cambiar')),
-          cod ? null : h('small.tenue', 'Si el cliente declara IVA y pide su actividad, toque «Cambiar» y escriba el código.'),
+          cod ? null : h('small.tenue', 'Si el cliente declara IVA y pide que se anote su actividad, toque «Cambiar» y escriba el código.'),
           fueraDeLista ? h('div.act-aviso', 'Este código no está entre las actividades que Hacienda tiene para este cliente. Hacienda podría rechazar la factura.') : null,
           !cliente.correo ? h('div.act-aviso', 'Este cliente no tiene correo. La factura se emite igual, pero no se le podrá enviar por correo.') : null,
+          direccionIncompleta(cliente) ? h('div.act-aviso', 'A este cliente le falta la dirección completa (provincia, cantón, distrito y otras señas). La factura se emite igual; complétela en Clientes cuando pueda.') : null,
         ].filter(Boolean));
       }
       function actualizar() {
@@ -878,6 +1006,9 @@ export default {
         lblMonto.textContent = medio === 'efectivo' ? 'Efectivo que entrega el cliente (₡)' : 'Monto a cobrar con ' + MEDIOS[medio] + ' (₡)';
         rapidos.hidden = medio !== 'efectivo';
         refEtq.hidden = medio === 'efectivo';
+        refTxt.textContent = medio === 'tarjeta' ? 'Número de autorización o voucher (opcional)'
+          : medio === 'sinpe' ? 'Número de comprobante del SINPE Móvil (recomendado: ayuda a cuadrar la caja)'
+          : 'Número de referencia de la transferencia (recomendado: ayuda a cuadrar la caja)';
         const b = borrador();
         const r = calcularPagos(entradas(), totalC);
         sinErr();
@@ -923,6 +1054,12 @@ export default {
         async function elegir(cod) {
           if (ocupado) return;
           err.hidden = true;
+          // Un código que Hacienda no tiene para este cliente puede hacer que rechacen la factura: se pide confirmación antes de seguir
+          const deHac = lista.filter((x) => !x.manual);
+          if (cliente.verificado && deHac.length && !deHac.some((x) => x.codigo === cod)) {
+            const sigue = await confirmar('El código ' + cod + ' (' + infoActividad(cod, lista).nombre + ') no está entre las actividades que Hacienda tiene para este cliente. Hacienda puede rechazar la factura. ¿Quiere usarlo de todos modos?', { si: 'Sí, usarlo de todos modos', no: 'No, volver' });
+            if (!sigue) return;
+          }
           ocupado = true;
           try {
             if (chk.checked) {
@@ -937,8 +1074,8 @@ export default {
         function pintarLista() {
           const actual = codigoActividad();
           cajaLista.replaceChildren(...(lista.length ? lista.map((x) => h('button.cli-item', { type: 'button', 'aria-pressed': String(x.codigo === actual), onclick: () => elegir(x.codigo) },
-            h('b', x.codigo + (x.codigo === actual ? ' (la que está en esta factura)' : '')),
-            h('small', (x.manual ? 'Escrita a mano' : (x.descripcion || 'Sin descripción')) + (x.codigo === cliente.actividad_codigo ? ' · Principal del cliente' : '')))) : [h('div.vacio', 'Este cliente no tiene actividades guardadas. Escriba el código abajo o consulte a Hacienda.')]));
+            h('b', infoActividad(x.codigo, lista).nombre + (x.codigo === actual ? ' (la que está en esta factura)' : '')),
+            h('small', 'Código ' + x.codigo + (x.manual ? ' · escrita a mano' : '') + (x.codigo === cliente.actividad_codigo ? ' · principal del cliente' : '')))) : [h('div.vacio', 'Este cliente no tiene actividades guardadas. Escriba el código abajo o consulte a Hacienda.')]));
         }
         const btnHac = h('button.btn', { type: 'button' }, 'Consultar actividades en Hacienda');
         btnHac.hidden = !/^0[1-4]$/.test(cliente.tipo_id || '');
@@ -1037,30 +1174,26 @@ export default {
       const chip = h('span.chip');
       const msgEstado = h('p.tenue-linea');
       const impEstado = h('p.tenue-linea', { role: 'status' });
+      // Los textos salen de describirEstado (util.js): nunca dicen que algo "ya está" si la base no lo sabe
       const pintarEstado = (c) => {
-        const e = c.estado || 'pendiente';
-        chip.textContent = ESTADOS[e] || e;
-        chip.className = 'chip ' + (e === 'aceptado' ? 'ok' : (e === 'rechazado' || e === 'error') ? 'mal' : 'espera');
-        msgEstado.className = 'tenue-linea' + (e === 'rechazado' ? ' msg-mal' : '');
-        msgEstado.textContent = e === 'aceptado' ? 'Hacienda lo aceptó.'
-          : e === 'rechazado' ? 'Hacienda lo rechazó' + (c.mensaje ? ': ' + c.mensaje : '.') + ' Avise a la persona encargada; el documento queda en «Documentos del día».'
-          : e === 'error' ? 'Hubo un error al enviarlo' + (c.mensaje ? ': ' + c.mensaje : '') + '. El sistema volverá a intentarlo.'
-          : e === 'enviado' ? 'Enviado a Hacienda, esperando la respuesta. El cliente ya puede irse.'
-          : 'En cola para enviarse a Hacienda. No hace falta esperar; el cliente ya puede irse.';
+        const d = describirEstado(c.estado, c.mensaje);
+        chip.textContent = d.chip;
+        chip.className = 'chip ' + (d.clase === 'ok' ? 'ok' : d.clase === 'mal' ? 'mal' : 'espera');
+        msgEstado.className = 'tenue-linea' + (d.clase === 'mal' ? ' msg-mal' : '');
+        msgEstado.textContent = d.texto;
       };
       pintarEstado(comp);
-      async function vigilar() {
-        for (let i = 0; i < 60 && abierto && vivo; i++) {
-          await new Promise((r) => setTimeout(r, 4000));
-          if (!abierto || !vivo) return;
-          try { const c = await api.comprobante(compId); pintarEstado(c); if (c.estado === 'aceptado' || c.estado === 'rechazado') return; } catch { /* reintenta */ }
-        }
-      }
+      // Consulta el estado cada 4 segundos hasta que Hacienda responda o se cierre esta ventana
+      let dejarDeVigilar = () => {};
+      const vigilar = () => { dejarDeVigilar = api.vigilarComprobante(compId, (e) => { if (abierto && vivo) pintarEstado({ estado: e.estado, mensaje: e.mensaje }); }, { cada: 4000, max: 240000 }); };
       async function imprimir(fmt) {
         impEstado.className = 'tenue-linea'; impEstado.textContent = 'Enviando a la impresora…';
         try {
           await (await imp()).imprimirComprobante(compId, { formato: fmt, copias: aj.copias });
-          impEstado.textContent = fmt === 'carta' ? 'Factura en formato carta enviada a imprimir.' : 'Tiquete de ' + aj.papel + ' mm enviado a imprimir (' + aj.copias + (aj.copias === 1 ? ' copia).' : ' copias).');
+          // La página solo sabe que abrió la impresión: no puede saber si la persona la canceló o si salió el papel
+          impEstado.textContent = fmt === 'carta'
+            ? 'Se abrió la impresión de la factura carta (' + aj.copias + (aj.copias === 1 ? ' copia' : ' copias') + '). Si no salió, toque el botón otra vez.'
+            : 'Se abrió la impresión del tiquete de ' + aj.papel + ' mm (' + aj.copias + (aj.copias === 1 ? ' copia' : ' copias') + '). Si no salió, toque «Imprimir otra vez».';
         } catch (e) {
           impEstado.className = 'tenue-linea msg-mal';
           impEstado.textContent = 'No se pudo imprimir: ' + (e.message || e) + ' Toque el botón de imprimir otra vez o revise el botón «Impresora».';
@@ -1079,7 +1212,7 @@ export default {
       const contenido = h('div.exito',
         h('div.gran', '✓ Cobro registrado'),
         aviso ? h('div.error-caja', aviso) : null,
-        h('div', h('div', (TIPOS_DOC[comp.tipo_doc] || 'Comprobante') + (comp.consecutivo ? ' N° ' + comp.consecutivo : '')), h('div.gran', money(comp.total))),
+        h('div', h('div', (TIPOS_DOC[comp.tipo_doc] || 'Comprobante') + (numeroDoc(comp.consecutivo) ? ' N.° ' + numeroDoc(comp.consecutivo) : '')), h('div.gran', money(comp.total))),
         pagosEl,
         vuelto > 0 ? h('div.vuelto-caja', h('div', 'Entregue de vuelto'), h('div.monto', money(vuelto))) : h('p.tenue-linea', 'Sin vuelto.'),
         h('div.estado-caja', chip), msgEstado, impEstado,
@@ -1089,7 +1222,7 @@ export default {
           h('button.btn', { type: 'button', onclick: () => imprimir(fmtPrincipal === 'carta' ? 'tiquete' : 'carta') }, fmtPrincipal === 'carta' ? 'Imprimir tiquete' : 'Imprimir factura carta'),
           h('button.btn.suave', { type: 'button', onclick: () => cerrarM() }, 'Listo, cerrar'),
           h('button.btn.cab-anular', { type: 'button', onclick: () => { cerrarM(); app.ir('anular'); } }, 'Me equivoqué: anular esta factura')));
-      const mo = modal({ titulo: 'Cobro listo', contenido, ancho: 520, alCerrar: () => { abierto = false; if (vivo && buscador && fino()) buscador.inp.focus(); } });
+      const mo = modal({ titulo: 'Cobro listo', contenido, ancho: 520, alCerrar: () => { abierto = false; dejarDeVigilar(); if (vivo && buscador && fino()) buscador.inp.focus(); } });
       cerrarM = mo.cerrar;
       if (aj.auto) imprimir(fmtPrincipal);
       else impEstado.textContent = 'No se imprimió sola (la impresión automática está apagada en «Impresora»). Toque «Imprimir ' + nombrePrincipal + '» si el cliente lo quiere.';

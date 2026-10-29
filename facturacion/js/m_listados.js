@@ -1,5 +1,5 @@
 // Listados: reportes de ventas facturadas. Datos: fx_listados2 (ventas netas de notas de crédito), ver sql/05_listados2.sql.
-import { h, money, num, fechaHora, horaCorta, fechaCorta, sumaDias, toast, TIPOS_SERVICIO, MEDIOS } from './util.js';
+import { h, money, num, fechaHora, horaCorta, fechaCorta, sumaDias, toast, nombrePropio, nombreLocal, TIPOS_SERVICIO, MEDIOS } from './util.js';
 import { listados2 } from './api_listados.js';
 import { selectorPeriodo, textoRango, fechaLarga } from './periodo.js';
 import { csvBajar } from './csv.js';
@@ -18,6 +18,7 @@ export default {
   async mount(root, app) {
     if (!document.getElementById('css-listados')) document.head.append(h('link', { id: 'css-listados', rel: 'stylesheet', href: cssUrl }));
     const limpiezas = [];
+    const nomSoc = nombreLocal(app.soc);
     let ficha = 0; // descarta respuestas viejas
     const est = { desde: null, hasta: null, turno: '', datos: null, demo: false, vista: 'arbol', orden: 'monto', ordenLista: { col: 'total', dir: -1 }, filtro: '', abiertos: new Set(), verTodos: false };
 
@@ -27,11 +28,12 @@ export default {
     const rotulo = h('p.lis-rotulo');
     const resumenEl = h('div');
     const cuerpo = h('div');
-    const demoBanner = h('div.demo-banner', { hidden: true }, h('strong', 'DATOS DE EJEMPLO. '), 'Lo que ve aquí no son ventas reales, es solo una muestra para ver cómo se verán los gráficos. ',
-      h('button.btn.chico', { type: 'button', onclick: () => { est.demo = false; cargar(est.desde, est.hasta); } }, 'Volver a los datos reales'));
+    // Franja que acompaña a toda la pantalla mientras se ve la muestra, para que nadie la confunda con ventas reales
+    const demoBanner = h('div.demo-banner', { hidden: true, role: 'status' }, h('strong', 'DATOS DE EJEMPLO, NO SON SUYOS'), h('span', 'Son ventas inventadas, solo para ver cómo se verán los gráficos.'),
+      h('button.btn', { type: 'button', onclick: () => { est.demo = false; cargar(est.desde, est.hasta); } }, 'Volver a los datos reales'));
 
     root.append(
-      h('div.lis-cab', h('div', h('h1', 'Listados de ventas'), h('p.tenue', 'Ventas ya facturadas de ', h('strong', app.soc?.nombre_comercial || app.soc?.nombre || ''), '. Las cifras vienen de las facturas y tiquetes emitidos; las notas de crédito se restan.')),
+      h('div.lis-cab', h('div', h('h1', 'Listados de ventas'), h('p.tenue', 'Ventas ya facturadas de ', h('strong', nomSoc), '. Las cifras vienen de las facturas y tiquetes emitidos; las notas de crédito se restan.')),
         h('button.btn', { type: 'button', onclick: (e) => imprimir(e.currentTarget) }, 'Imprimir resumen')),
       h('div.tarjeta.lis-filtros', periodo.el, turnoCaja),
       demoBanner, rotulo, resumenEl, cuerpo);
@@ -58,9 +60,18 @@ export default {
       }
     }
 
+    // «Turno del 28/10/2026 desde las 18:29 (sigue abierto)» o «Turno del 28/10/2026 de 18:29 a 22:05». Lo más reciente primero.
+    function textoTurno(t) {
+      const dia0 = fechaCorta(t.abierto_en);
+      const cuando = !t.cerrado_en ? `desde las ${horaCorta(t.abierto_en)} (sigue abierto)`
+        : fechaCorta(t.cerrado_en) === dia0 ? `de ${horaCorta(t.abierto_en)} a ${horaCorta(t.cerrado_en)}`
+          : `desde las ${horaCorta(t.abierto_en)} hasta el ${fechaCorta(t.cerrado_en)} a las ${horaCorta(t.cerrado_en)}`;
+      return `Turno del ${dia0} ${cuando}`;
+    }
+    const turnosRecientes = (turnos) => [...turnos].sort((a, b) => new Date(b.abierto_en) - new Date(a.abierto_en));
     function llenarTurnos(turnos) {
       turnoSel.replaceChildren(h('option', { value: '' }, 'Todos los turnos'));
-      turnos.forEach((t) => turnoSel.append(h('option', { value: t.id }, `Turno del ${fechaCorta(t.abierto_en)}, ${horaCorta(t.abierto_en)} a ${t.cerrado_en ? horaCorta(t.cerrado_en) : 'en curso'}${t.abierto_por ? ' · abrió ' + t.abierto_por : ''} (${t.ventas} ${t.ventas === 1 ? 'venta' : 'ventas'})`)));
+      turnosRecientes(turnos).forEach((t) => turnoSel.append(h('option', { value: t.id }, `${textoTurno(t)}${t.abierto_por ? ', abrió ' + nombrePropio(t.abierto_por) : ''} (${t.ventas} ${t.ventas === 1 ? 'venta' : 'ventas'})`)));
       turnoSel.value = est.turno || '';
       turnoCaja.hidden = turnos.length === 0;
     }
@@ -69,7 +80,7 @@ export default {
     const seccion = (titulo, ayuda, csv, ...hijos) => h('section.tarjeta.lis-sec',
       h('div.lis-sec-cab', h('div', h('h2', titulo), ayuda ? h('p.tenue.lis-ayuda', ayuda) : null),
         csv ? h('button.btn.chico', { type: 'button', onclick: csv }, 'Descargar en Excel (CSV)') : null), ...hijos);
-    const nombreArchivo = (que) => `${que} ${app.soc?.nombre_comercial || app.soc?.codigo || ''} ${est.desde}${est.desde === est.hasta ? '' : ' a ' + est.hasta}`;
+    const nombreArchivo = (que) => `${que} ${nomSoc || app.soc?.codigo || ''} ${est.desde}${est.desde === est.hasta ? '' : ' a ' + est.hasta}`;
     const kpi = (titulo, valor, nota, extra) => h('div.tarjeta.kpi' + (extra ? '.' + extra : ''), h('div.kpi-t', titulo), h('div.kpi-v.cifra', valor), h('div.kpi-n', nota));
 
     function tablaSimple(cols, filas, pie) {
@@ -94,6 +105,7 @@ export default {
     function pintar() {
       const d = est.datos, r = d.resumen;
       resumenEl.replaceChildren(); cuerpo.replaceChildren();
+      const rech = d.rechazados || { n: r.rechazados_n || 0, total: r.rechazados_total || 0, lista: [] };
       if (!r.docs_emitidos && !r.notas_credito_n) {
         const masAmplio = periodo.id() === 'hoy' ? ['mes', 'Ver este mes'] : null;
         cuerpo.append(h('div.vacio.lis-vacio', h('h2', 'Todavía no hay ventas facturadas en este periodo'),
@@ -102,6 +114,7 @@ export default {
             masAmplio ? h('button.btn.primario', { type: 'button', onclick: () => periodo.elegir(masAmplio[0]) }, masAmplio[1]) : null,
             h('button.btn', { type: 'button', onclick: () => periodo.elegir('ayer') }, 'Ver ayer'),
             h('button.btn', { type: 'button', onclick: () => { est.demo = true; cargar(est.desde, est.hasta); } }, 'Ver un ejemplo con datos de muestra'))));
+        if (rech.n > 0) cuerpo.append(avisoRechazados(rech), seccionRechazados(rech));
         return;
       }
       const ticket = r.vigentes_n ? r.vigentes_total / r.vigentes_n : 0;
@@ -114,12 +127,13 @@ export default {
           kpi('IVA dentro de las ventas netas', money(r.iva_neto), `Sin IVA, las ventas netas serían ${money(baseNeta)}.`),
           kpi('Documentos emitidos', num(r.docs_emitidos, 0), 'Facturas y tiquetes electrónicos. Las notas de crédito no se cuentan aquí.'),
           kpi('Ticket promedio', money(ticket), 'Ventas netas entre el número de ventas vigentes. Con IVA incluido.')),
+        rech.n > 0 ? avisoRechazados(rech) : null,
         r.sin_aceptar_n > 0 ? h('p.lis-aviso', `${r.sin_aceptar_n} ${r.sin_aceptar_n === 1 ? 'documento todavía no está aceptado' : 'documentos todavía no están aceptados'} por Hacienda (en cola o con error). Cuentan en las cifras igual que los aceptados.`) : null,
         Math.abs((r.vigentes_total || 0) - (r.ventas_netas || 0)) > 0.005 ? h('p.lis-aviso', `Los desgloses de abajo suman ${money(r.vigentes_total)} y las ventas netas ${money(r.ventas_netas)}: la diferencia viene de notas de crédito de este periodo que anulan ventas de otro periodo.`) : null,
       ].filter(Boolean));
 
-      cuerpo.append(seccionDias(d), seccionHoras(d), seccionMedios(d), seccionServicio(d), seccionProductos(d));
-      const extra = [seccionTurnos(d), seccionCajeros(d), seccionIva(d)].filter(Boolean);
+      cuerpo.append(seccionDias(d), seccionHoras(d), seccionMedios(d), seccionServicio(d), seccionTarifas(d), seccionProductos(d));
+      const extra = [seccionTurnos(d), seccionCajeros(d), rech.n > 0 ? seccionRechazados(rech) : null].filter(Boolean);
       if (extra.length) cuerpo.append(...extra);
       if (!est.demo) cuerpo.append(h('p.lis-pie', h('button.btn.suave.chico', { type: 'button', onclick: () => { est.demo = true; cargar(est.desde, est.hasta); } }, 'Ver un ejemplo con datos de muestra')));
     }
@@ -180,24 +194,52 @@ export default {
 
     /* ---------- turnos, cajeros, IVA ---------- */
     function seccionTurnos(d) {
-      const filas = d.por_turno || []; if (!filas.length) return null;
-      const csv = () => csvBajar(nombreArchivo('Ventas por turno'), ['Abrió', 'Cerró', 'Abierto por', 'Ventas (número)', 'Monto con IVA'], filas.map((t) => [fechaHora(t.abierto_en), t.cerrado_en ? fechaHora(t.cerrado_en) : 'En curso', t.abierto_por || '', +t.ventas, +t.total]));
-      return seccion('Por turno de caja', 'Cada turno abre y cierra la caja. Monto de las ventas vigentes (sin anuladas), con IVA.', csv,
+      const filas = turnosRecientes(d.por_turno || []); if (!filas.length) return null;
+      const csv = () => csvBajar(nombreArchivo('Ventas por turno'), ['Abrió', 'Cerró', 'Abierto por', 'Ventas (número)', 'Monto con IVA'], filas.map((t) => [fechaHora(t.abierto_en), t.cerrado_en ? fechaHora(t.cerrado_en) : 'Sigue abierto', t.abierto_por || '', +t.ventas, +t.total]));
+      return seccion('Por turno de caja', 'Cada turno abre y cierra la caja. El más reciente va primero. Monto de las ventas vigentes (sin anuladas), con IVA.', csv,
         tablaSimple([{ t: 'Turno' }, { t: 'Abrió' }, { t: 'Cerró' }, { t: 'Ventas', der: 1 }, { t: 'Monto con IVA', der: 1 }],
-          filas.map((t) => [t.abierto_por ? 'Abrió ' + t.abierto_por : 'Turno', fechaHora(t.abierto_en), t.cerrado_en ? fechaHora(t.cerrado_en) : 'En curso', num(t.ventas, 0), money(t.total)])));
+          filas.map((t) => [t.abierto_por ? 'Abrió ' + nombrePropio(t.abierto_por) : 'Turno', fechaHora(t.abierto_en), t.cerrado_en ? fechaHora(t.cerrado_en) : 'Sigue abierto', num(t.ventas, 0), money(t.total)])));
     }
     function seccionCajeros(d) {
       const filas = d.por_cajero || []; if (!filas.length || (filas.length === 1 && filas[0].cajero === 'Sin registrar')) return null;
       const csv = () => csvBajar(nombreArchivo('Ventas por cajero'), ['Cajero', 'Ventas (número)', 'Monto con IVA'], filas.map((t) => [t.cajero, +t.ventas, +t.total]));
       return seccion('Por cajero', 'Quien abrió la cuenta de cada venta. Monto con IVA, sin ventas anuladas.', csv,
-        tablaSimple([{ t: 'Cajero' }, { t: 'Ventas', der: 1 }, { t: 'Monto con IVA', der: 1 }], filas.map((t) => [t.cajero, num(t.ventas, 0), money(t.total)])));
+        tablaSimple([{ t: 'Cajero' }, { t: 'Ventas', der: 1 }, { t: 'Monto con IVA', der: 1 }], filas.map((t) => [nombrePropio(t.cajero), num(t.ventas, 0), money(t.total)])));
     }
-    function seccionIva(d) {
+    // Una fila por tarifa de IVA (13 %, 2 %, 0 %...). Las notas de crédito restan, así que el total cuadra con las ventas netas de arriba.
+    const nombreTarifa = (t) => {
+      const pc = Number(t.tarifa);
+      const corto = Number.isFinite(pc) ? new Intl.NumberFormat('es-CR', { maximumFractionDigits: 2 }).format(pc) + ' %' : '';
+      const nom = String(t.nombre || '').trim();
+      return nom && corto && !nom.includes(corto) ? `${nom} (${corto})` : (nom || corto || 'Sin tarifa');
+    };
+    function seccionTarifas(d) {
       const filas = d.por_tarifa || []; if (!filas.length) return null;
-      const csv = () => csvBajar(nombreArchivo('IVA por tarifa'), ['Tarifa de IVA (%)', 'Ventas con IVA', 'IVA', 'Ventas sin IVA'], filas.map((t) => [+t.tarifa, +t.total_con_iva, +t.iva, Math.round((+t.total_con_iva - +t.iva) * 100) / 100]));
-      return seccion('IVA por tarifa', 'Desglose del IVA de las ventas vigentes (sin anuladas), línea por línea.', csv,
-        tablaSimple([{ t: 'Tarifa' }, { t: 'Ventas con IVA', der: 1 }, { t: 'IVA', der: 1 }, { t: 'Ventas sin IVA', der: 1 }],
-          filas.map((t) => [(+t.tarifa) + ' %', money(t.total_con_iva), money(t.iva), money(+t.total_con_iva - +t.iva)])));
+      // Acepta también la forma anterior de la función (total_con_iva, sin base)
+      const f = filas.map((t) => { const total = +(t.total ?? t.total_con_iva ?? 0), iva = +(t.iva ?? 0); return { ...t, total, iva, base: t.base != null ? +t.base : Math.round((total - iva) * 100) / 100, documentos: t.documentos }; });
+      const sum = (k) => f.reduce((a, x) => a + x[k], 0);
+      const csv = () => csvBajar(nombreArchivo('Ventas por tarifa de IVA'), ['Tarifa de IVA', 'Porcentaje', 'Ventas sin IVA', 'IVA', 'Total con IVA'], f.map((t) => [nombreTarifa(t), +t.tarifa, t.base, t.iva, t.total]));
+      return seccion('Ventas por tarifa de IVA', 'Cada tarifa va aparte (por ejemplo 13 %, 2 % y 0 %). Es lo que se declara de las ventas netas: ya restadas las notas de crédito.', csv,
+        tablaSimple([{ t: 'Tarifa' }, { t: 'Ventas sin IVA', der: 1 }, { t: 'IVA', der: 1 }, { t: 'Total con IVA', der: 1 }],
+          f.map((t) => [nombreTarifa(t), money(t.base), money(t.iva), money(t.total)]),
+          h('tr', h('td', 'Total de todas las tarifas'), h('td.der', money(sum('base'))), h('td.der', money(sum('iva'))), h('td.der', money(sum('total'))))));
+    }
+
+    /* ---------- rechazados por Hacienda: van aparte y no suman en las ventas ---------- */
+    function avisoRechazados(rech) {
+      const n = +rech.n || 0;
+      return h('div.lis-aviso.mal',
+        h('div', h('b', `${n} ${n === 1 ? 'documento fue rechazado' : 'documentos fueron rechazados'} por Hacienda`), ` (${money(rech.total)}). No cuentan en las ventas de arriba. Si eran ventas reales, hay que hacerlas de nuevo en Caja.`),
+        h('button.btn', { type: 'button', onclick: () => app.ir('documentos', { filtro: 'problemas', desde: est.desde }) }, 'Ver en Documentos del día'));
+    }
+    function seccionRechazados(rech) {
+      const lista = rech.lista || [];
+      return seccion('Rechazados por Hacienda (aparte)', 'Hacienda no los aceptó, así que no son ventas válidas y no suman en nada de lo anterior. Primero el más reciente.', null,
+        lista.length
+          ? tablaSimple([{ t: 'Fecha y hora' }, { t: 'Documento' }, { t: 'Total', der: 1 }, { t: 'Qué dice Hacienda' }],
+            lista.map((x) => [fechaHora(x.fecha), `${{ '01': 'Factura', '03': 'Nota de crédito', '04': 'Tiquete' }[x.tipo_doc] || 'Documento'} N.° ${x.numero}`, money(x.total), x.mensaje || 'Sin detalle']))
+          : h('p.tenue', 'No hay detalle para mostrar.'),
+        +rech.n > lista.length ? h('p.tenue', `Se muestran los ${lista.length} más recientes de ${rech.n}. Los demás están en Documentos del día.`) : null);
     }
 
     /* ---------- productos (código de 6 dígitos: cajón + producto + modificador) ---------- */
@@ -219,10 +261,11 @@ export default {
       const f = norm(filtro);
       const cajones = new Map();
       filas.filter((x) => !x.abierto && (!f || norm(x.nombre + ' ' + x.codigo + ' ' + (x.cajon_nombre || '')).includes(f))).forEach((x) => {
-        const c = x.codigo ? x.codigo.slice(0, 2) : '--', p = x.codigo ? x.codigo.slice(0, 4) : '----';
+        // Las líneas libres (sin producto del catálogo) van cada una por su nombre, no mezcladas en un solo «producto»
+        const c = x.codigo ? x.codigo.slice(0, 2) : '--', p = x.codigo ? x.codigo.slice(0, 4) : '----' + x.nombre;
         if (!cajones.has(c)) cajones.set(c, { id: 'c' + c, codigo: c, nombre: c === '--' ? 'Sin código del catálogo (líneas libres)' : (x.cajon_nombre || 'Cajón ' + c), productos: new Map(), cantidad: 0, total: 0 });
         const cj = cajones.get(c); cj.cantidad += +x.cantidad; cj.total += +x.total;
-        if (!cj.productos.has(p)) cj.productos.set(p, { id: 'p' + p, codigo: p, hojas: [], cantidad: 0, total: 0 });
+        if (!cj.productos.has(p)) cj.productos.set(p, { id: 'p' + p, codigo: x.codigo ? p : '', hojas: [], cantidad: 0, total: 0 });
         const pr = cj.productos.get(p); pr.hojas.push(x); pr.cantidad += +x.cantidad; pr.total += +x.total;
       });
       const cmp = (a, b) => est.orden === 'codigo' ? String(a.codigo).localeCompare(String(b.codigo)) : est.orden === 'cantidad' ? b.cantidad - a.cantidad : b.total - a.total;
@@ -331,12 +374,15 @@ export default {
       const totM = (d.por_medio || []).reduce((a, x) => a + +x.total, 0), totS = (d.por_servicio || []).reduce((a, x) => a + +x.total, 0);
       const top = (d.productos || []).filter((x) => !x.abierto).sort((a, b) => b.total - a.total).slice(0, 15);
       hoja = h('div#impresion-resumen',
-        h('h1', 'Resumen de ventas · ' + (app.soc?.nombre_comercial || app.soc?.nombre || '')),
+        h('h1', 'Resumen de ventas · ' + nomSoc),
         h('p', textoRango(est.desde, est.hasta) + (est.turno ? ' · un solo turno' : ' · todos los turnos') + (est.demo ? ' · DATOS DE EJEMPLO, NO SON VENTAS REALES' : '')),
         h('p.sm', 'Colones (₡). Todas las cifras incluyen IVA salvo donde se indique. Las notas de crédito se restan.'),
         h('table.imp-kpi', h('tbody',
           [['Ventas brutas (antes de notas de crédito)', money(r.ventas_brutas)], ['Notas de crédito (se restan)', '−' + money(r.notas_credito)], ['Ventas netas (con IVA)', money(r.ventas_netas)],
             ['IVA dentro de las ventas netas', money(r.iva_neto)], ['Documentos emitidos', num(r.docs_emitidos, 0)], ['Ticket promedio (con IVA)', money(ticket)]].map(([a, b]) => h('tr', h('td', a), h('td.der', b))))),
+        (d.por_tarifa || []).length ? h('div', h('h2', 'Ventas por tarifa de IVA'), tablaSimple([{ t: 'Tarifa' }, { t: 'Ventas sin IVA', der: 1 }, { t: 'IVA', der: 1 }, { t: 'Total con IVA', der: 1 }],
+          d.por_tarifa.map((t) => { const total = +(t.total ?? t.total_con_iva ?? 0), iva = +(t.iva ?? 0); return [nombreTarifa(t), money(t.base != null ? +t.base : total - iva), money(iva), money(total)]; }))) : null,
+        (d.rechazados?.n || 0) > 0 ? h('p.sm', `Aparte: ${d.rechazados.n} ${d.rechazados.n === 1 ? 'documento rechazado' : 'documentos rechazados'} por Hacienda (${money(d.rechazados.total)}), que no suman en estas ventas.`) : null,
         serie.length > 1 ? h('div', h('h2', 'Ventas netas por ' + (serie[0].mes ? 'mes' : 'día')), g('col', serie.map((x) => ({ etiqueta: x.mes ? dia(x.dia, { month: 'short' }) : dia(x.dia, { day: '2-digit', month: '2-digit' }), valor: +x.netas })), { tituloX: serie[0].mes ? 'Mes' : 'Día (en orden de fecha)', tituloY: 'Ventas netas (₡, IVA incluido)', alto: 230, anchoEtiqueta: 44 })) : null,
         hSerie.length ? h('div', h('h2', 'Ventas por hora'), g('col', hSerie, { tituloX: 'Hora del día (24 horas)', tituloY: 'Ventas (₡, IVA incluido)', color: 'ambar', alto: 220, anchoEtiqueta: 36 })) : null,
         (d.por_medio || []).length ? h('div', h('h2', 'Por medio de pago'), g('bar', d.por_medio.map((x) => ({ etiqueta: nombreMedio(x.medio), valor: +x.total, extra: pct(+x.total, totM) })), { tituloX: 'Monto cobrado (₡, IVA incluido)', tituloY: 'Medio de pago' })) : null,

@@ -1,13 +1,12 @@
 // Usuarios del facturador (solo administradores): crear, cambiar nombre, reiniciar PIN, activar o desactivar. Nunca se elimina.
-import { h, modal, confirmar, pedir, conBoton, toast, fechaHora, horaCorta } from './util.js';
+import { h, modal, confirmar, pedir, conBoton, toast, fechaHora, horaCorta, pinDebil, conPunto, nombrePropio } from './util.js';
 import { api } from './api.js';
 import { cargarCss, aviso, campo, soloDigitos, diaCR } from './ui_mant.js';
 
-// PIN temporal al azar de 4 números, sin repeticiones ni secuencias obvias (1111, 1234, 4321)
+// PIN temporal al azar de 4 números, con la misma regla que se exige al elegir uno (util.js pinDebil): sin repeticiones ni secuencias (1111, 1212, 1234, 4321)
 function pinAzar() {
-  const debil = (p) => /^(\d)\1{3}$/.test(p) || '01234567890'.includes(p) || '09876543210'.includes(p) || /^(\d\d)\1$/.test(p);
   let p;
-  do { const a = new Uint32Array(1); crypto.getRandomValues(a); p = String(a[0] % 10000).padStart(4, '0'); } while (debil(p));
+  do { const a = new Uint32Array(1); crypto.getRandomValues(a); p = String(a[0] % 10000).padStart(4, '0'); } while (pinDebil(p));
   return p;
 }
 const usuarioLimpio = (s) => s.toLowerCase().replace(/\s+/g, '');
@@ -30,10 +29,12 @@ export default {
     async function cargar() {
       try { usuarios = await api.usuarios(); } catch (e) { lista.replaceChildren(h('div.error-caja', e.message || 'No se pudo cargar la lista de usuarios.')); return; }
       const hoy = diaCR(new Date());
-      const hoyIng = (u) => u.ultimo_ingreso && diaCR(u.ultimo_ingreso) === hoy;
+      // Solo cuentan los usuarios activos, en los dos números de la frase y en la lista de arriba
+      const hoyIng = (u) => u.activo && u.ultimo_ingreso && diaCR(u.ultimo_ingreso) === hoy;
       const deHoy = usuarios.filter(hoyIng).sort((a, b) => new Date(b.ultimo_ingreso) - new Date(a.ultimo_ingreso));
       const resto = usuarios.filter((u) => !hoyIng(u)).sort((a, b) => a.usuario.localeCompare(b.usuario));
-      resumen.textContent = 'Hoy han ingresado ' + deHoy.length + ' de ' + usuarios.filter((u) => u.activo).length + ' usuarios activos.';
+      const nActivos = usuarios.filter((u) => u.activo).length;
+      resumen.textContent = 'Hoy han ingresado ' + deHoy.length + ' de ' + nActivos + (nActivos === 1 ? ' usuario activo.' : ' usuarios activos.');
       const partes = [];
       if (deHoy.length) partes.push(h('div.mt-seccion', 'Ingresaron hoy'), h('div.mt-lista', deHoy.map(tarjeta)));
       if (resto.length) partes.push(h('div.mt-seccion', deHoy.length ? 'Los demás usuarios' : 'Usuarios'), h('div.mt-lista', resto.map(tarjeta)));
@@ -53,7 +54,7 @@ export default {
       const btnActivo = yo ? null : h('button.btn' + (u.activo ? '.peligro' : ''), { type: 'button', onclick: (e) => cambiarActivo(u, e.currentTarget) }, u.activo ? 'Desactivar' : 'Activar de nuevo');
       return h('div.mt-item' + (u.activo ? '' : '.apagado'),
         h('div.mt-datos',
-          h('span.mt-nombre', u.nombre || u.usuario),
+          h('span.mt-nombre', nombrePropio(u.nombre || u.usuario)),
           h('span.mt-sub', 'Usuario: ', h('span.mt-codigo', u.usuario)),
           h('span.mt-sub', ultimo),
           h('div.fila', { style: 'gap:.4rem;margin-top:.2rem' },
@@ -87,14 +88,14 @@ export default {
     }
 
     async function cambiarAdmin(u, btn) {
-      if (u.admin && u.activo && adminsActivos() <= 1) return toast('Tiene que quedar al menos un administrador activo.', 'error');
+      if (u.admin && u.activo && adminsActivos() <= 1) return toast('Tiene que quedar al menos un administrador activo. Primero haga administrador a otra persona.', 'error', 7000);
       const ok = await confirmar(u.admin ? '¿Quitarle a ' + (u.nombre || u.usuario) + ' el permiso de administrador? Ya no podrá ver esta pantalla de Usuarios.' : '¿Hacer administrador a ' + (u.nombre || u.usuario) + '? Podrá crear usuarios, reiniciar PIN y desactivar personas.');
       if (!ok) return;
       await guardar(btn, { id: u.id, admin: !u.admin }, u.admin ? 'Ya no es administrador.' : 'Ahora es administrador.');
     }
 
     async function cambiarActivo(u, btn) {
-      if (u.activo && u.admin && adminsActivos() <= 1) return toast('No se puede desactivar al único administrador.', 'error');
+      if (u.activo && u.admin && adminsActivos() <= 1) return toast('No se puede desactivar al único administrador activo. Primero haga administrador a otra persona.', 'error', 7000);
       const ok = await confirmar(u.activo ? '¿Desactivar a ' + (u.nombre || u.usuario) + '? No podrá entrar al facturador. No se borra nada y se puede activar de nuevo.' : '¿Activar de nuevo a ' + (u.nombre || u.usuario) + '? Podrá entrar con su PIN.', { si: u.activo ? 'Sí, desactivar' : 'Sí, activar', peligro: u.activo });
       if (!ok) return;
       await guardar(btn, { id: u.id, activo: !u.activo }, u.activo ? 'Usuario desactivado.' : 'Usuario activado.');
@@ -127,6 +128,7 @@ export default {
           if (usuarios.some((x) => x.usuario === u)) return mostrar('Ya existe un usuario "' + u + '". Elija otro.', usr);
           if (!nom.value.trim()) return mostrar('Escriba el nombre de la persona.', nom);
           if (!/^\d{4}$/.test(pin.value)) return mostrar('El PIN debe tener exactamente 4 números.', pin);
+          if (pinDebil(pin.value)) return mostrar(conPunto(pinDebil(pin.value)) + ' Use el botón «Generar un PIN al azar» o escriba otro.', pin);
           const btn = m.el.querySelector('.modal-pie .primario');
           await conBoton(btn, async () => {
             await api.usuarioGuardar({ usuario: u, nombre: nom.value.trim(), admin, pin: pin.value });

@@ -14,7 +14,7 @@ async function rpc(nombre, args = {}) {
 export const apiM = {
   // Consulta de cédula en Hacienda (función de borde facturador-cedula, con copia guardada). Siempre responde ok:true|false + estado:
   // 'encontrada' | 'padron' (nombre, tipo '01'-'04', actividades [{codigo, descripcion, principal}]), 'no_encontrada' (+ sugerencias), 'formato', 'servicio'.
-  // No trae ni muestra morosidad. forzar=true ignora la copia guardada.
+  // forzar=true ignora la copia guardada.
   cedula: (cedula, { forzar = false, signal } = {}) => funcion('facturador-cedula', { cedula, forzar }, { signal }),
   // Cambia la actividad principal de un cliente (y la agrega a su lista si no estaba)
   clienteActividadPrincipal: (id, codigo) => rpc('fx_cliente_actividad_principal', { p_id: id, p_codigo: codigo }),

@@ -14,12 +14,15 @@
 //     Orden: número de identificación (se verifica en Hacienda mientras se escribe), nombre o razón social y código de actividad
 //     (se llenan solos con lo que dice Hacienda, pero se pueden cambiar) y después los datos que Hacienda no tiene (correo, teléfono, dirección).
 //     El correo principal y la dirección son obligatorios; hay 3 correos más opcionales. Ver js/ui_cedula.js para las reglas de la cédula.
+//     También se elige la «Tarifa de IVA habitual de este cliente» (llave tarifa_habitual_codigo de fx_cliente_guardar): solo avisa en la
+//     Caja y ofrece aplicarla; nunca se aplica sola.
 import { h, modal, conBoton, debounce, TIPOS_ID, toast } from './util.js';
 import { api } from './api.js';
 import { clientesTodos, clienteActivar } from './api_clientes.js';
 import { UBICACIONES } from './data_ubicaciones.js';
-import { cargarCss, campo } from './ui_mant.js';
+import { cargarCss, campo, aviso } from './ui_mant.js';
 import { crearCampoIdentificacion, leerCorreos } from './ui_cedula.js';
+import { TARIFAS_CLIENTE, tarifaHabitual, clienteTraeTarifa } from './iva.js';
 
 export { leerCorreos };
 
@@ -110,13 +113,18 @@ export function abrirFormCliente(app, cliente, { alGuardar, alCambiarEstado, tit
       if (!dist.value) return mostrarError('Falta elegir el distrito.', dist);
       if (sn.length < 5) return mostrarError('Faltan las otras señas (por ejemplo: 200 metros norte de la iglesia). Escriba al menos 5 letras.', senas);
       const val = ced.valores();
-      const r = await api.clienteGuardar({
+      const datos = {
         id: c.id || undefined, solo_nuevo: esNuevo, sociedad_id: soc.id, tipo_id: val.tipo_id, identificacion: val.identificacion,
         nombre: val.nombre, nombre_comercial: comercial.value.trim(), correo: listaCorreos.join(', '), telefono: tel,
         provincia: prov.value, canton: cant.value, distrito: dist.value, barrio: c.barrio || '', otras_senas: senas.value.trim(),
         actividad_codigo: val.actividad_codigo, notas: notas.value.trim(), activo, sin_verificar_motivo: val.sin_verificar_motivo,
-      });
-      toast((esNuevo ? 'Cliente agregado.' : 'Cliente guardado.') + (r.verificado ? '' : ' Quedó marcado como sin verificar en Hacienda.'));
+      };
+      // Contrato: la llave se manda siempre que la base la sepa leer (también en blanco, para poder quitarla); a un cliente que no la trae no se le toca
+      if (traeLlave !== false) datos.tarifa_habitual_codigo = tarifaSel || null;
+      const r = await api.clienteGuardar(datos);
+      const tarifaNoGuardada = !!tarifaSel && !!r && (!('tarifa_habitual_codigo' in r) || String(r.tarifa_habitual_codigo ?? '') !== tarifaSel);
+      toast((esNuevo ? 'Cliente agregado.' : 'Cliente guardado.') + (r?.verificado ? '' : ' Quedó marcado como sin verificar en Hacienda.')
+        + (tarifaNoGuardada ? ' La tarifa de IVA habitual todavía no se pudo guardar en este sistema; se cambia línea por línea al cobrar.' : ''), tarifaNoGuardada ? 'error' : 'ok', tarifaNoGuardada ? 9000 : 3500);
       cerrar();
       alGuardar?.(r);
     });
@@ -140,6 +148,28 @@ export function abrirFormCliente(app, cliente, { alGuardar, alCambiarEstado, tit
   }));
   pintarEstado();
 
+  // Tarifa de IVA habitual: se guarda con la llave tarifa_habitual_codigo. Si la base todavía no la devuelve, se avisa en palabras y no se finge que se guardó.
+  const traeLlave = esNuevo ? null : clienteTraeTarifa(c); // null = no se sabe (cliente nuevo), false = la base aún no la devuelve
+  const codigoInicial = String(c.tarifa_habitual_codigo ?? '').trim();
+  let tarifaSel = codigoInicial === '08' ? '' : codigoInicial;
+  const tarAyuda = h('p.mt-tar-ayuda', { 'aria-live': 'polite' });
+  const botonesTarifa = TARIFAS_CLIENTE.map((t) => h('button.mt-tarifa-btn', {
+    type: 'button', disabled: traeLlave === false, 'data-codigo': t.codigo, 'aria-pressed': String(t.codigo === tarifaSel),
+    onclick: () => { tarifaSel = t.codigo; pintarTarifa(); },
+  }, h('b', t.texto)));
+  function pintarTarifa() {
+    botonesTarifa.forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.codigo === tarifaSel)));
+    const t = TARIFAS_CLIENTE.find((x) => x.codigo === tarifaSel) || TARIFAS_CLIENTE[0];
+    tarAyuda.textContent = t.ayuda + (tarifaSel ? ' En la caja se le avisará a la cajera y podrá aplicar esta tarifa a las líneas con un botón.' : '');
+  }
+  pintarTarifa();
+  const bloqueTarifa = h('fieldset', h('legend', 'Tarifa de IVA habitual de este cliente'),
+    h('div.col',
+      h('small.tenue', 'Si este cliente casi siempre paga una tarifa distinta del IVA normal (por ejemplo una universidad pública paga 2 %), escójala aquí. Nunca se aplica sola: al elegir al cliente en la caja, el sistema avisa y ofrece un botón para aplicarla.'),
+      traeLlave === false ? aviso('ambar', 'Esta opción todavía no se puede guardar en este sistema. Estará lista cuando se termine la actualización. Mientras tanto, la tarifa se cambia línea por línea al cobrar.') : null,
+      h('div.mt-tarifas', { role: 'group', 'aria-label': 'Tarifa de IVA habitual' }, botonesTarifa),
+      tarAyuda));
+
   const cuerpo = h('div.mt-form',
     err,
     esNuevo ? null : h('fieldset', h('legend', 'Estado del cliente'), h('div.col', estadoTexto, estadoBtn)),
@@ -158,6 +188,7 @@ export function abrirFormCliente(app, cliente, { alGuardar, alCambiarEstado, tit
         h('small.tenue', 'Provincia, cantón y distrito se eligen de las listas oficiales para evitar errores. Las otras señas se escriben.'),
         h('div.rejilla', campo('Provincia', prov), campo('Cantón', cant), campo('Distrito', dist)),
         campo('Otras señas', senas, 'Por ejemplo: 200 metros norte de la iglesia, portón negro.'))),
+    bloqueTarifa,
     h('fieldset', h('legend', 'Notas internas'),
       campo('Notas (solo las ve usted, no salen en la factura)', notas)),
     !esNuevo && c.creado_en ? h('small.tenue', 'Cliente agregado el ' + new Intl.DateTimeFormat('es-CR', { timeZone: 'America/Costa_Rica', dateStyle: 'long' }).format(new Date(c.creado_en)) + '.') : null);
@@ -183,7 +214,8 @@ export function selectorCliente(app, { alElegir, titulo = 'Elegir cliente' } = {
       const r = await api.clientes(soc.id, q.value.trim());
       if (mi !== n) return;
       lista.replaceChildren(...(r.length ? r.map((cl) => h('div.mt-item',
-        h('div.mt-datos', h('span.mt-nombre', cl.nombre), h('span.mt-sub', (TIPOS_ID[cl.tipo_id] || '') + ' ' + cl.identificacion + (cl.correo ? ' · ' + cl.correo : ''))),
+        h('div.mt-datos', h('span.mt-nombre', cl.nombre || ''), h('span.mt-sub', (TIPOS_ID[cl.tipo_id] || '') + ' ' + (cl.identificacion || '') + (cl.correo ? ' · ' + cl.correo : '')),
+          tarifaHabitual(cl) ? h('span.mt-sub', h('span.chip.espera', 'Paga ' + tarifaHabitual(cl).texto)) : null),
         h('div.mt-btns', h('button.btn.primario', { type: 'button', onclick: () => elegir(cl) }, 'Elegir')))) : [h('div.vacio', q.value ? 'No hay clientes con eso. Puede agregarlo con el botón de abajo.' : 'Todavía no hay clientes guardados.')]));
     } catch (e) { if (mi === n) lista.replaceChildren(h('div.error-caja', e.message)); }
   };

@@ -4,6 +4,7 @@
 //   imprimirComprobante(comprobanteId, { formato: 'tiquete'|'carta', copias: 1 })
 //   imprimirPrefactura(ventaId)
 //   abrirAjustesImpresion()
+//   reimprimirComprobante(comprobanteId) : pregunta Tiquete o Factura carta y lo imprime
 //   imprimirPrueba()
 //   + leerAjustes() / guardarAjustes(parcial) para quien necesite saber la configuración de ESTE aparato.
 //
@@ -29,6 +30,7 @@
 //   async function imprimirEscPos(modelo, ajustes) { throw new Error('Impresión directa ESC/POS no disponible todavía'); }
 
 import { api } from './api.js';
+import { tarifaDeLinea } from './iva.js';
 import { h, esc, money, num, r2, modal, toast, conBoton, fechaCorta, horaCorta, TIPOS_ID, TIPOS_SERVICIO, MEDIOS } from './util.js';
 
 /* ------------------------------------------------------------------ constantes */
@@ -105,6 +107,13 @@ const titulo = (s) => { // "CONTIGUO A SERVICENTRO GUTI" -> "Contiguo a Servicen
   if (!s || s !== s.toUpperCase()) return s;
   return s.toLowerCase().split(/\s+/).map((w, i) => (i > 0 && MINUS.has(w)) ? w : w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
 };
+// Nombre comercial sin gritar: "POLLOS LA BOMBA" -> "Pollos La Bomba". Solo para mostrar; si ya trae minúsculas se respeta.
+const SIN_MAYUS = new Set(['a', 'al', 'de', 'del', 'y', 'e', 'en', 'con', 'por', 'para']);
+const nombreComercial = (s) => {
+  s = String(s ?? '').trim();
+  if (!s || s !== s.toUpperCase()) return s;
+  return s.toLowerCase().split(/\s+/).map((w, i) => (i > 0 && SIN_MAYUS.has(w)) ? w : w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+};
 function fmtCedula(ced, tipo) {
   const d = soloDig(ced);
   if (tipo === '02' && d.length === 10) return `${d[0]}-${d.slice(1, 4)}-${d.slice(4)}`;
@@ -125,17 +134,38 @@ function direccion(x) {
 const fechaLinea = (d) => d ? fechaCorta(d) + ' ' + horaCorta(d) : '';
 const numCorto = (cons) => { const n = parseInt(String(cons || '').slice(-10), 10); return Number.isFinite(n) ? String(n) : ''; };
 
+// Etiqueta impresa de una tarifa. Con 0 % hay varias cosas distintas, y por eso se separan por código.
+function etiquetaIva(t, codigo) {
+  if (t > 0) return 'IVA ' + num(t, 2) + '%';
+  if (codigo === '01') return 'IVA 0% (no sujeto)';
+  if (codigo === '11') return 'IVA 0% (sin derecho a crédito)';
+  return 'Exento (IVA 0%)';
+}
 // IVA por tarifa. Los importes salen del precio final con IVA; si el comprobante trae el IVA oficial (total_iva),
 // la diferencia de redondeo se absorbe en la tarifa mayor para que la suma cuadre al céntimo con el comprobante.
+// Se agrupa por código de tarifa de Hacienda (no solo por porcentaje): "Exento" y "0 % no sujeto" salen en renglones separados.
 function desgloseIva(lineas, ivaOficial) {
   const g = new Map();
-  for (const l of lineas) { const t = Number(l.tarifa_iva) || 0; g.set(t, r2((g.get(t) || 0) + (Number(l.total_linea) || 0))); }
-  const filas = [...g].map(([t, bruto]) => { const base = r2(bruto / (1 + t / 100)); return { t, bruto, base, iva: r2(bruto - base) }; }).sort((a, b) => a.t - b.t);
+  for (const l of lineas) {
+    const tf = tarifaDeLinea(l);
+    const clave = tf.codigo || String(tf.pct);
+    const x = g.get(clave) || { t: tf.pct, codigo: tf.codigo, bruto: 0 };
+    x.bruto = r2(x.bruto + (Number(l.total_linea) || 0));
+    g.set(clave, x);
+  }
+  const filas = [...g.values()].map((x) => { const base = r2(x.bruto / (1 + x.t / 100)); return { t: x.t, codigo: x.codigo, etq: etiquetaIva(x.t, x.codigo), bruto: x.bruto, base, iva: r2(x.bruto - base) }; })
+    .sort((a, b) => a.t - b.t || String(a.codigo).localeCompare(String(b.codigo)));
   if (ivaOficial != null && filas.length) {
     const dif = r2(ivaOficial - filas.reduce((a, f) => a + f.iva, 0));
     if (dif) { const f = filas.reduce((m, x) => (x.bruto > m.bruto ? x : m), filas[0]); f.iva = r2(f.iva + dif); f.base = r2(f.bruto - f.iva); }
   }
   return filas;
+}
+// Lo que se entregó y el vuelto de un pago en efectivo. Una nota de crédito nunca muestra Recibido ni Vuelto (no se recibe dinero).
+function pagoEfectivo(p) {
+  const monto = Number(p.monto) || 0, rec = Number(p.recibido) || 0, vue = Number(p.vuelto) || 0;
+  const vuelto = vue > 0 ? r2(vue) : rec > monto ? r2(rec - monto) : 0;
+  return vuelto > 0 ? { recibido: rec >= monto + vuelto - 0.005 ? rec : r2(monto + vuelto), vuelto } : null;
 }
 
 // Utilidades de formato que también usa la pantalla de documentos
@@ -146,7 +176,7 @@ export { direccion as formatoDireccion, fmtCedula as formatoCedula, fmtTel as fo
 function datosSoc(s = {}) {
   const codigo = s.codigo === 'pollos' ? 'pollos' : 'soda';
   return {
-    codigo, comercial: s.nombre_comercial || s.nombre || '', razon: s.nombre || '', cedula: fmtCedula(s.cedula, s.cedula_tipo || '02'),
+    codigo, comercial: nombreComercial(s.nombre_comercial || s.nombre || ''), razon: s.nombre || '', cedula: fmtCedula(s.cedula, s.cedula_tipo || '02'),
     tel: fmtTel(s.telefono), dir: direccion(s), correo: s.correo || '', ambiente: s.ambiente,
   };
 }
@@ -256,20 +286,21 @@ function nodoTiquete(m, { papel, logo, copia }) {
     raiz.append(h('div.lin',
       h('div.d', l.descripcion || ''),
       h('div.q', h('span', `${num(l.cantidad)} x ${money(l.precio_final)}`), h('b', money(l.total_linea))),
+      tarifaDeLinea(l).pct !== 13 ? h('div.iva-lin', etiquetaIva(tarifaDeLinea(l).pct, tarifaDeLinea(l).codigo)) : null,
       l.nota ? h('div.nota', l.nota) : null));
   }
   raiz.append(linea('doble'));
   raiz.append(fila('Subtotal sin IVA', money(m.subtotal)));
-  for (const f of m.desglose) raiz.append(fila(f.t ? `IVA ${num(f.t, 2)}%` : 'Exento (IVA 0%)', money(f.iva)));
+  for (const f of m.desglose) raiz.append(fila(f.etq, money(f.iva)));
   raiz.append(h('div.fila-tq.total', h('span', nc ? 'TOTAL ACREDITADO' : 'TOTAL'), h('span.v', money(m.total))));
   if (m.pagos.length) {
     raiz.append(linea());
-    raiz.append(h('div.etq-chica', 'Pagos'));
+    raiz.append(h('div.etq-chica', nc ? 'Pagos del documento original' : 'Pagos'));
     for (const p of m.pagos) {
       raiz.append(fila(MEDIOS[p.medio] || p.medio, money(p.monto)));
       if (p.referencia) raiz.append(h('div.dato.izq', 'Ref. ' + p.referencia));
-      const rec = Number(p.recibido);
-      if (rec > Number(p.monto)) { raiz.append(fila('Recibido', money(rec))); raiz.append(fila('Vuelto', money(r2(rec - Number(p.monto))), 'negrita')); }
+      const ef = nc ? null : pagoEfectivo(p);
+      if (ef) { raiz.append(fila('Recibido', money(ef.recibido))); raiz.append(fila('Vuelto', money(ef.vuelto), 'negrita')); }
     }
   }
   if (!pre) {
@@ -349,7 +380,7 @@ function nodoCarta(m, { logo, copia }) {
       h('td', h('div', l.descripcion || ''), l.nota ? h('div.ct-tenue', l.nota) : null),
       h('td.der', num(l.cantidad)),
       h('td.der', money(l.precio_final)),
-      h('td.der', (Number(l.tarifa_iva) ? num(l.tarifa_iva, 2) + '%' : 'Exento')),
+      h('td.der', (tarifaDeLinea(l).pct ? num(tarifaDeLinea(l).pct, 2) + '%' : tarifaDeLinea(l).codigo === '10' || !tarifaDeLinea(l).codigo ? 'Exento' : '0%')),
       h('td.der', money(l.total_linea)))))));
   raiz.append(h('div.ct-nota-precio', 'Los precios unitarios y los totales de cada línea incluyen el IVA.'));
 
@@ -358,13 +389,13 @@ function nodoCarta(m, { logo, copia }) {
   if (m.pagos.length) {
     for (const p of m.pagos) {
       pagos.append(h('div.ct-fila', h('span', (MEDIOS[p.medio] || p.medio) + (p.referencia ? ' (ref. ' + p.referencia + ')' : '')), h('span.v', money(p.monto))));
-      const rec = Number(p.recibido);
-      if (rec > Number(p.monto)) { pagos.append(h('div.ct-fila', h('span', 'Recibido'), h('span.v', money(rec))), h('div.ct-fila', h('span', 'Vuelto'), h('span.v', money(r2(rec - Number(p.monto)))))); }
+      const ef = nc ? null : pagoEfectivo(p);
+      if (ef) { pagos.append(h('div.ct-fila', h('span', 'Recibido'), h('span.v', money(ef.recibido))), h('div.ct-fila', h('span', 'Vuelto'), h('span.v', money(ef.vuelto)))); }
     }
   } else pagos.append(h('div.ct-tenue', 'Sin pagos registrados'));
   const tot = h('div.ct-totales',
     h('div.ct-fila', h('span', 'Subtotal sin IVA'), h('span.v', money(m.subtotal))),
-    m.desglose.map((f) => h('div.ct-fila', h('span', f.t ? `IVA ${num(f.t, 2)}%` : 'Exento (IVA 0%)'), h('span.v', money(f.iva)))),
+    m.desglose.map((f) => h('div.ct-fila', h('span', f.etq), h('span.v', money(f.iva)))),
     h('div.ct-fila.gran', h('span', nc ? 'Total acreditado' : 'Total'), h('span.v', money(m.total))));
   raiz.append(h('div.ct-cierre', pagos, tot));
 
@@ -448,7 +479,7 @@ async function esperarRecursos(doc, raiz) {
 // Tamaño de página: tiquete = ancho del rollo x alto exacto del contenido; carta = hoja completa con márgenes
 function cssPagina({ tipo, papel, hoja, altoMm }) {
   if (tipo === 'tiquete') return `@page{size:${papel}mm ${altoMm}mm;margin:0}`;
-  return `@page{size:${hoja === 'a4' ? 'A4' : 'letter'};margin:12mm 14mm 14mm}`;
+  return `@page{size:${hoja === 'a4' ? 'A4' : 'letter'};margin:10mm 14mm 11mm}`;
 }
 
 /**
@@ -459,7 +490,7 @@ async function imprimirNodos(nodos, { tipo, papel, hoja, titulo: tit, fuentes = 
   const aj = leerAjustes();
   const modo = aj.modo === 'iframe' ? 'iframe' : (aj.modo === 'pagina' || esIOS()) ? 'pagina' : 'iframe';
   const ancho = tipo === 'tiquete' ? papel : 216;
-  let doc, raiz, ventana, limpiar;
+  let doc, raiz, ventana, limpiar, estiloPagina = null;
 
   if (modo === 'iframe') {
     const f = h('iframe', { title: 'Documento para imprimir', 'aria-hidden': 'true', tabindex: '-1',
@@ -477,11 +508,13 @@ async function imprimirNodos(nodos, { tipo, papel, hoja, titulo: tit, fuentes = 
   } else {
     // Modo "pagina": el mismo contenido en el documento principal; una regla @media print oculta lo demás.
     document.getElementById('fx-impresion')?.remove();
+    document.getElementById('fx-impresion-estilo')?.remove();
     const caja = h('div#fx-impresion');
     caja.style.width = ancho + 'mm';
     document.body.append(caja);
     doc = document; ventana = window; raiz = caja;
-    limpiar = () => { caja.remove(); document.getElementById('fx-impresion-estilo')?.remove(); document.body.classList.remove('fx-imprimiendo'); };
+    // Cada impresión limpia solo lo suyo: si se pide otra enseguida, el aviso tardío de la primera no le quita el estilo a la segunda
+    limpiar = () => { caja.remove(); estiloPagina?.remove(); if (!document.getElementById('fx-impresion')) document.body.classList.remove('fx-imprimiendo'); };
   }
 
   try {
@@ -496,6 +529,7 @@ async function imprimirNodos(nodos, { tipo, papel, hoja, titulo: tit, fuentes = 
     const estilo = (modo === 'iframe' ? doc.createElement('style') : h('style#fx-impresion-estilo'));
     estilo.textContent = cssPagina({ tipo, papel, hoja, altoMm });
     (modo === 'iframe' ? doc.head : document.head).append(estilo);
+    if (modo === 'pagina') estiloPagina = estilo;
     if (modo === 'pagina') document.body.classList.add('fx-imprimiendo');
 
     await new Promise((fin) => {
@@ -530,6 +564,23 @@ export async function imprimirComprobante(comprobanteId, { formato, copias } = {
   for (let i = 1; i <= copias; i++) nodos.push(formato === 'carta' ? nodoCarta(m, { logo, copia: copiaTxt(i, copias) }) : nodoTiquete(m, { papel: aj.papel, logo, copia: copiaTxt(i, copias) }));
   const nombre = `${NOMBRE_DOC[m.tipo] || 'Comprobante'} ${m.consecutivo}`;
   await imprimirNodos(nodos, { tipo: formato, papel: aj.papel, hoja: aj.hoja, titulo: nombre, fuentes: formato === 'carta' });
+}
+
+// Para reimprimir un comprobante ya emitido: pregunta si se quiere el tiquete de rollo o la factura carta y lo imprime.
+// Lo pueden usar otras pantallas (Documentos del día, Anular factura) en lugar de tener botones sueltos.
+export function reimprimirComprobante(comprobanteId, { copias } = {}) {
+  const aj = leerAjustes();
+  const estado = h('p.tenue-linea', { role: 'status' });
+  let m = null;
+  const lanzar = (formato, btn) => conBoton(btn, async () => {
+    estado.textContent = '';
+    try { await imprimirComprobante(comprobanteId, { formato, copias }); m?.cerrar(); }
+    catch (e) { estado.textContent = 'No se pudo imprimir: ' + (e.message || e) + ' Revise el botón «Impresora» e intente de nuevo.'; }
+  });
+  const b1 = h('button.btn.primario.grande', { type: 'button', onclick: () => lanzar('tiquete', b1) }, 'Tiquete (rollo de ' + aj.papel + ' mm)');
+  const b2 = h('button.btn.grande', { type: 'button', onclick: () => lanzar('carta', b2) }, 'Factura carta (' + (aj.hoja === 'a4' ? 'hoja grande A4' : 'hoja carta') + ')');
+  m = modal({ titulo: 'Imprimir otra vez', ancho: 460, contenido: h('div.col', h('p', '¿Cómo quiere imprimirlo?'), b1, b2, estado) });
+  return m;
 }
 
 async function sociedadDeVenta(venta) {
@@ -594,7 +645,7 @@ export function abrirAjustesImpresion() {
     grupo('Qué se imprime automáticamente', 'Solo aplica si arriba escogió que se imprima solo.',
       seg([['tiquete', 'Tiquete (rollo)'], ['carta', 'Factura carta (hoja)']], aj.formato, (v) => cambiar('formato', v), 'Formato automático')),
     grupo('Tamaño de la hoja para la factura carta', null,
-      seg([['carta', 'Carta'], ['a4', 'A4']], aj.hoja, (v) => cambiar('hoja', v), 'Hoja')),
+      seg([['carta', 'Hoja carta (Letter)'], ['a4', 'Hoja grande (A4)']], aj.hoja, (v) => cambiar('hoja', v), 'Tamaño de la hoja')),
     h('div.fx-grupo', h('div.fx-tit', 'Probar la impresora'),
       h('div.fx-ayuda', 'Saca un tiquete con una regla, letras de varios tamaños y tildes, para ver que nada se corta.'), probar, guardado),
 

@@ -2,19 +2,22 @@
 export const SUPA_URL = 'https://dwlbcbtwdungyrykgahm.supabase.co';
 export const SUPA_KEY = 'sb_publishable_gUoYvCNka0je2rbNeWPpUA_l26vgQbO'; // clave pública; el acceso real lo controlan sesión y funciones
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm';
+import { describirEstado } from './util.js';
 
 // Sesión propia del facturador (usuario + PIN), separada de la del panel
 export const sb = createClient(SUPA_URL, SUPA_KEY, { auth: { storageKey: 'sb-facturador', persistSession: true, autoRefreshToken: true, detectSessionInUrl: false } });
 
 // Error con texto listo para mostrar. transitorio = falla de red, tiempo agotado o servidor ocupado (vale la pena intentar de nuevo).
 export class ErrorApi extends Error {
-  constructor(mensaje, { transitorio = false, estado = 0 } = {}) { super(mensaje); this.transitorio = transitorio; this.estado = estado; }
+  constructor(mensaje, { transitorio = false, estado = 0, hasta = null, sesion = false } = {}) { super(mensaje); this.transitorio = transitorio; this.estado = estado; this.hasta = hasta; this.sesion = sesion; }
 }
+export const esSesionVencida = (e) => !!e && (e.sesion === true || /sesi[oó]n venci/i.test(e.message || ''));
 export const esTransitorio = (e) => !!e && (e.transitorio === true || /no se pudo conectar|servidor est[aá] ocupado|tard[oó] demasiado|no respondi[oó]/i.test(e.message || ''));
 
 const MSG_RED = 'No se pudo conectar con el servidor. Revise la conexión a internet e intente de nuevo.';
 const MSG_OCUPADO = 'El servidor está ocupado en este momento. Espere unos segundos e intente de nuevo.';
 const MSG_TARDO = 'El servidor tardó demasiado en responder. Intente de nuevo.';
+export const MSG_SESION = 'Su sesión venció. Toque «Entrar de nuevo» para seguir donde estaba.';
 const pausa = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // Clasifica la respuesta de PostgREST: devuelve el texto claro si la falla es transitoria, o null si es un error "normal" (regla de negocio, permisos...)
@@ -28,6 +31,39 @@ function fallaTransitoria(error, estado) {
   return null;
 }
 
+/* ---------- Sesión vencida y conexión caída ---------- */
+// Cuando la sesión ya no sirve se avisa UNA vez con el evento 'app:sesion-vencida' (main.js muestra «Entrar de nuevo» sin cerrar nada).
+// Cuando se cae o vuelve la conexión se avisa con 'app:red' ({ detail: { ok } }).
+let sesionAvisada = false, redOk = true, enRenovacion = null;
+function avisarSesionVencida() {
+  if (sesionAvisada) return;
+  sesionAvisada = true;
+  document.dispatchEvent(new CustomEvent('app:sesion-vencida'));
+}
+function marcarRed(ok) {
+  if (ok === redOk) return;
+  redOk = ok;
+  document.dispatchEvent(new CustomEvent('app:red', { detail: { ok } }));
+}
+export const redDisponible = () => redOk;
+export function sesionRestaurada() { sesionAvisada = false; marcarRed(true); }
+const esErrorSesion = (r) => r.status === 401 || r.error?.code === 'PGRST301' || /JWT|jwt expired|not authenticated|invalid token/i.test(String(r.error?.message || ''));
+// Intenta renovar la sesión una sola vez a la vez. 'ok' | 'vencida' (el servidor la rechazó) | 'red' (no hubo conexión)
+function renovarSesion() {
+  if (!enRenovacion) {
+    enRenovacion = (async () => {
+      try {
+        const { data, error } = await sb.auth.refreshSession();
+        if (data?.session && !error) return 'ok';
+        const m = String(error?.message || '');
+        return error && (error.name === 'AuthRetryableFetchError' || /fetch|network|load failed/i.test(m)) ? 'red' : 'vencida';
+      } catch (e) { return /fetch|network|load failed/i.test(String(e?.message || e)) ? 'red' : 'vencida'; }
+      finally { setTimeout(() => { enRenovacion = null; }, 0); }
+    })();
+  }
+  return enRenovacion;
+}
+
 /* ---------- Catálogo en memoria ---------- */
 // Se guarda por sociedad. Se descarta cuando alguien edita productos, cajones o precios (desde cualquier módulo) y a los 5 minutos.
 let versionCatalogo = 0;
@@ -36,7 +72,7 @@ const VIDA_CATALOGO = 5 * 60 * 1000;
 export function invalidarCatalogo(soc) { versionCatalogo++; if (soc) cacheCatalogo.delete(soc); else cacheCatalogo.clear(); }
 const CAMBIA_CATALOGO = /^fx_(producto_guardar|cajon_guardar|precios_lote)$/;
 // Solo las consultas (no cambian datos) se repiten solas una vez si falla la red. Una escritura NUNCA se repite sola.
-const SOLO_LECTURA = /^fx_(contexto|catalogo|clientes|venta|ventas_abiertas|turno_estado|turnos|salidas|comprobante|comprobantes|comprobante_nc|comprobante_xml|listados2?|documentos|usuarios|recibidas?|respuesta_recibida|producto_historial|cabys_buscar|cabys_verificar)$/;
+const SOLO_LECTURA = /^fx_(contexto|catalogo|clientes|venta|ventas_abiertas|turno_estado|turnos|salidas|comprobante|comprobantes|comprobante_nc|comprobante_xml|listados2?|documentos|alertas|usuarios|recibidas?|respuesta_recibida|producto_historial|cabys_buscar|cabys_verificar)$/;
 
 // Todos los módulos llaman a sb.rpc: aquí se les da tiempo máximo, un reintento en las consultas y mensajes claros en las fallas de red.
 const rpcOriginal = sb.rpc.bind(sb);
@@ -44,6 +80,7 @@ async function llamar(nombre, args, opciones) {
   const lectura = SOLO_LECTURA.test(nombre);
   const cambia = CAMBIA_CATALOGO.test(nombre);
   if (cambia) invalidarCatalogo();
+  let renovado = false;
   try {
     for (let intento = 1; ; intento++) {
       const ctrl = new AbortController();
@@ -52,9 +89,19 @@ async function llamar(nombre, args, opciones) {
       try { r = await rpcOriginal(nombre, args, opciones).abortSignal(ctrl.signal); }
       catch (e) { r = { data: null, error: { message: String(e?.message || e), code: '' }, status: 0 }; }
       finally { clearTimeout(reloj); }
-      if (!r.error) return r;
+      if (!r.error) { marcarRed(true); return r; }
+      // Sesión vencida: se intenta renovar una vez (la llamada rechazada por el token no cambió nada, así que repetirla es seguro)
+      if (!renovado && esErrorSesion(r)) {
+        renovado = true;
+        const est = await renovarSesion();
+        if (est === 'ok') { intento--; continue; }
+        if (est === 'vencida') { avisarSesionVencida(); return { ...r, error: { ...r.error, message: MSG_SESION, sesion: true } }; }
+        marcarRed(false);
+        return { ...r, error: { ...r.error, message: MSG_RED, transitorio: true } };
+      }
       const texto = fallaTransitoria(r.error, r.status);
       if (!texto) return r;
+      if (texto === MSG_RED) marcarRed(false);
       if (lectura && intento < 2) { await pausa(700); continue; }
       return { ...r, error: { ...r.error, message: texto, transitorio: true } };
     }
@@ -64,12 +111,12 @@ async function llamar(nombre, args, opciones) {
 }
 sb.rpc = (nombre, args, opciones) => llamar(nombre, args, opciones);
 
-async function rpc(nombre, args = {}) {
+// Llama a una función fx_* y devuelve los datos; si falla lanza ErrorApi con un texto listo para mostrar.
+export async function rpc(nombre, args = {}) {
   const { data, error } = await sb.rpc(nombre, args);
   if (error) {
-    let m = error.message || 'Error desconocido';
-    if (/JWT|expired|not authenticated/i.test(m)) m = 'Su sesión venció. Recargue la página e ingrese de nuevo.';
-    throw new ErrorApi(m, { transitorio: !!error.transitorio });
+    const m = error.sesion || /JWT|expired|not authenticated/i.test(error.message || '') ? MSG_SESION : (error.message || 'Error desconocido');
+    throw new ErrorApi(m, { transitorio: !!error.transitorio, sesion: m === MSG_SESION });
   }
   return data;
 }
@@ -90,7 +137,7 @@ function catalogoDe(soc, forzar) {
 export const LOCALES_EN_PRUEBA = ['pollos'];
 const soloLocalesEnPrueba = (c) => {
   if (!c || !Array.isArray(c.sociedades)) return c;
-  const sociedades = c.sociedades.filter((s) => LOCALES_EN_PRUEBA.includes(s.codigo));
+  const sociedades = c.sociedades.filter((s) => LOCALES_EN_PRUEBA.includes(String(s.codigo ?? '').toLowerCase()));
   return sociedades.length ? { ...c, sociedades } : c;
 };
 
@@ -149,28 +196,43 @@ export const api = {
   notaCredito: (id, motivo, terminal = 1) => rpc('fx_nota_credito', { p_id: id, p_motivo: motivo, p_terminal: terminal }),
   // Listados
   listados: (soc, desde, hasta) => rpc('fx_listados', { p_soc: soc, p_desde: desde, p_hasta: hasta }),
+  // Estado en palabras de un comprobante y vigilancia hasta que Hacienda responda (ver más abajo)
+  estadoComprobante: (id) => estadoComprobante(id),
+  vigilarComprobante: (id, alCambiar, opciones) => vigilarComprobante(id, alCambiar, opciones),
 };
 
 // Funciones de borde (edge functions) con la sesión del usuario
 // opciones.signal (AbortSignal) permite cancelar la consulta si ya no hace falta (p. ej. la cajera siguió escribiendo).
 export async function funcion(nombre, cuerpo = {}, opciones = {}) {
-  const { data: s } = await sb.auth.getSession();
-  let r;
-  try {
-    r = await fetch(`${SUPA_URL}/functions/v1/${nombre}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', apikey: SUPA_KEY, Authorization: 'Bearer ' + (s.session?.access_token || SUPA_KEY) },
-      body: JSON.stringify(cuerpo),
-      signal: opciones.signal,
-    });
-  } catch (e) {
-    if (e?.name === 'AbortError') throw e; // cancelado a propósito por quien llamó
-    throw new ErrorApi(MSG_RED, { transitorio: true });
+  let renovado = false;
+  for (;;) {
+    const { data: s } = await sb.auth.getSession();
+    let r;
+    try {
+      r = await fetch(`${SUPA_URL}/functions/v1/${nombre}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', apikey: SUPA_KEY, Authorization: 'Bearer ' + (s.session?.access_token || SUPA_KEY) },
+        body: JSON.stringify(cuerpo),
+        signal: opciones.signal,
+      });
+    } catch (e) {
+      if (e?.name === 'AbortError') throw e; // cancelado a propósito por quien llamó
+      marcarRed(false);
+      throw new ErrorApi(MSG_RED, { transitorio: true });
+    }
+    marcarRed(true);
+    if (r.status === 401 && !renovado) { // el token no sirvió: se renueva una vez y se repite (la función rechazó la llamada sin hacer nada)
+      renovado = true;
+      const est = await renovarSesion();
+      if (est === 'ok') continue;
+      if (est === 'vencida') { avisarSesionVencida(); throw new ErrorApi(MSG_SESION, { sesion: true, estado: 401 }); }
+      throw new ErrorApi(MSG_RED, { transitorio: true });
+    }
+    const t = await r.text();
+    let j; try { j = JSON.parse(t); } catch { j = { error: t.slice(0, 200) }; }
+    if (!r.ok || j.error) throw new ErrorApi(j.error || ('Error ' + r.status), { transitorio: r.status >= 502 && r.status <= 504, estado: r.status });
+    return j;
   }
-  const t = await r.text();
-  let j; try { j = JSON.parse(t); } catch { j = { error: t.slice(0, 200) }; }
-  if (!r.ok || j.error) throw new ErrorApi(j.error || ('Error ' + r.status), { transitorio: r.status >= 502 && r.status <= 504, estado: r.status });
-  return j;
 }
 
 // Inicio de sesión con usuario y PIN.
@@ -192,9 +254,10 @@ export async function entrar(usuario, pin, { alReintentar } = {}) {
       let j = null;
       try { j = JSON.parse(await r.text()); } catch { j = null; }
       if (!j || typeof j.ok !== 'boolean') throw new ErrorApi('El servicio de acceso no respondió bien (código ' + r.status + '). Intente de nuevo en unos segundos.', { transitorio: true, estado: r.status });
-      if (!j.ok) throw new ErrorApi(j.error || 'No se pudo entrar. Intente de nuevo.', { transitorio: r.status >= 500, estado: r.status });
+      if (!j.ok) throw new ErrorApi(j.error || 'No se pudo entrar. Intente de nuevo.', { transitorio: r.status >= 500, estado: r.status, hasta: j.hasta || null });
       const { error } = await sb.auth.setSession({ access_token: j.access_token, refresh_token: j.refresh_token });
       if (error) throw new ErrorApi(error.message || 'No se pudo abrir la sesión. Intente de nuevo.', { transitorio: true });
+      sesionRestaurada();
       return j;
     } catch (e) {
       ultimo = e;
@@ -205,4 +268,36 @@ export async function entrar(usuario, pin, { alReintentar } = {}) {
   }
   throw ultimo instanceof Error && ultimo.message ? ultimo : new ErrorApi('No se pudo entrar. Intente de nuevo.');
 }
-export const salir = () => sb.auth.signOut();
+// Cierre de sesión limpio: avisa al servidor (si hay conexión) y SIEMPRE borra la sesión de este aparato y el catálogo en memoria
+export async function salir() {
+  try { await Promise.race([sb.auth.signOut(), pausa(4000)]); } catch { /* sin conexión: se borra solo aquí */ }
+  try { await sb.auth.signOut({ scope: 'local' }); } catch { /* ya estaba cerrada */ }
+  invalidarCatalogo();
+  sesionAvisada = false;
+}
+
+/* ---------- Estado de un comprobante (lo usan Caja, Documentos y Anular) ---------- */
+// Lee el comprobante y devuelve su estado en palabras: { id, estado, final, clase:'ok'|'espera'|'mal', chip, texto, motivo, mensaje, comprobante }
+// "final" es true cuando Hacienda ya respondió (aceptado o rechazado).
+export async function estadoComprobante(id) {
+  const c = await rpc('fx_comprobante', { p_id: id });
+  return { id, mensaje: c?.mensaje || '', ...describirEstado(c?.estado, c?.mensaje), comprobante: c };
+}
+// Consulta el estado cada pocos segundos hasta que Hacienda responda (o pasen "max" milisegundos). alCambiar(info) se llama la primera vez y cada vez que
+// cambia el estado. Devuelve una función para dejar de vigilar (llamarla al cerrar la pantalla).
+export function vigilarComprobante(id, alCambiar, { cada = 4000, max = 5 * 60 * 1000 } = {}) {
+  let parar = false, ultimo = null;
+  (async () => {
+    const fin = Date.now() + max;
+    while (!parar && Date.now() < fin) {
+      try {
+        const info = await estadoComprobante(id);
+        if (parar) return;
+        if (info.estado !== ultimo) { ultimo = info.estado; alCambiar(info); }
+        if (info.final) return;
+      } catch { /* sin conexión: se vuelve a intentar */ }
+      await pausa(cada);
+    }
+  })();
+  return () => { parar = true; };
+}
