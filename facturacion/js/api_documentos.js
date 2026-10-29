@@ -5,6 +5,7 @@
 //   fx_alertas(p_soc)                       -> { rechazados, pendientes, pendientes_demorados, recepcion_por_responder, recepcion_vencen_pronto, ultimos[] } (contrato 3 y 2B)
 //   fx_alerta_atender(p_comprobante, p_nota) -> marca un documento rechazado como atendido: sale del aviso rojo, NO de Anular y reimprimir ni de Informes (contrato 2B)
 //   fx_venta_clonar(p_venta)                -> cuenta nueva abierta con las líneas de una venta anulada o rechazada; misma forma que fx_venta (contrato 2B)
+//   fx_venta_clonar_con_cliente(p_venta, p_cliente) -> lo mismo, pero la cuenta nueva queda con el cliente elegido (un tiquete no guarda cliente); sql/21h
 import { api, rpc, funcion, ErrorApi } from './api.js';
 import { hoyCR, sumaDias, numeroDoc, traducirHacienda } from './util.js';
 
@@ -31,10 +32,19 @@ export async function documentos(soc, desde, hasta) {
 // Nota de crédito vigente de un comprobante, o null
 export const ncDe = (id) => rpc('fx_comprobante_nc', { p_id: id });
 
-// Correo al cliente: todavía no existe la función en el servidor. Cuando se active el envío de correos,
-// poner CORREO_ACTIVO en true y ajustar el nombre de la función de borde si hace falta.
-export const CORREO_ACTIVO = false;
+// Correo al cliente: el interruptor ya no es una constante fija. Lo trae fx_contexto (llave correo_activo, que lee fact.config) y m_documentos.js lo mira con correoActivo(app).
+// Mientras la base diga que no, el botón «Reenviar al cliente por correo» queda apagado y lo explica.
+export const correoActivo = (app) => app?.ctx?.correo_activo === true;
 export const reenviarCorreo = (id) => funcion('facturador-correo', { id });
+
+// Frase para mostrar cuando algo falla. Los errores que vienen de la base ya llegan en español y con qué hacer (api.js los filtra); solo un error del propio navegador
+// o de este código (TypeError, undefined...) no debe verse tal cual.
+export const FRASE_GENERAL = 'Algo no salió bien. Intente de nuevo; si sigue igual, avise a la persona encargada.';
+const TECNICO = /\b(typeerror|referenceerror|syntaxerror|undefined|null|failed to fetch|networkerror|load failed|permission denied|invalid input|duplicate key|could not find|schema cache|violates|jwt|pgrst)\b|\[object|is not a function|cannot read/i;
+export function mensajeAmable(e, defecto = FRASE_GENERAL) {
+  const m = String((e && e.message) ?? e ?? '').trim();
+  return !m || TECNICO.test(m) ? defecto : m;
+}
 
 /* ---------- Alertas del encabezado ---------- */
 // Devuelve { rechazados, pendientes, recepcion_por_responder (número o null si no se sabe), recepcion_vencen_pronto, ultimos:[{id, numero, estado, mensaje}], desde (YYYY-MM-DD), fuente }.
@@ -75,7 +85,7 @@ async function alertasDeReserva(soc) {
   const pendientes = docs.filter((d) => ['pendiente', 'enviado', 'error'].includes(d.estado) && ahora - new Date(d.fecha_emision).getTime() > MIN_PENDIENTE * 60000);
   const ultimos = [...rechazados, ...pendientes].sort((a, b) => new Date(b.fecha_emision) - new Date(a.fecha_emision)).slice(0, 5).map((d) => ({
     id: d.id, numero: numeroDoc(d.consecutivo), estado: d.estado,
-    mensaje: d.estado === 'rechazado' ? (traducirHacienda(d.mensaje).resumen || 'Hacienda no lo aceptó.') : 'Todavía no llegó a Hacienda. El sistema vuelve a intentarlo solo.',
+    mensaje: d.estado === 'rechazado' ? (traducirHacienda(d.mensaje).resumen || 'Hacienda no lo aceptó.') : 'Todavía no llegó a Hacienda. El sistema lo intentará de nuevo solo.',
   }));
   return { rechazados: rechazados.length, pendientes: pendientes.length, recepcion_por_responder: null, recepcion_vencen_pronto: null, ultimos, desde, fuente: 'reserva' };
 }
@@ -88,7 +98,7 @@ export async function alertaAtender(comprobanteId, nota = '') {
   try {
     return await rpc('fx_alerta_atender', { p_comprobante: comprobanteId, p_nota: String(nota || '').trim().slice(0, 300) || null });
   } catch (e) {
-    if (NO_EXISTE.test(e.message || '')) throw new ErrorApi('Esta opción todavía no está activada en el servidor. El aviso rojo seguirá hasta que se active.');
+    if (NO_EXISTE.test(e.message || '')) throw new ErrorApi('Esta opción todavía no está activada. El aviso rojo seguirá hasta que se active.');
     throw e;
   }
 }
@@ -103,15 +113,29 @@ export async function ventaClonar(ventaId) {
   }
 }
 
+// Igual, pero la cuenta nueva queda con el cliente elegido (clienteId) o, si no se manda, con el cliente que tenía la venta original.
+// Es lo que permite pasar de un tiquete a una factura a nombre del cliente. Si la función nueva no está, copia sin cliente y lo avisa con { sinCliente: true }.
+export async function ventaClonarConCliente(ventaId, clienteId = null) {
+  try {
+    return await rpc('fx_venta_clonar_con_cliente', { p_venta: ventaId, p_cliente: clienteId || null });
+  } catch (e) {
+    if (!NO_EXISTE.test(e.message || '')) throw e;
+    const r = await ventaClonar(ventaId);
+    return r && clienteId ? { ...r, sinCliente: true } : r;
+  }
+}
+
 // Lo que hace el botón «Hacer la venta de nuevo en Facturación»: copia las líneas a una cuenta nueva, la deja anotada para que Facturación la abra
 // (sessionStorage 'fx.caja.abrir' = id de la cuenta nueva) y va a Facturación (app.ir('caja')). Si no se pudo copiar, igual va y avisa con palabras claras.
-export async function hacerVentaDeNuevo(app, ventaId, toast) {
+// clienteId (opcional): el cliente que debe quedar en la cuenta nueva.
+export async function hacerVentaDeNuevo(app, ventaId, toast, clienteId = null) {
   let nueva = null;
-  try { nueva = ventaId ? await ventaClonar(ventaId) : null; }
-  catch (e) { toast?.('No se pudo copiar la venta: ' + (e.message || e) + ' En Facturación tendrá que armarla otra vez.', 'error', 8000); }
+  try { nueva = ventaId ? await ventaClonarConCliente(ventaId, clienteId) : null; }
+  catch (e) { toast?.('No se pudo copiar la venta. ' + mensajeAmable(e) + ' En Facturación tendrá que armarla otra vez.', 'error', 8000); }
   const id = nueva?.venta?.id || nueva?.id || null;
   if (id) { try { sessionStorage.setItem('fx.caja.abrir', String(id)); } catch { /* sin almacenamiento: Caja abre la cuenta sola si puede */ } }
   else if (!nueva) toast?.('La copia automática de la venta todavía no está activada. En Facturación tendrá que armarla otra vez.', 'error', 8000);
+  if (nueva?.sinCliente) toast?.('La venta se copió, pero el cliente hay que elegirlo en Facturación.', 'error', 8000);
   app.ir('caja');
   return id;
 }

@@ -7,6 +7,7 @@
 //     revisarDuplicado(ident),      // opcional: promesa con el cliente ya guardado con ese número, o null
 //     accionDuplicado: { texto, fn(clienteExistente) },
 //     alTerminar(),                 // opcional: la consulta llenó todo; que el formulario lleve el foco a su siguiente campo vacío
+//     numeroInicial,                // opcional (cliente nuevo): número que la persona ya había escrito en el buscador; se consulta de una vez
 //   });
 //   ced.el            -> bloque con: número de identificación, nombre o razón social y código de actividad (en ese orden)
 //   await ced.validar() -> null si todo está bien, o { mensaje, campo } con el primer problema
@@ -46,7 +47,7 @@ const RE_CORREO = /^\w+([-+.']\w+)*@\w+([-.]\w+)*\.\w+([-.]\w+)*$/;
 export function leerCorreos(texto) {
   const lista = String(texto || '').split(/[,;\s]+/).map((x) => x.trim().toLowerCase()).filter(Boolean);
   const malo = lista.find((c) => !RE_CORREO.test(c) || c.length > 160);
-  return { lista, error: malo ? 'El correo "' + malo + '" no parece válido. Revise que tenga @ y un punto después, sin espacios.' : '' };
+  return { lista, error: malo ? 'El correo «' + malo + '» no parece válido. Revise que tenga @ y un punto después, sin espacios.' : '' };
 }
 
 // Tipo de identificación según el largo del número: 9 física, 10 que empieza con 3 jurídica, 11 o 12 DIMEX, otro de 10 NITE
@@ -84,7 +85,7 @@ export function crearCampoIdentificacion(opts = {}) {
   let acts = Array.isArray(c?.actividades) ? c.actividades.filter((a) => a && RE_ACTIVIDAD.test(String(a.codigo))) : [];
   let auto = { nombre: '', act: '' }; // lo último que se llenó solo desde Hacienda
   let dup = null;
-  let ultimo = String(c?.identificacion || '').replace(/\D/g, '');
+  let ultimo = String(c?.identificacion || opts.numeroInicial || '').replace(/\D/g, '').slice(0, 20);
 
   /* ---------- Controles ---------- */
   const ident = h('input.campo.ced-num', { type: 'text', inputmode: 'numeric', autocomplete: 'off', autocorrect: 'off', spellcheck: 'false', enterkeyhint: 'next', value: ultimo, 'aria-label': 'Número de identificación', 'aria-describedby': 'ced-ayuda-' + uid });
@@ -367,7 +368,7 @@ export function crearCampoIdentificacion(opts = {}) {
         Array.isArray(r?.sugerencias) && r.sugerencias.length ? null : btnVolver());
     } else if (fase === 'formato') nodo = caja('rojo', '✕', 'El número no tiene un largo válido', r?.mensaje || 'La cédula debe tener entre 9 y 12 números.');
     else if (fase === 'servicio') nodo = caja('gris', '-', 'Hacienda no responde en este momento',
-      'Puede seguir: el cliente se guarda marcado como «sin verificar» y se confirma después.' + (r?.mensaje ? ' ' + r.mensaje : ''), btnVolver());
+      'Puede seguir: el cliente se guarda marcado como «sin verificar» y se confirma después. Revise bien el número, porque Hacienda rechaza las facturas con un número que no existe.' + (r?.mensaje ? ' ' + r.mensaje : ''), btnVolver());
     else if (fase === 'sesion') nodo = caja('rojo', '✕', 'Su sesión venció', 'Entre de nuevo con su usuario y PIN para poder consultar a Hacienda.');
     else if (fase === 'otro') nodo = caja('gris', '-', 'Este tipo de documento no se consulta en Hacienda', 'Escriba el nombre completo a mano.');
     estado._k = claveEstado;
@@ -393,7 +394,7 @@ export function crearCampoIdentificacion(opts = {}) {
           h('div.fila', MOTIVOS_RAPIDOS.map((x) => h('button.btn.chico', { type: 'button', onclick: () => { motivo.value = x; motivo.focus(); } }, x))),
           h('div.fila', h('button.btn.chico.suave', { type: 'button', onclick: () => { sinConfirmar = false; pintar(); ident.focus(); } }, 'Mejor corrijo el número')))
         : h('div.col',
-          h('p', 'Si está segura o seguro de que el número es correcto, puede guardar el cliente sin la confirmación de Hacienda. Va a tener que escribir el motivo.'),
+          h('p', 'Si está segura o seguro de que el número es correcto, puede guardar el cliente sin la confirmación de Hacienda. Va a tener que escribir el motivo. Tenga presente que Hacienda rechaza las facturas cuyo número no existe en sus registros.'),
           btnSin)]);
     }
 

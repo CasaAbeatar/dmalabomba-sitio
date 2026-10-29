@@ -2,6 +2,21 @@
 export const $ = (s, r = document) => r.querySelector(s);
 export const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 
+// Textos de error que comparten util.js y api.js. Los dos fallan con palabras que dicen qué hacer; ninguno muestra textos técnicos de la base.
+export const MSG_SIN_INTERNET = 'No hay conexión con internet. Revise la conexión e intente de nuevo.';
+export const MSG_GENERICO = 'Algo no salió bien. Intente de nuevo; si sigue igual, avise a la persona encargada.';
+// El texto que se le muestra a una persona por cualquier error. Un error del sistema (ErrorApi, que trae .tipo) ya viene con palabras claras; una falla del navegador
+// sin conexión («Failed to fetch») se explica como falta de internet; cualquier otro error de programa («TypeError: x is undefined») no se enseña: sale la frase general.
+export function textoDeError(e) {
+  if (!e) return MSG_GENERICO;
+  const m = typeof e === 'string' ? e : String(e.message || '');
+  if (e && typeof e === 'object' && typeof e.tipo === 'string' && m) return m;
+  if (e instanceof TypeError && /failed to fetch|networkerror|load failed|network request failed/i.test(m)) return MSG_SIN_INTERNET;
+  if (typeof e === 'string') return m || MSG_GENERICO;
+  if (/^(TypeError|ReferenceError|SyntaxError|RangeError|EvalError|URIError)$/.test(e.name || '') || e instanceof DOMException || !m) return MSG_GENERICO;
+  return m;
+}
+
 // Atributos seguros para h() y para los gráficos SVG. Nunca se crea un atributo on* con texto (solo funciones con addEventListener),
 // ni srcdoc, ni una dirección que ejecute código (javascript:, vbscript:). Un src de imagen puede ser data:image/(png, jpeg, gif, webp o svg);
 // un href o src de otro elemento solo puede ser data:image/(png, jpeg, gif, webp) o una dirección normal (https:, blob:, relativa).
@@ -100,7 +115,7 @@ export const TIPOS_DOC = { '01': 'Factura electrónica', '02': 'Nota de débito'
 export const TIPOS_SERVICIO = { buffet: 'Buffet', espera: 'En espera', llevar: 'Para llevar', express: 'Express' };
 export const MEDIOS = { efectivo: 'Efectivo', tarjeta: 'Tarjeta', sinpe: 'SINPE Móvil', transferencia: 'Transferencia' };
 export const TIPOS_ID = { '01': 'Cédula física', '02': 'Cédula jurídica', '03': 'DIMEX', '04': 'NITE', '05': 'Extranjero no domiciliado', '06': 'No contribuyente' };
-export const ESTADOS = { pendiente: 'En cola', enviado: 'Enviado a Hacienda', aceptado: 'Aceptado', rechazado: 'Rechazado', error: 'Con error' };
+export const ESTADOS = { pendiente: 'Por enviar a Hacienda', enviado: 'Enviado a Hacienda', aceptado: 'Aceptado', rechazado: 'Rechazado', error: 'No se pudo enviar' };
 
 // Nombre del local para mostrar: usa el nombre comercial (o la razón social si falta) y, si viene todo en mayúsculas, lo pasa a "Pollos La Bomba".
 const MENORES = new Set(['a', 'al', 'de', 'del', 'la', 'las', 'el', 'los', 'y', 'e', 'en', 'con', 'por', 'para']);
@@ -279,7 +294,7 @@ export function pedir({ titulo, etiqueta, valor = '', tipo = 'text', nota = '', 
 export async function conBoton(btn, fn) {
   const t = btn?.textContent; if (btn) { btn.disabled = true; btn.dataset.ocupado = '1'; }
   try { return await fn(); }
-  catch (e) { toast(e.message || String(e), 'error', 7000); }
+  catch (e) { toast(textoDeError(e), 'error', 7000); }
   finally { if (btn) { btn.disabled = false; delete btn.dataset.ocupado; if (t != null) btn.textContent = t; } }
 }
 
@@ -343,20 +358,11 @@ export function pinDebil(p) {
   return '';
 }
 
-// "unos 12 minutos" / "menos de un minuto" hasta una hora futura
-export function tiempoFalta(hasta) {
-  const ms = new Date(hasta).getTime() - Date.now();
-  if (!Number.isFinite(ms)) return '';
-  if (ms <= 0) return '';
-  const min = Math.ceil(ms / 60000);
-  return min <= 1 ? 'menos de un minuto' : 'unos ' + min + ' minutos';
-}
-
 /* ---------- Respuesta de Hacienda en palabras simples ---------- */
 const CODIGOS_HACIENDA = {
-  '-37': 'La provincia, el cantón o el distrito del emisor no coinciden con lo que Hacienda tiene registrado. Es solo un aviso y no impide que el documento valga, pero hay que actualizar esos datos en Hacienda.',
-  '-60': 'La firma del documento no corresponde a quien lo emite: el certificado de firma es de otro contribuyente.',
-  '-99': 'Ese número de comprobante ya existe en Hacienda.',
+  '-37': 'La provincia, el cantón o el distrito de la empresa no coinciden con lo que Hacienda tiene registrado. Es solo un aviso y el documento sigue siendo válido. La persona encargada debe actualizar esos datos en Hacienda.',
+  '-60': 'La firma digital del documento no es de esta empresa. Avise a la persona encargada.',
+  '-99': 'Hacienda ya tiene un documento con ese mismo número. Avise a la persona encargada.',
   '-410': 'El código de actividad económica del cliente no está registrado en Hacienda. Revise la actividad del cliente.',
 };
 const limpiarHacienda = (x) => String(x ?? '').replace(/"{2,}/g, '"').replace(/[\[\]]/g, ' ').replace(/^[\s"']+|[\s"']+$/g, '').replace(/\s+/g, ' ').trim();
@@ -387,11 +393,11 @@ export function describirEstado(estado, mensaje) {
   const causas = items.filter((i) => i.codigo !== '-37');
   const motivo = (causas.length ? causas : items).map((i) => i.texto).join(' ');
   const ESTADOS_TXT = {
-    pendiente: { final: false, clase: 'espera', chip: 'En cola', texto: 'Cobro registrado. Se está enviando a Hacienda. Este aviso cambia solo cuando Hacienda responda.' },
-    enviado: { final: false, clase: 'espera', chip: 'Enviado a Hacienda', texto: 'Cobro registrado. Ya se envió a Hacienda y se espera su respuesta. Este aviso cambia solo.' },
+    pendiente: { final: false, clase: 'espera', chip: 'Por enviar a Hacienda', texto: 'Cobro registrado. Se enviará a Hacienda en un momento. Este aviso cambia solo cuando Hacienda responda.' },
+    enviado: { final: false, clase: 'espera', chip: 'Enviado a Hacienda', texto: 'Cobro registrado. Se envió a Hacienda y se espera su respuesta. Este aviso cambia solo cuando Hacienda responda.' },
     aceptado: { final: true, clase: 'ok', chip: 'Aceptado', texto: 'Cobro registrado. Hacienda aceptó el comprobante.' },
     rechazado: { final: true, clase: 'mal', chip: 'Rechazado', texto: 'Cobro registrado, pero Hacienda no aceptó el comprobante.' + (motivo ? ' Motivo: ' + motivo : '') + ' Avise a la persona encargada; el documento queda en «Anular y reimprimir».' },
-    error: { final: false, clase: 'mal', chip: 'Con error', texto: 'Cobro registrado, pero todavía no se pudo enviar a Hacienda.' + (motivo ? ' Motivo: ' + motivo : '') + ' El sistema vuelve a intentarlo solo.' },
+    error: { final: false, clase: 'mal', chip: 'No se pudo enviar', texto: 'Cobro registrado, pero todavía no se pudo enviar a Hacienda.' + (motivo ? ' Motivo: ' + motivo : '') + ' El sistema lo intentará de nuevo solo. No tiene que repetir el cobro.' },
   };
   return { estado: e, motivo, ...(ESTADOS_TXT[e] || ESTADOS_TXT.pendiente) };
 }

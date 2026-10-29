@@ -207,7 +207,7 @@ export function modeloPrefactura(r, soc) {
   return {
     clase: 'prefactura', tipo: 'PRE', titulo: 'PREFACTURA', soc: datosSoc(soc), cliente: datosCliente(r.cliente),
     lineas, total, iva, subtotal: r2(total - iva), desglose, pagos: [], consecutivo: '', clave: '', fecha: v.prefacturada_en || new Date().toISOString(),
-    estado: null, sandbox: false, motivo: '', original: null, venta: { numero: v.numero, tipo_servicio: v.tipo_servicio, referencia: v.referencia, prefactura_numero: v.prefactura_numero },
+    estado: null, sandbox: false, motivo: '', original: null, venta: { numero: v.numero, tipo_servicio: v.tipo_servicio, referencia: v.referencia, prefactura_numero: v.prefactura_numero, prefactura_revision: v.prefactura_revision },
   };
 }
 
@@ -267,6 +267,7 @@ function nodoTiquete(m, { papel, logo, copia }) {
   raiz.append(fila('Fecha', fechaLinea(m.fecha)));
   if (m.venta?.numero) raiz.append(fila(pre ? 'Cuenta' : 'Venta', m.venta.numero));
   if (m.venta?.prefactura_numero && pre) raiz.append(fila('Prefactura N.°', m.venta.prefactura_numero));
+  if (pre && Number(m.venta?.prefactura_revision) > 1) raiz.append(fila('Revisión', String(Number(m.venta.prefactura_revision))));
   if (m.venta?.tipo_servicio) raiz.append(fila('Servicio', TIPOS_SERVICIO[m.venta.tipo_servicio] || m.venta.tipo_servicio));
   if (m.venta?.referencia) raiz.append(fila('Referencia', m.venta.referencia));
   if (!pre) raiz.append(fila('Condición de venta', 'Contado'));
@@ -662,9 +663,9 @@ export function abrirAjustesImpresion() {
       h('h3', 'Para que imprima sin ventanitas (recomendado en la computadora de la caja)'),
       h('p', 'Normalmente el navegador abre una ventana para escoger la impresora cada vez. En la computadora de la caja se puede evitar: el tiquete sale directo a la impresora de tiquetes. Se hace una sola vez, en esa computadora.'),
       h('ol',
-        h('li', h('b', 'Deje la impresora de tiquetes como predeterminada. '), 'En Windows: Inicio, Configuración, Bluetooth y dispositivos, Impresoras y escáneres. Toque la impresora de tiquetes y luego "Establecer como predeterminada". Si arriba de la lista dice "Permitir que Windows administre mi impresora predeterminada", apáguelo.'),
-        h('li', h('b', 'Revise el papel de esa impresora. '), 'En "Preferencias de impresión" escoja papel de rollo de 80 mm y márgenes en cero. Si el tiquete sale muy pequeño, ponga la escala en 100%.'),
-        h('li', h('b', 'Cree un acceso directo especial. '), 'Clic derecho en el Escritorio, Nuevo, Acceso directo. En "Ubicación" pegue el texto de abajo (toque "Copiar texto"), toque Siguiente, escriba el nombre "Facturación La Bomba" y toque Finalizar.'),
+        h('li', h('b', 'Deje la impresora de tiquetes como predeterminada. '), 'En Windows: Inicio, Configuración, Bluetooth y dispositivos, Impresoras y escáneres. Toque la impresora de tiquetes y luego «Establecer como predeterminada». Si arriba de la lista dice «Permitir que Windows administre mi impresora predeterminada», apáguelo.'),
+        h('li', h('b', 'Revise el papel de esa impresora. '), 'En «Preferencias de impresión» escoja papel de rollo de 80 mm y márgenes en cero. Si el tiquete sale muy pequeño, ponga la escala en 100%.'),
+        h('li', h('b', 'Cree un acceso directo especial. '), 'Clic derecho en el Escritorio, Nuevo, Acceso directo. En «Ubicación» pegue el texto de abajo (toque «Copiar texto»), toque Siguiente, escriba el nombre «Facturación La Bomba» y toque Finalizar.'),
         h('li', h('b', 'Abra el sistema siempre con ese acceso directo. '), 'Se abre en su propia ventana, sin pestañas, y al imprimir el tiquete sale solo, sin preguntar.')),
       h('div.fx-cmd', { tabindex: 0 }, cmd),
       h('button.btn', { type: 'button', onclick: (e) => copiar(e.currentTarget) }, 'Copiar texto'),

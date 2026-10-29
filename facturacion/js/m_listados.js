@@ -1,6 +1,7 @@
 // Informes (antes Listados): reportes de ventas facturadas. Datos: fx_listados2 (ventas netas de notas de crédito), ver sql/05_listados2.sql.
 import { h, money, num, fechaHora, horaCorta, fechaCorta, sumaDias, toast, nombrePropio, nombreLocal, TIPOS_SERVICIO, MEDIOS } from './util.js';
 import { listados2 } from './api_listados.js';
+import { mensajeAmable } from './api_documentos.js';
 import { selectorPeriodo, textoRango, fechaLarga } from './periodo.js';
 import { csvBajar } from './csv.js';
 import { graficoColumnas, graficoBarras, autoAjustar } from './graficos.js';
@@ -56,7 +57,7 @@ export default {
         pintar();
       } catch (e) {
         if (mia !== ficha) return;
-        cuerpo.replaceChildren(h('div.vacio', h('p', 'No se pudieron traer las ventas.'), h('p.tenue', e.message || String(e)), h('button.btn', { type: 'button', onclick: () => cargar(desde, hasta) }, 'Intentar de nuevo')));
+        cuerpo.replaceChildren(h('div.vacio', h('p', 'No se pudieron traer las ventas.'), h('p.tenue', mensajeAmable(e, 'Revise la conexión e intente de nuevo.')), h('button.btn', { type: 'button', onclick: () => cargar(desde, hasta) }, 'Intentar de nuevo')));
       }
     }
 
@@ -126,9 +127,9 @@ export default {
           kpi('Ventas netas', money(r.ventas_netas), 'Ventas brutas menos notas de crédito. Incluyen el IVA.', 'resalta'),
           kpi('IVA dentro de las ventas netas', money(r.iva_neto), `Sin IVA, las ventas netas serían ${money(baseNeta)}.`),
           kpi('Documentos emitidos', num(r.docs_emitidos, 0), 'Facturas y tiquetes electrónicos. Las notas de crédito no se cuentan aquí.'),
-          kpi('Ticket promedio', money(ticket), 'Ventas netas entre el número de ventas vigentes. Con IVA incluido.')),
+          kpi('Promedio por venta', money(ticket), 'Ventas netas entre el número de ventas vigentes. Con IVA incluido.')),
         rech.n > 0 ? avisoRechazados(rech) : null,
-        r.sin_aceptar_n > 0 ? h('p.lis-aviso', `${r.sin_aceptar_n} ${r.sin_aceptar_n === 1 ? 'documento todavía no está aceptado' : 'documentos todavía no están aceptados'} por Hacienda (en cola o con error). Cuentan en las cifras igual que los aceptados.`) : null,
+        r.sin_aceptar_n > 0 ? h('p.lis-aviso', `${r.sin_aceptar_n} ${r.sin_aceptar_n === 1 ? 'documento todavía no está aceptado' : 'documentos todavía no están aceptados'} por Hacienda (por enviar o con problemas para enviar). Cuentan en las cifras igual que los aceptados.`) : null,
         Math.abs((r.vigentes_total || 0) - (r.ventas_netas || 0)) > 0.005 ? h('p.lis-aviso', `Los desgloses de abajo suman ${money(r.vigentes_total)} y las ventas netas ${money(r.ventas_netas)}: la diferencia viene de notas de crédito de este periodo que anulan ventas de otro periodo.`) : null,
       ].filter(Boolean));
 
@@ -153,7 +154,7 @@ export default {
       const serie = seriesDias(d);
       const csv = () => csvBajar(nombreArchivo('Ventas por dia'), ['Fecha', 'Documentos', 'Ventas brutas (con IVA)', 'Notas de crédito (con IVA)', 'Ventas netas (con IVA)', 'IVA neto'],
         serie.map((x) => [x.dia, +x.docs, +x.ventas, +x.notas_credito, +x.netas, +x.iva]));
-      if (serie.length <= 1) return seccion('Ventas por día', 'El periodo es de un solo día. Más abajo está el detalle por hora.', null, h('p.tenue', 'Escoja "Esta semana" o "Este mes" para ver cada día en una columna.'));
+      if (serie.length <= 1) return seccion('Ventas por día', 'El periodo es de un solo día. Más abajo está el detalle por hora.', null, h('p.tenue', 'Escoja «Esta semana» o «Este mes» para ver cada día en una columna.'));
       const datos = serie.map((x) => ({ id: x.dia, etiqueta: x.mes ? dia(x.dia, { month: 'short', year: '2-digit' }) : (serie.length <= 8 ? dia(x.dia, { weekday: 'short' }).replace('.', '') + ' ' + dia(x.dia, { day: 'numeric' }) : dia(x.dia, { day: '2-digit', month: '2-digit' })), valor: +x.netas,
         texto: `${x.mes ? dia(x.dia, { month: 'long', year: 'numeric' }) : fechaLarga(x.dia)}: ventas netas ${money(x.netas)} (brutas ${money(x.ventas)}, notas de crédito ${money(x.notas_credito)}), IVA ${money(x.iva)}, ${x.docs} ${x.docs === 1 ? 'documento' : 'documentos'}.` }));
       const mes = serie[0].mes;
@@ -173,7 +174,7 @@ export default {
       const mejor = serie.reduce((a, b) => (+b.total > +a.total ? b : a), serie[0]);
       const csv = () => csvBajar(nombreArchivo('Ventas por hora'), ['Hora (inicio)', 'Ventas (número)', 'Monto con IVA'], serie.map((x) => [etq(x.hora), +x.docs, +x.total]));
       return seccion('Ventas por hora', `Suma de todos los días del periodo. Cada columna es una hora completa: la de 7:00 son las ventas entre 7:00 y 7:59. La hora con más ventas es ${etq(mejor.hora)} a ${String(mejor.hora).padStart(2, '0')}:59 (${money(mejor.total)}). No incluye ventas anuladas con nota de crédito.`, csv,
-        conGrafico('col', datos, { tituloX: 'Hora del día (24 horas)', tituloY: 'Ventas (₡, IVA incluido)', color: 'ambar', anchoEtiqueta: 36, descripcion: 'Gráfico de columnas de ventas por hora del día' }));
+        conGrafico('col', datos, { tituloX: 'Hora del día (24 horas)', tituloY: 'Ventas netas, sin las anuladas (₡, IVA incluido)', color: 'ambar', anchoEtiqueta: 36, descripcion: 'Gráfico de columnas de ventas por hora del día' }));
     }
 
     /* ---------- medio de pago y tipo de servicio ---------- */
@@ -182,14 +183,14 @@ export default {
       const datos = filas.map((x) => ({ etiqueta: nombreMedio(x.medio), valor: +x.total, extra: pct(+x.total, tot), texto: `${nombreMedio(x.medio)}: ${money(x.total)} (${pct(+x.total, tot)} de lo cobrado) en ${x.docs} ${x.docs === 1 ? 'venta' : 'ventas'}.` }));
       const csv = () => csvBajar(nombreArchivo('Ventas por medio de pago'), ['Medio de pago', 'Ventas (número)', 'Monto con IVA', 'Porcentaje'], filas.map((x) => [nombreMedio(x.medio), +x.docs, +x.total, tot ? Math.round((+x.total / tot) * 1000) / 10 : 0]));
       return seccion('Por medio de pago', 'Cómo pagaron los clientes (una venta pagada con dos medios aparece en ambos). No incluye ventas anuladas.', csv,
-        conGrafico('bar', datos, { tituloX: 'Monto cobrado (₡, IVA incluido)', tituloY: 'Medio de pago', descripcion: 'Barras de ventas por medio de pago' }));
+        conGrafico('bar', datos, { tituloX: 'Monto cobrado, sin las anuladas (₡, IVA incluido)', tituloY: 'Medio de pago', descripcion: 'Barras de ventas por medio de pago' }));
     }
     function seccionServicio(d) {
       const filas = d.por_servicio || []; const tot = filas.reduce((a, x) => a + +x.total, 0);
       const datos = filas.map((x) => ({ etiqueta: nombreServicio(x.tipo_servicio), valor: +x.total, extra: pct(+x.total, tot), texto: `${nombreServicio(x.tipo_servicio)}: ${money(x.total)} (${pct(+x.total, tot)}) en ${x.ventas} ${x.ventas === 1 ? 'venta' : 'ventas'}; promedio por venta ${money(+x.total / (+x.ventas || 1))}.` }));
       const csv = () => csvBajar(nombreArchivo('Ventas por tipo de servicio'), ['Tipo de servicio', 'Ventas (número)', 'Monto con IVA', 'Porcentaje', 'Promedio por venta'], filas.map((x) => [nombreServicio(x.tipo_servicio), +x.ventas, +x.total, tot ? Math.round((+x.total / tot) * 1000) / 10 : 0, Math.round((+x.total / (+x.ventas || 1)) * 100) / 100]));
       return seccion('Por tipo de servicio', 'Buffet, para llevar, express o en espera. No incluye ventas anuladas.', csv,
-        conGrafico('bar', datos, { tituloX: 'Monto vendido (₡, IVA incluido)', tituloY: 'Tipo de servicio', descripcion: 'Barras de ventas por tipo de servicio' }));
+        conGrafico('bar', datos, { tituloX: 'Monto vendido, sin las anuladas (₡, IVA incluido)', tituloY: 'Tipo de servicio', descripcion: 'Barras de ventas por tipo de servicio' }));
     }
 
     /* ---------- turnos, cajeros, IVA ---------- */
@@ -329,7 +330,7 @@ export default {
         if (!total) return h('p.tenue', 'Ningún producto coincide con la búsqueda.');
         return h('div', h('p.tenue', 'Toque el título de una columna para ordenar. Cada presentación (por ejemplo Coca-Cola 355 mL y Coca-Cola 600 mL) es un producto aparte.'),
           h('div.tabla-caja', h('table.tabla', h('thead', h('tr', th('codigo', 'Código'), th('nombre', 'Producto'), th('cantidad', 'Cantidad', 1), th('total', 'Monto con IVA', 1), h('th.der', '% del total'))),
-            h('tbody', mostrar.map((x) => h('tr', h('td', h('code.cod', x.codigo || 's/d')), h('td', x.nombre), h('td.der', num(x.cantidad, 3)), h('td.der', money(x.total)), h('td.der', pct(x.total, totalFijos))))))),
+            h('tbody', mostrar.map((x) => h('tr', h('td', h('code.cod', x.codigo || 'sin dato')), h('td', x.nombre), h('td.der', num(x.cantidad, 3)), h('td.der', money(x.total)), h('td.der', pct(x.total, totalFijos))))))),
           total > 15 ? h('div.fila', { style: 'margin-top:.6rem' }, h('button.btn', { type: 'button', onclick: () => { est.verTodos = !est.verTodos; pintarProd(); } }, est.verTodos ? 'Mostrar solo los 15 primeros' : `Ver los ${total} productos`)) : null);
       }
       // "Con papas": cuántas veces se vendió la opción de papas frente a los platos principales del mismo cajón
@@ -340,9 +341,9 @@ export default {
           const cp = hojas.filter((x) => /^con papas/i.test(x.nombre)); if (!cp.length) return;
           const nCP = cp.reduce((a, x) => a + x.cantidad, 0);
           const base = hojas.filter((x) => !/^con papas/i.test(x.nombre) && !/^adicional/i.test(x.nombre)).reduce((a, x) => a + x.cantidad, 0);
-          if (base > 0) out.push(h('li', `${cj.nombre}: la opción "Con papas" se vendió ${num(nCP, 0)} ${nCP === 1 ? 'vez' : 'veces'} frente a ${num(base, 0)} platos del cajón (sin contar adicionales), alrededor del ${pct(nCP, base)}.`));
+          if (base > 0) out.push(h('li', `${cj.nombre}: la opción «Con papas» se vendió ${num(nCP, 0)} ${nCP === 1 ? 'vez' : 'veces'} frente a ${num(base, 0)} platos del cajón (sin contar adicionales), alrededor del ${pct(nCP, base)}.`));
         });
-        return out.length ? h('div.lis-nota', h('strong', 'Cuántos salen con papas'), h('ul', out), h('small', 'Es una estimación: si un cliente pide varios platos y una sola vez "Con papas", se cuenta una sola vez.')) : null;
+        return out.length ? h('div.lis-nota', h('strong', 'Cuántos salen con papas'), h('ul', out), h('small', 'Es una estimación: si un cliente pide varios platos y una sola vez «Con papas», se cuenta una sola vez.')) : null;
       }
       pintarProd();
 
@@ -351,14 +352,14 @@ export default {
         const rows = []; lista.forEach((cj) => cj.productos.forEach((pr) => pr.hojas.forEach((x) => rows.push([cj.nombre, pr.nombre, x.codigo || '', x.nombre, +x.cantidad, +x.total, totalFijos ? Math.round((+x.total / totalFijos) * 10000) / 100 : 0]))));
         csvBajar(nombreArchivo('Productos vendidos'), ['Cajón', 'Producto', 'Código', 'Nombre completo', 'Cantidad', 'Monto con IVA', '% del total'], rows);
       };
-      const cab = seccion('Productos vendidos', 'Agrupados por el código de 6 dígitos: cajón (2), producto (2) y modificador (2), igual que en el reporte "Productos vendidos" de Prisma. Sirve para ver, por ejemplo, qué marca de gaseosa se vende más. Cada tamaño es un producto distinto (Coca-Cola 355 mL y Coca-Cola 600 mL no se mezclan). No incluye ventas anuladas.', csvProd,
+      const cab = seccion('Productos vendidos', 'Agrupados por el código de 6 dígitos: cajón (2), producto (2) y modificador (2), igual que en el reporte «Productos vendidos» de Prisma. Sirve para ver, por ejemplo, qué marca de gaseosa se vende más. Cada tamaño es un producto distinto (Coca-Cola 355 mL y Coca-Cola 600 mL no se mezclan). No incluye ventas anuladas.', csvProd,
         h('label.etq.lis-buscar', 'Buscar un producto', busca), barra, cuerpoProd);
       if (!abiertos.length) return cab;
       const totalAb = abiertos.reduce((a, x) => a + +x.total, 0);
       const csvAb = () => csvBajar(nombreArchivo('Productos de precio abierto o por peso'), ['Código', 'Producto', 'Unidad', 'Cantidad', 'Monto con IVA'], abiertos.map((x) => [x.codigo || '', x.nombre, x.unidad || '', +x.cantidad, +x.total]));
       return h('div', cab, seccion('Precio abierto o por peso (aparte)', 'En estos productos el precio se digita a mano o se vende por peso, así que la cantidad NO se puede comparar con la de los demás productos. Por eso van separados y no suman en la tabla de arriba.', csvAb,
         tablaSimple([{ t: 'Código' }, { t: 'Producto' }, { t: 'Unidad' }, { t: 'Cantidad o peso', der: 1 }, { t: 'Monto con IVA', der: 1 }],
-          abiertos.map((x) => [h('code.cod', x.codigo || 's/d'), x.nombre, x.unidad || '', num(x.cantidad, 3), money(x.total)]),
+          abiertos.map((x) => [h('code.cod', x.codigo || 'sin dato'), x.nombre, x.unidad || '', num(x.cantidad, 3), money(x.total)]),
           h('tr', h('td', { colspan: 4 }, 'Total de precio abierto'), h('td.der', money(totalAb))))));
     }
 
@@ -379,14 +380,14 @@ export default {
         h('p.sm', 'Colones (₡). Todas las cifras incluyen IVA salvo donde se indique. Las notas de crédito se restan.'),
         h('table.imp-kpi', h('tbody',
           [['Ventas brutas (antes de notas de crédito)', money(r.ventas_brutas)], ['Notas de crédito (se restan)', '−' + money(r.notas_credito)], ['Ventas netas (con IVA)', money(r.ventas_netas)],
-            ['IVA dentro de las ventas netas', money(r.iva_neto)], ['Documentos emitidos', num(r.docs_emitidos, 0)], ['Ticket promedio (con IVA)', money(ticket)]].map(([a, b]) => h('tr', h('td', a), h('td.der', b))))),
+            ['IVA dentro de las ventas netas', money(r.iva_neto)], ['Documentos emitidos', num(r.docs_emitidos, 0)], ['Promedio por venta (con IVA)', money(ticket)]].map(([a, b]) => h('tr', h('td', a), h('td.der', b))))),
         (d.por_tarifa || []).length ? h('div', h('h2', 'Ventas por tarifa de IVA'), tablaSimple([{ t: 'Tarifa' }, { t: 'Ventas sin IVA', der: 1 }, { t: 'IVA', der: 1 }, { t: 'Total con IVA', der: 1 }],
           d.por_tarifa.map((t) => { const total = +(t.total ?? t.total_con_iva ?? 0), iva = +(t.iva ?? 0); return [nombreTarifa(t), money(t.base != null ? +t.base : total - iva), money(iva), money(total)]; }))) : null,
         (d.rechazados?.n || 0) > 0 ? h('p.sm', `Aparte: ${d.rechazados.n} ${d.rechazados.n === 1 ? 'documento rechazado' : 'documentos rechazados'} por Hacienda (${money(d.rechazados.total)}), que no suman en estas ventas.`) : null,
         serie.length > 1 ? h('div', h('h2', 'Ventas netas por ' + (serie[0].mes ? 'mes' : 'día')), g('col', serie.map((x) => ({ etiqueta: x.mes ? dia(x.dia, { month: 'short' }) : dia(x.dia, { day: '2-digit', month: '2-digit' }), valor: +x.netas })), { tituloX: serie[0].mes ? 'Mes' : 'Día (en orden de fecha)', tituloY: 'Ventas netas (₡, IVA incluido)', alto: 230, anchoEtiqueta: 44 })) : null,
-        hSerie.length ? h('div', h('h2', 'Ventas por hora'), g('col', hSerie, { tituloX: 'Hora del día (24 horas)', tituloY: 'Ventas (₡, IVA incluido)', color: 'ambar', alto: 220, anchoEtiqueta: 36 })) : null,
-        (d.por_medio || []).length ? h('div', h('h2', 'Por medio de pago'), g('bar', d.por_medio.map((x) => ({ etiqueta: nombreMedio(x.medio), valor: +x.total, extra: pct(+x.total, totM) })), { tituloX: 'Monto cobrado (₡, IVA incluido)', tituloY: 'Medio de pago' })) : null,
-        (d.por_servicio || []).length ? h('div', h('h2', 'Por tipo de servicio'), g('bar', d.por_servicio.map((x) => ({ etiqueta: nombreServicio(x.tipo_servicio), valor: +x.total, extra: pct(+x.total, totS) })), { tituloX: 'Monto vendido (₡, IVA incluido)', tituloY: 'Tipo de servicio' })) : null,
+        hSerie.length ? h('div', h('h2', 'Ventas por hora'), g('col', hSerie, { tituloX: 'Hora del día (24 horas)', tituloY: 'Ventas netas, sin las anuladas (₡, IVA incluido)', color: 'ambar', alto: 220, anchoEtiqueta: 36 })) : null,
+        (d.por_medio || []).length ? h('div', h('h2', 'Por medio de pago'), g('bar', d.por_medio.map((x) => ({ etiqueta: nombreMedio(x.medio), valor: +x.total, extra: pct(+x.total, totM) })), { tituloX: 'Monto cobrado, sin las anuladas (₡, IVA incluido)', tituloY: 'Medio de pago' })) : null,
+        (d.por_servicio || []).length ? h('div', h('h2', 'Por tipo de servicio'), g('bar', d.por_servicio.map((x) => ({ etiqueta: nombreServicio(x.tipo_servicio), valor: +x.total, extra: pct(+x.total, totS) })), { tituloX: 'Monto vendido, sin las anuladas (₡, IVA incluido)', tituloY: 'Tipo de servicio' })) : null,
         top.length ? h('div', h('h2', 'Los 15 productos con más ventas'), tablaSimple([{ t: 'Código' }, { t: 'Producto' }, { t: 'Cantidad', der: 1 }, { t: 'Monto con IVA', der: 1 }], top.map((x) => [x.codigo || '', x.nombre, num(x.cantidad, 3), money(x.total)]))) : null,
         h('p.sm', 'Impreso el ' + fechaHora(new Date()) + ' desde el facturador.'));
       document.body.append(hoja);

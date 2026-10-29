@@ -53,10 +53,11 @@
 .mt-radios{display:grid;grid-template-columns:1fr 1fr;gap:.6rem}
 .mt-radios label{display:flex;align-items:center;gap:.6rem;min-height:52px;padding:.5rem .8rem;border:1px solid var(--borde-control,#8f8672);border-radius:var(--r);cursor:pointer;font-weight:600;background:#fff}
 .mt-radios label:has(input:checked){border-color:var(--rojo);background:var(--rojo-suave)}
-.mt-radios input{width:22px;height:22px;accent-color:var(--rojo)}
+.mt-radios input{width:28px;height:28px;margin:0;flex:0 0 auto;accent-color:var(--rojo)}
+.mt-radios label:focus-within,.mt-interruptor:focus-within,.mt-casilla:focus-within{outline:3px solid var(--rojo);outline-offset:2px}
 .mt-radios.una{grid-template-columns:1fr}
-.mt-interruptor{display:flex;align-items:center;gap:.7rem;min-height:52px;padding:.5rem .8rem;border:1px solid var(--borde-control,#8f8672);border-radius:var(--r);cursor:pointer;background:#fff;font-weight:600}
-.mt-interruptor input{width:28px;height:28px;accent-color:var(--rojo);flex:0 0 auto}
+.mt-interruptor{display:flex;align-items:center;gap:.7rem;min-height:56px;padding:.5rem .8rem;border:1px solid var(--borde-control,#8f8672);border-radius:var(--r);cursor:pointer;background:#fff;font-weight:600}
+.mt-interruptor input{width:28px;height:28px;margin:0;accent-color:var(--rojo);flex:0 0 auto}
 .mt-interruptor small{font-weight:400;color:var(--tinta2);display:block}
 .mt-interruptor:has(input:checked){border-color:var(--rojo)}
 .mt-pin-grande{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:2.6rem;letter-spacing:.35em;text-align:center;padding:.8rem 0 .8rem .35em;border:1px dashed var(--linea2);border-radius:12px;background:#fff;margin:.6rem 0}
@@ -143,8 +144,8 @@
 
 @media(max-width:560px){.mt-radios{grid-template-columns:1fr}.modal-cuerpo .rejilla.dos{grid-template-columns:1fr}}
 @media(max-width:900px){.mt-cajon-cab{position:static}}
-.mt-casilla{display:flex;align-items:center;gap:.7rem;min-height:56px;padding:.4rem .9rem;font-weight:600;margin:.4rem 0;cursor:pointer;border:1px solid var(--borde-control,#8f8672);border-radius:var(--r);background:#fff;width:fit-content;max-width:100%}
-.mt-casilla input{width:32px;height:32px;margin:0}
+.mt-casilla{display:flex;align-items:center;gap:.7rem;min-height:56px;padding:.4rem .9rem;font-weight:600;margin:.4rem 0;cursor:pointer;-webkit-tap-highlight-color:transparent;border:1px solid var(--borde-control,#8f8672);border-radius:var(--r);background:#fff;width:fit-content;max-width:100%}
+.mt-casilla input{width:32px;height:32px;margin:0;flex:0 0 auto}
 .mt-casilla:has(input:checked){border-color:var(--rojo)}
 .mt-estado-txt{margin:0 0 .5rem}
 
@@ -155,3 +156,15 @@
 .mt-tarifa-btn[aria-pressed=true]{background:var(--rojo);border-color:var(--rojo);color:#fff}
 .mt-tarifa-btn[disabled]{color:#6b6558;background:#f4f1ea;border-color:#b8b09f;cursor:not-allowed}
 .mt-tar-ayuda{margin:0;color:var(--tinta2);font-size:.92rem;line-height:1.4}
+
+/* Botón grande que abre o cierra los datos opcionales de un cliente nuevo (se lee como botón, con palabras) */
+.mt-mas{display:flex;flex-direction:column;align-items:flex-start;justify-content:center;gap:.15rem;width:100%;min-height:64px;padding:.7rem 1rem;text-align:left;border-style:dashed}
+.mt-mas small{font-weight:400;color:var(--tinta2);line-height:1.35}
+.mt-mas[aria-expanded=true]{border-style:solid}
+
+/* Pantalla de Clientes: aviso suave de lo que falta y que Hacienda no exige */
+.mt-sub .chip.suave{background:#f1ece1;color:var(--tinta2);border-color:var(--linea2)}
+
+/* Un aviso de error dentro de una ventana larga se queda a la vista aunque la persona baje al campo con el problema */
+.mt-form>.error-caja{position:sticky;top:0;z-index:4;margin:0;box-shadow:0 6px 14px rgba(29,26,23,.14)}
+.modal-cuerpo:has(.mt-form){scroll-padding-top:6rem;scroll-padding-bottom:2rem}

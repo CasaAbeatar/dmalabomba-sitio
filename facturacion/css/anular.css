@@ -1,4 +1,4 @@
-/* Ventana de anulación (la usa la ventana «Anular y reimprimir») */
+/* Ventana de anulación (la usa la ventana «Anular y reimprimir»): resumen, motivos, qué hacer con el dinero, confirmación y camino guiado «el cliente pide factura» */
 .der{text-align:right}
 .an-dlg{display:flex;flex-direction:column;gap:.9rem}
 .an-resumen{border:1px solid var(--linea);border-radius:12px;padding:.8rem 1rem;display:flex;flex-direction:column;gap:.15rem}
@@ -18,9 +18,35 @@
 .an-botones{display:grid;grid-template-columns:1fr 1fr;gap:.6rem}
 .an-botones>.primario{grid-column:1/-1}
 .an-botones .btn{min-height:56px}
-.an-ok{background:var(--verde-suave);border:1px solid #a8d5bd;border-radius:12px;padding:.8rem 1rem}
+.an-ok{background:var(--verde-suave);border:1px solid #a8d5bd;border-radius:12px;padding:.8rem 1rem;display:flex;flex-direction:column;gap:.15rem}
+.an-codigo{font-weight:600}
+.an-compruebe{font-size:.95rem;color:var(--tinta2)}
+.an-pregunta{margin:0;font-size:1.15rem;font-weight:700}
+.an-ficha{border:1px solid var(--linea2);border-radius:12px;background:var(--papel);display:flex;flex-direction:column}
+.an-ficha-fila{display:grid;grid-template-columns:11rem minmax(0,1fr);gap:.2rem 1rem;padding:.65rem 1rem;border-bottom:1px solid var(--linea)}
+.an-ficha-fila:last-child{border-bottom:0}
+.an-ficha-fila .an-etq{font-size:.78rem}
+.an-sin-deshacer{margin:0;font-weight:700;color:var(--rojo-osc)}
+.an-dinero{border:1px solid var(--linea2);border-left:4px solid var(--ambar);border-radius:12px;background:#fffdf8;padding:.7rem 1rem;display:flex;flex-direction:column;gap:.35rem}
+.an-dinero p{margin:0}
+.an-dinero ul{margin:0;padding-left:1.2rem;display:flex;flex-direction:column;gap:.3rem}
+.an-aviso{border:1px solid #efd08f;background:var(--ambar-suave);border-radius:12px;padding:.7rem 1rem;display:flex;flex-direction:column;gap:.5rem;align-items:flex-start}
+.an-aviso[hidden]{display:none}
+.an-aviso p{margin:0}
+.an-aviso.ok{border-color:#a8d5bd;background:var(--verde-suave)}
+.an-aviso .btn{min-height:52px}
+.an-pasos{margin:0;padding:0;list-style:none;counter-reset:paso;display:flex;flex-direction:column;gap:.7rem}
+.an-pasos>li{counter-increment:paso;position:relative;padding:.7rem 1rem .8rem 3.2rem;border:1px solid var(--linea2);border-radius:12px;background:var(--papel)}
+.an-pasos>li::before{content:counter(paso);position:absolute;left:.9rem;top:.7rem;width:1.7rem;height:1.7rem;border:1px solid var(--rojo);border-radius:50%;color:var(--rojo);font-weight:700;display:flex;align-items:center;justify-content:center}
+.an-cliente{margin-top:.5rem}
+.an-cliente-ok{display:flex;flex-wrap:wrap;gap:.6rem 1rem;align-items:center;justify-content:space-between;border:1px solid #a8d5bd;background:var(--verde-suave);border-radius:12px;padding:.6rem .9rem}
+.an-cliente .btn{min-height:52px}
+.an-porque{flex:1 0 100%;margin:0;color:var(--tinta2);font-size:.95rem}
+.an-porque:empty{display:none}
 
 @media(max-width:760px){
+  .an-ficha-fila{grid-template-columns:1fr}
+  .an-pasos>li{padding-left:2.9rem}
   .an-motivos{grid-template-columns:1fr}
   .an-pie .btn{flex:1 1 40%;padding-inline:.6rem}
   .an-pie .peligro{order:1}

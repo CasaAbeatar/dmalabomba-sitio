@@ -56,7 +56,11 @@
 .doc-cabeza-cols{flex:1 1 auto;min-width:0;display:grid;grid-template-columns:var(--doc-cols);gap:.3rem .8rem;padding:0 calc(1rem + 1px)}
 .doc-cabeza-acc{flex:0 0 var(--doc-acc)}
 .doc-cabeza .der{text-align:right}
-.doc-fila{display:flex;align-items:stretch;gap:.5rem}
+.doc-fila{display:flex;flex-wrap:wrap;align-items:stretch;gap:.5rem}
+.doc-espera{flex:1 0 100%;padding:.55rem .9rem;border:1px dashed var(--borde-ambar,#a87400);border-radius:var(--r);background:var(--ambar-suave);color:#6b4600;font-size:.92rem;line-height:1.3}
+.doc-espera b{font-weight:700}
+.doc-espera-caja{display:flex;flex-direction:column;gap:.4rem;padding:.8rem 1rem;border:1px solid #efd08f;border-radius:12px;background:var(--ambar-suave);margin-bottom:.7rem}
+.doc-espera-caja p{margin:0}
 .doc-ver{flex:1 1 auto;min-width:0;display:grid;grid-template-columns:var(--doc-cols);gap:.3rem .8rem;align-items:center;min-height:64px;padding:.7rem 1rem;text-align:left;background:var(--papel);border:1px solid var(--borde-control,#8f8672);border-radius:12px;cursor:pointer;font:inherit;color:inherit}
 .doc-ver:hover{border-color:var(--tinta)}
 .doc-ver>span{display:block;min-width:0}
@@ -77,7 +81,7 @@
 /* Tableta y celular: los botones pasan debajo de la fila */
 @media(max-width:1180px){
   .doc-cabeza{display:none}
-  .doc-fila{flex-direction:column;gap:.35rem}
+  .doc-fila{flex-direction:column;flex-wrap:nowrap;gap:.35rem}
   .doc-fbot{flex:0 0 auto;display:grid;grid-template-columns:1fr 1fr}
   .doc-fbot.una .btn{flex:none;grid-column:1/-1}
 }

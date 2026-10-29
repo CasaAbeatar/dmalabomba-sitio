@@ -1,4 +1,4 @@
-// Tarifas de IVA que se ofrecen al editar una línea de la cuenta (códigos de la nota 8.1 del anexo v4.4 de Hacienda).
+// Tarifas de IVA que se ofrecen al editar un producto de la cuenta (códigos de la nota 8.1 del anexo v4.4 de Hacienda).
 // La lista oficial vive en la base (fact.tarifas_iva) y el servidor fija el porcentaje según el código; esta copia solo sirve
 // para mostrar las opciones y calcular, solo para mostrar, el desglose de una línea.
 // Los transitorios 05, 06 y 07 son únicamente para notas de crédito y débito: no se ofrecen en ventas.
@@ -37,13 +37,13 @@ export function desgloseIva(totalConIva, pct) {
    "boton" es lo que dice el botón grande de la caja. El 08 (13 %) equivale a "Ninguna": no se ofrece como opción aparte. */
 export const TARIFAS_CLIENTE = [
   { codigo: '', pct: 13, texto: 'Ninguna', ayuda: 'Paga el IVA normal de 13 % (o el que tenga cada producto).' },
-  { codigo: '03', pct: 2, texto: 'IVA reducido 2 % (universidades)', ayuda: 'Universidades públicas y entidades que la ley cubre con la tarifa de 2 %. No es una exoneración.', frase: 'paga IVA reducido del 2 %', boton: 'Aplicar 2 % a todas las líneas' },
-  { codigo: '04', pct: 4, texto: 'IVA reducido 4 %', ayuda: 'Por ejemplo boletos aéreos y salud privada.', frase: 'paga IVA reducido del 4 %', boton: 'Aplicar 4 % a todas las líneas' },
-  { codigo: '02', pct: 1, texto: 'IVA reducido 1 %', ayuda: 'Canasta básica.', frase: 'paga IVA reducido del 1 %', boton: 'Aplicar 1 % a todas las líneas' },
-  { codigo: '09', pct: 0.5, texto: 'IVA reducido 0,5 %', ayuda: 'Productos agropecuarios orgánicos.', frase: 'paga IVA reducido del 0,5 %', boton: 'Aplicar 0,5 % a todas las líneas' },
-  { codigo: '10', pct: 0, texto: 'Exento de IVA', ayuda: 'La ley lo exime del impuesto (Ley 9635, artículo 8).', frase: 'está exento de IVA', boton: 'Aplicar «exento» a todas las líneas' },
-  { codigo: '01', pct: 0, texto: '0 % (CCSS y municipalidades)', ayuda: 'No sujeto: ventas a la CCSS o a una municipalidad (artículo 32 del reglamento).', frase: 'paga 0 % de IVA (no sujeto, por ejemplo la CCSS o una municipalidad)', boton: 'Aplicar 0 % a todas las líneas' },
-  { codigo: '11', pct: 0, texto: '0 % sin derecho a crédito', ayuda: 'Bien o servicio no sujeto que no da derecho a crédito fiscal.', frase: 'paga 0 % de IVA sin derecho a crédito', boton: 'Aplicar 0 % a todas las líneas' },
+  { codigo: '03', pct: 2, texto: 'IVA reducido 2 % (universidades)', ayuda: 'Universidades públicas y entidades que la ley cubre con la tarifa de 2 %. No es una exoneración.', frase: 'paga IVA reducido del 2 %', boton: 'Aplicar 2 % a todos los productos' },
+  { codigo: '04', pct: 4, texto: 'IVA reducido 4 %', ayuda: 'Por ejemplo boletos aéreos y salud privada.', frase: 'paga IVA reducido del 4 %', boton: 'Aplicar 4 % a todos los productos' },
+  { codigo: '02', pct: 1, texto: 'IVA reducido 1 %', ayuda: 'Canasta básica.', frase: 'paga IVA reducido del 1 %', boton: 'Aplicar 1 % a todos los productos' },
+  { codigo: '09', pct: 0.5, texto: 'IVA reducido 0,5 %', ayuda: 'Productos agropecuarios orgánicos.', frase: 'paga IVA reducido del 0,5 %', boton: 'Aplicar 0,5 % a todos los productos' },
+  { codigo: '10', pct: 0, texto: 'Exento de IVA', ayuda: 'La ley lo exime del impuesto (Ley 9635, artículo 8).', frase: 'está exento de IVA', boton: 'Aplicar «exento» a todos los productos' },
+  { codigo: '01', pct: 0, texto: '0 % (CCSS y municipalidades)', ayuda: 'Tarifa 0 % con derecho a crédito: ventas a la CCSS o a una municipalidad, entre otras operaciones del artículo 32, numeral 1, del reglamento.', frase: 'paga 0 % de IVA con derecho a crédito (por ejemplo la CCSS o una municipalidad)', boton: 'Aplicar 0 % a todos los productos' },
+  { codigo: '11', pct: 0, texto: '0 % sin derecho a crédito', ayuda: 'Bien o servicio no sujeto que no da derecho a crédito fiscal.', frase: 'paga 0 % de IVA sin derecho a crédito', boton: 'Aplicar 0 % sin derecho a crédito a todos los productos' },
 ];
 // Códigos que sí significan "una tarifa distinta de la normal" (el 08 y vacío no avisan nada)
 export function tarifaHabitual(cliente) {

@@ -1,15 +1,5 @@
 // Funciones de datos de Clientes, Productos y Usuarios que no estaban en api.js (se agregan aquí para no editarlo).
-import { sb, ErrorApi, funcion } from './api.js';
-
-async function rpc(nombre, args = {}) {
-  const { data, error } = await sb.rpc(nombre, args);
-  if (error) {
-    let m = error.message || 'Error desconocido';
-    if (/JWT|expired|not authenticated/i.test(m)) m = 'Su sesión venció. Recargue la página e ingrese de nuevo.';
-    throw new ErrorApi(m);
-  }
-  return data;
-}
+import { rpc, funcion } from './api.js';
 
 export const apiM = {
   // Consulta de cédula en Hacienda (función de borde facturador-cedula, con copia guardada). Siempre responde ok:true|false + estado:

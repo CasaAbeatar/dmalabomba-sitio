@@ -13,6 +13,27 @@ async function leer(nombre, args) {
   }
 }
 
+// Motivos de un toque. Son los mismos para Facturación y para Apertura y cierre de caja. Si el servidor manda su propia lista (fx_contexto:
+// motivos_entrada_efectivo y motivos_salida_efectivo) se usa esa; si no, estas. «Otro» siempre queda al final.
+export const MOTIVOS_ENTRADA = ['Sencillo / cambio', 'Aporte del dueño', 'Otro'];
+export const MOTIVOS_SALIDA = ['Pago a proveedor', 'Compra de hielo', 'Compra de insumos', 'Sencillo / cambio', 'Retiro del dueño', 'Otro'];
+export function motivosValidos(lista, porDefecto) {
+  if (!Array.isArray(lista)) return porDefecto;
+  const limpia = [...new Set(lista.map((x) => (typeof x === 'string' ? x.trim() : '')).filter((x) => x && x.length <= 40))].slice(0, 12);
+  if (!limpia.length) return porDefecto;
+  return [...limpia.filter((x) => x !== 'Otro'), 'Otro'];
+}
+
+// Texto de error para mostrar en pantalla: el mensaje solo se deja pasar si lo escribió el sistema en español. Un mensaje técnico
+// (permission denied, invalid input, Failed to fetch...) se cambia por una frase que dice qué hacer.
+export const MENSAJE_GENERAL = 'Algo no salió bien. Intente de nuevo; si sigue igual, avise a la persona encargada.';
+const TECNICO = /permission denied|invalid input|duplicate key|could not|violates|syntax error|does not exist|undefined|null value|TypeError|Failed to fetch|NetworkError|Load failed|JWT|PGRST|schema cache|overflow|unexpected|\bHTTP\b|\berror\b:/i;
+export function textoError(e, general = MENSAJE_GENERAL) {
+  const m = String((e && e.message) || (typeof e === 'string' ? e : '') || '').trim();
+  if (!m || m.length > 300 || TECNICO.test(m)) return general;
+  return m;
+}
+
 export const apiEfectivo = {
   // Todo lo que hace falta para el resumen del turno: esperado_efectivo, total_entradas, total_salidas, entradas[] y salidas[] vigentes, turno.abierto_en
   estado: (turno) => leer('fx_turno_estado', { p_turno: turno }),

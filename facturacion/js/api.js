@@ -2,34 +2,65 @@
 export const SUPA_URL = 'https://dwlbcbtwdungyrykgahm.supabase.co';
 export const SUPA_KEY = 'sb_publishable_gUoYvCNka0je2rbNeWPpUA_l26vgQbO'; // clave pública; el acceso real lo controlan sesión y funciones
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm';
-import { describirEstado } from './util.js';
+import { describirEstado, MSG_SIN_INTERNET, MSG_GENERICO } from './util.js';
 
 // Sesión propia del facturador (usuario + PIN), separada de la del panel
 export const sb = createClient(SUPA_URL, SUPA_KEY, { auth: { storageKey: 'sb-facturador', persistSession: true, autoRefreshToken: true, detectSessionInUrl: false } });
 
-// Error con texto listo para mostrar. transitorio = falla de red, tiempo agotado o servidor ocupado (vale la pena intentar de nuevo).
-// motivo = la razón que da el servicio de acceso cuando la hay ('empresa_desconocida', 'empresa_no_habilitada', 'sin_acceso_empresa', 'ip', 'empresa'...)
-export class ErrorApi extends Error {
-  constructor(mensaje, { transitorio = false, estado = 0, hasta = null, sesion = false, motivo = '' } = {}) { super(mensaje); this.transitorio = transitorio; this.estado = estado; this.hasta = hasta; this.sesion = sesion; this.motivo = motivo; }
-}
-export const esSesionVencida = (e) => !!e && (e.sesion === true || /sesi[oó]n venci/i.test(e.message || ''));
-export const esTransitorio = (e) => !!e && (e.transitorio === true || /no se pudo conectar|servidor est[aá] ocupado|tard[oó] demasiado|no respondi[oó]/i.test(e.message || ''));
-
-const MSG_RED = 'No se pudo conectar con el servidor. Revise la conexión a internet e intente de nuevo.';
-const MSG_OCUPADO = 'El servidor está ocupado en este momento. Espere unos segundos e intente de nuevo.';
-const MSG_TARDO = 'El servidor tardó demasiado en responder. Intente de nuevo.';
+/* ---------- Qué clase de falla es ---------- */
+// La decisión «¿vale la pena intentar de nuevo?» NO sale del texto del mensaje: sale de la clase de la falla (ErrorApi.tipo), que se fija una sola vez, aquí,
+// mirando el estado HTTP y el código de la base:
+//   'red', 'tiempo', 'ocupado'  transitorias: no hubo conexión, se acabó el tiempo o el sistema está saturado. Una consulta puede repetirse sola una vez.
+//   'sesion'                    la sesión ya no sirve: hay que entrar de nuevo.
+//   'negocio'                   el sistema entendió y dijo que no («cliente inactivo», «turno cerrado», permisos, datos). Repetirlo daría lo mismo: nunca se reintenta
+//                               ni se muestra como falla de red.
+// Así se pueden cambiar las palabras de cualquier mensaje sin romper el reintento, y un mensaje de negocio que por casualidad diga «tardó» o «conexión» no se toma por falla de red.
+const MSG_RED = MSG_SIN_INTERNET;
+const MSG_OCUPADO = 'El sistema está ocupado en este momento. Espere unos segundos e intente de nuevo.';
+const MSG_TARDO = 'La respuesta tardó demasiado. Intente de nuevo.';
+const MSG_ACCESO_TARDO = 'La entrada tardó demasiado en responder. Intente de nuevo.';
+// Cuando lo que falló era un cambio (cobrar, agregar una línea...) no se sabe si llegó a guardarse: el texto pide revisar ANTES de repetir, para no cobrar ni agregar dos veces
+const MSG_RED_ESCRIBIR = 'No hay conexión con internet. Antes de repetirlo, revise si lo último que hizo quedó guardado.';
+const MSG_TARDO_ESCRIBIR = 'La respuesta tardó demasiado y no se sabe si quedó guardado. Antes de repetirlo, revise si ya aparece en pantalla.';
+const MSG_ACCION_FALLIDA = 'No se pudo completar la acción. Intente de nuevo; si sigue igual, avise a la persona encargada.';
+const MSG_PERMISO = 'Su usuario no tiene permiso para hacer esto. Avise a la persona encargada.';
 export const MSG_SESION = 'Su sesión venció. Toque «Entrar de nuevo» para seguir donde estaba.';
+// Los textos de arriba son los únicos que este archivo fabrica para una falla transitoria o de sesión. Si otro archivo vuelve a envolver uno de ellos en un ErrorApi nuevo
+// (api_clientes.js, api_mantenimiento.js), el tipo se recupera por igualdad exacta con la constante, nunca por palabras sueltas.
+const TIPO_DE_MENSAJE = new Map([[MSG_RED, 'red'], [MSG_RED_ESCRIBIR, 'red'], [MSG_OCUPADO, 'ocupado'], [MSG_TARDO, 'tiempo'], [MSG_TARDO_ESCRIBIR, 'tiempo'], [MSG_ACCESO_TARDO, 'tiempo'], [MSG_SESION, 'sesion']]);
+const TRANSITORIOS = new Set(['red', 'tiempo', 'ocupado']);
+
+// Error con texto listo para mostrar. motivo = la razón que da el servicio de acceso cuando la hay ('empresa_desconocida', 'empresa_no_habilitada', 'sin_acceso_empresa'...)
+export class ErrorApi extends Error {
+  constructor(mensaje, { tipo = '', transitorio = false, estado = 0, sesion = false, motivo = '' } = {}) {
+    super(mensaje);
+    this.tipo = tipo || TIPO_DE_MENSAJE.get(mensaje) || (sesion ? 'sesion' : transitorio ? 'ocupado' : 'negocio');
+    this.transitorio = TRANSITORIOS.has(this.tipo);
+    this.sesion = this.tipo === 'sesion' || sesion === true;
+    this.estado = estado; this.motivo = motivo;
+  }
+}
+export const esSesionVencida = (e) => !!e && (e.sesion === true || e.tipo === 'sesion' || /sesi[oó]n venci/i.test(e.message || ''));
+// Los textos propios del navegador cuando no hubo red («Failed to fetch», «Load failed») también cuentan como falla de red; los del sistema no se leen
+const NATIVO_DE_RED = /failed to fetch|networkerror|load failed|network request failed/i;
+export const esTransitorio = (e) => !!e && (e.transitorio === true || TRANSITORIOS.has(e.tipo) || (e instanceof TypeError && NATIVO_DE_RED.test(e.message || '')));
+export const esErrorDeNegocio = (e) => !!e && e.tipo === 'negocio';
 const pausa = (ms) => new Promise((r) => setTimeout(r, ms));
 
-// Clasifica la respuesta de PostgREST: devuelve el texto claro si la falla es transitoria, o null si es un error "normal" (regla de negocio, permisos...)
-function fallaTransitoria(error, estado) {
+// Clasifica la respuesta de PostgREST con su estado HTTP y su código. escribe = la llamada cambia datos.
+// Devuelve { tipo, mensaje }. Un error de negocio conserva el texto del sistema si lo escribió una función nuestra (código P0001 o PT4xx, ya en español);
+// cualquier otro texto técnico de la base («duplicate key», «invalid input syntax», «Could not find the function») se cambia por una frase que diga qué hacer.
+const CODIGO_NUESTRO = /^(P0001|PT[1-4]\d\d)$/;
+function clasificarFalla(error, estado, escribe) {
   const m = String(error?.message || '');
-  if (/AbortError|aborted/i.test(m)) return MSG_TARDO;
-  if (error?.code === '57014' || /canceling statement|statement timeout/i.test(m)) return MSG_TARDO;
-  if (!estado) return MSG_RED; // sin respuesta HTTP: no hubo conexión (postgrest-js deja status 0)
-  if (estado === 504 || estado === 408) return MSG_TARDO;
-  if (estado >= 500 || estado === 429) return MSG_OCUPADO;
-  return null;
+  const codigo = String(error?.code || '');
+  if (CODIGO_NUESTRO.test(codigo)) return { tipo: 'negocio', mensaje: m || MSG_GENERICO }; // mande el estado HTTP que mande: es una respuesta del negocio
+  if (/AbortError|aborted/i.test(m) || codigo === '57014' || /canceling statement|statement timeout/i.test(m)) return { tipo: 'tiempo', mensaje: escribe ? MSG_TARDO_ESCRIBIR : MSG_TARDO };
+  if (!estado) return { tipo: 'red', mensaje: escribe ? MSG_RED_ESCRIBIR : MSG_RED }; // sin respuesta HTTP: no hubo conexión (postgrest-js deja status 0)
+  if (estado === 504 || estado === 408 || estado === 502) return { tipo: 'tiempo', mensaje: escribe ? MSG_TARDO_ESCRIBIR : MSG_TARDO };
+  if (estado >= 500 || estado === 429) return { tipo: 'ocupado', mensaje: MSG_OCUPADO };
+  if (codigo === '42501' || estado === 403) return { tipo: 'negocio', mensaje: MSG_PERMISO };
+  return { tipo: 'negocio', mensaje: MSG_GENERICO };
 }
 
 /* ---------- Sesión vencida y conexión caída ---------- */
@@ -48,7 +79,8 @@ function marcarRed(ok) {
 }
 export const redDisponible = () => redOk;
 export function sesionRestaurada() { sesionAvisada = false; marcarRed(true); }
-const esErrorSesion = (r) => r.status === 401 || r.error?.code === 'PGRST301' || /JWT|jwt expired|not authenticated|invalid token/i.test(String(r.error?.message || ''));
+// La sesión no sirve cuando el servidor contesta 401 (token vencido, sesión cerrada o sin empresa: PT401, PGRST301). No se lee el texto del mensaje.
+const esErrorSesion = (r) => r.status === 401 || /^(PGRST30[123]|PT401)$/.test(String(r.error?.code || ''));
 // Intenta renovar la sesión una sola vez a la vez. 'ok' | 'vencida' (el servidor la rechazó) | 'red' (no hubo conexión)
 function renovarSesion() {
   if (!enRenovacion) {
@@ -96,17 +128,18 @@ async function llamar(nombre, args, opciones) {
         renovado = true;
         const est = await renovarSesion();
         if (est === 'ok') { intento--; continue; }
-        if (est === 'vencida') { avisarSesionVencida(); return { ...r, error: { ...r.error, message: MSG_SESION, sesion: true } }; }
+        if (est === 'vencida') { avisarSesionVencida(); return { ...r, error: { ...r.error, message: MSG_SESION, sesion: true, tipo: 'sesion' } }; }
         marcarRed(false);
-        return { ...r, error: { ...r.error, message: MSG_RED, transitorio: true } };
+        return { ...r, error: { ...r.error, message: lectura ? MSG_RED : MSG_RED_ESCRIBIR, transitorio: true, tipo: 'red' } };
       }
       // El token ya se renovó y el servidor lo sigue rechazando (por ejemplo una sesión vieja que no está atada a una empresa): no sirve más, hay que entrar de nuevo
-      if (renovado && esErrorSesion(r)) { avisarSesionVencida(); return { ...r, error: { ...r.error, message: MSG_SESION, sesion: true } }; }
-      const texto = fallaTransitoria(r.error, r.status);
-      if (!texto) return r;
-      if (texto === MSG_RED) marcarRed(false);
-      if (lectura && intento < 2) { await pausa(700); continue; }
-      return { ...r, error: { ...r.error, message: texto, transitorio: true } };
+      if (renovado && esErrorSesion(r)) { avisarSesionVencida(); return { ...r, error: { ...r.error, message: MSG_SESION, sesion: true, tipo: 'sesion' } }; }
+      const { tipo, mensaje } = clasificarFalla(r.error, r.status, !lectura);
+      // Un error de negocio vuelve tal cual, en el primer intento: ni se repite ni toca el aviso de «sin conexión». Su texto original queda en .tecnico por si hace falta en la consola.
+      if (tipo === 'negocio') return { ...r, error: { ...r.error, message: mensaje, tecnico: r.error.message, tipo: 'negocio', transitorio: false } };
+      if (tipo === 'red') marcarRed(false);
+      if (lectura && intento < 2) { await pausa(700); continue; } // solo una consulta se repite sola; una escritura NUNCA
+      return { ...r, error: { ...r.error, message: mensaje, tecnico: r.error.message, tipo, transitorio: true } };
     }
   } finally {
     if (cambia) invalidarCatalogo();
@@ -116,10 +149,10 @@ sb.rpc = (nombre, args, opciones) => llamar(nombre, args, opciones);
 
 // Llama a una función fx_* y devuelve los datos; si falla lanza ErrorApi con un texto listo para mostrar.
 export async function rpc(nombre, args = {}) {
-  const { data, error } = await sb.rpc(nombre, args);
+  const { data, error, status } = await sb.rpc(nombre, args);
   if (error) {
-    const m = error.sesion || /JWT|expired|not authenticated/i.test(error.message || '') ? MSG_SESION : (error.message || 'Error desconocido');
-    throw new ErrorApi(m, { transitorio: !!error.transitorio, sesion: m === MSG_SESION });
+    if (error.tecnico && typeof console !== 'undefined') console.debug('[' + nombre + ']', error.tecnico);
+    throw new ErrorApi(error.message || MSG_GENERICO, { tipo: error.tipo || '', estado: status || 0, sesion: error.sesion === true });
   }
   return data;
 }
@@ -222,7 +255,7 @@ export async function funcion(nombre, cuerpo = {}, opciones = {}) {
     } catch (e) {
       if (e?.name === 'AbortError') throw e; // cancelado a propósito por quien llamó
       marcarRed(false);
-      throw new ErrorApi(MSG_RED, { transitorio: true });
+      throw new ErrorApi(MSG_RED, { tipo: 'red' });
     }
     marcarRed(true);
     if (r.status === 401 && !renovado) { // el token no sirvió: se renueva una vez y se repite (la función rechazó la llamada sin hacer nada)
@@ -230,12 +263,16 @@ export async function funcion(nombre, cuerpo = {}, opciones = {}) {
       const est = await renovarSesion();
       if (est === 'ok') continue;
       if (est === 'vencida') { avisarSesionVencida(); throw new ErrorApi(MSG_SESION, { sesion: true, estado: 401 }); }
-      throw new ErrorApi(MSG_RED, { transitorio: true });
+      throw new ErrorApi(MSG_RED, { tipo: 'red' });
     }
     const t = await r.text();
-    let j; try { j = JSON.parse(t); } catch { j = { error: t.slice(0, 200) }; }
-    if (!r.ok || j.error) throw new ErrorApi(j.error || ('Error ' + r.status), { transitorio: r.status >= 502 && r.status <= 504, estado: r.status });
-    return j;
+    let j; try { j = JSON.parse(t); } catch { j = null; } // una página de error de la puerta de entrada no es un mensaje para la cajera
+    if (!r.ok || j?.error) {
+      const tipo = r.status === 504 || r.status === 408 ? 'tiempo' : r.status === 502 || r.status === 503 ? 'ocupado' : 'negocio';
+      const propio = j && typeof j.error === 'string' && j.error.trim(); // el texto lo escribió la función de borde, ya en español
+      throw new ErrorApi(propio || (tipo === 'tiempo' ? MSG_TARDO : tipo === 'ocupado' ? MSG_OCUPADO : MSG_ACCION_FALLIDA), { tipo, estado: r.status });
+    }
+    return j || {};
   }
 }
 
@@ -252,14 +289,14 @@ async function intentoAcceso(cuerpo) {
     try {
       r = await fetch(`${SUPA_URL}/functions/v1/facturador-acceso`, { method: 'POST', headers: { 'Content-Type': 'application/json', apikey: SUPA_KEY }, body: JSON.stringify(cuerpo), signal: ctrl.signal });
     } catch (e) {
-      throw new ErrorApi(e?.name === 'AbortError' ? 'El acceso tardó demasiado en responder. Intente de nuevo.' : MSG_RED, { transitorio: true });
+      throw new ErrorApi(e?.name === 'AbortError' ? MSG_ACCESO_TARDO : MSG_RED, { tipo: e?.name === 'AbortError' ? 'tiempo' : 'red' });
     }
     let j = null;
     try { j = JSON.parse(await r.text()); } catch { j = null; }
     return { r, j };
   } finally { clearTimeout(reloj); }
 }
-// Si el servicio no respondió (red, arranque en frío, 5xx) se repite UNA vez solo. Un PIN equivocado (401) o un bloqueo (429) NO se repiten: así no se gastan los 5 intentos del PIN.
+// Si el servicio no respondió (red, arranque en frío, 5xx) se repite UNA vez solo. Un PIN o un usuario que no coinciden (401) NO se repiten solos: la persona los corrige.
 // alReintentar() avisa a la pantalla para mostrar "Reintentando…".
 async function conReintento(hacer, alReintentar) {
   let ultimo;
@@ -276,9 +313,18 @@ async function conReintento(hacer, alReintentar) {
 }
 // El estado que se anota en el error: el del servidor; si contestó 200 con ok:false, el que corresponde al motivo (así un rechazo esperado nunca se toma por una falla)
 const ESTADO_DE_MOTIVO = { falta_empresa: 400, empresa_desconocida: 404, empresa_no_habilitada: 403 };
-const errorDeAcceso = (r, j) => new ErrorApi(j.error || 'No se pudo entrar. Intente de nuevo.', { transitorio: r.status >= 500, estado: r.ok ? (ESTADO_DE_MOTIVO[j.motivo] || 400) : r.status, hasta: j.hasta || null, motivo: j.motivo || '' });
+// El ingreso NUNCA se bloquea (decisión de Emil): no hay «intentos restantes», ni hora de desbloqueo, ni espera. Un PIN o un usuario que no coinciden dicen eso y se puede intentar de inmediato.
+// Un 5xx o un 429 del servicio (saturado) es una falla transitoria; todo lo demás es una respuesta clara del acceso y no se repite sola.
+const MSG_EMPRESA_DESCONOCIDA = 'No se reconoce ese código de empresa. Revíselo e intente de nuevo.';
+function errorDeAcceso(r, j) {
+  const estado = r.ok ? (ESTADO_DE_MOTIVO[j.motivo] || 400) : r.status;
+  const motivo = j.motivo || '';
+  if (r.status >= 500 || r.status === 429) return new ErrorApi(MSG_OCUPADO, { tipo: 'ocupado', estado, motivo });
+  if (motivo === 'empresa_desconocida') return new ErrorApi(MSG_EMPRESA_DESCONOCIDA, { tipo: 'negocio', estado, motivo });
+  return new ErrorApi(typeof j.error === 'string' && j.error.trim() ? j.error : 'No se pudo entrar. Intente de nuevo.', { tipo: 'negocio', estado, motivo });
+}
 const sinRespuestaClara = (r, j) => !j || typeof j.ok !== 'boolean';
-const MSG_SIN_RESPUESTA = (r) => new ErrorApi('El servicio de acceso no respondió bien (código ' + r.status + '). Intente de nuevo en unos segundos.', { transitorio: true, estado: r.status });
+const MSG_SIN_RESPUESTA = (r) => { console.debug('[acceso] respuesta sin cuerpo claro, estado ' + r.status); return new ErrorApi('No se pudo entrar en este momento. Intente de nuevo en unos segundos.', { tipo: 'ocupado', estado: r.status }); };
 
 // RESPALDO: la tabla de empresas conocidas de este aparato. SOLO se usa cuando no hay red o el servicio de acceso no responde (sin respuesta, error del servidor o una respuesta
 // que no se entiende, como la del servicio viejo que no conocía los códigos de empresa). Cuando el servicio contesta con claridad (empresa reconocida, desconocida o no habilitada) manda el servicio.
@@ -288,14 +334,14 @@ const EMPRESAS_RESPALDO = {
 };
 function empresaDeRespaldo(codigo) {
   const e = EMPRESAS_RESPALDO[codigo];
-  if (!e) throw new ErrorApi('No reconocemos ese código de empresa.', { estado: 404, motivo: 'empresa_desconocida' });
-  if (!LOCALES_EN_PRUEBA.includes(e.codigo)) throw new ErrorApi(`${e.nombre_comercial} todavía no está habilitada en este facturador. Por ahora sigue con Prisma.`, { estado: 403, motivo: 'empresa_no_habilitada' });
+  if (!e) throw new ErrorApi(MSG_EMPRESA_DESCONOCIDA, { tipo: 'negocio', estado: 404, motivo: 'empresa_desconocida' });
+  if (!LOCALES_EN_PRUEBA.includes(e.codigo)) throw new ErrorApi(`${e.nombre_comercial} todavía no está habilitada en este facturador. Por ahora sigue con Prisma.`, { tipo: 'negocio', estado: 403, motivo: 'empresa_no_habilitada' });
   return { ...e, respaldo: true };
 }
 
 // Primer paso de la entrada: ¿existe esa empresa y está habilitada? Se lo pregunta al servicio de acceso ({ accion: 'empresa', empresa }) y devuelve
 // { codigo, codigo_acceso, nombre, nombre_comercial, cedula, cedula_tipo }. Si el servicio dice que no, lanza un ErrorApi con motivo 'empresa_desconocida'
-// («No reconocemos ese código de empresa.») o 'empresa_no_habilitada' (el texto lo da el servidor). Solo si no hay red o el servicio no responde se usa el respaldo.
+// («No se reconoce ese código de empresa. Revíselo e intente de nuevo.») o 'empresa_no_habilitada' (el texto lo da el servidor). Solo si no hay red o el servicio no responde se usa el respaldo.
 export async function consultarEmpresa(escrito, { alReintentar } = {}) {
   const codigo = normalizarEmpresa(escrito);
   if (!codigo) throw new ErrorApi('Escriba el código de su empresa, por ejemplo pollos.', { estado: 400, motivo: 'falta_empresa' });
@@ -321,7 +367,7 @@ export async function entrar(empresa, usuario, pin, { alReintentar } = {}) {
     if (sinRespuestaClara(r, j)) throw MSG_SIN_RESPUESTA(r);
     if (!j.ok) throw errorDeAcceso(r, j);
     const { error } = await sb.auth.setSession({ access_token: j.access_token, refresh_token: j.refresh_token });
-    if (error) throw new ErrorApi(error.message || 'No se pudo abrir la sesión. Intente de nuevo.', { transitorio: true });
+    if (error) throw new ErrorApi('No se pudo abrir la sesión. Intente de nuevo.', { tipo: 'ocupado' });
     sesionRestaurada();
     reintentarSalidas(); // si un cierre de sesión anterior no llegó al servidor, se repite ahora que hay conexión
     return j;

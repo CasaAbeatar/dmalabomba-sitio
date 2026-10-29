@@ -135,7 +135,20 @@ table.tabla{width:100%;border-collapse:collapse;font-size:.95rem}
 .alerta-cab :focus-visible,.sesion-fondo :focus-visible{outline-color:#fff}
 .sin-red{background:var(--ambar-suave);border-bottom:1px solid #efd08f;color:#5c3d00}
 .sin-red-in{max-width:1400px;margin:0 auto;padding:.35rem 1rem;display:flex;align-items:center;gap:.4rem 1rem;flex-wrap:wrap;font-size:.92rem}
-.sin-red-in span{flex:1 1 16rem}
+.sin-red-in{padding:.5rem 1rem}
+.sin-red-txt{flex:1 1 22rem;line-height:1.35}
+.sin-red-btns{display:flex;gap:.5rem;flex-wrap:wrap;flex:0 0 auto}
+/* Pantalla baja o celular: el aviso se queda en lo esencial; el detalle completo está en la ventana «Si no hay internet» */
+@media(max-height:899px),(max-width:700px){.sin-red-mas{display:none}}
+@media(max-width:700px){.sin-red-in{padding:.4rem .7rem}.sin-red-btns{width:100%}.sin-red-btns .btn{flex:1 1 0;padding-inline:.5rem}}
+/* Ventana «Si no hay internet» */
+.ayuda-red{display:flex;flex-direction:column;gap:.8rem}
+.ayuda-red-intro{margin:0;font-weight:600}
+.ayuda-red-bloque{padding:.7rem .9rem;border:1px solid var(--linea2);border-radius:var(--r);background:#fff}
+.ayuda-red-bloque.no{border-color:var(--borde-mal);background:var(--rojo-suave)}
+.ayuda-red-bloque h3{margin:0 0 .35rem;font-size:1.05rem}
+.ayuda-red-bloque ul{margin:0;padding-left:1.2rem;display:grid;gap:.4rem}
+.usr-nota{display:block;font-weight:400}
 
 /* Pantalla baja (menos de 900 px de alto): el aviso rojo es UNA línea, «Hacienda no aceptó 1 documento. Ver». La versión completa (motivo y qué hacer) queda para pantallas altas. */
 @media(max-height:899px){
@@ -203,6 +216,8 @@ input[type=search]{-webkit-appearance:none;appearance:none}
 body:has(.modal-fondo) #toasts{bottom:6.2rem}
 .toast{padding:.8rem 1rem;border-radius:var(--r);background:var(--tinta);color:#fff;box-shadow:var(--sombra);transition:opacity .3s}
 .toast.error{background:var(--rojo)}.toast.fuera{opacity:0}
+/* Un aviso breve nunca se come un toque: los botones que quedan debajo (por ejemplo «Listo, cerrar») siguen respondiendo */
+#toasts,#toasts .toast{pointer-events:none}
 
 @media(max-width:700px){
   main#vista{padding:.7rem}
@@ -220,6 +235,8 @@ body:has(.modal-fondo) #toasts{bottom:6.2rem}
   .cab-titulo{font-size:1.4rem}
   .cabecera[data-vista=facturar] .cab-fila{grid-template-columns:auto minmax(0,1fr) auto auto;grid-template-areas:'volver titulo anular menu';padding:.3rem .5rem;gap:.25rem}
   .cabecera[data-vista=facturar] .cab-titulo{font-size:.98rem;text-align:center}
+  /* «Anular o reimprimir» se parte en dos renglones para que el título «Facturación» se lea completo */
+  .cabecera[data-vista=facturar] .btn.cab-anular{white-space:normal;line-height:1.1;width:5.9rem;padding-inline:.3rem}
   .cabecera[data-vista=facturar] .btn{padding-inline:.5rem;font-size:.92rem}
   .alerta-in{padding:.4rem .7rem}
   .alerta-texto strong{font-size:.95rem}

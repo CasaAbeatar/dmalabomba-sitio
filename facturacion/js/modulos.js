@@ -36,7 +36,7 @@ export const MODULOS = [
   { id: 'caja', titulo: 'Facturación', descripcion: 'Cobrar una venta, cuentas en espera, para llevar y express', grupo: 'principal', ruta: 'facturar', icono: 'facturar', orden: 10, destacado: true, cargar: () => import('./m_caja.js') },
   { id: 'anular', alias: ['documentos'], titulo: 'Anular y reimprimir', descripcion: 'Anular una factura o tiquete, o volver a imprimirlo', grupo: 'principal', ruta: 'anular', icono: 'impresora', orden: 20, cargar: () => import('./m_documentos.js') },
   { id: 'clientes', titulo: 'Clientes', descripcion: 'Buscar, agregar o corregir clientes', grupo: 'principal', ruta: 'clientes', icono: 'personas', orden: 30, cargar: () => import('./m_clientes.js') },
-  { id: 'turno', alias: ['admin/cierre', 'cierre'], titulo: 'Apertura y cierre de caja', descripcion: 'Abrir la caja, anotar salidas de efectivo, contar y cerrar el turno', grupo: 'principal', ruta: 'turno', icono: 'caja', orden: 40, cargar: () => import('./m_turno.js') },
+  { id: 'turno', alias: ['admin/cierre', 'cierre'], titulo: 'Apertura y cierre de caja', descripcion: 'Abrir la caja, contar el efectivo y cerrar el turno', grupo: 'principal', ruta: 'turno', icono: 'caja', orden: 40, cargar: () => import('./m_turno.js') },
   // Administración: su descripción sale de los módulos del grupo «admin» y su insignia es la primera que tenga alguno de ellos
   { id: 'admin', titulo: 'Administración', grupo: 'principal', ruta: 'admin', icono: 'ajustes', orden: 50, pantalla: 'admin' },
   // Dentro de Administración

@@ -2,7 +2,7 @@
 // Todo vive en su propia zona: al guardar solo se actualizan los textos de esta zona. La cuenta que se está armando no se toca.
 // Regla de caja: debe haber en caja = fondo + ventas en efectivo + ENTRADAS - salidas - devoluciones en efectivo (lo calcula el servidor).
 import { h, money, money0, leerNumero, toast, modal, horaCorta, fechaCorta, esqueleto, conPunto } from './util.js';
-import { apiEfectivo } from './api_efectivo.js';
+import { apiEfectivo, MOTIVOS_ENTRADA, MOTIVOS_SALIDA, motivosValidos, textoError } from './api_efectivo.js';
 import { esTransitorio } from './api.js';
 
 const TOPE = 99999999.99;
@@ -12,11 +12,11 @@ const cents = (n) => Math.round((Number(n) || 0) * 100);
 // ₡5 000 si es redondo, ₡5 000,50 si trae céntimos
 const colones = (n) => (cents(n) % 100 === 0 ? money0(n) : money(n));
 
-const TIPOS = {
+const TIPOS_BASE = {
   entrada: {
     titulo: 'Entrada de efectivo', agregar: 'Agregar entrada', guardar: 'Guardar entrada', palabra: 'Entrada', signo: '+',
     ayuda: 'Entra dinero a la caja', ejemplo: 'Ej. Sencillo para dar vuelto',
-    motivos: ['Sencillo / cambio', 'Aporte del dueño', 'Otro'],
+    motivos: MOTIVOS_ENTRADA,
     pideMonto: 'Escriba cuánto dinero entra a la caja, por ejemplo 5 000.',
     pideMotivo: 'Escriba de dónde viene el dinero (mínimo 3 letras).',
     nada: 'ninguna entrada',
@@ -24,7 +24,7 @@ const TIPOS = {
   salida: {
     titulo: 'Salida de efectivo', agregar: 'Agregar salida', guardar: 'Guardar salida', palabra: 'Salida', signo: '−',
     ayuda: 'Sale dinero de la caja', ejemplo: 'Ej. Pago a proveedor de hielo',
-    motivos: ['Pago a proveedor', 'Sencillo / cambio', 'Retiro del dueño', 'Otro'],
+    motivos: MOTIVOS_SALIDA,
     pideMonto: 'Escriba cuánto dinero sale de la caja, por ejemplo 5 000.',
     pideMotivo: 'Escriba para qué sale el dinero (mínimo 3 letras).',
     nada: 'ninguna salida',
@@ -49,8 +49,9 @@ function resumir(e) {
 }
 
 /* ---------- Anular un movimiento, con motivo ---------- */
+// Es la ÚNICA ventana para anular una entrada o una salida (Facturación y Apertura y cierre de caja). mov = { tipo: 'entrada'|'salida', id, monto, motivo }.
 // Devuelve true si se anuló
-function anularMovimiento(mov) {
+export function anularMovimiento(mov) {
   return new Promise((fin) => {
     const entrada = mov.tipo === 'entrada';
     let hecho = false, enviando = false;
@@ -78,7 +79,7 @@ function anularMovimiento(mov) {
             hecho = true; m.cerrar(); toast(entrada ? 'Entrada anulada.' : 'Salida anulada.'); fin(true);
           } catch (e) {
             if (/ya estaba anulada/i.test(e.message || '')) { hecho = true; m.cerrar(); toast('Ese movimiento ya estaba anulado.'); fin(true); return; }
-            err.textContent = esTransitorio(e) ? 'No se pudo anular por la conexión. Revise la lista de movimientos antes de intentarlo otra vez.' : conPunto(e.message || 'No se pudo anular.');
+            err.textContent = esTransitorio(e) ? 'No se pudo anular por la conexión. Revise la lista de movimientos antes de intentarlo otra vez.' : conPunto(textoError(e, 'No se pudo anular. Intente de nuevo; si sigue igual, avise a la persona encargada.'));
             err.hidden = false;
             enviando = false;
             if (boton) { boton.disabled = false; delete boton.dataset.ocupado; }
@@ -93,7 +94,13 @@ function anularMovimiento(mov) {
 /* ---------- Zona de efectivo ---------- */
 // turnoId: turno abierto, o null cuando la caja está cerrada (las cajitas se ven apagadas).
 // alAbrirCaja(): lo que hace el botón «Abrir la caja» cuando no hay turno.
-export function crearZonaEfectivo({ turnoId = null, alAbrirCaja } = {}) {
+// Opciones para usarla fuera de Facturación (Apertura y cierre de caja): conPie=false quita «Debe haber en caja» y el enlace a los movimientos (esa pantalla ya los muestra),
+// enFlujo=true abre la tarjeta en su lugar y no encima, alCambiar() avisa cada vez que se guardó o se anuló algo, motivos={ entrada, salida } son las listas del servidor.
+export function crearZonaEfectivo({ turnoId = null, alAbrirCaja, conPie = true, enFlujo = false, alCambiar, motivos } = {}) {
+  const TIPOS = {
+    entrada: { ...TIPOS_BASE.entrada, motivos: motivosValidos(motivos?.entrada, MOTIVOS_ENTRADA) },
+    salida: { ...TIPOS_BASE.salida, motivos: motivosValidos(motivos?.salida, MOTIVOS_SALIDA) },
+  };
   let vivo = true;
   let datos = null; // resumen de la última lectura buena
   let fallo = false; // la última lectura falló
@@ -128,7 +135,7 @@ export function crearZonaEfectivo({ turnoId = null, alAbrirCaja } = {}) {
   const actualizar = h('button.btn.efz-reintentar', { type: 'button', hidden: true, onclick: () => refrescar() }, 'Actualizar');
   const botonVer = h('button.btn.efz-ver', { type: 'button', onclick: () => abrirMovimientos() }, 'Ver movimientos de este turno');
   const pie = h('div.efz-pie',
-    h('div.efz-esperado', h('span.efz-et', 'Efectivo esperado en caja'), h('span.efz-valor', cifra, hora)),
+    h('div.efz-esperado', h('span.efz-et', 'Debe haber en caja'), h('span.efz-valor', cifra, hora)),
     actualizar, botonVer);
 
   /* --- Sin turno --- */
@@ -137,10 +144,10 @@ export function crearZonaEfectivo({ turnoId = null, alAbrirCaja } = {}) {
     h('button.btn.primario.grande.efz-abrir', { type: 'button', onclick: () => alAbrirCaja?.() }, 'Abrir la caja'));
 
   const sitioTarjeta = h('div.efz-sitio');
-  const el = h('section.efz' + (sinTurno ? '.sin-turno' : ''), { 'aria-label': 'Efectivo de la caja: entradas y salidas de dinero' },
+  const el = h('section.efz' + (sinTurno ? '.sin-turno' : '') + (enFlujo ? '.efz-flujo' : ''), { 'aria-label': 'Efectivo de la caja: entradas y salidas de dinero' },
     h('div.efz-cajitas', cajas.entrada.el, cajas.salida.el),
     sitioTarjeta,
-    sinTurno ? avisoSinTurno : pie);
+    sinTurno ? avisoSinTurno : (conPie ? pie : null));
 
   /* --- Textos --- */
   function textoResumen(tipo) {
@@ -282,7 +289,7 @@ export function crearZonaEfectivo({ turnoId = null, alAbrirCaja } = {}) {
     const v = leerNumero(textoMonto);
     let errMonto = '';
     if (!textoMonto) errMonto = T.pideMonto;
-    else if (!Number.isFinite(v)) errMonto = 'No entiendo ese monto. Escriba solo números, por ejemplo 5000 o 5 000,50.';
+    else if (!Number.isFinite(v)) errMonto = 'El monto no es válido. Escriba solo números, por ejemplo 5000 o 5 000,50.';
     else if (v <= 0) errMonto = 'El monto tiene que ser mayor que cero.';
     else if (v > TOPE) errMonto = 'El monto es demasiado grande. El máximo es ' + money(TOPE) + '.';
     if (errMonto) { t.marcarError(t.monto, t.msgMonto, errMonto); primero = t.monto; }
@@ -353,7 +360,7 @@ export function crearZonaEfectivo({ turnoId = null, alAbrirCaja } = {}) {
         avisarGeneral(t, 'No hay conexión y no se pudo comprobar si quedó guardada. No la guarde otra vez todavía: toque «Revisar si quedó guardada».');
         return;
       }
-      avisarGeneral(t, conPunto(e.message || 'No se pudo guardar.'));
+      avisarGeneral(t, conPunto(textoError(e, 'No se pudo guardar. Intente de nuevo; si sigue igual, avise a la persona encargada.')));
     } finally {
       enviando = false;
       if (tarjeta === t) pintarBotonGuardar();
@@ -373,6 +380,7 @@ export function crearZonaEfectivo({ turnoId = null, alAbrirCaja } = {}) {
     cerrarTarjeta();
     mostrarGuardado(tipo, monto);
     refrescar();
+    try { alCambiar?.(tipo); } catch { /* quien escucha no debe romper el guardado */ }
   }
 
   /* --- Lista de movimientos del turno --- */
@@ -389,7 +397,7 @@ export function crearZonaEfectivo({ turnoId = null, alAbrirCaja } = {}) {
         cuerpo.replaceChildren(...pintarLista(l));
       } catch (e) {
         if (!abierto) return;
-        cuerpo.replaceChildren(h('div.error-caja', { role: 'alert' }, conPunto(e.message || 'No se pudieron leer los movimientos.')),
+        cuerpo.replaceChildren(h('div.error-caja', { role: 'alert' }, conPunto(textoError(e, 'No se pudieron leer los movimientos. Revise la conexión e intente de nuevo.'))),
           h('button.btn.primario', { type: 'button', onclick: () => { cuerpo.replaceChildren(esqueleto(2, 'Cargando los movimientos…')); cargar(); } }, 'Intentar de nuevo'));
       }
     }
@@ -411,7 +419,7 @@ export function crearZonaEfectivo({ turnoId = null, alAbrirCaja } = {}) {
           h('div.efz-mov-der',
             h('div.efz-mov-cifra', { 'aria-label': T.palabra + ' de ' + colones(m.monto) + (m.anulada ? ', anulada' : '') }, T.signo + ' ' + colones(m.monto)),
             !m.anulada ? h('button.btn.peligro.efz-anular', { type: 'button', 'aria-label': 'Anular ' + (entrada ? 'la entrada' : 'la salida') + ' de ' + colones(m.monto) + ' por ' + m.motivo,
-              onclick: async () => { if (await anularMovimiento(m)) { if (abierto) cargar(); refrescar(); } } }, 'Anular') : null));
+              onclick: async () => { if (await anularMovimiento(m)) { if (abierto) cargar(); refrescar(); try { alCambiar?.(m.tipo); } catch { /* nada */ } } } }, 'Anular') : null));
       });
       return [
         h('p.efz-movs-tot', h('span', 'Entradas vigentes: ', h('strong', '+ ' + colones(tot('entrada')))), h('span', 'Salidas vigentes: ', h('strong', '− ' + colones(tot('salida'))))),

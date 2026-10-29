@@ -1,5 +1,5 @@
 // Ayudas visuales comunes de Clientes, Productos y Usuarios.
-import { h } from './util.js';
+import { h, conBoton } from './util.js';
 
 // Carga css/mantenimiento.css una sola vez (devuelve una promesa que se cumple cuando ya está puesto)
 let cssListo = null;
@@ -37,4 +37,17 @@ export function soloDigitos(inp, max) {
 export function casilla(alCambiar, etiquetaAria) {
   const i = h('input', { type: 'checkbox', 'aria-label': etiquetaAria || 'Seleccionar', onchange: () => alCambiar(i.checked) });
   return { el: h('label.mt-chk', i), input: i };
+}
+
+// Mensajes de error para la pantalla: se muestra el texto cuando lo escribió el sistema en español («Ya existe un cliente con esa identificación»);
+// si es un texto técnico (inglés de la base, «Failed to fetch», un código) se muestra una frase que dice qué hacer.
+export const MENSAJE_GENERAL = 'Algo no salió bien. Intente de nuevo; si sigue igual, avise a la persona encargada.';
+const TEXTO_TECNICO = /permission denied|invalid input|duplicate key|violates|syntax error|could not|does not exist|null value|relation "|column "|function public|TypeError|ReferenceError|Failed to fetch|NetworkError|Load failed|\bundefined\b|\bJWT\b|PGRST|\[object|Unexpected token|is not a function|Cannot read|Error desconocido/i;
+export function mensajeSeguro(e, porDefecto = MENSAJE_GENERAL) {
+  const m = String((e && e.message) ?? e ?? '').trim();
+  return !m || TEXTO_TECNICO.test(m) ? porDefecto : m;
+}
+// Igual que conBoton (botón ocupado mientras trabaja, así un segundo toque no repite la acción), pero el aviso de error pasa por mensajeSeguro
+export function conBotonM(btn, fn, porDefecto) {
+  return conBoton(btn, async () => { try { return await fn(); } catch (e) { throw new Error(mensajeSeguro(e, porDefecto)); } });
 }
