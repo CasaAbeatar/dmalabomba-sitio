@@ -1,0 +1,292 @@
+/* Caja y cierre de caja. Usa las variables y clases de app.css */
+
+/* ---------- Abrir caja ---------- */
+.caja-abrir{max-width:520px;margin:2.5rem auto;text-align:center;padding:1.6rem 1.4rem}
+.caja-abrir h1{margin-bottom:.4rem}
+.caja-abrir p{color:var(--tinta2);margin:.2rem 0 1.2rem}
+.caja-abrir .etq{text-align:left}
+.monto-grande{font-size:1.9rem!important;font-weight:600;min-height:64px!important;text-align:right;font-variant-numeric:tabular-nums}
+.atajos{display:flex;flex-wrap:wrap;gap:.5rem;margin:.7rem 0 1.1rem;justify-content:center}
+
+/* ---------- Estructura de la caja ---------- */
+.caja{display:flex;flex-direction:column;gap:.9rem}
+.cuentas-bar{display:flex;gap:.6rem;align-items:stretch}
+.cuentas-lista{display:flex;gap:.5rem;overflow-x:auto;flex:1 1 auto;min-width:0;padding:2px 2px .35rem;scrollbar-width:thin}
+.cuenta-btn{flex:0 0 auto;min-width:158px;max-width:230px;min-height:60px;padding:.45rem .8rem;text-align:left;border:1px solid var(--linea2);border-left:4px solid var(--linea2);border-radius:var(--r);background:var(--papel);cursor:pointer;display:flex;flex-direction:column;gap:.1rem}
+.cuenta-btn:hover{border-color:var(--tinta)}
+.cuenta-btn[aria-pressed=true]{border-color:var(--tinta);border-left-color:var(--ambar);background:#fff;box-shadow:0 0 0 1px var(--tinta) inset}
+.cuenta-btn .c-tipo{font-size:.76rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--tinta2)}
+.cuenta-btn .c-ref{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cuenta-btn .c-tot{font-variant-numeric:tabular-nums;font-size:.92rem;color:var(--tinta2)}
+.cuenta-btn.prefact{border-left-color:var(--ambar)}
+.cuentas-vacio{align-self:center;color:var(--tinta2);padding:0 .3rem}
+.cuentas-bar>.btn{flex:0 0 auto;align-self:center;min-height:52px}
+
+.caja-cuerpo{display:grid;grid-template-columns:minmax(0,1fr) 430px;gap:1rem;align-items:start}
+@media(max-width:1150px){.caja-cuerpo{grid-template-columns:minmax(0,1fr) 390px}}
+
+/* ---------- Catálogo ---------- */
+.caja-catalogo{display:flex;flex-direction:column;gap:.8rem;min-width:0}
+.buscar-fila{display:flex;gap:.6rem;align-items:stretch}
+.buscar-fila .campo{flex:1 1 auto;font-size:1.05rem}
+.cajones{display:flex;flex-wrap:wrap;gap:.45rem}
+.cajon-btn{min-height:48px;padding:.4rem .9rem;border:1px solid var(--linea2);border-radius:99px;background:var(--papel);font-weight:600;cursor:pointer;white-space:nowrap}
+.cajon-btn:hover{border-color:var(--tinta)}
+.cajon-btn[aria-pressed=true]{background:var(--tinta);border-color:var(--tinta);color:#fff}
+.productos{display:grid;gap:.6rem;grid-template-columns:repeat(auto-fill,minmax(148px,1fr))}
+.prod{position:relative;min-height:96px;padding:.7rem .75rem .6rem;border:1px solid var(--linea);border-radius:12px;background:var(--papel);text-align:left;cursor:pointer;display:flex;flex-direction:column;justify-content:space-between;gap:.4rem;transition:border-color .12s,box-shadow .12s,transform .06s}
+.prod:hover{border-color:var(--tinta);box-shadow:var(--sombra)}
+.prod:active,.prod.tocado{transform:scale(.97);border-color:var(--rojo)}
+.prod-nombre{font-weight:600;line-height:1.2;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.prod-pie{display:flex;justify-content:space-between;align-items:baseline;gap:.4rem}
+.prod-precio{font-variant-numeric:tabular-nums;color:var(--rojo-osc);font-weight:700}
+.prod-precio.abierto{color:#8a5a00}
+.prod-cod{font-size:.74rem;color:var(--tinta2);font-variant-numeric:tabular-nums}
+.prod-cuenta{position:absolute;top:-8px;right:-6px;min-width:28px;height:28px;padding:0 .4rem;border-radius:99px;background:var(--rojo);color:#fff;font-weight:700;font-size:.85rem;display:grid;place-items:center;border:2px solid var(--fondo);font-variant-numeric:tabular-nums}
+.prod-cuenta[hidden]{display:none}
+.res-info{color:var(--tinta2);font-size:.92rem}
+
+/* ---------- Cuenta activa ---------- */
+.caja-cuenta{position:sticky;top:122px;display:flex;flex-direction:column;max-height:calc(100vh - 140px);background:var(--papel);border:1px solid var(--linea);border-radius:14px;box-shadow:var(--sombra);overflow:hidden}
+.cuenta-cab{padding:.8rem 1rem;border-bottom:1px solid var(--linea);display:flex;gap:.6rem;justify-content:space-between;align-items:flex-start;flex-wrap:wrap}
+.cuenta-cab h2{font-size:1.1rem}
+.cuenta-cab .sub{color:var(--tinta2);font-size:.92rem;overflow-wrap:anywhere}
+.cuenta-lineas{flex:1 1 auto;overflow-y:auto;padding:.3rem 1rem;min-height:120px}
+.linea{padding:.75rem 0;border-bottom:1px solid var(--linea);display:flex;flex-direction:column;gap:.5rem}
+.linea:last-child{border-bottom:0}
+.linea.editada{box-shadow:inset 3px 0 0 var(--ambar);padding-left:.7rem;margin-left:-.7rem}
+.linea-top{display:flex;justify-content:space-between;gap:.6rem;align-items:flex-start}
+.linea-nombre{font-weight:600;line-height:1.25;overflow-wrap:anywhere}
+.linea-total{font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap}
+.linea-ctrl{display:flex;gap:.5rem;align-items:flex-end;flex-wrap:wrap}
+.cant{display:flex;align-items:stretch}
+.cant .mm{min-width:48px;min-height:48px;padding:0;border:1px solid var(--linea2);background:#fff;font-size:1.5rem;font-weight:600;cursor:pointer;line-height:1}
+.cant .mm:first-child{border-radius:var(--r) 0 0 var(--r)}
+.cant .mm:last-child{border-radius:0 var(--r) var(--r) 0}
+.cant .mm:hover:not([disabled]){border-color:var(--tinta)}
+.cant .mm[disabled]{opacity:.35;cursor:not-allowed}
+.cant .cant-inp{width:70px;border-radius:0;text-align:center;font-weight:600;padding:.4rem .2rem;border-left:0;border-right:0}
+.precio-et{display:flex;flex-direction:column;gap:.15rem;font-size:.76rem;font-weight:600;color:var(--tinta2);flex:1 1 120px;min-width:112px}
+.precio-et .campo{font-size:1rem;font-weight:600;text-align:right;font-variant-numeric:tabular-nums}
+.linea.editada .precio-inp{border-color:var(--ambar);background:var(--ambar-suave)}
+.linea-pie{display:flex;gap:.5rem;align-items:center;flex-wrap:wrap}
+.linea-pie .nota-inp{flex:1 1 150px;min-height:44px;font-size:.92rem}
+.etiqueta-cambio{font-size:.8rem;color:#8a5a00}
+.cuenta-pie{border-top:1px solid var(--linea);padding:.8rem 1rem 1rem;background:#fffdf9;display:flex;flex-direction:column;gap:.6rem}
+.total-fila{display:flex;justify-content:space-between;align-items:baseline;gap:.6rem}
+.total-fila .et{font-weight:600;color:var(--tinta2)}
+.total-fila small{display:block}
+.total-monto{font-size:2.3rem;font-weight:700;letter-spacing:-.02em;font-variant-numeric:tabular-nums;line-height:1.05}
+.acciones-cuenta{display:grid;grid-template-columns:1fr 1fr;gap:.5rem}
+.acciones-cuenta .btn.ancho{grid-column:1/-1}
+.aviso-pref{padding:.6rem .8rem;border:1px solid #efd08f;background:var(--ambar-suave);border-radius:var(--r);font-size:.92rem;color:#5c3d00}
+.aviso-pref strong{display:block}
+.nota-pref{font-size:.82rem;color:var(--tinta2);margin:0}
+.vacio-cuenta{padding:2rem 1.2rem;text-align:center;color:var(--tinta2);display:flex;flex-direction:column;gap:.9rem;align-items:center}
+
+/* ---------- Barra móvil ---------- */
+.barra-movil{display:none}
+@media(max-width:979px){
+  .caja{padding-bottom:84px}
+  .caja-cuerpo{display:block}
+  .caja.v-productos .caja-cuenta{display:none}
+  .caja.v-cuenta .caja-catalogo{display:none}
+  .caja-cuenta{position:static;max-height:none;overflow:visible}
+  .cuenta-lineas{overflow:visible}
+  .barra-movil{display:flex;gap:.6rem;position:fixed;left:0;right:0;bottom:0;z-index:30;padding:.6rem .8rem calc(.6rem + env(safe-area-inset-bottom));background:rgba(251,248,242,.97);border-top:1px solid var(--linea2);backdrop-filter:blur(8px)}
+  .barra-movil .btn{flex:1 1 0;min-height:56px;font-size:1.05rem}
+  .barra-movil .btn.primario{flex:1.6 1 0}
+  .btn-cobrar-aside{display:none}
+  .productos{grid-template-columns:repeat(auto-fill,minmax(136px,1fr))}
+  .cajones{flex-wrap:nowrap;overflow-x:auto;padding-bottom:.3rem;scrollbar-width:thin}
+}
+@media(max-width:560px){
+  .cuentas-bar{flex-direction:column}
+  .cuentas-bar>.btn{width:100%}
+  .total-monto{font-size:2rem}
+}
+
+/* ---------- Ventana de cuenta nueva / cobro ---------- */
+.tipos-cuenta{display:grid;grid-template-columns:repeat(2,1fr);gap:.5rem}
+.tipo-btn{min-height:64px;padding:.5rem .7rem;border:1px solid var(--linea2);border-radius:var(--r);background:#fff;cursor:pointer;text-align:left;display:flex;flex-direction:column;gap:.1rem}
+.tipo-btn b{font-size:1rem}
+.tipo-btn small{line-height:1.2}
+.tipo-btn[aria-pressed=true]{border-color:var(--tinta);box-shadow:0 0 0 1px var(--tinta) inset;background:var(--ambar-suave)}
+
+.cobro{display:flex;flex-direction:column;gap:1rem}
+.cobro-total{text-align:center;padding:.4rem 0 .2rem}
+.cobro-total .et{color:var(--tinta2);font-weight:600}
+.cobro-total .monto{font-size:3rem;font-weight:700;letter-spacing:-.02em;font-variant-numeric:tabular-nums;line-height:1.1}
+.cobro-doc{border:1px solid var(--linea);border-radius:12px;padding:.8rem 1rem;display:flex;gap:.8rem;justify-content:space-between;align-items:center;flex-wrap:wrap;background:#fffdf9}
+.cobro-doc .doc{font-weight:700}
+.cobro-doc .cli{color:var(--tinta2);font-size:.92rem;overflow-wrap:anywhere}
+.medios{display:grid;grid-template-columns:repeat(4,1fr);gap:.5rem}
+.medio-btn{min-height:60px;padding:.4rem .5rem;border:1px solid var(--linea2);border-radius:var(--r);background:#fff;font-weight:700;cursor:pointer}
+.medio-btn:hover{border-color:var(--tinta)}
+.medio-btn[aria-pressed=true]{background:var(--tinta);border-color:var(--tinta);color:#fff}
+@media(max-width:560px){.medios{grid-template-columns:repeat(2,1fr)}}
+.rapidos{display:grid;grid-template-columns:repeat(3,1fr);gap:.5rem}
+.rapidos .btn{min-height:52px}
+.pago-item{display:flex;justify-content:space-between;align-items:center;gap:.6rem;padding:.6rem .8rem;border:1px solid var(--linea);border-radius:var(--r);background:#fff}
+.pago-item .p-med{font-weight:700}
+.pago-item .p-det{color:var(--tinta2);font-size:.88rem;overflow-wrap:anywhere}
+.cobro-resumen{border-radius:12px;padding:.8rem 1rem;border:1px solid var(--linea);display:flex;justify-content:space-between;align-items:center;gap:.8rem;flex-wrap:wrap}
+.cobro-resumen .grande{font-size:1.7rem;font-weight:700;font-variant-numeric:tabular-nums}
+.cobro-resumen.falta{border-color:#e9b3b7;background:var(--rojo-suave);color:var(--rojo-osc)}
+.cobro-resumen.ok{border-color:#a8d5bd;background:var(--verde-suave);color:var(--verde)}
+.cobro-resumen.vuelto{border-color:#efd08f;background:var(--ambar-suave);color:#5c3d00}
+.seg{display:flex;border:1px solid var(--linea2);border-radius:var(--r);overflow:hidden;background:#fff}
+.seg button{flex:1 1 0;min-height:48px;border:0;background:transparent;font-weight:600;cursor:pointer;padding:.3rem .5rem}
+.seg button+button{border-left:1px solid var(--linea2)}
+.seg button[aria-pressed=true]{background:var(--tinta);color:#fff}
+.cobro-pie{position:sticky;bottom:-1.2rem;margin:0 -1.2rem -1.2rem;padding:.8rem 1.2rem;background:var(--papel);border-top:1px solid var(--linea);display:flex;gap:.6rem;justify-content:flex-end;flex-wrap:wrap}
+.cobro-pie .btn.primario{flex:1 1 220px}
+.lista-clientes{display:flex;flex-direction:column;gap:.5rem;max-height:340px;overflow:auto}
+.cli-item{min-height:60px;text-align:left;padding:.55rem .8rem;border:1px solid var(--linea);border-radius:var(--r);background:#fff;cursor:pointer;display:flex;flex-direction:column}
+.cli-item:hover{border-color:var(--tinta)}
+.cli-item b{overflow-wrap:anywhere}
+.mas-datos{border:1px solid var(--linea);border-radius:var(--r);padding:.5rem .8rem}
+.mas-datos summary{cursor:pointer;min-height:44px;display:flex;align-items:center;font-weight:600}
+.exito{text-align:center;display:flex;flex-direction:column;gap:.9rem;align-items:stretch}
+.exito .gran{font-size:1.5rem;font-weight:700}
+.exito .vuelto-caja{border:2px solid var(--ambar);background:var(--ambar-suave);border-radius:14px;padding:.8rem}
+.exito .vuelto-caja .monto{font-size:2.6rem;font-weight:700;font-variant-numeric:tabular-nums}
+.exito .estado-caja{display:flex;gap:.5rem;justify-content:center;align-items:center;flex-wrap:wrap}
+.exito .botones{display:grid;grid-template-columns:1fr 1fr;gap:.5rem}
+.exito .botones .btn.primario{grid-column:1/-1}
+@media(max-width:480px){.exito .botones{grid-template-columns:1fr}}
+.tenue-linea{color:var(--tinta2);font-size:.92rem;margin:0}
+.msg-mal{color:var(--rojo-osc)}
+
+/* ---------- Cierre de caja ---------- */
+.turno{display:flex;flex-direction:column;gap:1.1rem;max-width:1180px;margin:0 auto}
+.turno h1{margin-bottom:.2rem}
+.turno-datos{display:grid;gap:.8rem;grid-template-columns:repeat(auto-fit,minmax(170px,1fr))}
+.dato{border:1px solid var(--linea);border-radius:12px;padding:.7rem .9rem;background:#fffdf9}
+.dato .et{font-size:.78rem;text-transform:uppercase;letter-spacing:.05em;color:var(--tinta2);font-weight:600}
+.dato .val{font-size:1.25rem;font-weight:700;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.dato .det{font-size:.84rem;color:var(--tinta2)}
+.medio-fila{display:grid;grid-template-columns:1.1fr 1fr 1.2fr 1fr;gap:.8rem;align-items:center;padding:.75rem 0;border-bottom:1px solid var(--linea)}
+.medio-fila:last-child{border-bottom:0}
+.medio-fila.cab{font-size:.78rem;text-transform:uppercase;letter-spacing:.05em;color:var(--tinta2);font-weight:600;padding:.3rem 0}
+.medio-fila .nom{font-weight:700}
+.medio-fila .cifra{font-variant-numeric:tabular-nums;font-weight:600}
+.medio-fila .campo{text-align:right;font-weight:600;font-variant-numeric:tabular-nums}
+.medio-fila .sub-det{display:block;font-size:.78rem;color:var(--tinta2);font-weight:400}
+.medio-fila.total{font-weight:700;border-top:2px solid var(--tinta);border-bottom:0}
+.dif{display:inline-block;padding:.2rem .7rem;border-radius:99px;font-weight:700;font-size:.92rem;font-variant-numeric:tabular-nums;border:1px solid var(--linea2);color:var(--tinta2);background:#fff}
+.dif.cuadra{color:var(--verde);border-color:#a8d5bd;background:var(--verde-suave)}
+.dif.sobra{color:#8a5a00;border-color:#efd08f;background:var(--ambar-suave)}
+.dif.falta{color:var(--rojo);border-color:#e9b3b7;background:var(--rojo-suave)}
+@media(max-width:700px){
+  .medio-fila{grid-template-columns:1fr 1fr;gap:.4rem .8rem}
+  .medio-fila.cab{display:none}
+  .medio-fila .nom{grid-column:1/-1;font-size:1.05rem}
+  .medio-fila .c-esp::before{content:'Esperado: ';font-weight:400;color:var(--tinta2)}
+  .medio-fila .c-dif{grid-column:1/-1}
+}
+.aviso-abiertas{border:1px solid #efd08f;background:var(--ambar-suave);border-radius:12px;padding:.9rem 1rem;display:flex;flex-direction:column;gap:.6rem}
+.aviso-abiertas ul{margin:0;padding-left:1.2rem}
+.resumen-final{border:2px solid var(--verde);border-radius:14px;padding:1rem;background:#fff;display:flex;flex-direction:column;gap:.8rem}
+.hist td,.hist th{vertical-align:middle}
+.hist .noche{font-size:.74rem}
+
+/* ---------- Ajustes generales de la caja ---------- */
+[hidden]{display:none!important}
+.sr-solo{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+:root{--cab-h:110px;--bus-h:92px}
+
+/* ---------- Buscador de producto (siempre visible) ---------- */
+.buscador{position:sticky;top:var(--cab-h);z-index:15;background:var(--fondo);padding:.35rem 0 .45rem;margin-top:-.25rem}
+.buscador-caja{position:relative}
+.buscador-caja>.etq{gap:.25rem}
+.buscador-caja .rotulo{display:flex;justify-content:space-between;gap:.6rem;align-items:baseline;flex-wrap:wrap}
+.buscador-caja .rotulo small{font-weight:400}
+.buscador-fila{display:flex;gap:.5rem;align-items:stretch}
+.buscador-inp{flex:1 1 auto;min-height:56px!important;font-size:1.15rem!important;border-width:1.5px!important;border-color:var(--linea2)}
+.buscador-fila .btn{flex:0 0 auto}
+.resultados{position:absolute;left:0;right:0;top:100%;margin-top:.3rem;z-index:25;background:var(--papel);border:1px solid var(--tinta);border-radius:12px;box-shadow:0 14px 40px rgba(29,26,23,.22);max-height:min(54vh,420px);max-height:min(54dvh,420px);overflow-y:auto;overscroll-behavior:contain}
+.buscador-caja.en-linea .resultados{position:static;box-shadow:none;border-color:var(--linea2);max-height:340px;margin-top:.5rem}
+.res-item{display:grid;grid-template-columns:1fr auto;gap:.05rem .8rem;width:100%;min-height:56px;padding:.5rem .9rem;text-align:left;border:0;border-bottom:1px solid var(--linea);background:transparent;cursor:pointer;align-items:center}
+.res-item:last-child{border-bottom:0}
+.res-item:hover,.res-item[aria-selected=true]{background:var(--ambar-suave)}
+.res-nom{font-weight:600;line-height:1.2}
+.res-pre{grid-row:1/3;grid-column:2;font-weight:700;font-variant-numeric:tabular-nums;color:var(--rojo-osc);white-space:nowrap}
+.res-cod{font-size:.8rem;color:var(--tinta2);font-variant-numeric:tabular-nums}
+.res-vacio{padding:.9rem 1rem;color:var(--tinta2)}
+.grupo-sep{grid-column:1/-1;height:0;border-top:1px solid var(--linea);margin:.15rem 0}
+.caja.bus-activo .barra-movil{display:none}
+
+/* La cabecera deja de fijarse en celular para que el teclado no tape el buscador */
+@media(max-width:979px){
+  body.fx-caja .cabecera{position:static}
+  :root{--cab-h:0px}
+  .buscador{top:0}
+  .caja-cuenta{top:auto}
+}
+@media(min-width:980px){
+  .caja-cuenta{top:calc(var(--cab-h) + .5rem);max-height:calc(100vh - var(--cab-h) - 1.7rem)}
+}
+.caja-izq{display:flex;flex-direction:column;gap:.7rem;min-width:0}
+
+.exito .botones .btn.suave{grid-column:1/-1}
+.cobro-total .monto{font-size:2.6rem}
+
+.cuentas-extras{display:flex;gap:.5rem;flex-wrap:wrap;justify-content:flex-end;margin-top:-.3rem}
+.cuentas-extras .btn{min-height:48px}
+@media(max-width:560px){.cuentas-extras .btn{flex:1 1 0}}
+.salida-item{display:flex;gap:.7rem;align-items:center;justify-content:space-between;padding:.6rem .8rem;border:1px solid var(--linea);border-radius:var(--r);background:#fff}
+.salida-item>div:first-child{flex:1 1 auto;min-width:0}
+.salida-item .s-mot{font-weight:600;overflow-wrap:anywhere}
+.salida-item .s-det{font-size:.84rem;color:var(--tinta2)}
+.salida-item .s-monto{font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap}
+.calc{display:flex;flex-direction:column}
+.calc-fila{display:flex;justify-content:space-between;align-items:baseline;gap:1rem;padding:.7rem 0;border-bottom:1px solid var(--linea);font-size:1.05rem}
+.calc-fila .v{font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap}
+.calc-fila .op{display:inline-block;width:1.4rem;color:var(--tinta2);font-weight:700}
+.calc-fila.total{border-top:2px solid var(--tinta);border-bottom:0;font-size:1.35rem;padding-top:.9rem}
+.calc-sub{padding:.2rem 0 .7rem 1.4rem;border-bottom:1px solid var(--linea)}
+.contado-caja{display:flex;flex-direction:column;gap:.5rem;margin-top:.4rem}
+.alerta-dif{border-radius:14px;padding:1rem 1.1rem;border:2px solid;font-size:1.15rem;font-weight:600}
+.alerta-dif.falta{border-color:var(--rojo);background:var(--rojo-suave);color:var(--rojo-osc)}
+.alerta-dif.sobra{border-color:var(--ambar);background:var(--ambar-suave);color:#5c3d00}
+.alerta-dif small{display:block;font-weight:400;margin-top:.3rem;color:inherit}
+.otros-medios{display:flex;gap:1.2rem;flex-wrap:wrap}
+.otros-medios>div{min-width:150px}
+.otros-medios .et{font-size:.8rem;color:var(--tinta2)}
+.otros-medios .v{font-weight:700;font-variant-numeric:tabular-nums}
+
+.ventas-medios{display:grid;gap:.7rem;grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}
+.ventas-medios .dato.total{border-color:var(--tinta);background:#fff;box-shadow:0 0 0 1px var(--tinta) inset}
+.ventas-medios .dato.total .val{font-size:1.5rem}
+.hist th{white-space:normal;min-width:84px}
+
+@media(max-width:979px){
+  .caja-cuerpo{display:flex;flex-direction:column;align-items:stretch;gap:.7rem}
+  .caja-cuerpo>*,.caja-izq>*{min-width:0;max-width:100%}
+  .caja-izq{display:contents}
+  .buscador{order:-1}
+  .buscador-caja .rotulo small{display:none}
+  .caja.v-cuenta .cuentas-extras{display:none}
+  .cobro-pie{flex-wrap:nowrap}
+  .cobro-pie .btn:not(.primario){flex:0 0 auto}
+  .cobro-pie .btn.primario{flex:1 1 0;min-width:0}
+}
+.linea-pie .btn{min-height:48px}
+@media(max-width:979px){
+  .linea-pie .nota-inp{flex:1 1 100%}
+  .linea-pie .btn{flex:1 1 0}
+}
+
+/* ---------- Actividad del cliente para esta factura / crear cliente en el cobro ---------- */
+.cobro-act{border:1px solid var(--linea);border-radius:12px;padding:.7rem 1rem;background:#fffdf9;display:flex;flex-direction:column;gap:.5rem}
+.act-fila{display:flex;gap:.8rem;justify-content:space-between;align-items:center;flex-wrap:wrap}
+.act-txt{flex:1 1 240px;min-width:0;overflow-wrap:anywhere;line-height:1.35}
+.act-txt .et{color:var(--tinta2)}
+.act-txt .chip{margin-left:.4rem}
+.act-aviso{padding:.55rem .75rem;border:1px solid #efd08f;background:var(--ambar-suave);color:#6b4500;border-radius:var(--r);font-size:.92rem;line-height:1.35}
+.act-aviso.info{border-color:var(--linea2);background:#f4f1ea;color:var(--tinta)}
+.cli-item[aria-pressed=true]{border-color:var(--verde);background:var(--verde-suave);box-shadow:0 0 0 1px var(--verde) inset}
+.cobro-chk{display:flex;gap:.7rem;align-items:flex-start;min-height:56px;padding:.6rem .8rem;border:1px solid var(--linea2);border-radius:var(--r);background:#fff;cursor:pointer}
+.cobro-chk input{width:26px;height:26px;margin-top:.1rem;accent-color:var(--rojo);flex:0 0 auto}
+.cobro-chk small{display:block;color:var(--tinta2);font-weight:400;line-height:1.35}

@@ -1,0 +1,11 @@
+/* Selector de periodo (compartido con Recepción) */
+.periodo{display:flex;flex-direction:column;gap:.6rem}
+.per-botones{display:flex;flex-wrap:wrap;gap:.5rem}
+.per-btn{flex:1 1 auto;min-width:104px}
+.per-btn[aria-pressed=true]{background:var(--rojo);border-color:var(--rojo);color:#fff}
+.per-otro{display:flex;flex-wrap:wrap;gap:.6rem;align-items:flex-end}
+.per-otro[hidden]{display:none}
+.per-otro .etq{flex:1 1 150px}
+.per-aviso{flex-basis:100%;color:var(--rojo-osc);font-weight:600}
+
+@media(max-width:640px){.per-btn{min-width:calc(50% - .3rem)}}

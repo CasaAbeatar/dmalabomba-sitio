@@ -1,0 +1,82 @@
+/* Campo de identificación con verificación en Hacienda (js/ui_cedula.js). Usa las variables y clases de app.css */
+.ced{display:flex;flex-direction:column;gap:1rem}
+.ced [hidden]{display:none!important}
+.ced-bloque{display:flex;flex-direction:column;gap:.5rem;min-width:0}
+.ced-bloque>.etq{gap:.35rem}
+
+/* Número de identificación: grande y con cifras de igual ancho para ver cada número */
+.ced-num{min-height:64px!important;font-size:1.65rem!important;font-weight:600;letter-spacing:.08em;font-variant-numeric:tabular-nums}
+.ced-num:focus{border-color:var(--tinta);box-shadow:0 0 0 3px rgba(29,26,23,.14)}
+.ced-num.mal{border-color:var(--rojo);background:var(--rojo-suave)}
+.ced-num.bien{border-color:#7fc3a0}
+.ced-ayuda{color:var(--tinta2);font-weight:400;font-size:.88rem;line-height:1.35}
+
+.ced-tipo{display:flex;flex-wrap:wrap;gap:.4rem .7rem;align-items:center;min-height:40px}
+.ced-tipo-txt{font-size:.95rem}
+.ced-tipo-txt strong{font-weight:700}
+.ced-tipo-txt .via{color:var(--tinta2)}
+.ced-tipo select{max-width:100%}
+
+/* Caja de estado: siempre lleva color Y palabras */
+.ced-estado{display:flex;gap:.75rem;align-items:flex-start;padding:.8rem .95rem;border-radius:var(--r);border:1px solid var(--linea2);background:#fff;line-height:1.38}
+.ced-estado .ico{flex:0 0 auto;width:30px;height:30px;border-radius:50%;display:grid;place-items:center;font-weight:700;font-size:1.05rem;line-height:1;background:#e9e3d5;color:var(--tinta)}
+.ced-est-cuerpo{display:flex;flex-direction:column;gap:.25rem;min-width:0;flex:1 1 auto}
+.ced-est-cuerpo strong{font-size:1.02rem;overflow-wrap:anywhere}
+.ced-est-cuerpo span{overflow-wrap:anywhere}
+.ced-est-cuerpo .btn{align-self:flex-start;margin-top:.3rem}
+.ced-estado.verde{border-color:#a8d5bd;background:var(--verde-suave);color:#14583a}
+.ced-estado.verde .ico{background:var(--verde);color:#fff}
+.ced-estado.ambar{border-color:#efd08f;background:var(--ambar-suave);color:#6b4500}
+.ced-estado.ambar .ico{background:var(--ambar);color:#2a1d00}
+.ced-estado.rojo{border-color:#e9b3b7;background:var(--rojo-suave);color:var(--rojo-osc)}
+.ced-estado.rojo .ico{background:var(--rojo);color:#fff}
+.ced-estado.gris{border-color:var(--linea2);background:#f4f1ea;color:var(--tinta)}
+.ced-estado.azul{border-color:#bcd0ea;background:#edf3fb;color:#1d4175}
+.ced-estado.azul .ico{background:transparent}
+.ced-giro{width:22px;height:22px;border-radius:50%;border:3px solid #bcd0ea;border-top-color:var(--azul);animation:ced-giro .8s linear infinite;display:block}
+@keyframes ced-giro{to{transform:rotate(360deg)}}
+@media(prefers-reduced-motion:reduce){.ced-giro{animation-duration:2.4s}}
+
+/* Sugerencia grande: "¿Quiso decir 3102765594?" */
+.ced-sugs{display:flex;flex-direction:column;gap:.5rem}
+.ced-sug{display:flex;flex-direction:column;align-items:flex-start;gap:.15rem;width:100%;min-height:72px;padding:.7rem 1rem;text-align:left;cursor:pointer;border:2px solid var(--verde);border-radius:12px;background:#fff;box-shadow:0 1px 0 rgba(29,26,23,.05)}
+.ced-sug:hover{background:var(--verde-suave)}
+.ced-sug .pre{font-size:1.1rem;font-weight:700}
+.ced-sug .pre .num{font-variant-numeric:tabular-nums;letter-spacing:.04em;color:var(--verde)}
+.ced-sug .nom{font-weight:600;overflow-wrap:anywhere}
+.ced-sug .mot{color:var(--tinta2);font-size:.9rem}
+.ced-sug .acc{margin-top:.2rem;font-weight:700;color:var(--verde)}
+
+/* Cliente repetido */
+.ced-dup{display:flex;flex-direction:column;gap:.5rem}
+
+/* Guardar de todos modos */
+.ced-sin{display:flex;flex-direction:column;gap:.6rem;padding:.8rem .95rem;border:1px dashed #d9b25d;border-radius:var(--r);background:#fffaf0}
+.ced-sin p{margin:0;font-size:.92rem;color:#6b4500}
+
+/* Nombre y actividad */
+.ced-datos{display:flex;flex-wrap:wrap;gap:.5rem .7rem;align-items:center;padding:.6rem .8rem;border:1px solid var(--linea);border-radius:var(--r);background:#fffdf9}
+.ced-datos .txt{flex:1 1 220px;min-width:0;font-size:.92rem;line-height:1.35;overflow-wrap:anywhere}
+.ced-datos .txt strong{font-weight:700}
+.ced-datos .btn{flex:0 0 auto}
+.ced-nombre.hac,.ced-act.hac{border-color:#7fc3a0;background:#f6fbf8}
+.ced-act{font-variant-numeric:tabular-nums;letter-spacing:.04em;font-weight:600}
+.ced-act.mal{border-color:var(--rojo);background:var(--rojo-suave)}
+.ced-act-nota{font-size:.9rem;line-height:1.35}
+.ced-act-nota.ok{color:#14583a}
+.ced-act-nota.mal{color:var(--rojo-osc);font-weight:600}
+.ced-act-nota.aviso{color:#6b4500;background:var(--ambar-suave);border:1px solid #efd08f;border-radius:var(--r);padding:.5rem .7rem}
+.ced-lista-act{display:flex;flex-direction:column;gap:.35rem;max-height:240px;overflow:auto}
+.ced-lista-act .tit{font-size:.88rem;font-weight:600;color:var(--tinta2)}
+.ced-opt{display:flex;gap:.7rem;align-items:flex-start;width:100%;min-height:52px;padding:.5rem .8rem;text-align:left;border:1px solid var(--linea2);border-radius:var(--r);background:#fff;cursor:pointer}
+.ced-opt:hover{border-color:var(--tinta)}
+.ced-opt[aria-pressed=true]{border-color:var(--verde);background:var(--verde-suave);box-shadow:0 0 0 1px var(--verde) inset}
+.ced-opt .cod{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-weight:700;white-space:nowrap}
+.ced-opt .desc{flex:1 1 auto;min-width:0;overflow-wrap:anywhere}
+.ced-opt .pri{font-size:.76rem;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--verde);white-space:nowrap}
+.ced-opt .pri.man{color:var(--tinta2)}
+
+@media(max-width:560px){
+  .ced-num{font-size:1.45rem!important;letter-spacing:.05em}
+  .ced-datos .btn{flex:1 1 100%}
+}
