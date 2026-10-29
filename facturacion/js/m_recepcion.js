@@ -99,7 +99,7 @@ export default {
         marcarPestana(d.conteo);
       } catch (e) {
         if (mia !== ficha) return;
-        lista.replaceChildren(h('div.vacio', h('p', 'No se pudieron traer las facturas.'), h('p.tenue', mensajeAmable(e, 'Revise la conexión e intente de nuevo.')), h('button.btn', { type: 'button', onclick: () => cargar() }, 'Intentar de nuevo')));
+        lista.replaceChildren(h('div.vacio', h('p', 'No se pudieron traer las facturas.'), h('p.tenue', mensajeAmable(e, 'Revise la conexión e intente de nuevo.')), h('button.btn', { type: 'button', 'data-reintentar': '1', onclick: () => cargar() }, 'Intentar de nuevo')));
       }
     }
 
