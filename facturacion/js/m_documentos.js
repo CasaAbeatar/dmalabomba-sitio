@@ -2,7 +2,7 @@
 // y en cada fila los botones «Reimprimir» y «Anular». La lista se pinta por tandas («Mostrar más»): la búsqueda y los filtros actúan sobre todo lo cargado. Tocar la fila abre el detalle (estado en Hacienda, «Ya lo atendí», archivos, reenvíos).
 // La anulación con nota de crédito es la de m_anular.js; la impresión es la de imprimir.js.
 import { h, money, modal, toast, descargar, hoyCR, sumaDias, fechaHora, horaCorta, debounce, num, r2, nombrePropio, nombreLocal, traducirHacienda, campoBusqueda, TIPOS_SERVICIO, MEDIOS, TIPOS_ID } from './util.js';
-import { documentos, anulacionDe, permiteAnular, otrasNotas, sinEfectoDeSaldos, correoActivo, reenviarCorreo, alertaAtender, hacerVentaDeNuevo, mensajeAmable } from './api_documentos.js';
+import { documentosPagina, anulacionDe, permiteAnular, otrasNotas, sinEfectoDeSaldos, correoActivo, reenviarCorreo, alertaAtender, hacerVentaDeNuevo, mensajeAmable } from './api_documentos.js';
 import { anularDocumento, cambiarCliente, textoCodigoNota, codigoDeNota, sustituyeSoportado, listaNotas, TEXTO_07 } from './m_anular.js';
 import { devolverParte, corregirMonto, dejarSinEfecto } from './m_nota_parcial.js';
 import { selectorCliente } from './ui_cliente.js';
@@ -40,7 +40,6 @@ export const mesAnterior = (ymd) => { const y = Number(ymd.slice(0, 4)), m = Num
 const CLASE_ESTADO = { pendiente: 'espera', enviado: 'espera', aceptado: 'ok', rechazado: 'mal', error: 'mal' };
 const NOMBRE_TIPO = { ...NOMBRES_DOCUMENTO, '01': 'Factura', '02': 'Nota de débito', '03': 'Nota de crédito', '04': 'Tiquete' }; // nombres cortos para la lista
 const esVenta = (d) => d.tipo_doc === '01' || d.tipo_doc === '04';
-const MAX_DOCUMENTOS = 1000; // fx_documentos devuelve a lo sumo 1 000 documentos por consulta (los más antiguos del rango)
 const paraArchivo = (t, max = 40) => String(t || '').replace(/[^\p{L}\p{N} .,&'()-]/gu, ' ').replace(/\s+/g, ' ').trim().slice(0, max).trim();
 const mediosTxt = (m) => (m ? m.split(', ').map((x) => MEDIOS[x] || x).join(' y ') : '');
 const signo = (d) => (d.tipo_doc === '03' ? -1 : 1);
@@ -50,7 +49,11 @@ export default {
   id: 'anular',
   titulo: 'Anular y reimprimir',
   async mount(root, app) {
-    const est = { rango: 'hoy', desde: hoyCR(), hasta: hoyCR(), q: '', filtro: 'todos', tarifa: '', lista: [], cargando: false, error: null, turnoEstado: null, firma: null, pagina: 1 };
+    const est = { rango: 'hoy', desde: hoyCR(), hasta: hoyCR(), q: '', filtro: 'todos', tarifa: '', lista: [], cargando: false, error: null, turnoEstado: null, firma: null, pagina: 1,
+      // La base entrega los documentos por tandas de 1 000, los más nuevos primero: base = la primera tanda, antiguos = lo que se cargó después con «Cargar los documentos más antiguos»
+      base: [], antiguos: new Map(), total: 0, cargandoMas: false, errorMas: null };
+    const cargados = () => est.base.length + est.antiguos.size;
+    const hayMas = () => est.total > cargados();
     let nCarga = 0; // cada carga lleva su número: si llega tarde la respuesta de una anterior (por ejemplo «Este mes» y enseguida «Hoy»), se descarta
     // Con la caja abierta, «Hoy» es el turno: si el turno abrió en un día anterior (cruzó la medianoche), «Hoy» arranca en la hora de apertura,
     // y el cuadre con «Apertura y cierre de caja» sigue saliendo cuando el rango es «Hoy».
@@ -133,7 +136,7 @@ export default {
     async function cargar(silencioso = false) {
       const mi = ++nCarga;
       pintarControles();
-      if (!silencioso) { est.cargando = true; est.error = null; est.firma = null; pintar(); }
+      if (!silencioso) { est.cargando = true; est.error = null; est.firma = null; est.antiguos = new Map(); est.errorMas = null; pintar(); } // una carga manual (o un cambio de fechas) empieza de cero; el refresco automático conserva lo ya cargado
       try {
         // Lo más reciente va arriba (igual que en «Anular factura»): lo último que hizo la cajera se ve sin bajar
         if (est.rango === 'hoy') { const [d0, h0] = rangoDe('hoy'); if (d0 !== est.desde || h0 !== est.hasta) { [est.desde, est.hasta] = [d0, h0]; pintarControles(); } } // la caja se cerró o cambió el día mientras tanto
@@ -141,18 +144,45 @@ export default {
         const desdeTurno = est.rango === 'hoy' && turnoDeAyer() ? new Date(turnoDeAyer().abierto_en).getTime() : 0;
         // En «Hoy» con la caja abierta también se lee el estado del turno, para mostrar cómo cuadra con «Apertura y cierre de caja» (si no se puede leer, solo falta esa explicación)
         const turnoId = est.rango === 'hoy' ? turnoAbierto()?.id : null;
-        const [filas, turno] = await Promise.all([documentos(app.soc.id, est.desde, est.hasta), turnoId ? app.api.turnoEstado(turnoId).catch(() => null) : null]);
+        const [pag, turno] = await Promise.all([documentosPagina(app.soc.id, est.desde, est.hasta), turnoId ? app.api.turnoEstado(turnoId).catch(() => null) : null]);
         if (mi !== nCarga) return; // llegó tarde: ya se pidió otra cosa
-        const lista = filas.filter((d) => !desdeTurno || new Date(d.fecha_emision).getTime() >= desdeTurno).sort((a, b) => new Date(b.fecha_emision) - new Date(a.fecha_emision));
+        est.base = pag.documentos; est.total = Math.max(pag.total || 0, est.base.length);
+        for (const d of est.base) est.antiguos.delete(d.id); // lo que ya viene en la primera tanda no se cuenta dos veces
+        const lista = armarLista(desdeTurno);
         // En el refresco automático solo se vuelve a pintar si algo cambió; así no se pierde lo que la cajera esté escribiendo ni se mueve la pantalla
         est.lista = lista; est.turnoEstado = turno; cacheTexto = new WeakMap();
-        const firma = JSON.stringify([lista, turno]) + '|' + lista.filter(esProblema).length; // esProblema cambia con el reloj (más de 15 minutos esperando a Hacienda)
+        const firma = firmaDe(lista, turno);
         if (silencioso && !est.error && est.firma && firma === est.firma) { ultimaCarga = Date.now(); return; }
         est.firma = firma;
         est.error = null;
       } catch (e) { if (mi !== nCarga) return; if (!silencioso) est.error = mensajeAmable(e); }
       est.cargando = false; ultimaCarga = Date.now();
       pintar();
+    }
+    // «Hoy» con un turno que abrió en un día anterior arranca en la hora de apertura
+    const desdeTurnoAhora = () => (est.rango === 'hoy' && turnoDeAyer() ? new Date(turnoDeAyer().abierto_en).getTime() : 0);
+    // La primera tanda más lo que se cargó después, desde la hora de apertura del turno si hace falta, y con lo más reciente arriba
+    function armarLista(desdeTurno = desdeTurnoAhora()) {
+      return est.base.concat([...est.antiguos.values()]).filter((d) => !desdeTurno || new Date(d.fecha_emision).getTime() >= desdeTurno).sort((a, b) => new Date(b.fecha_emision) - new Date(a.fecha_emision));
+    }
+    // esProblema cambia con el reloj (más de 15 minutos esperando a Hacienda), por eso entra en la firma
+    const firmaDe = (lista, turno) => JSON.stringify([lista, turno]) + '|' + lista.filter(esProblema).length + '|' + cargados() + '/' + est.total;
+    // Trae la tanda siguiente (los documentos más antiguos del rango) y la suma a lo que ya se ve. Una tanda son hasta 1 000 documentos.
+    async function cargarAntiguos() {
+      if (est.cargandoMas || est.cargando || !hayMas()) return;
+      const mi = nCarga;
+      est.cargandoMas = true; est.errorMas = null; pintarResumen();
+      try {
+        const pag = await documentosPagina(app.soc.id, est.desde, est.hasta, cargados());
+        if (mi === nCarga) {
+          const ya = new Set(est.base.map((d) => d.id));
+          for (const d of pag.documentos) if (!ya.has(d.id)) est.antiguos.set(d.id, d);
+          est.total = pag.documentos.length ? Math.max(pag.total || 0, cargados()) : cargados(); // si la base no entregó nada más, no se vuelve a ofrecer
+          est.lista = armarLista(); cacheTexto = new WeakMap(); est.firma = firmaDe(est.lista, est.turnoEstado);
+        }
+      } catch (e) { if (mi === nCarga) est.errorMas = mensajeAmable(e); }
+      est.cargandoMas = false;
+      if (mi === nCarga) pintar();
     }
 
     /* ---------- resumen, filtros y lista ---------- */
@@ -267,8 +297,10 @@ export default {
         h('span.doc-det-res', `${s.nVentas} ${s.nVentas === 1 ? 'venta' : 'ventas'}`, s.nAnul ? `, ${s.nAnul} ${s.nAnul === 1 ? 'anulación' : 'anulaciones'}` : '',
           s.nDev ? `, ${s.nDev} ${s.nDev === 1 ? 'devolución o corrección' : 'devoluciones o correcciones'}` : '', s.nND ? `, ${s.nND} ${s.nND === 1 ? 'nota de débito' : 'notas de débito'}` : '', ` · de los cuales ${money(s.iva / 100)} son IVA`)));
       pintarCuadre(s);
-      // El servidor entrega a lo sumo 1 000 documentos por consulta: si se llegó al tope, el total de arriba no es el de todo el rango, y hay que decirlo
-      if (est.lista.length >= MAX_DOCUMENTOS) zonaCuadre.prepend(h('div.doc-cuadre-caja', h('p.doc-cuadre-frase.alerta', { role: 'note' }, `Estas fechas tienen más de ${num(MAX_DOCUMENTOS)} documentos y aquí se ven solo los primeros ${num(MAX_DOCUMENTOS)} (los más antiguos). El total de arriba es de esos. Para ver los demás, elija un rango de fechas más corto.`)));
+      // El servidor entrega los documentos por tandas de 1 000, los más nuevos primero: si faltan los más antiguos, el total de arriba no es el de todo el rango, y hay que decirlo
+      if (hayMas()) zonaCuadre.prepend(h('div.doc-cuadre-caja', h('p.doc-cuadre-frase.alerta', { role: 'note' }, `Estas fechas tienen ${num(est.total)} documentos y aquí se ven los ${num(cargados())} más recientes. El total de arriba es de esos.`),
+        h('div.fila', h('button.btn', { type: 'button', 'data-cargar-antiguos': '1', onclick: cargarAntiguos }, est.cargandoMas ? 'Cargando…' : 'Cargar los documentos más antiguos')),
+        est.errorMas ? h('div.error-caja', { role: 'alert' }, est.errorMas) : null));
     }
 
     // Qué no suma y qué sí suma este total, y cómo cuadra con «Apertura y cierre de caja» (mismas frases y montos que en esa pantalla)
@@ -352,7 +384,7 @@ export default {
         'Las notas de crédito (anulaciones, devoluciones y correcciones de monto) van con signo negativo y restan. Las notas de débito suman. Los documentos que Hacienda no aceptó se muestran, pero no suman: en «Suma al total» valen cero.',
       ];
       if (est.rango === 'hoy' && turnoDeAyer()) notas.push('«Hoy» empieza cuando se abrió el turno, el ' + diaCortoTxt(ymdDe(turnoDeAyer().abierto_en)) + ' a las ' + horaCorta(turnoDeAyer().abierto_en) + '.');
-      if (est.lista.length >= MAX_DOCUMENTOS) notas.push(`Estas fechas tienen más de ${num(MAX_DOCUMENTOS)} documentos y el sistema entrega solo los primeros ${num(MAX_DOCUMENTOS)} (los más antiguos). Este archivo no trae los demás: para tenerlos todos, descargue un rango de fechas más corto.`);
+      if (hayMas()) notas.push(`Estas fechas tienen ${num(est.total)} documentos y este archivo trae solo los ${num(cargados())} más recientes. Para tener los demás, toque «Cargar los documentos más antiguos» antes de descargar, o elija un rango de fechas más corto.`);
       return {
         nombre: `Facturas emitidas ${nombrePeriodo(est.desde, est.hasta)}${filtroCorto ? ' ' + filtroCorto : ''}${paraArchivo(q, 30) ? ' búsqueda ' + paraArchivo(q, 30) : ''}`,
         empresa: nombreLocal(soc), cedula: soc?.cedula || '',
