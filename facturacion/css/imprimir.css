@@ -1,0 +1,136 @@
+/* Impresión: documentos (tiquete térmico, factura carta, tiquete de prueba) y ventana de ajustes.
+   Todo lo del papel cuelga de .fxd para no mezclarse con el resto de la aplicación.
+   Este archivo se carga en la página principal Y dentro del iframe de impresión (js/imprimir.js). */
+
+/* ---------- base del documento ---------- */
+.fxd{color:#000;background:#fff;font-family:Arial,"Helvetica Neue","Liberation Sans",sans-serif;-webkit-print-color-adjust:exact;print-color-adjust:exact;overflow-wrap:anywhere}
+.fxd,.fxd *{box-sizing:border-box}
+.fxd img{display:block}
+.fxd .mono{font-family:"Courier New","Liberation Mono","DejaVu Sans Mono",monospace;letter-spacing:0;word-break:break-all}
+.fxd .der{text-align:right;font-variant-numeric:tabular-nums}
+
+/* ---------- tiquete térmico: 80 mm de papel con 72 mm útiles (58 mm con 48 mm útiles) ---------- */
+.fxd.tq{width:72mm;margin:0 auto;padding:3mm 0 0;font-size:12px;line-height:1.3;break-inside:avoid;break-after:page}
+.fxd.tq:last-child{break-after:auto}
+.fxd.tq.p58{width:48mm;font-size:11px}
+.tq .logo{height:18mm;width:auto;max-width:100%;margin:0 auto 1.5mm;filter:grayscale(1) contrast(1.8)}
+.tq .nombre{text-align:center;font-weight:800;font-size:1.35em;line-height:1.15}
+.tq .razon{text-align:center;font-size:.82em;margin-top:.6mm}
+.tq .dato{text-align:center;font-size:.9em}
+.tq .dato.izq{text-align:left}
+.tq .hr{border-top:1px dashed #000;margin:2mm 0}
+.tq .hr.doble{border-top:1.5px solid #000}
+.tq .titulo{text-align:center;font-weight:800;font-size:1.2em;letter-spacing:.02em;margin:1mm 0 .8mm}
+.tq .etq-chica{font-size:.74em;text-transform:uppercase;letter-spacing:.07em;margin-top:1.2mm}
+.tq .mono{font-size:.88em;text-align:center}
+.tq .cli{font-weight:700}
+.tq .fila-tq{display:flex;justify-content:space-between;gap:2mm}
+.tq .fila-tq .v{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.tq .fila-tq.enc{font-size:.78em;text-transform:uppercase;letter-spacing:.05em}
+.tq .fila-tq.negrita{font-weight:800}
+.tq .fila-tq.total{font-size:1.5em;font-weight:800;border-top:1.5px solid #000;border-bottom:1.5px solid #000;padding:1mm 0;margin:1.5mm 0;line-height:1.2}
+.tq .lin{margin:1.2mm 0;break-inside:avoid}
+.tq .lin .d{font-weight:700}
+.tq .lin .q{display:flex;justify-content:space-between;gap:2mm;font-variant-numeric:tabular-nums}
+.tq .lin .q b{white-space:nowrap}
+.tq .lin .nota{font-size:.85em;font-style:italic}
+.tq .prueba{border:2px solid #000;text-align:center;padding:1.5mm 1mm;margin:1mm 0 2mm;font-size:1.05em;letter-spacing:.03em;line-height:1.25}
+.tq .prueba b{display:block}
+.tq .aviso-pre{border:2px solid #000;padding:2mm 1.5mm;text-align:center;font-weight:800;font-size:1.15em;line-height:1.3;margin:1.5mm 0}
+.tq .aviso-pre.chico{font-size:.95em}
+.tq .aviso-pre+.dato{margin:1.2mm 0}
+.tq .estado{text-align:center;font-size:.9em;margin-top:1.5mm}
+.tq .estado.pend,.tq .estado.mal{border:1.5px dashed #000;padding:1.2mm;font-size:.95em}
+.tq .estado b,.tq .estado span{display:block}
+.tq .estado.mal b{font-size:1.1em}
+.tq .pie{text-align:center;font-size:.78em;margin-top:1.5mm}
+.tq .pie.copia{font-style:italic}
+.tq .avance{height:8mm}
+/* tiquete de prueba */
+.tq .regla{height:5mm;width:100%;margin-top:1mm;border-bottom:.3mm solid #000;border-right:.4mm solid #000;background-repeat:no-repeat;background-position:left bottom;
+  background-image:repeating-linear-gradient(90deg,#000 0,#000 .25mm,transparent .25mm,transparent 1mm),repeating-linear-gradient(90deg,#000 0,#000 .3mm,transparent .3mm,transparent 5mm),repeating-linear-gradient(90deg,#000 0,#000 .4mm,transparent .4mm,transparent 10mm);
+  background-size:100% 1.6mm,100% 2.8mm,100% 4.4mm}
+.tq .regla-nums{display:flex;font-size:9px;line-height:1.2}
+.tq .regla-nums span{flex:0 0 10mm;padding-left:.4mm}
+.tq .caja-prueba{width:100%;border:.5mm solid #000;padding:2mm;text-align:center;font-size:.85em;margin:1mm 0}
+.tq .borde-borde{position:relative;height:3mm;border-top:.5mm solid #000;margin-top:2mm}
+.tq .borde-borde i{position:absolute;top:-1.5mm;height:3mm;border-left:.5mm solid #000}
+.tq .borde-borde i:first-child{left:0}
+.tq .borde-borde i:last-child{right:0}
+
+/* ---------- factura carta ---------- */
+.fxd.ct{width:100%;font-family:Figtree,"Helvetica Neue",Arial,"Liberation Sans",sans-serif;font-size:13px;line-height:1.4;position:relative;break-after:page}
+.fxd.ct:last-child{break-after:auto}
+.ct .marca-agua{position:fixed;left:0;right:0;top:42%;text-align:center;font-size:150px;font-weight:800;letter-spacing:.08em;color:rgba(184,22,34,.07);transform:rotate(-28deg);pointer-events:none;z-index:0}
+.ct>*:not(.marca-agua){position:relative;z-index:1}
+.ct-cab{display:flex;justify-content:space-between;align-items:flex-start;gap:8mm}
+.ct-logo{height:25mm;width:auto}
+.ct-nombre-grande{font-size:26px;font-weight:700}
+.ct-titulo{text-align:right}
+.ct-tit{font-size:21px;font-weight:700;letter-spacing:.03em;color:#b81622;line-height:1.15}
+.ct-num{font-size:30px;font-weight:700;line-height:1.15;margin-top:1mm}
+.ct-fecha{color:#6b645b;margin-top:.5mm}
+.ct-prueba{display:inline-block;margin-top:2mm;border:.4mm solid #b81622;color:#b81622;font-weight:700;font-size:11px;letter-spacing:.05em;padding:1mm 2.5mm}
+.ct-regla{position:relative;border-top:.25mm solid #b81622;margin:3.5mm 0 4mm}
+.ct-regla i{position:absolute;top:-.6mm;left:0;width:24mm;border-top:1.1mm solid #f3a62c}
+.ct-dos{display:grid;grid-template-columns:1fr 1fr;gap:6mm}
+.ct-caja{border:.25mm solid #cfc5b2;border-radius:2mm;padding:3mm 4mm;line-height:1.45;break-inside:avoid}
+.ct-etq{font-size:9.5px;text-transform:uppercase;letter-spacing:.1em;color:#6b645b;font-weight:600}
+.ct-fuerte{font-weight:700;font-size:14.5px;margin:.6mm 0 .8mm}
+.ct-tenue{color:#6b645b}
+.ct-meta{display:flex;flex-wrap:wrap;gap:1.5mm 9mm;margin:3.5mm 0 3mm}
+.ct-meta div{display:flex;flex-direction:column}
+.ct-meta b{font-weight:600}
+.ct-ref{border-left:1.2mm solid #f3a62c;background:#fdf2dc;padding:2mm 4mm;margin:0 0 3mm;line-height:1.45;break-inside:avoid}
+.ct-ref .mono{font-size:11px}
+table.ct-tabla{width:100%;border-collapse:collapse;margin-top:2mm}
+.ct-tabla thead{display:table-header-group}
+.ct-tabla tr{break-inside:avoid}
+.ct-tabla th{text-align:left;font-size:9.5px;text-transform:uppercase;letter-spacing:.08em;color:#6b645b;font-weight:600;padding:1.8mm 1.5mm;border-bottom:.3mm solid #1d1a17;white-space:nowrap}
+.ct-tabla th.der{text-align:right}
+.ct-tabla td{padding:1.8mm 1.5mm;border-bottom:.15mm solid #e2dacb;vertical-align:top}
+.ct-tabla td.cod{font-family:"Courier New","Liberation Mono","DejaVu Sans Mono",monospace;font-size:10.5px;white-space:nowrap;color:#444}
+.ct-tabla td.der{white-space:nowrap}
+.ct-nota-precio{font-size:10.5px;color:#6b645b;margin-top:1.5mm}
+.ct-cierre{display:grid;grid-template-columns:1fr 82mm;gap:10mm;margin-top:4mm;break-inside:avoid}
+.ct-fila{display:flex;justify-content:space-between;gap:4mm;padding:.8mm 0}
+.ct-fila .v{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.ct-totales{border-top:.3mm solid #1d1a17;padding-top:1.5mm}
+.ct-fila.gran{font-size:19px;font-weight:700;border-top:.3mm solid #b81622;margin-top:1.5mm;padding-top:2mm;color:#b81622}
+.ct-pagos .ct-fila{border-bottom:.15mm solid #e2dacb}
+.ct-clave{margin-top:4mm;background:#fbf8f2;border:.25mm solid #e2dacb;border-radius:2mm;padding:3mm 4mm;break-inside:avoid}
+.ct-clave>div{display:flex;flex-wrap:wrap;gap:1mm 4mm;align-items:baseline}
+.ct-clave .mono{font-size:11.5px}
+.ct-estado{margin-top:1.5mm;font-weight:600}
+.ct-estado.ok{color:#1f7a4d}
+.ct-estado.mal{color:#b81622}
+.ct-estado.pend{color:#8a5a00}
+.ct-pie{display:grid;grid-template-columns:2fr 1fr;gap:10mm;margin-top:5mm;padding-top:3mm;border-top:.25mm solid #cfc5b2;break-inside:avoid}
+.ct-quienes p{margin:1mm 0 0}
+.ct-contacto div:not(.ct-etq){margin-top:.6mm}
+.ct-ley{text-align:center;font-size:10px;color:#6b645b;margin-top:3.5mm}
+
+/* ---------- modo "pagina" (iPhone y iPad): el documento va en la página principal y al imprimir se oculta todo lo demás ---------- */
+#fx-impresion{position:absolute;left:-10000px;top:0;opacity:0;pointer-events:none}
+@media print{
+  body.fx-imprimiendo>*:not(#fx-impresion){display:none!important}
+  body.fx-imprimiendo #fx-impresion{position:static!important;left:auto!important;width:auto!important;opacity:1!important}
+}
+
+/* ---------- ventana de ajustes (en la página principal) ---------- */
+.fx-aj{display:flex;flex-direction:column;gap:1.1rem}
+.fx-grupo{display:flex;flex-direction:column;gap:.45rem}
+.fx-tit{font-weight:700}
+.fx-ayuda{color:var(--tinta2);font-size:.92rem}
+.fx-seg{display:flex;flex-wrap:wrap;border:1px solid var(--linea2);border-radius:var(--r);overflow:hidden;background:#fff}
+.fx-seg button{flex:1 1 140px;min-height:52px;padding:.5rem .9rem;border:0;background:transparent;cursor:pointer;font-weight:600}
+.fx-seg button+button{border-left:1px solid var(--linea2)}
+.fx-seg button[aria-pressed=true]{background:var(--rojo);color:#fff}
+.fx-guardado{color:var(--tinta2)}
+.fx-instr{border-top:1px solid var(--linea);padding-top:1rem;display:flex;flex-direction:column;gap:.7rem}
+.fx-instr h3{font-size:1.05rem}
+.fx-instr p{margin:0}
+.fx-instr ol{margin:0;padding-left:1.3rem;display:flex;flex-direction:column;gap:.55rem}
+.fx-cmd{font-family:"Courier New","Liberation Mono",monospace;font-size:.85rem;background:#fbf8f2;border:1px solid var(--linea2);border-radius:var(--r);padding:.7rem .8rem;word-break:break-all;user-select:all}
+.fx-nota{color:var(--tinta2);font-size:.92rem}
+.fx-instr .btn{align-self:flex-start}
