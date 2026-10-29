@@ -1,0 +1,43 @@
+/* Componente de descargas (js/descargas.js): botón «Descargar» y su menú de formatos. Líneas finas, crema, rojo, ámbar y verde azulado para las opciones. */
+.desc{--teal:#0f6f6a;--teal-suave:#e5f2f0;display:inline-flex;flex-direction:column;align-items:flex-end;gap:.35rem;max-width:100%;vertical-align:top}
+.desc-ancla{position:relative;display:inline-block;max-width:100%}
+.desc-boton{background:#fff;border-color:var(--rojo);color:var(--rojo);font-weight:700;min-width:150px;gap:.6rem}
+.desc-boton:hover{background:var(--rojo-suave);border-color:var(--rojo-osc)}
+.desc-boton[aria-expanded=true]{background:var(--rojo-suave)}
+.desc-boton[disabled]{opacity:.65;cursor:progress}
+.desc-flecha{font-size:.72em;line-height:1;transition:transform .15s}
+.desc-boton[aria-expanded=true] .desc-flecha{transform:rotate(180deg)}
+.desc-velo{display:none}
+.desc-menu{position:absolute;top:calc(100% + 6px);z-index:60;width:min(380px,calc(100vw - 32px));display:flex;flex-direction:column;gap:.5rem;padding:.75rem;background:var(--papel);border:1px solid var(--linea2);border-radius:14px;box-shadow:0 14px 40px rgba(29,26,23,.2)}
+.desc-menu[hidden]{display:none}
+.desc-menu.der{right:0}
+.desc-menu.izq{left:0}
+.desc-tit{margin:.1rem .2rem .15rem;font-weight:600;font-size:.95rem;color:var(--tinta)}
+.desc-opc{display:flex;align-items:center;gap:.8rem;width:100%;min-height:64px;padding:.6rem .8rem;border:1px solid var(--linea2);border-radius:12px;background:#fff;text-align:left;cursor:pointer;color:inherit;transition:background .12s,border-color .12s}
+.desc-opc:hover,.desc-opc:focus-visible{border-color:var(--teal);background:var(--teal-suave)}
+.desc-opc:focus-visible{outline:3px solid var(--teal);outline-offset:1px}
+.desc-sello{flex:0 0 auto;min-width:3.7rem;padding:.3rem .5rem;border:1px solid var(--teal);border-radius:8px;color:var(--teal);font-size:.78rem;font-weight:700;letter-spacing:.06em;text-align:center}
+.desc-opc-txt{display:flex;flex-direction:column;gap:.1rem;min-width:0}
+.desc-opc-txt strong{font-weight:600;font-size:.98rem}
+.desc-opc-txt small{color:var(--tinta2);font-size:.85rem;line-height:1.3}
+.desc-cerrar{width:100%;background:transparent;border-color:var(--linea2);color:var(--tinta2)}
+.desc-estado{margin:0;max-width:30rem;font-size:.88rem;line-height:1.35;text-align:right;color:var(--tinta2)}
+.desc-estado.ok{color:var(--verde)}
+.desc-estado.mal{color:var(--rojo-osc);display:flex;flex-direction:column;align-items:flex-end;gap:.4rem}
+.desc-estado[hidden]{display:none}
+.desc-reintentar{background:#fff}
+/* en las filas de resumen de Contable y en los encabezados de sección el botón se queda a la derecha */
+.rec-resumen-fila>.desc{margin-left:auto}
+.rec-resumen-fila .desc .btn{margin-left:0}
+.lis-sec-cab>.desc,.lis-cab .desc{flex:0 0 auto}
+/* celular: el menú sube desde abajo, ocupa todo el ancho y se cierra tocando fuera o con el botón «Cerrar sin descargar» */
+@media(max-width:640px){
+  .desc{max-width:100%}
+  .desc-estado{max-width:100%}
+  .desc-velo{display:block;position:fixed;inset:0;z-index:59;background:rgba(29,26,23,.45)}
+  .desc-velo[hidden]{display:none}
+  .desc-menu{position:fixed;left:0;right:0;top:auto;bottom:0;width:auto;max-height:88vh;overflow:auto;border-radius:16px 16px 0 0;padding:.9rem 16px calc(.9rem + env(safe-area-inset-bottom,0px))}
+  .desc-menu.der,.desc-menu.izq{left:0;right:0}
+}
+@media(prefers-reduced-motion:reduce){.desc-flecha,.desc-opc{transition:none}}
+@media print{.desc{display:none!important}}

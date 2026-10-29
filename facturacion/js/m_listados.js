@@ -3,7 +3,7 @@ import { h, money, num, fechaHora, horaCorta, fechaCorta, sumaDias, toast, nombr
 import { listados2 } from './api_listados.js';
 import { mensajeAmable } from './api_documentos.js';
 import { selectorPeriodo, textoRango, fechaLarga } from './periodo.js';
-import { csvBajar } from './csv.js';
+import { crearDescarga, nombrePeriodo } from './descargas.js';
 import { graficoColumnas, graficoBarras, autoAjustar } from './graficos.js';
 
 const cssUrl = new URL('../css/listados.css', import.meta.url).href;
@@ -35,7 +35,8 @@ export default {
 
     root.append(
       h('div.lis-cab', h('div', h('p.tenue', 'Ventas ya facturadas de ', h('strong', nomSoc), '. Las cifras vienen de las facturas y tiquetes emitidos; las notas de crédito se restan.')),
-        h('button.btn', { type: 'button', onclick: (e) => imprimir(e.currentTarget) }, 'Imprimir resumen')),
+        h('div.fila', crearDescarga(() => informeCompleto(), { texto: 'Descargar todo el informe', etiqueta: 'Descargar todo el informe de ventas, con una hoja por tabla' }),
+          h('button.btn', { type: 'button', onclick: (e) => imprimir(e.currentTarget) }, 'Imprimir resumen'))),
       h('div.tarjeta.lis-filtros', periodo.el, turnoCaja),
       demoBanner, rotulo, resumenEl, cuerpo);
 
@@ -78,10 +79,21 @@ export default {
     }
 
     /* ---------- piezas de pantalla ---------- */
-    const seccion = (titulo, ayuda, csv, ...hijos) => h('section.tarjeta.lis-sec',
+    // descarga: función que arma, al bajar, lo que hay en pantalla (ver descargas.js); null si la sección no se descarga
+    const seccion = (titulo, ayuda, descarga, ...hijos) => h('section.tarjeta.lis-sec',
       h('div.lis-sec-cab', h('div', h('h2', titulo), ayuda ? h('p.tenue.lis-ayuda', ayuda) : null),
-        csv ? h('button.btn.chico', { type: 'button', onclick: csv }, 'Descargar en Excel (CSV)') : null), ...hijos);
-    const nombreArchivo = (que) => `${que} ${nomSoc || app.soc?.codigo || ''} ${est.desde}${est.desde === est.hasta ? '' : ' a ' + est.hasta}`;
+        descarga ? crearDescarga(descarga, { etiqueta: 'Descargar: ' + titulo }) : null), ...hijos);
+
+    /* ---------- lo que se descarga ---------- */
+    // Encabezado común de todas las descargas: empresa, rango en palabras, turno escogido y, si se ven datos de muestra, que no son ventas reales
+    const baseDescarga = (que) => ({
+      nombre: (est.demo ? 'Ejemplo ' : '') + que + ' ' + nombrePeriodo(est.desde, est.hasta) + (est.turno ? ' un turno' : ''),
+      empresa: nomSoc, cedula: app.soc?.cedula || '',
+      subtitulo: textoRango(est.desde, est.hasta) + (est.turno ? ' · ' + (turnoSel.selectedOptions[0]?.textContent || 'un solo turno de caja') : ' · todos los turnos') + (est.demo ? ' · DATOS DE EJEMPLO, NO SON VENTAS REALES' : ''),
+    });
+    const conBase = (que, tabla) => ({ ...baseDescarga(que), ...tabla });
+    const redondea = (n, d = 2) => { const k = 10 ** d; return Math.round((+n || 0) * k) / k; };
+    const NOTA_NETAS = 'Montos con IVA incluido, sin las ventas anuladas con nota de crédito';
     const kpi = (titulo, valor, nota, extra) => h('div.tarjeta.kpi' + (extra ? '.' + extra : ''), h('div.kpi-t', titulo), h('div.kpi-v.cifra', valor), h('div.kpi-n', nota));
 
     function tablaSimple(cols, filas, pie) {
@@ -139,6 +151,36 @@ export default {
       if (!est.demo) cuerpo.append(h('p.lis-pie', h('button.btn.suave.chico', { type: 'button', onclick: () => { est.demo = true; cargar(est.desde, est.hasta); } }, 'Ver un ejemplo con datos de muestra')));
     }
 
+    // Todo el informe en un libro de Excel: una hoja por tabla, en el mismo orden de la pantalla (el PDF lleva todas las tablas y el CSV un .zip con un archivo por tabla)
+    function tablaResumen(d) {
+      const r = d.resumen, rech = d.rechazados || { n: r.rechazados_n || 0, total: r.rechazados_total || 0 };
+      const ticket = r.vigentes_n ? r.vigentes_total / r.vigentes_n : 0;
+      const baseNeta = (Number(r.ventas_netas) || 0) - (Number(r.iva_neto) || 0);
+      const fila = (concepto, monto, cantidad) => ({ concepto, monto, cantidad });
+      return {
+        titulo: 'Resumen de ventas', cifras: 'mixtas', cifrasNota: 'Montos con IVA incluido salvo donde se indique',
+        columnas: [{ clave: 'concepto', titulo: 'Concepto', tipo: 'texto' }, { clave: 'monto', titulo: 'Monto (₡)', tipo: 'moneda' }, { clave: 'cantidad', titulo: 'Cantidad de documentos', tipo: 'numero', dec: 0 }],
+        filas: [
+          fila('Ventas brutas (con IVA, antes de restar notas de crédito)', +r.ventas_brutas, null),
+          fila('Notas de crédito (se restan, con IVA)', +r.notas_credito, +r.notas_credito_n),
+          fila('Ventas netas (con IVA)', +r.ventas_netas, null),
+          fila('IVA dentro de las ventas netas', +r.iva_neto, null),
+          fila('Ventas netas sin IVA', redondea(baseNeta), null),
+          fila('Documentos emitidos (facturas y tiquetes)', null, +r.docs_emitidos),
+          fila('Promedio por venta (con IVA)', redondea(ticket), null),
+          ...((+rech.n || 0) > 0 ? [fila('Rechazados por Hacienda (aparte, no suman en las ventas)', +rech.total, +rech.n)] : []),
+          ...((+r.sin_aceptar_n || 0) > 0 ? [fila('Documentos todavía sin aceptar por Hacienda (cuentan en las cifras)', null, +r.sin_aceptar_n)] : [])],
+      };
+    }
+    function informeCompleto() {
+      const d = est.datos; if (!d) return { hojas: [] };
+      const r = d.resumen, rech = d.rechazados || { n: r.rechazados_n || 0, total: r.rechazados_total || 0, lista: [] };
+      if (!r.docs_emitidos && !r.notas_credito_n && !(+rech.n > 0)) return { hojas: [] };
+      const hojas = [tablaResumen(d), seriesDias(d).length > 1 ? tablaDias(d) : null, tablaHoras(d), tablaMedios(d), tablaServicio(d), tablaTarifas(d), tablaProductos(d), tablaAbiertos(d), tablaTurnos(d), tablaCajeros(d), +rech.n > 0 ? tablaRechazados(rech) : null]
+        .filter((t) => t && (t.filas || []).length);
+      return { ...baseDescarga('Informe de ventas'), titulo: 'Informe de ventas', hojas };
+    }
+
     /* ---------- ventas por día ---------- */
     function seriesDias(d) {
       const mapa = new Map((d.por_dia || []).map((x) => [x.dia, x]));
@@ -150,19 +192,47 @@ export default {
       }
       return dias.map((y) => mapa.get(y) || { dia: y, docs: 0, ventas: 0, notas_credito: 0, netas: 0, iva: 0 });
     }
+    function tablaDias(d) {
+      const serie = seriesDias(d), mes = !!(serie[0] && serie[0].mes);
+      return {
+        titulo: mes ? 'Ventas por mes' : 'Ventas por día', cifras: 'netas',
+        cifrasNota: 'Montos con IVA incluido. La columna de ventas netas ya tiene restadas las notas de crédito; la de ventas brutas es antes de restarlas',
+        columnas: [
+          { clave: 'dia', titulo: mes ? 'Mes' : 'Fecha', tipo: 'fecha', formato: mes ? 'mes' : undefined },
+          ...(mes ? [] : [{ clave: 'sem', titulo: 'Día de la semana', tipo: 'texto' }]),
+          { clave: 'docs', titulo: 'Documentos emitidos (número)', tipo: 'numero', dec: 0 },
+          { clave: 'ventas', titulo: 'Ventas brutas (₡, con IVA)', tipo: 'moneda' },
+          { clave: 'nc', titulo: 'Notas de crédito que se restan (₡, con IVA)', tipo: 'moneda' },
+          { clave: 'netas', titulo: 'Ventas netas (₡, con IVA)', tipo: 'moneda' },
+          { clave: 'iva', titulo: 'IVA dentro de las ventas netas (₡)', tipo: 'moneda' }],
+        filas: serie.map((x) => ({ dia: x.dia, sem: mes ? '' : dia(x.dia, { weekday: 'long' }), docs: +x.docs, ventas: +x.ventas, nc: +x.notas_credito, netas: +x.netas, iva: +x.iva })),
+        totales: { docs: 'suma', ventas: 'suma', nc: 'suma', netas: 'suma', iva: 'suma' },
+        notas: [`Ordenado ${mes ? 'del mes más antiguo al más reciente' : 'del día más antiguo al más reciente'}. Lo que no tuvo ventas aparece en cero.`],
+      };
+    }
     function seccionDias(d) {
       const serie = seriesDias(d);
-      const csv = () => csvBajar(nombreArchivo('Ventas por dia'), ['Fecha', 'Documentos', 'Ventas brutas (con IVA)', 'Notas de crédito (con IVA)', 'Ventas netas (con IVA)', 'IVA neto'],
-        serie.map((x) => [x.dia, +x.docs, +x.ventas, +x.notas_credito, +x.netas, +x.iva]));
       if (serie.length <= 1) return seccion('Ventas por día', 'El periodo es de un solo día. Más abajo está el detalle por hora.', null, h('p.tenue', 'Escoja «Esta semana» o «Este mes» para ver cada día en una columna.'));
       const datos = serie.map((x) => ({ id: x.dia, etiqueta: x.mes ? dia(x.dia, { month: 'short', year: '2-digit' }) : (serie.length <= 8 ? dia(x.dia, { weekday: 'short' }).replace('.', '') + ' ' + dia(x.dia, { day: 'numeric' }) : dia(x.dia, { day: '2-digit', month: '2-digit' })), valor: +x.netas,
         texto: `${x.mes ? dia(x.dia, { month: 'long', year: 'numeric' }) : fechaLarga(x.dia)}: ventas netas ${money(x.netas)} (brutas ${money(x.ventas)}, notas de crédito ${money(x.notas_credito)}), IVA ${money(x.iva)}, ${x.docs} ${x.docs === 1 ? 'documento' : 'documentos'}.` }));
       const mes = serie[0].mes;
-      return seccion(mes ? 'Ventas por mes' : 'Ventas por día', `Cada columna es ${mes ? 'un mes' : 'un día'}, de izquierda (más antiguo) a derecha (más reciente). Ventas netas: ya restadas las notas de crédito, con IVA incluido.`, csv,
+      return seccion(mes ? 'Ventas por mes' : 'Ventas por día', `Cada columna es ${mes ? 'un mes' : 'un día'}, de izquierda (más antiguo) a derecha (más reciente). Ventas netas: ya restadas las notas de crédito, con IVA incluido.`, () => conBase(mes ? 'Ventas por mes' : 'Ventas por día', tablaDias(d)),
         conGrafico('col', datos, { tituloX: mes ? 'Mes' : 'Día (de izquierda a derecha, en orden de fecha)', tituloY: 'Ventas netas (₡, IVA incluido)', color: 'rojo', anchoEtiqueta: mes ? 56 : 44, descripcion: 'Gráfico de columnas de ventas netas por ' + (mes ? 'mes' : 'día') }));
     }
 
     /* ---------- ventas por hora ---------- */
+    function tablaHoras(d) {
+      const porH = new Map((d.por_hora || []).map((x) => [+x.hora, x]));
+      if (!porH.size) return null;
+      const hs = [...porH.keys()]; const desdeH = Math.min(...hs, 7), hastaH = Math.max(...hs, 18);
+      const filas = []; for (let k = desdeH; k <= hastaH; k++) { const x = porH.get(k) || { docs: 0, total: 0 }; filas.push({ hora: String(k).padStart(2, '0') + ':00', docs: +x.docs, total: +x.total }); }
+      return {
+        titulo: 'Ventas por hora', cifras: 'netas', cifrasNota: NOTA_NETAS,
+        columnas: [{ clave: 'hora', titulo: 'Hora de inicio (la hora completa, de 24 horas)', tipo: 'texto' }, { clave: 'docs', titulo: 'Ventas (número)', tipo: 'numero', dec: 0 }, { clave: 'total', titulo: 'Monto con IVA (₡)', tipo: 'moneda' }],
+        filas, totales: { docs: 'suma', total: 'suma' },
+        notas: ['Suma de todos los días del periodo. Ordenado de la hora más temprana a la más tarde.'],
+      };
+    }
     function seccionHoras(d) {
       const porH = new Map((d.por_hora || []).map((x) => [+x.hora, x]));
       if (!porH.size) return null;
@@ -172,39 +242,73 @@ export default {
       const rangoH = (k) => `${String(k).padStart(2, '0')}:00 a ${String(k).padStart(2, '0')}:59`;
       const datos = serie.map((x) => ({ id: x.hora, etiqueta: etq(x.hora), valor: +x.total, texto: `De ${rangoH(x.hora)}: ${money(x.total)} en ${x.docs} ${x.docs === 1 ? 'venta' : 'ventas'}.` }));
       const mejor = serie.reduce((a, b) => (+b.total > +a.total ? b : a), serie[0]);
-      const csv = () => csvBajar(nombreArchivo('Ventas por hora'), ['Hora (inicio)', 'Ventas (número)', 'Monto con IVA'], serie.map((x) => [etq(x.hora), +x.docs, +x.total]));
-      return seccion('Ventas por hora', `Suma de todos los días del periodo. Cada columna es una hora completa: la de 7:00 son las ventas entre 7:00 y 7:59. La hora con más ventas es ${etq(mejor.hora)} a ${String(mejor.hora).padStart(2, '0')}:59 (${money(mejor.total)}). No incluye ventas anuladas con nota de crédito.`, csv,
+      return seccion('Ventas por hora', `Suma de todos los días del periodo. Cada columna es una hora completa: la de 7:00 son las ventas entre 7:00 y 7:59. La hora con más ventas es ${etq(mejor.hora)} a ${String(mejor.hora).padStart(2, '0')}:59 (${money(mejor.total)}). No incluye ventas anuladas con nota de crédito.`, () => conBase('Ventas por hora', tablaHoras(d)),
         conGrafico('col', datos, { tituloX: 'Hora del día (24 horas)', tituloY: 'Ventas netas, sin las anuladas (₡, IVA incluido)', color: 'ambar', anchoEtiqueta: 36, descripcion: 'Gráfico de columnas de ventas por hora del día' }));
     }
 
     /* ---------- medio de pago y tipo de servicio ---------- */
+    function tablaMedios(d) {
+      const filas = d.por_medio || []; const tot = filas.reduce((a, x) => a + +x.total, 0);
+      return {
+        titulo: 'Ventas por medio de pago', cifras: 'netas', cifrasNota: NOTA_NETAS,
+        columnas: [{ clave: 'medio', titulo: 'Medio de pago', tipo: 'texto' }, { clave: 'docs', titulo: 'Ventas (número)', tipo: 'numero', dec: 0 }, { clave: 'total', titulo: 'Monto con IVA (₡)', tipo: 'moneda' }, { clave: 'pct', titulo: '% del monto cobrado', tipo: 'porcentaje', dec: 2 }],
+        filas: filas.map((x) => ({ medio: nombreMedio(x.medio), docs: +x.docs, total: +x.total, pct: tot ? redondea((+x.total / tot) * 100) : 0 })),
+        totales: { total: 'suma' },
+        notas: ['Una venta pagada con dos medios aparece en los dos, por eso las ventas (número) no se suman.'],
+      };
+    }
     function seccionMedios(d) {
       const filas = d.por_medio || []; const tot = filas.reduce((a, x) => a + +x.total, 0);
       const datos = filas.map((x) => ({ etiqueta: nombreMedio(x.medio), valor: +x.total, extra: pct(+x.total, tot), texto: `${nombreMedio(x.medio)}: ${money(x.total)} (${pct(+x.total, tot)} de lo cobrado) en ${x.docs} ${x.docs === 1 ? 'venta' : 'ventas'}.` }));
-      const csv = () => csvBajar(nombreArchivo('Ventas por medio de pago'), ['Medio de pago', 'Ventas (número)', 'Monto con IVA', 'Porcentaje'], filas.map((x) => [nombreMedio(x.medio), +x.docs, +x.total, tot ? Math.round((+x.total / tot) * 1000) / 10 : 0]));
-      return seccion('Por medio de pago', 'Cómo pagaron los clientes (una venta pagada con dos medios aparece en ambos). No incluye ventas anuladas.', csv,
+      return seccion('Por medio de pago', 'Cómo pagaron los clientes (una venta pagada con dos medios aparece en ambos). No incluye ventas anuladas.', () => conBase('Ventas por medio de pago', tablaMedios(d)),
         conGrafico('bar', datos, { tituloX: 'Monto cobrado, sin las anuladas (₡, IVA incluido)', tituloY: 'Medio de pago', descripcion: 'Barras de ventas por medio de pago' }));
+    }
+    function tablaServicio(d) {
+      const filas = d.por_servicio || []; const tot = filas.reduce((a, x) => a + +x.total, 0);
+      return {
+        titulo: 'Ventas por tipo de servicio', cifras: 'netas', cifrasNota: NOTA_NETAS,
+        columnas: [{ clave: 'tipo', titulo: 'Tipo de servicio', tipo: 'texto' }, { clave: 'ventas', titulo: 'Ventas (número)', tipo: 'numero', dec: 0 }, { clave: 'total', titulo: 'Monto con IVA (₡)', tipo: 'moneda' }, { clave: 'pct', titulo: '% del monto vendido', tipo: 'porcentaje', dec: 2 }, { clave: 'prom', titulo: 'Promedio por venta (₡, con IVA)', tipo: 'moneda' }],
+        filas: filas.map((x) => ({ tipo: nombreServicio(x.tipo_servicio), ventas: +x.ventas, total: +x.total, pct: tot ? redondea((+x.total / tot) * 100) : 0, prom: redondea(+x.total / (+x.ventas || 1)) })),
+        totales: { ventas: 'suma', total: 'suma' },
+      };
     }
     function seccionServicio(d) {
       const filas = d.por_servicio || []; const tot = filas.reduce((a, x) => a + +x.total, 0);
       const datos = filas.map((x) => ({ etiqueta: nombreServicio(x.tipo_servicio), valor: +x.total, extra: pct(+x.total, tot), texto: `${nombreServicio(x.tipo_servicio)}: ${money(x.total)} (${pct(+x.total, tot)}) en ${x.ventas} ${x.ventas === 1 ? 'venta' : 'ventas'}; promedio por venta ${money(+x.total / (+x.ventas || 1))}.` }));
-      const csv = () => csvBajar(nombreArchivo('Ventas por tipo de servicio'), ['Tipo de servicio', 'Ventas (número)', 'Monto con IVA', 'Porcentaje', 'Promedio por venta'], filas.map((x) => [nombreServicio(x.tipo_servicio), +x.ventas, +x.total, tot ? Math.round((+x.total / tot) * 1000) / 10 : 0, Math.round((+x.total / (+x.ventas || 1)) * 100) / 100]));
-      return seccion('Por tipo de servicio', 'Buffet, para llevar, express o en espera. No incluye ventas anuladas.', csv,
+      return seccion('Por tipo de servicio', 'Buffet, para llevar, express o en espera. No incluye ventas anuladas.', () => conBase('Ventas por tipo de servicio', tablaServicio(d)),
         conGrafico('bar', datos, { tituloX: 'Monto vendido, sin las anuladas (₡, IVA incluido)', tituloY: 'Tipo de servicio', descripcion: 'Barras de ventas por tipo de servicio' }));
     }
 
     /* ---------- turnos, cajeros, IVA ---------- */
+    function tablaTurnos(d) {
+      const filas = [...(d.por_turno || [])].sort((x, y) => new Date(x.abierto_en) - new Date(y.abierto_en)); // en el archivo van del más antiguo al más reciente
+      if (!filas.length) return null;
+      return {
+        titulo: 'Ventas por turno de caja', cifras: 'netas', cifrasNota: NOTA_NETAS,
+        columnas: [{ clave: 'abrio', titulo: 'Abrió (fecha y hora)', tipo: 'fechahora' }, { clave: 'cerro', titulo: 'Cerró (fecha y hora)', tipo: 'fechahora' }, { clave: 'por', titulo: 'Abierto por', tipo: 'texto' }, { clave: 'ventas', titulo: 'Ventas (número)', tipo: 'numero', dec: 0 }, { clave: 'total', titulo: 'Monto con IVA (₡)', tipo: 'moneda' }],
+        filas: filas.map((t) => ({ abrio: t.abierto_en, cerro: t.cerrado_en || 'Sigue abierto', por: t.abierto_por ? nombrePropio(t.abierto_por) : '', ventas: +t.ventas, total: +t.total })),
+        totales: { ventas: 'suma', total: 'suma' },
+        notas: ['Ordenado del turno más antiguo al más reciente.'],
+      };
+    }
     function seccionTurnos(d) {
       const filas = turnosRecientes(d.por_turno || []); if (!filas.length) return null;
-      const csv = () => csvBajar(nombreArchivo('Ventas por turno'), ['Abrió', 'Cerró', 'Abierto por', 'Ventas (número)', 'Monto con IVA'], filas.map((t) => [fechaHora(t.abierto_en), t.cerrado_en ? fechaHora(t.cerrado_en) : 'Sigue abierto', t.abierto_por || '', +t.ventas, +t.total]));
-      return seccion('Por turno de caja', 'Cada turno abre y cierra la caja. El más reciente va primero. Monto de las ventas vigentes (sin anuladas), con IVA.', csv,
+      return seccion('Por turno de caja', 'Cada turno abre y cierra la caja. El más reciente va primero. Monto de las ventas vigentes (sin anuladas), con IVA.', () => conBase('Ventas por turno de caja', tablaTurnos(d)),
         tablaSimple([{ t: 'Turno' }, { t: 'Abrió' }, { t: 'Cerró' }, { t: 'Ventas', der: 1 }, { t: 'Monto con IVA', der: 1 }],
           filas.map((t) => [t.abierto_por ? 'Abrió ' + nombrePropio(t.abierto_por) : 'Turno', fechaHora(t.abierto_en), t.cerrado_en ? fechaHora(t.cerrado_en) : 'Sigue abierto', num(t.ventas, 0), money(t.total)])));
     }
+    function tablaCajeros(d) {
+      const filas = d.por_cajero || []; if (!filas.length || (filas.length === 1 && filas[0].cajero === 'Sin registrar')) return null;
+      return {
+        titulo: 'Ventas por cajero', cifras: 'netas', cifrasNota: NOTA_NETAS,
+        columnas: [{ clave: 'cajero', titulo: 'Cajero (quien abrió la cuenta)', tipo: 'texto' }, { clave: 'ventas', titulo: 'Ventas (número)', tipo: 'numero', dec: 0 }, { clave: 'total', titulo: 'Monto con IVA (₡)', tipo: 'moneda' }],
+        filas: filas.map((t) => ({ cajero: nombrePropio(t.cajero), ventas: +t.ventas, total: +t.total })),
+        totales: { ventas: 'suma', total: 'suma' },
+      };
+    }
     function seccionCajeros(d) {
       const filas = d.por_cajero || []; if (!filas.length || (filas.length === 1 && filas[0].cajero === 'Sin registrar')) return null;
-      const csv = () => csvBajar(nombreArchivo('Ventas por cajero'), ['Cajero', 'Ventas (número)', 'Monto con IVA'], filas.map((t) => [t.cajero, +t.ventas, +t.total]));
-      return seccion('Por cajero', 'Quien abrió la cuenta de cada venta. Monto con IVA, sin ventas anuladas.', csv,
+      return seccion('Por cajero', 'Quien abrió la cuenta de cada venta. Monto con IVA, sin ventas anuladas.', () => conBase('Ventas por cajero', tablaCajeros(d)),
         tablaSimple([{ t: 'Cajero' }, { t: 'Ventas', der: 1 }, { t: 'Monto con IVA', der: 1 }], filas.map((t) => [nombrePropio(t.cajero), num(t.ventas, 0), money(t.total)])));
     }
     // Una fila por tarifa de IVA (13 %, 2 %, 0 %...). Las notas de crédito restan, así que el total cuadra con las ventas netas de arriba.
@@ -214,13 +318,23 @@ export default {
       const nom = String(t.nombre || '').trim();
       return nom && corto && !nom.includes(corto) ? `${nom} (${corto})` : (nom || corto || 'Sin tarifa');
     };
+    // Acepta también la forma anterior de la función (total_con_iva, sin base)
+    const tarifasNormales = (d) => (d.por_tarifa || []).map((t) => { const total = +(t.total ?? t.total_con_iva ?? 0), iva = +(t.iva ?? 0); return { ...t, total, iva, base: t.base != null ? +t.base : Math.round((total - iva) * 100) / 100, documentos: t.documentos }; });
+    function tablaTarifas(d) {
+      const f = tarifasNormales(d); if (!f.length) return null;
+      return {
+        titulo: 'Ventas por tarifa de IVA', cifras: 'netas',
+        cifrasNota: 'Es lo que se declara: ventas netas con las notas de crédito ya restadas. Cada tarifa va aparte',
+        columnas: [{ clave: 'nom', titulo: 'Tarifa de IVA', tipo: 'texto' }, { clave: 'pc', titulo: 'Porcentaje de IVA', tipo: 'porcentaje', dec: 2 }, { clave: 'base', titulo: 'Ventas sin IVA (₡)', tipo: 'moneda' }, { clave: 'iva', titulo: 'IVA (₡)', tipo: 'moneda' }, { clave: 'total', titulo: 'Total con IVA (₡)', tipo: 'moneda' }],
+        filas: f.map((t) => ({ nom: nombreTarifa(t), pc: Number.isFinite(+t.tarifa) ? +t.tarifa : null, base: t.base, iva: t.iva, total: t.total })),
+        totales: { base: 'suma', iva: 'suma', total: 'suma' }, etiquetaTotal: 'Total de todas las tarifas',
+      };
+    }
     function seccionTarifas(d) {
       const filas = d.por_tarifa || []; if (!filas.length) return null;
-      // Acepta también la forma anterior de la función (total_con_iva, sin base)
-      const f = filas.map((t) => { const total = +(t.total ?? t.total_con_iva ?? 0), iva = +(t.iva ?? 0); return { ...t, total, iva, base: t.base != null ? +t.base : Math.round((total - iva) * 100) / 100, documentos: t.documentos }; });
+      const f = tarifasNormales(d);
       const sum = (k) => f.reduce((a, x) => a + x[k], 0);
-      const csv = () => csvBajar(nombreArchivo('Ventas por tarifa de IVA'), ['Tarifa de IVA', 'Porcentaje', 'Ventas sin IVA', 'IVA', 'Total con IVA'], f.map((t) => [nombreTarifa(t), +t.tarifa, t.base, t.iva, t.total]));
-      return seccion('Ventas por tarifa de IVA', 'Cada tarifa va aparte (por ejemplo 13 %, 2 % y 0 %). Es lo que se declara de las ventas netas: ya restadas las notas de crédito.', csv,
+      return seccion('Ventas por tarifa de IVA', 'Cada tarifa va aparte (por ejemplo 13 %, 2 % y 0 %). Es lo que se declara de las ventas netas: ya restadas las notas de crédito.', () => conBase('Ventas por tarifa de IVA', tablaTarifas(d)),
         tablaSimple([{ t: 'Tarifa' }, { t: 'Ventas sin IVA', der: 1 }, { t: 'IVA', der: 1 }, { t: 'Total con IVA', der: 1 }],
           f.map((t) => [nombreTarifa(t), money(t.base), money(t.iva), money(t.total)]),
           h('tr', h('td', 'Total de todas las tarifas'), h('td.der', money(sum('base'))), h('td.der', money(sum('iva'))), h('td.der', money(sum('total'))))));
@@ -233,9 +347,21 @@ export default {
         h('div', h('b', `${n} ${n === 1 ? 'documento fue rechazado' : 'documentos fueron rechazados'} por Hacienda`), ` (${money(rech.total)}). No cuentan en las ventas de arriba. Si eran ventas reales, hay que hacerlas de nuevo en Facturación.`),
         h('button.btn', { type: 'button', onclick: () => app.ir('anular', { filtro: 'problemas', desde: est.desde }) }, 'Ver en Anular y reimprimir'));
     }
+    const nombreDocRech = (t) => ({ '01': 'Factura', '03': 'Nota de crédito', '04': 'Tiquete' }[t] || 'Documento');
+    function tablaRechazados(rech) {
+      const lista = [...(rech.lista || [])].sort((x, y) => new Date(x.fecha) - new Date(y.fecha)); // en el archivo van del más antiguo al más reciente
+      if (!lista.length) return null;
+      return {
+        titulo: 'Documentos rechazados por Hacienda', cifras: 'brutas', cifrasNota: 'Hacienda no los aceptó: no son ventas válidas y no suman en ninguna otra tabla',
+        columnas: [{ clave: 'fecha', titulo: 'Fecha y hora', tipo: 'fechahora' }, { clave: 'tipo', titulo: 'Tipo de documento', tipo: 'texto' }, { clave: 'num', titulo: 'Número', tipo: 'texto' }, { clave: 'total', titulo: 'Total (₡, con IVA)', tipo: 'moneda' }, { clave: 'msg', titulo: 'Qué dice Hacienda', tipo: 'texto' }],
+        filas: lista.map((x) => ({ fecha: x.fecha, tipo: nombreDocRech(x.tipo_doc), num: String(x.numero ?? ''), total: +x.total, msg: x.mensaje || 'Sin detalle' })),
+        totales: { total: 'suma' },
+        notas: ['Ordenado del más antiguo al más reciente.', +rech.n > lista.length ? `Se incluyen los ${lista.length} más recientes de ${rech.n}. Los demás están en Anular y reimprimir.` : ''],
+      };
+    }
     function seccionRechazados(rech) {
       const lista = rech.lista || [];
-      return seccion('Rechazados por Hacienda (aparte)', 'Hacienda no los aceptó, así que no son ventas válidas y no suman en nada de lo anterior. Primero el más reciente.', null,
+      return seccion('Rechazados por Hacienda (aparte)', 'Hacienda no los aceptó, así que no son ventas válidas y no suman en nada de lo anterior. Primero el más reciente.', lista.length ? () => conBase('Documentos rechazados por Hacienda', tablaRechazados(rech)) : null,
         lista.length
           ? tablaSimple([{ t: 'Fecha y hora' }, { t: 'Documento' }, { t: 'Total', der: 1 }, { t: 'Qué dice Hacienda' }],
             lista.map((x) => [fechaHora(x.fecha), `${{ '01': 'Factura', '03': 'Nota de crédito', '04': 'Tiquete' }[x.tipo_doc] || 'Documento'} N.° ${x.numero}`, money(x.total), x.mensaje || 'Sin detalle']))
@@ -277,6 +403,39 @@ export default {
       return lista;
     }
 
+    // La lista de productos tal como está en pantalla: con la búsqueda y el orden escogidos (la usan la pantalla y la descarga)
+    function filasLista(fijos) {
+      const f = norm(est.filtro), { col, dir } = est.ordenLista;
+      const rows = fijos.filter((x) => !f || norm(x.nombre + ' ' + x.codigo).includes(f)).map((x) => ({ ...x, cantidad: +x.cantidad, total: +x.total }));
+      rows.sort((a, b) => (col === 'nombre' || col === 'codigo' ? String(a[col]).localeCompare(String(b[col])) * dir : (a[col] - b[col]) * dir));
+      return rows;
+    }
+    // Productos vendidos tal como se ven ahora (vista, orden y búsqueda de la pantalla), en filas planas
+    function tablaProductos(d) {
+      const todos = (d.productos || []).filter((x) => !x.abierto); if (!todos.length) return null;
+      const totalFijos = todos.reduce((a, x) => a + +x.total, 0);
+      const pc = (x) => (totalFijos ? redondea((+x.total / totalFijos) * 100) : 0);
+      let filas;
+      if (est.vista === 'arbol') { filas = []; arbol(todos, est.filtro).forEach((cj) => cj.productos.forEach((pr) => pr.hojas.forEach((x) => filas.push({ caj: cj.nombre, prod: pr.nombre, cod: x.codigo || '', nom: x.nombre, cant: +x.cantidad, total: +x.total, pct: pc(x) })))); }
+      else filas = filasLista(todos).map((x) => ({ caj: x.cajon_nombre || '', prod: partes(x.nombre).base, cod: x.codigo || '', nom: x.nombre, cant: x.cantidad, total: x.total, pct: pc(x) }));
+      const notas = ['El % del total es sobre todos los productos del periodo, aunque haya una búsqueda.'];
+      if (est.filtro) notas.push('Solo las filas que coinciden con la búsqueda; el total de abajo es el de estas filas.');
+      if (est.vista !== 'arbol' && !est.verTodos && filas.length > 15) notas.push(`Aquí van los ${filas.length} productos, aunque la pantalla muestre solo los primeros 15.`);
+      return {
+        titulo: 'Productos vendidos', cifras: 'netas', cifrasNota: NOTA_NETAS + (est.filtro ? '. Búsqueda: «' + est.filtro + '»' : ''),
+        columnas: [{ clave: 'caj', titulo: 'Cajón', tipo: 'texto' }, { clave: 'prod', titulo: 'Producto', tipo: 'texto' }, { clave: 'cod', titulo: 'Código (6 dígitos)', tipo: 'texto' }, { clave: 'nom', titulo: 'Nombre completo', tipo: 'texto' }, { clave: 'cant', titulo: 'Cantidad', tipo: 'numero', dec: 3 }, { clave: 'total', titulo: 'Monto con IVA (₡)', tipo: 'moneda' }, { clave: 'pct', titulo: '% del total', tipo: 'porcentaje', dec: 2 }],
+        filas, totales: { cant: 'suma', total: 'suma' }, notas,
+      };
+    }
+    function tablaAbiertos(d) {
+      const abiertos = (d.productos || []).filter((x) => x.abierto); if (!abiertos.length) return null;
+      return {
+        titulo: 'Productos de precio abierto o por peso', cifras: 'netas', cifrasNota: NOTA_NETAS + '. La cantidad no se puede comparar con la de los demás productos',
+        columnas: [{ clave: 'cod', titulo: 'Código', tipo: 'texto' }, { clave: 'nom', titulo: 'Producto', tipo: 'texto' }, { clave: 'uni', titulo: 'Unidad', tipo: 'texto' }, { clave: 'cant', titulo: 'Cantidad o peso', tipo: 'numero', dec: 3 }, { clave: 'total', titulo: 'Monto con IVA (₡)', tipo: 'moneda' }],
+        filas: abiertos.map((x) => ({ cod: x.codigo || '', nom: x.nombre, uni: x.unidad || '', cant: +x.cantidad, total: +x.total })),
+        totales: { total: 'suma' }, etiquetaTotal: 'Total de precio abierto',
+      };
+    }
     function seccionProductos(d) {
       const filas = d.productos || [];
       if (!filas.length) return seccion('Productos vendidos', null, null, h('p.tenue', 'No hay productos vendidos en este periodo.'));
@@ -321,9 +480,8 @@ export default {
           h('tfoot', h('tr', h('td', 'Total de estos productos'), h('td.der', num(fijos.reduce((a, x) => a + +x.cantidad, 0), 3)), h('td.der', money(totalFijos)), h('td.der', ''))))), insightPapas(lista));
       }
       function vistaLista() {
-        const f = norm(est.filtro), { col, dir } = est.ordenLista;
-        let rows = fijos.filter((x) => !f || norm(x.nombre + ' ' + x.codigo).includes(f)).map((x) => ({ ...x, cantidad: +x.cantidad, total: +x.total }));
-        rows.sort((a, b) => (col === 'nombre' || col === 'codigo' ? String(a[col]).localeCompare(String(b[col])) * dir : (a[col] - b[col]) * dir));
+        const { col, dir } = est.ordenLista;
+        const rows = filasLista(fijos);
         const total = rows.length, mostrar = est.verTodos ? rows : rows.slice(0, 15);
         const th = (c, t, der) => h('th' + (der ? '.der' : ''), { 'aria-sort': col === c ? (dir > 0 ? 'ascending' : 'descending') : 'none' },
           h('button.ord', { type: 'button', onclick: () => { est.ordenLista = { col: c, dir: col === c ? -dir : (c === 'nombre' || c === 'codigo' ? 1 : -1) }; pintarProd(); } }, t, ' ', h('span.flecha', col === c ? (dir > 0 ? '▲' : '▼') : '↕')));
@@ -347,17 +505,11 @@ export default {
       }
       pintarProd();
 
-      const csvProd = () => {
-        const lista = arbol(fijos, '');
-        const rows = []; lista.forEach((cj) => cj.productos.forEach((pr) => pr.hojas.forEach((x) => rows.push([cj.nombre, pr.nombre, x.codigo || '', x.nombre, +x.cantidad, +x.total, totalFijos ? Math.round((+x.total / totalFijos) * 10000) / 100 : 0]))));
-        csvBajar(nombreArchivo('Productos vendidos'), ['Cajón', 'Producto', 'Código', 'Nombre completo', 'Cantidad', 'Monto con IVA', '% del total'], rows);
-      };
-      const cab = seccion('Productos vendidos', 'Agrupados por el código de 6 dígitos: cajón (2), producto (2) y modificador (2), igual que en el reporte «Productos vendidos» de Prisma. Sirve para ver, por ejemplo, qué marca de gaseosa se vende más. Cada tamaño es un producto distinto (Coca-Cola 355 mL y Coca-Cola 600 mL no se mezclan). No incluye ventas anuladas.', csvProd,
+      const cab = seccion('Productos vendidos', 'Agrupados por el código de 6 dígitos: cajón (2), producto (2) y modificador (2), igual que en el reporte «Productos vendidos» de Prisma. Sirve para ver, por ejemplo, qué marca de gaseosa se vende más. Cada tamaño es un producto distinto (Coca-Cola 355 mL y Coca-Cola 600 mL no se mezclan). No incluye ventas anuladas.', () => conBase('Productos vendidos', tablaProductos(d)),
         h('label.etq.lis-buscar', 'Buscar un producto', busca), barra, cuerpoProd);
       if (!abiertos.length) return cab;
       const totalAb = abiertos.reduce((a, x) => a + +x.total, 0);
-      const csvAb = () => csvBajar(nombreArchivo('Productos de precio abierto o por peso'), ['Código', 'Producto', 'Unidad', 'Cantidad', 'Monto con IVA'], abiertos.map((x) => [x.codigo || '', x.nombre, x.unidad || '', +x.cantidad, +x.total]));
-      return h('div', cab, seccion('Precio abierto o por peso (aparte)', 'En estos productos el precio se digita a mano o se vende por peso, así que la cantidad NO se puede comparar con la de los demás productos. Por eso van separados y no suman en la tabla de arriba.', csvAb,
+      return h('div', cab, seccion('Precio abierto o por peso (aparte)', 'En estos productos el precio se digita a mano o se vende por peso, así que la cantidad NO se puede comparar con la de los demás productos. Por eso van separados y no suman en la tabla de arriba.', () => conBase('Productos de precio abierto o por peso', tablaAbiertos(d)),
         tablaSimple([{ t: 'Código' }, { t: 'Producto' }, { t: 'Unidad' }, { t: 'Cantidad o peso', der: 1 }, { t: 'Monto con IVA', der: 1 }],
           abiertos.map((x) => [h('code.cod', x.codigo || 'sin dato'), x.nombre, x.unidad || '', num(x.cantidad, 3), money(x.total)]),
           h('tr', h('td', { colspan: 4 }, 'Total de precio abierto'), h('td.der', money(totalAb))))));

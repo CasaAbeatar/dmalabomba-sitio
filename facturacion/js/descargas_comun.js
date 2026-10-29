@@ -158,7 +158,7 @@ export function normalizarTabla(o, base = {}) {
   const vistas = new Set(); cols.forEach((c, i) => { if (vistas.has(c.clave)) c.clave = c.clave + '#' + i; vistas.add(c.clave); });
   const filas = Array.isArray(o.filas) ? o.filas : [];
   return {
-    nombre: o.nombre ?? o.titulo ?? base.titulo ?? 'Informe',
+    nombre: o.hoja ?? o.titulo ?? base.titulo ?? 'Informe', // nombre de la hoja de Excel (no confundir con el nombre del archivo)
     titulo: o.titulo ?? base.titulo ?? 'Informe',
     subtitulo: o.subtitulo ?? base.subtitulo ?? '',
     cifras: o.cifras ?? base.cifras ?? '',

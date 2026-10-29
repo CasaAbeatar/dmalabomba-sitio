@@ -263,6 +263,8 @@ export default {
           else toast(textoDeError(e), 'error', 7000);
           // Alguien desactivó ese producto desde otro aparato: se vuelve a pedir el menú para que ya no aparezca
           if (/desactivado y no se puede vender/i.test(e?.message || '')) setTimeout(revisarCatalogo, 500);
+          // Otro aparato cerró la caja mientras esta pantalla la creía abierta: se pone al día el turno y la pantalla pasa a «La caja está cerrada»
+          if (/abra el turno de caja|turno (ya )?(est[aá] )?cerrado|turno no existe/i.test(e?.message || '')) setTimeout(() => { if (vivo) app.refrescar().catch(() => {}); }, 400);
           if (cur && asideCuenta) pintarCuenta();
         }
         finally { ocupadas--; cambios++; }
