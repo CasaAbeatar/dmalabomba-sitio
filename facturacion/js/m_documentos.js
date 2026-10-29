@@ -2,7 +2,7 @@
 // y en cada fila los botones «Reimprimir» y «Anular». La lista se pinta por tandas («Mostrar más»): la búsqueda y los filtros actúan sobre todo lo cargado. Tocar la fila abre el detalle (estado en Hacienda, «Ya lo atendí», archivos, reenvíos).
 // La anulación con nota de crédito es la de m_anular.js; la impresión es la de imprimir.js.
 import { h, money, modal, toast, descargar, hoyCR, sumaDias, fechaHora, horaCorta, debounce, num, r2, nombrePropio, nombreLocal, traducirHacienda, campoBusqueda, TIPOS_SERVICIO, MEDIOS, TIPOS_ID } from './util.js';
-import { documentos, anulacionDe, saldosDe, permiteAnular, otrasNotas, sinEfectoDeSaldos, correoActivo, reenviarCorreo, alertaAtender, hacerVentaDeNuevo, mensajeAmable } from './api_documentos.js';
+import { documentos, anulacionDe, permiteAnular, otrasNotas, sinEfectoDeSaldos, correoActivo, reenviarCorreo, alertaAtender, hacerVentaDeNuevo, mensajeAmable } from './api_documentos.js';
 import { anularDocumento, cambiarCliente, textoCodigoNota, codigoDeNota, sustituyeSoportado, listaNotas, TEXTO_07 } from './m_anular.js';
 import { devolverParte, corregirMonto, dejarSinEfecto } from './m_nota_parcial.js';
 import { selectorCliente } from './ui_cliente.js';
@@ -434,12 +434,15 @@ export default {
       let segundo = null;
       if (esVenta(d)) {
         if (anulado) segundo = null;
+        else if (d.estado === 'aceptado' && (nDev > 0 || nDeb > 0)) segundo = h('button.btn.peligro.doc-bot', { type: 'button', disabled: true, 'aria-label': `Anular ${quien}. No disponible: ya tiene ${nDeb > 0 ? 'una nota de débito' : 'una devolución o una corrección'}` }, 'Anular'); // la base tampoco deja anular completo un documento con notas (admite_anulacion = false); en el detalle se ve por qué y qué sí se puede hacer
         else if (d.estado === 'aceptado') segundo = h('button.btn.peligro.doc-bot', { type: 'button', 'aria-label': 'Anular ' + quien, onclick: () => abrirAnular(d, { alTerminar: () => cargar(true), alVerNC: (n) => abrirDetalle(n.id) }) }, 'Anular');
         else if (d.estado === 'rechazado' || d.estado === 'error') segundo = h('button.btn.doc-bot', { type: 'button', 'aria-label': (d.atendida ? 'Ver detalle de ' : 'Ver y atender ') + quien, onclick: () => abrirDetalle(d.id) }, d.atendida ? 'Ver detalle' : 'Ver y atender'); // el nombre accesible empieza con el mismo texto que se ve
       }
       // Todavía no hay nada que anular (Hacienda no ha aceptado el documento): se dice a la vista, no solo al pasar el mouse
       const espera = esVenta(d) && !anulado && (d.estado === 'pendiente' || d.estado === 'enviado')
-        ? h('div.doc-espera', { role: 'note' }, h('b', 'Esperando a Hacienda. '), 'Todavía no se puede anular: podrá hacerlo cuando Hacienda lo acepte. Toque la fila para ver qué significa y qué hacer.') : null;
+        ? h('div.doc-espera', { role: 'note' }, h('b', 'Esperando a Hacienda. '), 'Todavía no se puede anular: podrá hacerlo cuando Hacienda lo acepte. Toque la fila para ver qué significa y qué hacer.')
+        : esVenta(d) && !anulado && d.estado === 'aceptado' && (nDev > 0 || nDeb > 0)
+          ? h('div.doc-espera', { role: 'note' }, h('b', 'No se anula completo. '), `Ya tiene ${nDeb > 0 && nDev > 0 ? 'una devolución o corrección y una nota de débito' : nDeb > 0 ? 'una nota de débito' : 'una devolución o una corrección'}. Toque la fila: ahí puede devolver otra parte o corregir un monto.`) : null;
       return h('div.doc-fila' + (nc ? '.nc' : '') + (nd ? '.nd' : '') + (anulado ? '.anulada' : ''),
         h('button.doc-ver', { type: 'button', onclick: () => abrirDetalle(d.id), 'aria-label': `${tipo} número ${numeroCorto(d.consecutivo)}, ${money(d.total)}${nDev ? ', con devolución' : ''}${nDeb ? ', con nota de débito' : ''}. Toque para ver el detalle` },
           h('span.c-hora', horaCorta(d.fecha_emision)),
@@ -479,23 +482,20 @@ export default {
         const mi = ++nCarga;
         try {
           let falloNC = false;
-          // anulacionDe trae la anulación total (nc: solo la nota de crédito de código 01; una devolución parcial NO anula) y los saldos con las demás notas del documento
-          const [c, { nc: ncAnula, saldos }] = await Promise.all([app.api.comprobante(id), anulacionDe(id).catch(() => { falloNC = true; return { nc: null, saldos: null }; })]);
+          // anulacionDe trae la anulación total vigente (nc: solo la nota de crédito de código 01; una devolución parcial NO anula), los saldos con las demás notas del documento y, si el documento
+          // está anulado, los saldos de la nota de crédito: ahí está si se puede dejar sin efecto (admite_sin_efecto) o si ya se dejó sin efecto con una nota de débito (cuelga de la nota de crédito, no del documento)
+          const [c, an] = await Promise.all([app.api.comprobante(id), anulacionDe(id).catch(() => { falloNC = true; return { nc: null, saldos: null, ncAnulacion: null, saldosNC: null, sinEfecto: null }; })]);
           if (!vivo || mi !== nCarga) return;
           estadoVisto = c?.estado || null;
           if (silencioso && falloNC) return; // si no se pudo ver la nota de crédito, mejor no cambiar lo que ya se ve
-          // Si el documento está anulado, se lee la nota de crédito para saber si se puede dejar sin efecto (admite_sin_efecto) o si ya se dejó sin efecto con una nota de débito (cuelga de la nota de crédito, no del documento)
-          const saldosNC = ncAnula && esVenta(c) ? await saldosDe(ncAnula.id) : null;
-          if (!vivo || mi !== nCarga) return;
-          const sinEfecto = sinEfectoDeSaldos(saldosNC);
-          const nc = sinEfecto ? null : ncAnula; // con la anulación dejada sin efecto, el documento vuelve a valer
-          const nueva = JSON.stringify([c, nc, saldos, saldosNC, sinEfecto]);
+          const { nc, saldos, ncAnulacion: ncAnula, saldosNC, sinEfecto } = an; // con la anulación dejada sin efecto, nc es null: el documento vuelve a valer
+          const nueva = JSON.stringify([c, nc, saldos, saldosNC, sinEfecto, falloNC]);
           if (silencioso && nueva === firma) return; // nada cambió: no se toca la pantalla (ni el cursor, ni el teclado del celular)
           firma = nueva;
           // Si había un campo con el cursor adentro, después de pintar vuelve a quedar ahí, en el mismo lugar
           const foco = caja.contains(document.activeElement) && /^(INPUT|TEXTAREA)$/.test(document.activeElement.tagName)
             ? { etiqueta: document.activeElement.getAttribute('aria-label'), ini: document.activeElement.selectionStart, fin: document.activeElement.selectionEnd } : null;
-          caja.replaceChildren(vistaDetalle(c, nc, { repintar: pintarDet, cerrar: m.cerrar, borrador, saldos, saldosNC, sinEfecto, ncAnula }));
+          caja.replaceChildren(vistaDetalle(c, nc, { repintar: pintarDet, cerrar: m.cerrar, borrador, saldos, saldosNC, sinEfecto, ncAnula, falloNC }));
           if (foco?.etiqueta) {
             const campo = [...caja.querySelectorAll('input,textarea')].find((x) => x.getAttribute('aria-label') === foco.etiqueta);
             if (campo) { campo.focus({ preventScroll: true }); try { campo.setSelectionRange(foco.ini, foco.fin); } catch { /* campo sin cursor */ } }
@@ -522,6 +522,9 @@ export default {
       if (nc) raiz.append(h('div.doc-aviso.anulado', h('div', h('b', 'Anulado por la nota de crédito N.° ' + numeroCorto(nc.consecutivo) + '. '), 'Este documento ya no vale.' + (nc.estado !== 'aceptado' ? ' La nota de crédito todavía está esperando la respuesta de Hacienda.' : ''),
           textoCodigoNota(codigoDeNota(nc)) ? h('div.doc-motivo', 'Tipo de nota: ' + textoCodigoNota(codigoDeNota(nc)) + '.' + (sustituyeSoportado(c) ? ' Si se hace la venta de nuevo, la venta nueva llevará el ' + TEXTO_07 + '.' : '')) : null),
         h('button.btn', { type: 'button', onclick: () => { ctx.cerrar(); abrirDetalle(nc.id); } }, 'Ver la nota de crédito')));
+      // No se pudo leer si el documento está anulado: no se dice ni que sí ni que no
+      if (ctx.falloNC && esVenta(c)) raiz.append(h('div.doc-aviso.ref', h('div', h('b', 'No se pudo comprobar si este documento está anulado. '), 'Revise la conexión. Mientras tanto, no dé por hecho que sigue valiendo.'),
+        h('button.btn', { type: 'button', 'data-reintentar': '1', onclick: (e) => ejecutar(e.currentTarget, () => ctx.repintar()) }, 'Intentar de nuevo')));
       // La anulación se dejó sin efecto con una nota de débito (que cuelga de la nota de crédito): el documento vuelve a valer
       if (ctx.sinEfecto && esVenta(c)) raiz.append(h('div.doc-aviso.ref', h('div', h('b', `La anulación de este documento se dejó sin efecto con la nota de débito N.° ${numeroCorto(ctx.sinEfecto.consecutivo)}. `), 'El documento vuelve a valer. Ya no admite más devoluciones, correcciones ni anulaciones.' + (ctx.sinEfecto.estado !== 'aceptado' ? ' La nota de débito todavía está esperando la respuesta de Hacienda.' : '')),
         h('button.btn', { type: 'button', onclick: () => { ctx.cerrar(); abrirDetalle(ctx.sinEfecto.id); } }, 'Ver la nota de débito')));
