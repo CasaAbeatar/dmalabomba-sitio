@@ -58,7 +58,7 @@ export default {
         pintar();
       } catch (e) {
         if (mia !== ficha) return;
-        cuerpo.replaceChildren(h('div.vacio', h('p', 'No se pudieron traer las ventas.'), h('p.tenue', mensajeAmable(e, 'Revise la conexión e intente de nuevo.')), h('button.btn', { type: 'button', onclick: () => cargar(desde, hasta) }, 'Intentar de nuevo')));
+        cuerpo.replaceChildren(h('div.vacio', h('p', 'No se pudieron traer las ventas.'), h('p.tenue', mensajeAmable(e, 'Revise la conexión e intente de nuevo.')), h('button.btn', { type: 'button', 'data-reintentar': '1', onclick: () => cargar(desde, hasta) }, 'Intentar de nuevo')));
       }
     }
 

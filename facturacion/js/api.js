@@ -113,7 +113,7 @@ const VIDA_CATALOGO = 5 * 60 * 1000;
 export function invalidarCatalogo(soc) { versionCatalogo++; if (soc) cacheCatalogo.delete(soc); else cacheCatalogo.clear(); }
 const CAMBIA_CATALOGO = /^fx_(producto_guardar|cajon_guardar|precios_lote)$/;
 // Solo las consultas (no cambian datos) se repiten solas una vez si falla la red. Una escritura NUNCA se repite sola.
-const SOLO_LECTURA = /^fx_(contexto|catalogo|clientes|venta|ventas_abiertas|turno_estado|turno_sugerencia_apertura|movimientos_efectivo|turnos|salidas|comprobante|comprobantes|comprobante_nc|comprobante_xml|listados2?|documentos|alertas|usuarios|recibidas?|respuesta_recibida|producto_historial|cabys_buscar|cabys_verificar)$/;
+const SOLO_LECTURA = /^fx_(contexto|catalogo|clientes|venta|ventas_abiertas|turno_estado|turno_sugerencia_apertura|movimientos_efectivo|turnos|salidas|comprobante|comprobantes|comprobante_nc|comprobante_saldos|comprobante_xml|listados2?|documentos|alertas|usuarios|recibidas?|respuesta_recibida|producto_historial|venta_reemplazo_info|nota_calcular|cabys_buscar|cabys_verificar)$/;
 
 // Todos los módulos llaman a sb.rpc: aquí se les da tiempo máximo, un reintento en las consultas y mensajes claros en las fallas de red.
 const rpcOriginal = sb.rpc.bind(sb);

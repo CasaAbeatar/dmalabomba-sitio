@@ -1,5 +1,5 @@
 // Recepción de facturas de proveedores: lo que llega a los correos de contabilidad, y su respuesta a Hacienda (MensajeReceptor 1 aceptar, 2 aceptar parcialmente, 3 rechazar).
-// Plazo: 8 días hábiles desde que la factura llegó al correo. Datos: fx_recibidas / fx_recibida (solo lectura, ver sql/06_recepcion.sql).
+// Plazo: 8 días hábiles contados desde el inicio del mes siguiente a la fecha de la factura (lo calcula SQL, fx_plazo_receptor). Datos: fx_recibidas / fx_recibida (solo lectura, ver sql/06_recepcion.sql).
 import { h, money, num, fechaHora, debounce, modal, confirmar, pedir, conBoton, toast, nombrePropio, nombreLocal, campoBusqueda, hoyCR } from './util.js';
 import { recibidas, recibida, responder, consultarRespuesta, revisarCorreo } from './api_recepcion.js';
 import { mensajeAmable } from './api_documentos.js';
@@ -89,7 +89,7 @@ export default {
       pintarTabs();
       lista.replaceChildren(h('p.cargando', 'Cargando facturas…')); resumen.replaceChildren();
       rotulo.textContent = est.vista === 'pendientes'
-        ? 'Facturas que llegaron y todavía no tienen respuesta, con el plazo de 8 días hábiles que les queda. Las más urgentes van primero.'
+        ? 'Facturas que llegaron y todavía no tienen respuesta, con los días hábiles que les quedan. El plazo es de 8 días hábiles y se cuenta desde el inicio del mes siguiente a la fecha de la factura. Las más urgentes van primero.'
         : (est.vista === 'vencidas' ? 'Facturas sin respuesta registrada cuyo plazo de 8 días hábiles ya pasó, que llegaron ' : 'Facturas que llegaron ') + (est.vista === 'pendientes' ? '' : textoRango(desde, hasta) + '.');
       try {
         const d = await recibidas(soc.id, desde, hasta, est.q, modo());

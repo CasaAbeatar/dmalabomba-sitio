@@ -224,7 +224,7 @@ export default {
       if (est.cargando && !est.lista.length) { zonaResumen.replaceChildren(); zonaCuadre.replaceChildren(); zonaFiltros.replaceChildren(); zonaCabeza.replaceChildren(); zonaPaginas.replaceChildren(); zonaLista.replaceChildren(h('p.cargando', 'Cargando los documentos…')); return; }
       if (est.error) {
         zonaResumen.replaceChildren(); zonaCuadre.replaceChildren(); zonaFiltros.replaceChildren(); zonaCabeza.replaceChildren(); zonaPaginas.replaceChildren();
-        zonaLista.replaceChildren(h('div.vacio', h('p', 'No se pudieron cargar los documentos.'), h('p.tenue', est.error), h('button.btn.primario', { type: 'button', onclick: () => cargar() }, 'Intentar de nuevo')));
+        zonaLista.replaceChildren(h('div.vacio', h('p', 'No se pudieron cargar los documentos.'), h('p.tenue', est.error), h('button.btn.primario', { type: 'button', 'data-reintentar': '1', onclick: () => cargar() }, 'Intentar de nuevo')));
         return;
       }
       pintarResumen();

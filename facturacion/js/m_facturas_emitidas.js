@@ -8,9 +8,18 @@ export default {
   id: 'emitidas',
   titulo: 'Facturas emitidas',
   async mount(root, app) {
-    const fin = await documentos.mount(root, app);
-    root.querySelector('.doc-mod')?.prepend(h('p.doc-ayuda',
-      'Facturas y tiquetes emitidos. Busque por número, cliente, cédula, estado o monto, y vea si Hacienda lo aceptó o lo rechazó. Los que tienen una devolución o una nota de débito salen marcados. Para anular o volver a imprimir, toque el documento.'));
+    const promesa = documentos.mount(root, app);
+    // La frase va arriba desde el primer momento: no espera a que lleguen los documentos (si la base tarda, la pantalla no queda sin su introducción)
+    const intro = h('p.doc-ayuda',
+      'Facturas y tiquetes emitidos. Busque por número, cliente, cédula, estado o monto, y vea si Hacienda lo aceptó o lo rechazó. Los que tienen una devolución o una nota de débito salen marcados. Para anular o volver a imprimir, toque el documento.');
+    const poner = () => { const mod = root.querySelector('.doc-mod'); if (!mod) return false; if (!intro.isConnected) mod.prepend(intro); return true; };
+    if (!poner()) {
+      const obs = new MutationObserver(() => { if (poner()) obs.disconnect(); });
+      obs.observe(root, { childList: true, subtree: true });
+      promesa.then(() => obs.disconnect(), () => obs.disconnect());
+    }
+    const fin = await promesa;
+    poner();
     return fin;
   },
 };
