@@ -115,7 +115,7 @@ main#vista{max-width:1400px;margin:0 auto;padding:1rem}
 .modal-fondo{position:fixed;inset:0;z-index:100;background:rgba(29,26,23,.45);display:grid;place-items:center;padding:1rem;overflow:auto}
 .modal{width:100%;background:var(--papel);border-radius:16px;border:1px solid var(--linea);box-shadow:0 20px 60px rgba(0,0,0,.25);max-height:calc(100vh - 2rem);display:flex;flex-direction:column}
 .modal-tit{display:flex;justify-content:space-between;align-items:center;gap:1rem;padding:1rem 1.2rem;border-bottom:1px solid var(--linea)}
-.modal-tit .cerrar{border:1px solid var(--linea2);background:#fff;border-radius:var(--r);min-height:48px;padding:.2rem .9rem;cursor:pointer;font-weight:600}
+.modal-tit .cerrar{border:1px solid var(--linea2);background:#fff;border-radius:var(--r);min-height:48px;padding:.2rem .9rem;cursor:pointer;font-weight:600;white-space:nowrap;flex:0 0 auto}
 .modal-cuerpo{padding:1.2rem;overflow:auto}
 .modal-pie{display:flex;gap:.6rem;justify-content:flex-end;flex-wrap:wrap;padding:.9rem 1.2rem;border-top:1px solid var(--linea)}
 .conf{margin:0;font-size:1.05rem}

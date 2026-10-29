@@ -54,7 +54,7 @@
 .cuenta-lineas{flex:1 1 auto;overflow-y:auto;padding:.3rem 1rem;min-height:120px}
 .linea{padding:.75rem 0;border-bottom:1px solid var(--linea);display:flex;flex-direction:column;gap:.5rem}
 .linea:last-child{border-bottom:0}
-.linea.editada{box-shadow:inset 3px 0 0 var(--ambar);padding-left:.7rem;margin-left:-.7rem}
+.linea.editada,.linea.personalizada{box-shadow:inset 3px 0 0 var(--ambar);padding-left:.7rem;margin-left:-.7rem}
 .linea-top{display:flex;justify-content:space-between;gap:.6rem;align-items:flex-start}
 .linea-nombre{font-weight:600;line-height:1.25;overflow-wrap:anywhere}
 .linea-total{font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap}
@@ -303,3 +303,27 @@
 .aviso-red-txt{flex:1 1 260px;min-width:0}
 .aviso-red .fila{flex:0 0 auto}
 
+
+/* Línea libre: detalle, cantidad, precio con IVA y tarifa */
+.linea-iva{font-size:.8rem;color:var(--tinta2)}
+.linea-iva.cambiada{color:#8a5a00;font-weight:600}
+.res-pre.abierto{color:#8a5a00}
+.lin-dlg{display:flex;flex-direction:column;gap:.8rem}
+.lin-dlg .lin-desc{min-height:96px;resize:vertical;line-height:1.35}
+.lin-nums{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.6fr);gap:.7rem;align-items:end}
+.lin-nums .etq{display:flex;flex-direction:column;gap:.25rem}
+.tarifas{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:.5rem}
+.tarifa-btn{min-height:52px;text-align:left;justify-content:flex-start;line-height:1.2}
+.tarifa-btn[aria-pressed=true]{background:var(--rojo);border-color:var(--rojo);color:#fff}
+.otras-tarifas summary{display:inline-flex;align-items:center;min-height:48px;padding-inline:.9rem;border:1px solid var(--linea2);border-radius:var(--r);background:#fff;margin-bottom:.5rem}
+.lin-prev{border:1px solid var(--linea);border-radius:12px;padding:.8rem 1rem;background:#fffdf8;display:flex;flex-direction:column;gap:.3rem}
+.lin-prev-tit{font-size:.78rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--tinta2)}
+.lin-prev-det{font-weight:600;overflow-wrap:anywhere;white-space:pre-line}
+.lin-prev-fila{display:flex;justify-content:space-between;gap:1rem;font-variant-numeric:tabular-nums}
+.lin-prev-fila.tenue{color:var(--tinta2);font-size:.92rem}
+.lin-prev-fila.total{border-top:1px solid var(--linea);padding-top:.4rem;margin-top:.2rem;font-size:1.15rem}
+.lin-pie{display:flex;flex-wrap:wrap;gap:.6rem;justify-content:flex-end}
+@media(max-width:640px){
+  .lin-pie .btn{flex:1 1 100%}
+  .tarifas{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
