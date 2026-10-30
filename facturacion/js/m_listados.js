@@ -117,7 +117,6 @@ export default {
     const NOTA_IVA_CONTABLE = 'Esta cifra incluye comprobantes todavía pendientes de Hacienda. El «IVA del mes» de Contable cuenta solo los aceptados, por eso pueden no coincidir.';
     const kpi = (titulo, valor, nota, extra, aparte) => h('div.tarjeta.kpi' + (extra ? '.' + extra : ''), h('div.kpi-t', titulo), h('div.kpi-v.cifra', valor), h('div.kpi-n', nota), aparte ? h('div.kpi-n.kpi-aparte', aparte) : null);
 
-    // cols[i].ancha: la columna solo se ve en pantalla ancha (en celular se esconde y su contenido va en otra parte de la fila)
     // Una fila puede ser { celdas, sub }: `sub` es la fila de «cómo se llega al neto» que va debajo en celular. `ancha`: la columna solo se ve en pantalla ancha (en celular su cifra va debajo del monto). `fecha`: solo se ve desde 600 px (en celular las fechas van dentro de la primera celda). `extra`: clase de la tabla.
     function tablaSimple(cols, filas, pie, extra) {
       const clase = (c) => (c.der ? '.der' : '') + (c.ancha ? '.lis-ancha' : '') + (c.fecha ? '.lis-fecha' : '');
