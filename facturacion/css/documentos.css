@@ -119,12 +119,12 @@
   .doc-ver{padding-inline:.8rem;gap:.3rem .6rem}
   .doc-cabeza-cols{gap:.3rem .6rem;padding:0 calc(.8rem + 1px)}
 }
-/* Tableta vertical: la tarjeta arriba y los botones debajo, todos en una sola línea */
+/* Tableta vertical: sigue siendo UNA fila: la tarjeta de dos renglones y los botones en una línea a su derecha */
 @media(max-width:999px){
   .doc-cabeza{display:none}
-  .doc-fila{grid-template-columns:1fr;gap:.35rem}
+  .doc-lista{--doc-acc:19rem}
   .doc-fbot{flex-direction:row}
-  .doc-fbot .btn{flex:1 1 0;min-height:48px}
+  .doc-fbot .btn{flex:1 1 0;min-height:48px;font-size:.9rem;padding-inline:.3rem;line-height:1.15}
   .doc-ver{grid-template-columns:3.4rem minmax(0,1fr) auto;grid-template-areas:"hora doc total" "cli cli est";gap:.35rem .6rem}
   .doc-ver .c-hora{grid-area:hora;font-size:.9rem;color:var(--tinta2)}.doc-ver .c-doc{grid-area:doc}.doc-ver .c-total{grid-area:total}
   .doc-ver .c-doc .nw{white-space:normal;overflow-wrap:anywhere}  /* un número largo no se pega al total */
@@ -135,8 +135,8 @@
 }
 /* Celular: no hay ancho para la tarjeta y los botones lado a lado; los botones pasan DEBAJO de la tarjeta (los dos del mismo ancho) */
 @media(max-width:599px){
+  .doc-fila{grid-template-columns:1fr;gap:.35rem}
   .doc-fbot{gap:.35rem}
-  .doc-fbot .btn{font-size:.9rem;padding-inline:.25rem;line-height:1.15}
 }
 
 /* Detalle */
