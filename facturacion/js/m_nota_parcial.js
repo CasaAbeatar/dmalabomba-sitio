@@ -58,6 +58,8 @@ export function amigableDelServidor(msg) {
     .replace(/\b[Ll]a línea \d+ \(([^)]+)\)/g, (_, nombre) => `«${nombre}»`);
 }
 const mensajeDe = (e, defecto) => amigableDelServidor(mensajeAmable(e, defecto));
+// En la lista de notas el signo («+» o «−») tiene que quedar pegado a su importe: sin esto, en el celular la línea puede cortarse entre «+» y «₡7 000,00» (se une con U+2060, que no se ve ni ocupa lugar)
+const pegarSigno = (lista) => { lista?.querySelectorAll('li').forEach((li) => li.childNodes.forEach((t) => { if (t.nodeType === 3) t.nodeValue = t.nodeValue.replace(/([+\u2212])(\u20a1)/g, '$1\u2060$2'); })); return lista; };
 
 /* ---------- Validaciones (puras, sin pantalla). Las mismas reglas del servidor; el servidor sigue siendo quien manda ---------- */
 // lineas: [{ linea, nombre, saldoMil, saldoCent, pfCent }]; texto: Map(linea -> lo escrito).
@@ -262,7 +264,7 @@ function abrir(app, d, clase, { alTerminar, alVerNota } = {}) {
       cuerpo.replaceChildren(resumenDoc(d), bloqueError({ titulo: 'No se pudo abrir esta pantalla', mensaje: S.errorLectura, alReintentar: (b) => conBoton(b, cargar) }));
       pie.append(botonVolver('Volver'));
     } else if (S.paso === 'bloqueado') {
-      const notas = listaNotas(S.saldos);
+      const notas = pegarSigno(listaNotas(S.saldos));
       cuerpo.replaceChildren(resumenDoc(d), h('div.an-bloqueo', { role: 'alert' },
         h('p.an-bloqueo-tit', clase === 'sinefecto' ? 'Esta anulación no se puede dejar sin efecto' : 'Este documento no admite devoluciones ni correcciones'),
         S.aviso ? h('p', S.aviso) : null,
@@ -525,6 +527,10 @@ function abrir(app, d, clase, { alTerminar, alVerNota } = {}) {
     pintar();
     if (S.paso === 'editar') mostrarError(S.aviso);
   }
+  function refrescar() {
+    S.refresco = (async () => { try { const s = await saldosEstricto(d.id); if (S.vivo) S.saldos = s; } catch { /* se queda lo que ya se ve */ } })();
+    return S.refresco;
+  }
   /* ---------------------------------------------------------------- paso 2: revisar y confirmar ---------------------------------------------------------------- */
   const correoTxt = () => {
     const o = S.orig;
@@ -553,13 +559,14 @@ function abrir(app, d, clase, { alTerminar, alVerNota } = {}) {
     }
     if (!filas.length) filas = [{ medio: 'efectivo', topeCent: null, inicialCent: totalCent }];
     if (filas.length === 1) filas[0].inicialCent = totalCent; // un solo medio lleva todo
-    S.editor = editorPagos({ totalCent, filas, alCambiar: (r) => { if (r.ok && S.errorEsReparto) { S.errorEsReparto = false; mostrarError(''); } } });
+    // El aviso del pie sobre el reparto se quita apenas se toca un campo: de ahí en adelante habla solo la línea «Suma: … de …» de la caja del reparto (dos mensajes sobre lo mismo se contradecirían)
+    S.editor = editorPagos({ totalCent, filas, alCambiar: () => { if (S.errorEsReparto) { S.errorEsReparto = false; mostrarError(''); } } });
     const tipo = tipoNota();
     const explica = clase === 'sinefecto' ? EXPLICA_ND_SIN_EFECTO : clase === 'devolucion' ? EXPLICA_NC : credito ? EXPLICA_NC_MONTO : EXPLICA_ND;
     const lineas = Array.isArray(calc.lineas) ? calc.lineas : [];
-    const dineroTit = credito ? '¿Cómo se le devuelve el dinero al cliente?' : clase === 'sinefecto' ? '¿Cómo se anota el dinero de la nota?' : '¿Cómo paga el cliente la diferencia?';
+    const dineroTit = credito ? '¿Cómo se le devuelve el dinero al cliente?' : clase === 'sinefecto' ? '¿Cómo se había pagado la venta?' : '¿Cómo paga el cliente la diferencia?';
     const dineroAyuda = credito ? 'El dinero se devuelve por el mismo medio con que el cliente pagó. Ya se propuso un reparto; puede cambiarlo si hace falta.'
-      : clase === 'sinefecto' ? 'Esto es lo que quedará anotado en la nota. Si cuando se anuló se le devolvió dinero al cliente, ahora hay que cobrárselo de nuevo. El cierre de caja sumará el efectivo que ponga aquí.'
+      : clase === 'sinefecto' ? 'La anulación restó este dinero del cierre de caja. Esta nota lo vuelve a sumar. Anote aquí cómo se había pagado la venta.'
         : 'Ya se propuso un reparto según como pagó la compra. Puede cambiarlo si el cliente paga de otra forma. El cierre de caja sumará el efectivo que ponga aquí.';
     const orig2 = o.original;
     cuerpo.replaceChildren(
@@ -580,7 +587,8 @@ function abrir(app, d, clase, { alTerminar, alVerNota } = {}) {
       h('div.np-avisos', { role: 'note' },
         h('p.np-calma', h('b', 'Una vez creada, esta nota no se puede borrar ni deshacer. '), 'Revise que todo esté bien antes de confirmar.'),
         h('p', 'Después se enviará a Hacienda. Hacienda puede tardar unos minutos en aceptarla, y su estado cambiará solo en la lista.'),
-        h('p', correoTxt())));
+        h('p', correoTxt()),
+        app?.turno ? null : h('p.np-sin-turno', AVISO_SIN_TURNO)));
     volverAEditar = h('button.btn', { type: 'button', disabled: S.dudoso, onclick: async () => {
       if (S.enVuelo) return;
       if (S.refresco) { await S.refresco; S.refresco = null; } // si el servidor había dicho que no, los saldos ya se leyeron de nuevo
@@ -595,20 +603,27 @@ function abrir(app, d, clase, { alTerminar, alVerNota } = {}) {
       try { await (S.dudoso ? revisarSiQuedo() : confirmar()); } finally { b.disabled = false; delete b.dataset.ocupado; }
     } }, S.dudoso ? 'Revisar si quedó hecha' : titulos[2]);
     etiquetaConfirmar = titulos[2];
-    pie.append(cajaError, volverAEditar, principal);
+    ponerEstado(S.dudoso ? TEXTO_DUDOSO : '');
+    // En el estado «no se sabe si quedó hecha» la persona ya no está por confirmar nada: la frase sobraría y ocuparía lugar en el pie
+    lineaSinDeshacer = h('p.an-sin-deshacer.np-sin-deshacer', { hidden: S.dudoso }, 'Esto no se puede deshacer.');
+    pie.append(lineaSinDeshacer, cajaError, estadoPie, volverAEditar, principal);
     mostrarError(S.error);
   }
-  let principal = null, volverAEditar = null, etiquetaConfirmar = '';
+  let principal = null, volverAEditar = null, lineaSinDeshacer = null, etiquetaConfirmar = '';
   // Se perdió la respuesta y no se pudo comprobar si la nota quedó creada: el botón pasa a «Revisar si quedó hecha» y no se puede cambiar nada
   function marcarDudoso() {
     S.dudoso = true;
     if (principal) principal.textContent = 'Revisar si quedó hecha';
     if (volverAEditar) volverAEditar.disabled = true;
+    if (lineaSinDeshacer) lineaSinDeshacer.hidden = true;
+    ponerEstado(TEXTO_DUDOSO);
   }
   function quitarDudoso() {
     S.dudoso = false;
     if (principal) principal.textContent = etiquetaConfirmar;
     if (volverAEditar) volverAEditar.disabled = false;
+    if (lineaSinDeshacer) lineaSinDeshacer.hidden = false;
+    ponerEstado('');
   }
 
   /* ---------------------------------------------------------------- guardar ---------------------------------------------------------------- */
@@ -618,14 +633,37 @@ function abrir(app, d, clase, { alTerminar, alVerNota } = {}) {
     return notaDebitoSinEfecto(d.id, S.razon, terminal(), pagos);
   };
   // Si la respuesta se perdió, se averigua si la nota quedó creada antes de decir que falló: una nota nueva (que no estaba) del mismo tipo, código y total.
-  let antes = new Set(), desde = 0, totalEnviado = 0;
-  async function buscarCreada() {
+  // «Que no estaba» se decide con una lectura hecha justo antes de enviar (antes), no con la hora del aparato: un reloj adelantado o atrasado no puede esconder la nota.
+  let antes = new Set(), totalEnviado = 0, t0 = 0, tipoFalla = '';
+  const ahoraMs = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
+  const esperar = (ms) => new Promise((r) => setTimeout(r, ms));
+  const notaNueva = (s) => (s.notas || []).find((n) => !antes.has(n.id) && n.tipo_doc === tipoNota() && String(n.codigo_referencia) === codigoNota() && n.viva !== false && aCent(n.total) === totalEnviado) || null;
+  const noRepetir = () => ({ devolucion: 'No haga la devolución otra vez hasta saberlo.', monto: 'No haga la corrección otra vez hasta saberlo.', sinefecto: 'No deje sin efecto la anulación otra vez hasta saberlo.' })[clase];
+  // porque: el tipo de falla de la escritura ('tiempo', 'ocupado', 'red') o '' si lo que falló fue la lectura
+  const textoNoSeSupo = (porque) => (porque === 'tiempo' ? 'La respuesta tardó demasiado y no se pudo saber si la nota quedó hecha.' : porque === 'ocupado' ? 'El sistema estaba ocupado y no se pudo saber si la nota quedó hecha.'
+    : porque === 'red' ? 'Se perdió la conexión y no se pudo saber si la nota quedó hecha.' : 'No se pudo saber si la nota quedó hecha.')
+    + ` Toque «Revisar si quedó hecha» para comprobarlo. ${noRepetir()}`;
+  async function leerNueva() {
     let s;
-    try { s = await saldosEstricto(d.id); } catch { throw new Fallo('No se pudo confirmar si la nota quedó hecha. No toque el botón de confirmar todavía: revise la lista de documentos. Si la nota aparece, ya está lista; si no, puede intentarlo de nuevo.', { dudoso: true }); }
-    const nota = (s.notas || []).find((n) => !antes.has(n.id) && n.tipo_doc === tipoNota() && String(n.codigo_referencia) === codigoNota() && n.viva !== false && aCent(n.total) === totalEnviado
-      && (!n.fecha_emision || new Date(n.fecha_emision).getTime() >= desde - 120000));
+    try { s = await saldosEstricto(d.id); } catch { throw new Fallo(textoNoSeSupo(''), { dudoso: true }); }
+    return notaNueva(s);
+  }
+  // Tras la respuesta perdida: una lectura enseguida y otra a los pocos segundos (la base puede estar terminando de guardar). Si en ninguna aparece, NO se afirma que no se hizo: queda «no se pudo saber».
+  async function buscarCreada() {
+    let nota = await leerNueva();
     if (nota) return nota;
-    throw new Fallo('No hubo conexión y no se creó ninguna nota. Puede intentarlo de nuevo.');
+    await esperar(MS_RELEER);
+    if (!S.vivo) throw new Fallo(textoNoSeSupo(tipoFalla), { dudoso: true });
+    nota = await leerNueva();
+    if (nota) return nota;
+    throw new Fallo(textoNoSeSupo(tipoFalla), { dudoso: true });
+  }
+  // La persona toca «Revisar si quedó hecha»: una lectura. Si aún no aparece y todavía es pronto, se sigue sin saber; pasado el tiempo seguro, sin nota significa que no se hizo.
+  async function buscarCreadaUnaVez() {
+    const nota = await leerNueva();
+    if (nota) return nota;
+    if (ahoraMs() - t0 < MS_SEGURO) throw new Fallo(`Todavía no aparece ninguna nota nueva en este documento. Espere unos segundos y toque «Revisar si quedó hecha» otra vez. ${noRepetir()}`, { dudoso: true });
+    throw new Fallo('Se revisó y no hay ninguna nota nueva en este documento, así que no se hizo. Puede intentarlo de nuevo.');
   }
   async function confirmar() {
     if (S.enVuelo) return;
@@ -635,38 +673,78 @@ function abrir(app, d, clase, { alTerminar, alVerNota } = {}) {
     if (typeof navigator !== 'undefined' && navigator.onLine === false) return mostrarError('No hay conexión con internet, así que no se hizo nada. Cuando vuelva la conexión, intente de nuevo.');
     mostrarError('');
     S.enVuelo = true;
-    antes = new Set((S.saldos.notas || []).map((n) => n.id)); desde = Date.now(); totalEnviado = aCent(S.calc.total);
     S.ultimoReparto = lec.pagos;
     try {
+      // Lectura fresca justo antes de escribir: si otra persona hizo una nota después de revisar, no se escribe nada y se avisa; y de esta lectura sale «lo que ya había» para reconocer la nota propia
+      ponerEstado('Revisando el documento antes de guardar…');
+      let fresca;
+      try { fresca = await saldosEstricto(d.id); }
+      catch { ponerEstado(''); return mostrarError('No se pudo revisar el documento antes de guardar, así que no se hizo nada. Intente de nuevo.'); }
+      if (!S.vivo) return;
+      const nuevas = notasNuevas(S.saldos, fresca);
+      if (nuevas.length) { ponerEstado(''); return hayNotasNuevas(fresca, nuevas); }
+      antes = new Set((fresca.notas || []).map((n) => n.id)); totalEnviado = aCent(S.calc.total); tipoFalla = ''; t0 = ahoraMs();
+      ponerEstado('Guardando la nota…');
       let nota;
       try { nota = await escribir(lec.pagos); }
-      catch (e) { if (esDeRed(e)) nota = await buscarCreada(); else throw e; }
+      catch (e) {
+        if (!esDeRed(e)) throw e;
+        tipoFalla = e?.tipo === 'tiempo' ? 'tiempo' : e?.tipo === 'ocupado' ? 'ocupado' : 'red';
+        ponerEstado('Comprobando si la nota quedó hecha…');
+        nota = await buscarCreada();
+      }
+      ponerEstado('');
       S.enVuelo = false; m.cerrar();
       resultado(nota, lec.pagos);
       try { await alTerminar?.(nota); } catch { /* la lista se actualiza sola en unos segundos */ }
     } catch (e) {
-      mostrarError(e instanceof Fallo ? e.message : mensajeDe(e));
-      if (e instanceof Fallo && e.dudoso) { marcarDudoso(); try { Promise.resolve(alTerminar?.(null)).catch(() => {}); } catch { /* nada */ } }
-      else if (!(e instanceof Fallo) && esRechazo(e)) refrescar(); // si la persona vuelve al paso 1, ahí ya están los saldos de ahora
+      ponerEstado('');
+      if (e instanceof Fallo) {
+        mostrarError(e.message);
+        if (e.dudoso) { marcarDudoso(); try { Promise.resolve(alTerminar?.(null)).catch(() => {}); } catch { /* nada */ } }
+      } else if (esRechazo(e)) {
+        const msg = mensajeDe(e), accion = accionTrasRechazo(msg);
+        mostrarError(accion ? msg + ' ' + accion : msg);
+        alPonerseAlDia(msg); // si la persona vuelve al paso 1, ahí ya están los saldos de ahora
+      } else mostrarError(mensajeDe(e));
     } finally { S.enVuelo = false; }
+  }
+  // Qué hacer después de que el sistema dijo que no por los datos (no por la conexión): la frase dice qué toca
+  function accionTrasRechazo(msg) {
+    if (clase === 'sinefecto') return /ya se dej[oó] sin efecto/i.test(msg) ? 'No hace falta hacer nada más. Cierre esta ventana.' : 'Toque «Volver y cambiar» para ver cómo quedó este documento.';
+    return clase === 'devolucion' ? 'Toque «Volver y cambiar» para ver lo que queda por devolver.' : 'Toque «Volver y cambiar» para ver lo que se puede corregir.';
+  }
+  // Tras un rechazo: se leen los saldos de nuevo y, si el sistema dice que los pagos ya no suman el total, es que el total de la nota cambió (otra persona hizo una nota): se pide el cálculo otra vez y se pone al día lo que se ve
+  async function alPonerseAlDia(msg) {
+    await refrescar();
+    if (clase === 'sinefecto' || !/no suman el total de la nota/.test(msg)) return;
+    try {
+      const [calc, queda] = await Promise.all([notaCalcular(d.id, tipoNota(), codigoNota(), S.payload), esCredito() ? capacidadPagos(app, S.saldos) : null]);
+      if (!S.vivo || S.paso !== 'revisar' || S.enVuelo || !calc || !(Number(calc.total) > 0) || aCent(calc.total) === aCent(S.calc.total)) return;
+      S.calc = calc; S.queda = queda;
+      S.error = `El total de la nota cambió a ${money(calc.total)} porque se hizo otra nota mientras tanto. Revise el reparto del dinero y confirme de nuevo.`;
+      pintar();
+    } catch { /* se queda el aviso del sistema */ }
   }
   async function revisarSiQuedo() {
     if (S.enVuelo) return;
-    S.enVuelo = true; mostrarError('');
+    S.enVuelo = true; mostrarError(''); ponerEstado('Comprobando si la nota quedó hecha…');
     try {
-      const nota = await buscarCreada();
+      const nota = await buscarCreadaUnaVez();
+      ponerEstado('');
       S.enVuelo = false; m.cerrar();
       resultado(nota, S.ultimoReparto || []);
       try { await alTerminar?.(nota); } catch { /* nada */ }
     } catch (e) {
       mostrarError(e instanceof Fallo ? e.message : mensajeDe(e));
-      if (e instanceof Fallo && !e.dudoso) quitarDudoso();
+      if (e instanceof Fallo && !e.dudoso) quitarDudoso(); else ponerEstado(TEXTO_DUDOSO);
     } finally { S.enVuelo = false; }
   }
 
   /* ---------------------------------------------------------------- resultado ---------------------------------------------------------------- */
-  function cobrarTxt(pagos) {
-    const por = { efectivo: (x) => `Efectivo ${money(x)}: recíbalo del cliente y póngalo en la caja. El cierre de caja lo sumará, así que no lo anote además como entrada de efectivo.`,
+  // Qué hace la persona con cada medio. cierre = false cuando el efectivo ya se explicó aparte (en «Dejar sin efecto» la caja se dice en su propio bloque)
+  function cobrarTxt(pagos, { cierre = true } = {}) {
+    const por = { efectivo: (x) => `Efectivo ${money(x)}: recíbalo del cliente y póngalo en la caja.${cierre ? ' El cierre de caja lo sumará, así que no lo anote además como entrada de efectivo.' : ''}`,
       tarjeta: (x) => `Tarjeta ${money(x)}: cóbrelo por el datáfono.`, sinpe: (x) => `SINPE Móvil ${money(x)}: pídale al cliente que lo pague por SINPE Móvil.`, transferencia: (x) => `Transferencia ${money(x)}: pídale al cliente que la haga a la cuenta del local.` };
     return pagos.map((p) => h('li', (por[p.medio] || ((x) => `${MEDIOS[p.medio] || p.medio} ${money(x)}: cóbrelo por ese medio.`))(Number(p.monto))));
   }
@@ -677,20 +755,27 @@ function abrir(app, d, clase, { alTerminar, alVerNota } = {}) {
     const cod = String(nota?.codigo_referencia || codigoNota());
     const o = S.orig;
     const estadoTxt = !nota ? 'No se pudo leer la nota. Revísela en la lista.'
-      : nota.estado === 'aceptado' ? 'Hacienda ya la aceptó.' : 'Se enviará a Hacienda y su estado cambiará solo en la lista. Hacienda puede tardar unos minutos. No tiene que hacer nada más.';
-    const queHace = clase === 'devolucion' ? `Devuelve ${money(nota?.total ?? S.calc.total)} de ${(NOMBRE_TIPO[o.tipo_doc] || 'documento').toLowerCase()} N.° ${numeroCorto(o.consecutivo)}.`
-      : clase === 'monto' ? `${credito ? 'Corrige de más' : 'Corrige de menos'} ${money(nota?.total ?? S.calc.total)} en ${(NOMBRE_TIPO[o.tipo_doc] || 'documento').toLowerCase()} N.° ${numeroCorto(o.consecutivo)}.`
-        : `Deja sin efecto la anulación hecha con la nota de crédito N.° ${numeroCorto(o.consecutivo)} por ${money(nota?.total ?? S.calc.total)}.`;
-    const dinero = clase === 'sinefecto'
-      ? h('div.an-dinero', h('div.an-etq', 'Qué hacer con el dinero'), h('p', 'Si cuando se anuló se le devolvió dinero al cliente, ahora hay que cobrárselo de nuevo:'), h('ul', cobrarTxt(pagosNum)))
-      : credito ? h('div.an-dinero', h('div.an-etq', 'Qué hacer con el dinero'), h('p', 'Devuélvale al cliente lo que corresponde:'), h('ul', lineasDevolver(pagosNum)))
-        : h('div.an-dinero', h('div.an-etq', 'Qué hacer con el dinero'), h('p', 'Cóbrele al cliente la diferencia:'), h('ul', cobrarTxt(pagosNum)));
+      : nota.estado === 'aceptado' ? 'Hacienda ya la aceptó.' : 'Se enviará a Hacienda y su estado cambiará solo en la lista. Hacienda puede tardar unos minutos. Con Hacienda no tiene que hacer nada más.';
+    const total = money(nota?.total ?? S.calc.total), docN = `N.° ${numeroCorto(o.consecutivo)}`;
+    const queHace = clase === 'devolucion' ? `Devuelve ${total} ${DE_DOC[o.tipo_doc] || 'del documento'} ${docN}.`
+      : clase === 'monto' ? (credito ? `Devuelve ${total} que se habían cobrado de más ${EN_DOC[o.tipo_doc] || 'en el documento'} ${docN}.` : `Cobra ${total} que faltaban ${EN_DOC[o.tipo_doc] || 'en el documento'} ${docN}.`)
+        : `Deja sin efecto la anulación hecha con la nota de crédito ${docN} por ${total}.`;
+    // «Dejar sin efecto»: lo de la caja pasa siempre (la anulación restó el dinero del cierre y esta nota lo vuelve a sumar); cobrarle al cliente solo si cuando se anuló se le había devuelto dinero
+    const efectivo = pagosNum.filter((p) => p.medio === 'efectivo').reduce((a, p) => a + p.monto, 0);
+    const bloquesDinero = clase === 'sinefecto'
+      ? [h('div.an-dinero', h('div.an-etq', 'En el cierre de caja'),
+        h('p', efectivo > 0 ? `El cierre de caja volverá a sumar ${money(efectivo)} en efectivo por esta nota. No lo anote además como entrada de efectivo.` : 'Esta nota no lleva efectivo, así que no cambia el efectivo del cierre de caja.')),
+      h('div.an-dinero', h('div.an-etq', 'Con el cliente'), h('p', 'Solo si cuando se anuló se le había devuelto dinero al cliente: cóbreselo otra vez:'), h('ul', cobrarTxt(pagosNum, { cierre: false })))]
+      : [credito ? h('div.an-dinero', h('div.an-etq', 'Qué hacer con el dinero'), h('p', 'Devuélvale al cliente lo que corresponde:'), h('ul', lineasDevolver(pagosNum)))
+        : h('div.an-dinero', h('div.an-etq', 'Qué hacer con el dinero'), h('p', 'Cóbrele al cliente la diferencia:'), h('ul', cobrarTxt(pagosNum)))];
     const imp = nota?.id ? h('button.btn', { type: 'button', onclick: () => { reimprimirComprobante(nota.id); } }, 'Imprimir la nota') : null;
     const ver = alVerNota && nota?.id ? h('button.btn', { type: 'button', onclick: () => { r.cerrar(); alVerNota(nota); } }, 'Ver la nota') : null;
     const r = modal({ titulo, ancho: 600, contenido: h('div.an-dlg',
       h('div.an-ok', h('b', nota ? `${credito ? 'Nota de crédito' : 'Nota de débito'} N.° ${numeroCorto(nota.consecutivo)}` : (credito ? 'Nota de crédito' : 'Nota de débito')), h('div', queHace),
         tipoNotaTxt(cod) ? h('div.an-codigo', 'Tipo de nota: ' + tipoNotaTxt(cod)) : null),
-      h('p', estadoTxt), dinero,
+      ...bloquesDinero,
+      app?.turno ? null : h('div.an-aviso.np-sin-turno', h('p', AVISO_SIN_TURNO)),
+      h('p', estadoTxt),
       h('p.tenue', correoTxt()),
       h('div.an-botones', imp, ver, h('button.btn.primario', { type: 'button', onclick: () => r.cerrar() }, 'Cerrar'))) });
     ignorarToqueDeFondo(r);

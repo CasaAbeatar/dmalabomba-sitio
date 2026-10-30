@@ -2,7 +2,7 @@
 // y en cada fila los botones «Reimprimir» y «Anular». La lista se pinta por tandas («Mostrar más»): la búsqueda y los filtros actúan sobre todo lo cargado. Tocar la fila abre el detalle (estado en Hacienda, «Ya lo atendí», archivos, reenvíos).
 // La anulación con nota de crédito es la de m_anular.js; la impresión es la de imprimir.js.
 import { h, money, modal, toast, descargar, hoyCR, sumaDias, fechaHora, horaCorta, debounce, num, r2, nombrePropio, nombreLocal, traducirHacienda, campoBusqueda, TIPOS_SERVICIO, MEDIOS, TIPOS_ID } from './util.js';
-import { documentosPagina, anulacionDe, permiteAnular, otrasNotas, sinEfectoDeSaldos, correoActivo, reenviarCorreo, alertaAtender, hacerVentaDeNuevo, mensajeAmable } from './api_documentos.js';
+import { documentosPagina, DOCUMENTOS_POR_PAGINA, anulacionDe, permiteAnular, otrasNotas, sinEfectoDeSaldos, correoActivo, reenviarCorreo, alertaAtender, copiarVentaParaRehacer, abrirCuentaNueva, mensajeAmable } from './api_documentos.js';
 import { anularDocumento, cambiarCliente, textoCodigoNota, codigoDeNota, sustituyeSoportado, listaNotas, TEXTO_07 } from './m_anular.js';
 import { devolverParte, corregirMonto, dejarSinEfecto } from './m_nota_parcial.js';
 import { selectorCliente } from './ui_cliente.js';
@@ -30,6 +30,9 @@ const SUSTITUYE_RECHAZADO = false;
 // Nombres de los estados: los mismos en toda la aplicación
 const ETQ_ESTADO = { pendiente: 'Por enviar a Hacienda', enviado: 'Enviado a Hacienda', aceptado: 'Aceptado por Hacienda', rechazado: 'Rechazado por Hacienda', error: 'No se pudo enviar' };
 const PAGINA_ESCRITORIO = 100, PAGINA_CELULAR = 50; // documentos por página (la búsqueda y los filtros miran todos, no solo la página)
+// Cuántas tandas de 1 000 se vuelven a pedir cuando la lista se reconstruye: el refresco automático (cada 15 a 60 segundos) hasta 5 000 documentos, y «Actualizar» o lo que sigue a una acción hasta 12 000.
+// Si la persona había cargado más, se vuelve a cargar hasta ese tope y la pantalla lo dice con palabras.
+const MAX_TANDAS_AUTO = 5, MAX_TANDAS_MANUAL = 12;
 const esCelular = () => { try { return window.matchMedia('(max-width:700px)').matches; } catch { return false; } };
 const porPagina = () => (esCelular() ? PAGINA_CELULAR : PAGINA_ESCRITORIO);
 const fmtMes = new Intl.DateTimeFormat('es-CR', { timeZone: 'UTC', month: 'long', year: 'numeric' });
@@ -37,12 +40,24 @@ const mesTxt = (ymd) => { const t = fmtMes.format(new Date(ymd + 'T12:00:00Z'));
 export const primerDiaMes = (ymd) => ymd.slice(0, 8) + '01';
 // Último día del mes anterior y primer día del mes anterior (sirve en enero y en años bisiestos: Date.UTC con día 0 es el último día del mes anterior)
 export const mesAnterior = (ymd) => { const y = Number(ymd.slice(0, 4)), m = Number(ymd.slice(5, 7)); return [new Date(Date.UTC(y, m - 2, 1)).toISOString().slice(0, 10), new Date(Date.UTC(y, m - 1, 0)).toISOString().slice(0, 10)]; };
+// Lo que se dice cuando un filtro se quita solo porque ya no hay ningún documento así
+const ORACION_FILTRO = { problemas: 'No hay documentos con problemas', pendientes: 'No hay documentos esperando a Hacienda', aceptados: 'No hay documentos aceptados', rechazados: 'No hay documentos rechazados', devoluciones: 'No hay documentos con devolución', debitos: 'No hay documentos con nota de débito' };
 const CLASE_ESTADO = { pendiente: 'espera', enviado: 'espera', aceptado: 'ok', rechazado: 'mal', error: 'mal' };
 const NOMBRE_TIPO = { ...NOMBRES_DOCUMENTO, '01': 'Factura', '02': 'Nota de débito', '03': 'Nota de crédito', '04': 'Tiquete' }; // nombres cortos para la lista
 const esVenta = (d) => d.tipo_doc === '01' || d.tipo_doc === '04';
 const paraArchivo = (t, max = 40) => String(t || '').replace(/[^\p{L}\p{N} .,&'()-]/gu, ' ').replace(/\s+/g, ' ').trim().slice(0, max).trim();
 const mediosTxt = (m) => (m ? m.split(', ').map((x) => MEDIOS[x] || x).join(' y ') : '');
 const signo = (d) => (d.tipo_doc === '03' ? -1 : 1);
+// «la factura», «el tiquete», «la nota de crédito»... para decir a qué documento se refiere una nota
+const ARTICULO_DOC = { '01': 'la factura', '04': 'el tiquete', '03': 'la nota de crédito', '02': 'la nota de débito' };
+const conArticulo = (t) => ARTICULO_DOC[t] || 'el documento';
+// Lo que hace una nota con el documento al que se refiere, en palabras de uso diario (nota de crédito 01 o 13: anula; 02 o 06: corrige; nota de débito sobre una nota de crédito: deja sin efecto la anulación)
+const fraseReferencia = (d) => {
+  const n = numeroCorto(d.ref_consecutivo), a = conArticulo(d.ref_tipo);
+  if (d.tipo_doc === '03') return ['01', '13'].includes(String(d.codigo_referencia || '01')) ? `Anula ${a} N.° ${n}` : `Corrige ${a} N.° ${n}`;
+  if (d.ref_tipo === '03') return `Deja sin efecto la anulación N.° ${n}`;
+  return `Corrige ${a} N.° ${n}`;
+};
 /* ------------------------------------------------------------------ módulo */
 
 export default {
@@ -50,11 +65,21 @@ export default {
   titulo: 'Anular y reimprimir',
   async mount(root, app) {
     const est = { rango: 'hoy', desde: hoyCR(), hasta: hoyCR(), q: '', filtro: 'todos', tarifa: '', lista: [], cargando: false, error: null, turnoEstado: null, firma: null, pagina: 1,
-      // La base entrega los documentos por tandas de 1 000, los más nuevos primero: base = la primera tanda, antiguos = lo que se cargó después con «Cargar los documentos más antiguos»
-      base: [], antiguos: new Map(), total: 0, cargandoMas: false, errorMas: null };
+      // La base entrega los documentos por tandas de 1 000, los más nuevos primero: base = la primera tanda, antiguos = lo que se cargó después con «Cargar los documentos más antiguos».
+      // tandas = cuántas tandas hay cargadas, n = cuántas posiciones de la lista de la base cubren (es el desplazamiento de la tanda siguiente).
+      // sinPaginas = la base no sabe entregar más (versión sin la función de páginas); orden = 'recientes' o 'antiguos' según lo que entregó la base.
+      base: [], antiguos: new Map(), total: 0, tandas: 1, n: 0, hayMasBase: false, sinPaginas: false, orden: 'recientes', cargandoMas: false, errorMas: null,
+      avisoRecarga: null,  // lo que la pantalla le dice a la persona si al reconstruir la lista no pudo volver a cargar todo
+      avisoFiltro: null }; // por qué un filtro volvió a «Todos» (nunca en silencio)
     const cargados = () => est.base.length + est.antiguos.size;
-    const hayMas = () => est.total > cargados();
+    // Faltan documentos si el rango tiene más de los cargados, o si la base avisó que hay más (hay_mas) aunque no sepa cuántos
+    const hayMas = () => est.total > cargados() || est.hayMasBase;
+    const puedeMas = () => hayMas() && !est.sinPaginas;
+    const faltan = () => Math.max(est.total - cargados(), 0);
     let nCarga = 0; // cada carga lleva su número: si llega tarde la respuesta de una anterior (por ejemplo «Este mes» y enseguida «Hoy»), se descarta
+    let nRango = 0; // sube solo cuando se cambian las fechas o se empieza de cero: una tanda pedida de otras fechas no se mezcla con esta lista
+    let silenciosos = 0; // refrescos automáticos en camino (no se encima uno sobre otro)
+    let promesaMas = null; // la tanda de «Cargar los documentos más antiguos» que va en camino
     // Con la caja abierta, «Hoy» es el turno: si el turno abrió en un día anterior (cruzó la medianoche), «Hoy» arranca en la hora de apertura,
     // y el cuadre con «Apertura y cierre de caja» sigue saliendo cuando el rango es «Hoy».
     const turnoAbierto = () => app.turno || null;
@@ -96,7 +121,11 @@ export default {
     const buscador = h('input.campo#anular-buscar', { type: 'search', placeholder: 'Número, cliente, cédula, estado o monto', 'aria-label': 'Buscar documento por número, cliente, cédula, estado, monto o rango de montos, por ejemplo 5000-20000', autocomplete: 'off',
       oninput: debounce((e) => { est.q = e.target.value; est.pagina = 1; pintar(); }, 150) });
     const buscadorFila = campoBusqueda(buscador, () => { est.q = ''; est.pagina = 1; pintar(); });
-    const refrescar = h('button.btn', { type: 'button', onclick: async () => { refrescar.disabled = true; await cargar(); refrescar.disabled = false; } }, 'Actualizar');
+    // «Actualizar» conserva lo que ya se cargó (vuelve a pedir las mismas tandas, todas de una vez); solo cambiar de fechas empieza de cero
+    const refrescar = h('button.btn', { type: 'button', onclick: async () => {
+      refrescar.disabled = true;
+      try { if (est.cargandoMas && promesaMas) await promesaMas.catch(() => {}); await cargar('actualizar'); } finally { refrescar.disabled = false; }
+    } }, 'Actualizar');
     const zonaResumen = h('div');
     const zonaCuadre = h('div.doc-cuadre-zona');
     const zonaFiltros = h('div.doc-filtros');
@@ -133,10 +162,62 @@ export default {
     }
 
     /* ---------- carga ---------- */
-    async function cargar(silencioso = false) {
+    // La base entrega los documentos por desplazamiento (la más nueva primero). Si entra un documento nuevo entre dos lecturas, todo se corre un lugar y
+    // mezclar tandas de lecturas distintas deja un hueco o repite uno. Por eso varias tandas SOLO se unen si todas dicen el mismo total (nada entró en medio);
+    // si no, se vuelve a pedir desde el principio (hasta 3 veces) y la pantalla se actualiza una sola vez, al final, con una lista que es de una sola lectura.
+    async function traerTandas(k, mi, primera) {
+      const soc = app.soc.id, d = est.desde, hh = est.hasta;
+      let ultimo = null;
+      for (let intento = 1; intento <= 3; intento++) {
+        const pags = [intento === 1 && primera ? primera : await documentosPagina(soc, d, hh)];
+        if (mi !== nCarga) return null;
+        if (pags[0].sinPaginas) return { pags, coherente: true, fallo: null };
+        let coherente = true, fallo = null;
+        while (pags.length < k) {
+          const n = pags.reduce((a, p) => a + p.documentos.length, 0);
+          if (n >= (pags[0].total || 0)) break; // ya no hay más antiguos
+          let p;
+          try { p = await documentosPagina(soc, d, hh, n); } catch (e) { fallo = e; break; }
+          if (mi !== nCarga) return null;
+          if ((p.total || 0) !== (pags[0].total || 0)) { coherente = false; break; } // entró un documento en medio: las posiciones se corrieron
+          if (!p.documentos.length) break;
+          pags.push(p);
+        }
+        ultimo = { pags, coherente, fallo };
+        if (coherente || fallo) return ultimo;
+      }
+      return ultimo;
+    }
+    // Deja en pantalla las tandas leídas (todas de la misma lectura): reemplaza la primera, los antiguos, el total y los contadores
+    function aplicarTandas(pags) {
+      est.base = pags[0].documentos;
+      est.antiguos = new Map();
+      const ya = new Set(est.base.map((x) => x.id));
+      for (const p of pags.slice(1)) for (const x of p.documentos) if (!ya.has(x.id)) { ya.add(x.id); est.antiguos.set(x.id, x); }
+      est.tandas = pags.length;
+      est.n = pags.reduce((a, p) => a + p.documentos.length, 0);
+      est.total = Math.max(pags[0].total || 0, cargados());
+      est.hayMasBase = !!pags[pags.length - 1].hay_mas && est.total <= cargados(); // una base que avisa «hay más» sin decir cuántos
+      est.sinPaginas = !!pags[0].sinPaginas; est.orden = pags[0].orden || 'recientes';
+    }
+    // modo: 'nuevo' (primera vez o cambio de fechas: empieza de cero, una tanda), 'actualizar' (botón «Actualizar»: vuelve a pedir lo que ya estaba cargado),
+    // 'tras' (después de anular, devolver o corregir: igual, pero sin pantalla de espera), 'auto' (el reloj: no molesta, y solo reconstruye si cambió el total),
+    // 'mas' (la tanda siguiente no encajó porque entró un documento: se reconstruye con una tanda más)
+    async function cargar(modo = 'nuevo') {
+      const silencioso = modo === 'auto' || modo === 'tras' || modo === 'mas';
+      if (modo === 'auto' && (silenciosos > 0 || est.cargandoMas || est.cargando)) return; // el siguiente reloj lo vuelve a intentar
+      if (modo === 'tras' && est.cargandoMas && promesaMas) await promesaMas.catch(() => {}); // una acción no se pierde por una tanda en camino: espera y luego actualiza
       const mi = ++nCarga;
+      if (modo === 'nuevo') nRango++;
       pintarControles();
-      if (!silencioso) { est.cargando = true; est.error = null; est.firma = null; est.antiguos = new Map(); est.errorMas = null; pintar(); } // una carga manual (o un cambio de fechas) empieza de cero; el refresco automático conserva lo ya cargado
+      const quiere = modo === 'nuevo' ? 1 : Math.max(1, est.tandas + (modo === 'mas' ? 1 : 0));
+      if (modo === 'nuevo') {
+        // Otras fechas: se vacía todo para no mostrar el total viejo con el rótulo nuevo mientras llega la respuesta
+        est.cargando = true; est.error = null; est.firma = null; est.errorMas = null; est.avisoRecarga = null; est.avisoFiltro = null;
+        est.lista = []; est.base = []; est.antiguos = new Map(); est.total = 0; est.tandas = 1; est.n = 0; est.hayMasBase = false; est.sinPaginas = false; est.orden = 'recientes'; est.pagina = 1;
+        pintar();
+      } else if (modo === 'actualizar') { est.cargando = true; est.error = null; est.firma = null; est.errorMas = null; pintar(); }
+      if (silencioso) silenciosos++;
       try {
         // Lo más reciente va arriba (igual que en «Anular factura»): lo último que hizo la cajera se ve sin bajar
         if (est.rango === 'hoy') { const [d0, h0] = rangoDe('hoy'); if (d0 !== est.desde || h0 !== est.hasta) { [est.desde, est.hasta] = [d0, h0]; pintarControles(); } } // la caja se cerró o cambió el día mientras tanto
@@ -144,10 +225,27 @@ export default {
         const desdeTurno = est.rango === 'hoy' && turnoDeAyer() ? new Date(turnoDeAyer().abierto_en).getTime() : 0;
         // En «Hoy» con la caja abierta también se lee el estado del turno, para mostrar cómo cuadra con «Apertura y cierre de caja» (si no se puede leer, solo falta esa explicación)
         const turnoId = est.rango === 'hoy' ? turnoAbierto()?.id : null;
-        const [pag, turno] = await Promise.all([documentosPagina(app.soc.id, est.desde, est.hasta), turnoId ? app.api.turnoEstado(turnoId).catch(() => null) : null]);
+        const [pag0, turno] = await Promise.all([documentosPagina(app.soc.id, est.desde, est.hasta), turnoId ? app.api.turnoEstado(turnoId).catch(() => null) : null]);
         if (mi !== nCarga) return; // llegó tarde: ya se pidió otra cosa
-        est.base = pag.documentos; est.total = Math.max(pag.total || 0, est.base.length);
-        for (const d of est.base) est.antiguos.delete(d.id); // lo que ya viene en la primera tanda no se cuenta dos veces
+        const tope = modo === 'auto' ? MAX_TANDAS_AUTO : MAX_TANDAS_MANUAL;
+        const hayAntiguos = modo !== 'nuevo' && (est.tandas > 1 || modo === 'mas') && !pag0.sinPaginas;
+        if (!hayAntiguos) { aplicarTandas([pag0]); if (modo !== 'mas') est.avisoRecarga = null; }
+        else if (modo === 'auto' && pag0.total === est.total && !est.hayMasBase) {
+          // Nada entró desde la última lectura: las posiciones siguen siendo las mismas, solo se refresca la primera tanda y los antiguos se conservan
+          est.base = pag0.documentos;
+          for (const x of est.base) est.antiguos.delete(x.id); // lo que ya viene en la primera tanda no se cuenta dos veces
+        } else {
+          // Cambió el total (entró o se creó algún documento): lo ya cargado se reconstruye entero, de una sola lectura, y recién entonces se actualiza la pantalla
+          const res = await traerTandas(Math.min(quiere, tope), mi, pag0);
+          if (!res || mi !== nCarga) return;
+          if (modo === 'auto' && (!res.coherente || res.fallo)) return; // el refresco automático no deja una lista a medias: conserva la que había y reintenta pronto
+          aplicarTandas(res.pags);
+          let aviso = null;
+          if (res.fallo) { est.errorMas = mensajeAmable(res.fallo); if (modo !== 'mas') aviso = `Al actualizar solo se pudieron volver a cargar los ${num(cargados())} documentos más recientes; los más antiguos se quitaron de la lista. Toque «Cargar» para traerlos otra vez.`; }
+          else if (!res.coherente) aviso = `Entraron documentos nuevos mientras se actualizaba y solo se pudieron volver a cargar los ${num(cargados())} documentos más recientes. Toque «Cargar» para traer el resto.`;
+          else if (quiere > tope) aviso = `Al actualizar se volvieron a cargar los ${num(cargados())} documentos más recientes (el máximo de una vez). Los más antiguos se quitaron de la lista: toque «Cargar» si los necesita.`;
+          est.avisoRecarga = aviso;
+        }
         const lista = armarLista(desdeTurno);
         // En el refresco automático solo se vuelve a pintar si algo cambió; así no se pierde lo que la cajera esté escribiendo ni se mueve la pantalla
         est.lista = lista; est.turnoEstado = turno; cacheTexto = new WeakMap();
@@ -155,9 +253,14 @@ export default {
         if (silencioso && !est.error && est.firma && firma === est.firma) { ultimaCarga = Date.now(); return; }
         est.firma = firma;
         est.error = null;
-      } catch (e) { if (mi !== nCarga) return; if (!silencioso) est.error = mensajeAmable(e); }
+      } catch (e) {
+        if (mi !== nCarga) return;
+        if (modo === 'mas') { est.errorMas = mensajeAmable(e); return; }
+        if (silencioso) return; // el refresco automático no muestra errores: la pantalla sigue como estaba y se vuelve a intentar pronto
+        est.error = mensajeAmable(e);
+      } finally { if (silencioso) silenciosos--; }
       est.cargando = false; ultimaCarga = Date.now();
-      pintar();
+      if (modo !== 'mas') pintar(); // con «mas» pinta quien lo pidió, al terminar
     }
     // «Hoy» con un turno que abrió en un día anterior arranca en la hora de apertura
     const desdeTurnoAhora = () => (est.rango === 'hoy' && turnoDeAyer() ? new Date(turnoDeAyer().abierto_en).getTime() : 0);
@@ -166,23 +269,40 @@ export default {
       return est.base.concat([...est.antiguos.values()]).filter((d) => !desdeTurno || new Date(d.fecha_emision).getTime() >= desdeTurno).sort((a, b) => new Date(b.fecha_emision) - new Date(a.fecha_emision));
     }
     // esProblema cambia con el reloj (más de 15 minutos esperando a Hacienda), por eso entra en la firma
-    const firmaDe = (lista, turno) => JSON.stringify([lista, turno]) + '|' + lista.filter(esProblema).length + '|' + cargados() + '/' + est.total;
+    const firmaDe = (lista, turno) => JSON.stringify([lista, turno]) + '|' + lista.filter(esProblema).length + '|' + cargados() + '/' + est.total + '|' + est.tandas + '|' + (est.avisoRecarga || '') + '|' + (est.errorMas || '');
+    // Después de anular, devolver o corregir (o de reenviar, o de atender): se vuelve a leer todo lo que estaba cargado, así la fila de un documento de la parte antigua también cambia
+    const refrescarTras = () => cargar('tras');
+    // El botón «Cargar» tiene el foco del teclado: al volver a pintar la pantalla el foco se devuelve ahí (o, si el botón ya no hace falta, a la lista)
+    const botonMas = '[data-cargar-antiguos],[data-cargar-buscar]';
+    const quienTieneFoco = () => { const a = document.activeElement; return a && root.contains(a) && a.matches?.(botonMas) ? (a.hasAttribute('data-cargar-buscar') ? 'data-cargar-buscar' : 'data-cargar-antiguos') : null; };
+    const devolverFoco = (attr) => {
+      if (!attr) return;
+      const b = root.querySelector(`[${attr}]`) || root.querySelector(botonMas);
+      if (b) { try { b.focus({ preventScroll: true }); } catch { /* nada */ } return; }
+      const z = zonaCabeza.childElementCount ? zonaCabeza : zonaLista; z.tabIndex = -1; try { z.focus({ preventScroll: true }); } catch { /* nada */ }
+    };
     // Trae la tanda siguiente (los documentos más antiguos del rango) y la suma a lo que ya se ve. Una tanda son hasta 1 000 documentos.
-    async function cargarAntiguos() {
-      if (est.cargandoMas || est.cargando || !hayMas()) return;
-      const mi = nCarga;
-      est.cargandoMas = true; est.errorMas = null; pintarResumen();
-      try {
-        const pag = await documentosPagina(app.soc.id, est.desde, est.hasta, cargados());
-        if (mi === nCarga) {
+    // Termina SIEMPRE pintando la pantalla (con la tanda, con el aviso de error o con la lista nueva) y devuelve el foco al botón.
+    function cargarAntiguos() {
+      if (est.cargandoMas || est.cargando || !puedeMas()) return promesaMas;
+      const miRango = nRango, miCarga = nCarga, foco = quienTieneFoco();
+      est.cargandoMas = true; est.errorMas = null; pintar(); devolverFoco(foco);
+      promesaMas = (async () => {
+        try {
+          const pag = await documentosPagina(app.soc.id, est.desde, est.hasta, est.n);
+          if (miRango !== nRango || miCarga !== nCarga) return; // se cambiaron las fechas (o se empezó de cero) mientras tanto: esta tanda es de otra lista
+          if ((pag.total || 0) !== est.total) { await cargar('mas'); return; } // entró un documento mientras tanto: la tanda no encaja, se reconstruye todo de una sola lectura
           const ya = new Set(est.base.map((d) => d.id));
           for (const d of pag.documentos) if (!ya.has(d.id)) est.antiguos.set(d.id, d);
+          est.n += pag.documentos.length; if (pag.documentos.length) est.tandas++;
           est.total = pag.documentos.length ? Math.max(pag.total || 0, cargados()) : cargados(); // si la base no entregó nada más, no se vuelve a ofrecer
+          est.hayMasBase = !!pag.hay_mas && est.total <= cargados() && pag.documentos.length > 0;
+          est.avisoRecarga = null;
           est.lista = armarLista(); cacheTexto = new WeakMap(); est.firma = firmaDe(est.lista, est.turnoEstado);
-        }
-      } catch (e) { if (mi === nCarga) est.errorMas = mensajeAmable(e); }
-      est.cargandoMas = false;
-      if (mi === nCarga) pintar();
+        } catch (e) { if (miRango === nRango) est.errorMas = mensajeAmable(e); }
+        finally { est.cargandoMas = false; pintar(); devolverFoco(foco); }
+      })();
+      return promesaMas;
     }
 
     /* ---------- resumen, filtros y lista ---------- */
@@ -261,14 +381,14 @@ export default {
       pintarResumen();
       const problemas = est.lista.filter(esProblema), pend = est.lista.filter(esPendiente);
       const nAcept = est.lista.reduce((a, d) => a + (d.estado === 'aceptado' ? 1 : 0), 0), nRech = est.lista.reduce((a, d) => a + (d.estado === 'rechazado' ? 1 : 0), 0);
-      if (est.filtro === 'problemas' && !problemas.length) est.filtro = 'todos';
-      if (est.filtro === 'pendientes' && !pend.length) est.filtro = 'todos';
-      if (est.filtro === 'aceptados' && !nAcept) est.filtro = 'todos';
-      if (est.filtro === 'rechazados' && !nRech) est.filtro = 'todos';
       // Documentos con devoluciones o correcciones de crédito, y con notas de débito (llaves nuevas de fx_documentos: parciales_n y debitos_n)
       const nDev = est.lista.reduce((a, d) => a + (conDevolucion(d) ? 1 : 0), 0), nDeb = est.lista.reduce((a, d) => a + (conDebito(d) ? 1 : 0), 0);
-      if (est.filtro === 'devoluciones' && !nDev) est.filtro = 'todos';
-      if (est.filtro === 'debitos' && !nDeb) est.filtro = 'todos';
+      // Un filtro sin ningún documento vuelve a «Todos», pero nunca en silencio: si faltan documentos por cargar el filtro se queda (puede que lo que busca esté en los que faltan) y si no, se dice por qué cambió
+      const cuentaFiltro = { problemas: problemas.length, pendientes: pend.length, aceptados: nAcept, rechazados: nRech, devoluciones: nDev, debitos: nDeb };
+      if (est.filtro in cuentaFiltro && !cuentaFiltro[est.filtro] && !puedeMas()) {
+        est.avisoFiltro = `${ORACION_FILTRO[est.filtro]} en estas fechas, así que se muestran todos los documentos.`;
+        est.filtro = 'todos';
+      }
       // Tarifas de IVA que hay en la lista: el filtro solo sale si hay más de una (si todo es IVA 13 %, filtrar no sirve de nada)
       const porTarifa = new Map();
       for (const d of est.lista) for (const t of listaTarifas(d)) porTarifa.set(t, (porTarifa.get(t) || 0) + 1);
@@ -276,11 +396,14 @@ export default {
       const selTarifa = porTarifa.size > 1 ? h('select.campo', { 'aria-label': 'Tarifa de IVA', onchange: (e) => { est.tarifa = e.target.value; est.pagina = 1; pintar(); } },
         h('option', { value: '' }, 'Todas las tarifas'), [...porTarifa].sort((a, b) => a[0].localeCompare(b[0], 'es', { numeric: true })).map(([t, n]) => h('option', { value: t }, `${t} (${n})`))) : null;
       if (selTarifa) selTarifa.value = est.tarifa;
-      zonaFiltros.replaceChildren(...[['todos', `Todos (${est.lista.length})`], problemas.length ? ['problemas', `Con problemas (${problemas.length})`] : null, pend.length ? ['pendientes', `Esperando a Hacienda (${pend.length})`] : null,
-        nAcept ? ['aceptados', `Aceptados (${nAcept})`] : null, nRech ? ['rechazados', `Rechazados (${nRech})`] : null,
-        nDev ? ['devoluciones', `Con devolución (${nDev})`] : null, nDeb ? ['debitos', `Con nota de débito (${nDeb})`] : null]
-        .filter(Boolean).map(([k, t]) => h('button.btn' + (k === 'problemas' ? '.alerta' : ''), { type: 'button', 'aria-pressed': String(est.filtro === k), onclick: () => { est.filtro = k; est.pagina = 1; pintar(); } }, t)),
+      // Cada filtro sale si tiene documentos; el que está elegido sale siempre (aunque diga 0 mientras faltan documentos por cargar)
+      const chip = (k, t, n) => (n || est.filtro === k ? [k, `${t} (${num(n)})`] : null);
+      zonaFiltros.replaceChildren(...[['todos', `Todos (${num(est.lista.length)})`], chip('problemas', 'Con problemas', problemas.length), chip('pendientes', 'Esperando a Hacienda', pend.length),
+        chip('aceptados', 'Aceptados', nAcept), chip('rechazados', 'Rechazados', nRech),
+        chip('devoluciones', 'Con devolución', nDev), chip('debitos', 'Con nota de débito', nDeb)]
+        .filter(Boolean).map(([k, t]) => h('button.btn' + (k === 'problemas' ? '.alerta' : ''), { type: 'button', 'aria-pressed': String(est.filtro === k), onclick: () => { est.filtro = k; est.avisoFiltro = null; est.pagina = 1; pintar(); } }, t)),
         ...(selTarifa ? [h('label.doc-tarifa', h('span', 'Tarifa de IVA'), selTarifa)] : []));
+      if (est.avisoFiltro) zonaFiltros.append(h('p.doc-aviso-filtro', { role: 'status' }, est.avisoFiltro));
       consulta = norm(est.q.trim());
       const pasa = { todos: () => true, problemas: esProblema, pendientes: esPendiente, aceptados: (d) => d.estado === 'aceptado', rechazados: (d) => d.estado === 'rechazado', devoluciones: conDevolucion, debitos: conDebito }[est.filtro] || (() => true);
       const pasaTarifa = (d) => !est.tarifa || listaTarifas(d).includes(est.tarifa);
@@ -292,15 +415,33 @@ export default {
     function pintarResumen() {
       const s = sumarDocumentos(est.lista);
       const una = est.desde === est.hasta;
+      // Mientras falten documentos por cargar, el total NO es el del turno, el día o el mes: la tarjeta lo dice con palabras
+      const rotulo = hayMas() ? `Total de los ${num(cargados())} documentos ${est.orden === 'antiguos' ? 'más antiguos' : 'más recientes'}`
+        : est.rango === 'hoy' ? (turnoDeAyer() ? 'Total de este turno' : 'Total de hoy') : (est.rango === 'mes' || est.rango === 'anterior') ? 'Total del mes' : una ? 'Total del día' : 'Total de las fechas elegidas';
       zonaResumen.replaceChildren(h('div.doc-resumen',
-        h('div.doc-neto', h('span.doc-etq', est.rango === 'hoy' ? (turnoDeAyer() ? 'Total de este turno' : 'Total de hoy') : (est.rango === 'mes' || est.rango === 'anterior') ? 'Total del mes' : una ? 'Total del día' : 'Total de las fechas elegidas'), h('b.doc-gran', money(s.neto))),
-        h('span.doc-det-res', `${s.nVentas} ${s.nVentas === 1 ? 'venta' : 'ventas'}`, s.nAnul ? `, ${s.nAnul} ${s.nAnul === 1 ? 'anulación' : 'anulaciones'}` : '',
-          s.nDev ? `, ${s.nDev} ${s.nDev === 1 ? 'devolución o corrección' : 'devoluciones o correcciones'}` : '', s.nND ? `, ${s.nND} ${s.nND === 1 ? 'nota de débito' : 'notas de débito'}` : '', ` · de los cuales ${money(s.iva / 100)} son IVA`)));
+        h('div.doc-neto', h('span.doc-etq', rotulo), h('b.doc-gran', money(s.neto))),
+        h('span.doc-det-res', `${num(s.nVentas)} ${s.nVentas === 1 ? 'venta' : 'ventas'}`, s.nAnul ? `, ${num(s.nAnul)} ${s.nAnul === 1 ? 'anulación' : 'anulaciones'}` : '',
+          s.nDev ? `, ${num(s.nDev)} ${s.nDev === 1 ? 'devolución o corrección' : 'devoluciones o correcciones'}` : '', s.nND ? `, ${num(s.nND)} ${s.nND === 1 ? 'nota de débito' : 'notas de débito'}` : '', ` · de los cuales ${money(s.iva / 100)} son IVA`)));
       pintarCuadre(s);
       // El servidor entrega los documentos por tandas de 1 000, los más nuevos primero: si faltan los más antiguos, el total de arriba no es el de todo el rango, y hay que decirlo
-      if (hayMas()) zonaCuadre.prepend(h('div.doc-cuadre-caja', h('p.doc-cuadre-frase.alerta', { role: 'note' }, `Estas fechas tienen ${num(est.total)} documentos y aquí se ven los ${num(cargados())} más recientes. El total de arriba es de esos.`),
-        h('div.fila', h('button.btn', { type: 'button', 'data-cargar-antiguos': '1', onclick: cargarAntiguos }, est.cargandoMas ? 'Cargando…' : 'Cargar los documentos más antiguos')),
-        est.errorMas ? h('div.error-caja', { role: 'alert' }, est.errorMas) : null));
+      if (hayMas()) zonaCuadre.prepend(avisoFaltan());
+    }
+    // El aviso de que faltan documentos: recuadro ámbar con lo que pasa, lo que falta, y el botón para cargar lo que falta
+    function avisoFaltan() {
+      const f = faltan(), una = est.desde === est.hasta;
+      const alcance = est.rango === 'hoy' ? (turnoDeAyer() ? 'del turno completo' : 'de todo el día') : (est.rango === 'mes' || est.rango === 'anterior') ? 'de todo el mes' : una ? 'de todo el día' : 'de todas las fechas elegidas';
+      const titulo = f > 0 ? (f === 1 ? 'Falta 1 documento más antiguo.' : `Faltan ${num(f)} documentos más antiguos.`) : 'Puede haber más documentos de los que se ven.';
+      const sinCargar = est.sinPaginas
+        ? `Esta versión de la base no entrega más de ${num(DOCUMENTOS_POR_PAGINA)} documentos por vez y, en estas fechas, entregó los ${num(cargados())} ${est.orden === 'antiguos' ? 'más antiguos' : 'primeros'}. Aquí no se pueden cargar los demás: elija fechas más cortas, por ejemplo un solo día.`
+        : f > 0 ? `Estas fechas tienen ${num(est.total)} documentos y aquí se ven los ${num(cargados())} más recientes. Este total todavía no es el ${alcance}.`
+          : `Aquí se ven ${num(cargados())} documentos y la base avisa que hay más. Este total todavía no es el ${alcance}.`;
+      const boton = puedeMas() ? h('button.btn.primario', { type: 'button', 'data-cargar-antiguos': '1', 'aria-busy': String(est.cargandoMas), onclick: cargarAntiguos },
+        est.cargandoMas ? 'Cargando…' : f > 0 && f <= DOCUMENTOS_POR_PAGINA ? (f === 1 ? 'Cargar el documento que falta' : `Cargar los ${num(f)} documentos que faltan`) : 'Cargar más documentos antiguos') : null;
+      return h('div.doc-faltan.an-aviso', { role: 'note' },
+        h('p.doc-cuadre-frase.alerta', h('b', titulo + ' '), sinCargar),
+        est.avisoRecarga ? h('p.doc-cuadre-frase', est.avisoRecarga) : null,
+        boton,
+        est.errorMas ? h('div.error-caja', { role: 'alert' }, est.errorMas) : null);
     }
 
     // Qué no suma y qué sí suma este total, y cómo cuadra con «Apertura y cierre de caja» (mismas frases y montos que en esa pantalla)
@@ -308,9 +449,12 @@ export default {
       const frases = frasesDeLista(s);
       // El cuadre con «Apertura y cierre de caja» sale en «Hoy» con la caja abierta: se hace con los documentos emitidos desde la apertura del turno
       const turno = est.rango === 'hoy' ? turnoAbierto() : null;
-      const p = turno && est.turnoEstado ? puenteConTurno(sumarDocumentos(docsDelTurno(est.lista, turno.abierto_en)), est.turnoEstado) : null;
+      // Con documentos sin cargar no se compara: lo que falta aparecería como una diferencia con la caja que no es real
+      const faltaCargar = hayMas() && !!turno && !!est.turnoEstado;
+      const p = turno && est.turnoEstado && !faltaCargar ? puenteConTurno(sumarDocumentos(docsDelTurno(est.lista, turno.abierto_en)), est.turnoEstado) : null;
       const partes = frases.map((t) => h('p.doc-cuadre-frase', t));
-      if (p && p.coincide && !p.turnoRech && !p.sin) partes.push(h('p.doc-cuadre-frase.ok', `El turno abierto coincide con el total vendido de «Apertura y cierre de caja» (${money(p.turnoNeto / 100)}).`));
+      if (faltaCargar) partes.push(h('p.doc-cuadre-frase', puedeMas() ? 'Para comparar con «Apertura y cierre de caja», primero cargue los documentos que faltan.' : 'No se puede comparar con «Apertura y cierre de caja» porque faltan documentos que esta pantalla no puede cargar.'));
+      else if (p && p.coincide && !p.turnoRech && !p.sin) partes.push(h('p.doc-cuadre-frase.ok', `El turno abierto coincide con el total vendido de «Apertura y cierre de caja» (${money(p.turnoNeto / 100)}).`));
       else if (p) {
         const fila = (txt, monto, clase = '') => h('div.doc-cuadre-fila' + clase, h('span', txt), h('b', money(monto / 100)));
         partes.push(h('details.doc-cuadre',
@@ -331,9 +475,16 @@ export default {
       if (!visibles.length) {
         const hoy = est.rango === 'hoy';
         zonaCabeza.replaceChildren(); zonaPaginas.replaceChildren();
+        // Si faltan documentos por cargar, «no coincide» solo es cierto para los cargados: se dice cuántos se miraron y cuántos faltan, y se ofrece cargarlos y buscar otra vez
+        const f = faltan();
+        const faltanTxt = f > 0 ? `Se buscó entre los ${num(cargados())} documentos cargados; ${f === 1 ? 'falta 1 más antiguo' : `faltan ${num(f)} más antiguos`}.` : `Se buscó entre los ${num(cargados())} documentos cargados; la base avisa que hay más.`;
         zonaLista.replaceChildren(h('div.vacio',
           est.lista.length ? h('p', 'Ningún documento coincide con lo que buscó.')
             : h('p', hoy ? (turnoDeAyer() ? 'Todavía no hay documentos en este turno. Cuando cobre una venta en Facturación, aparecerá aquí.' : 'Todavía no hay documentos hoy. Cuando cobre una venta en Facturación, aparecerá aquí.') : 'No hay documentos en estas fechas.'),
+          est.lista.length && hayMas() ? h('p.tenue', faltanTxt) : null,
+          est.lista.length && puedeMas() ? h('button.btn.primario', { type: 'button', 'data-cargar-buscar': '1', 'aria-busy': String(est.cargandoMas), onclick: cargarAntiguos },
+            est.cargandoMas ? 'Cargando…' : (f > 0 && f <= DOCUMENTOS_POR_PAGINA ? `Cargar los ${num(f)} documentos que faltan y buscar de nuevo` : 'Cargar más documentos antiguos y buscar de nuevo')) : null,
+          est.lista.length && est.errorMas ? h('div.error-caja', { role: 'alert' }, est.errorMas) : null,
           !est.lista.length && hoy ? h('button.btn.primario', { onclick: () => app.ir('caja') }, 'Ir a Facturación') : null));
         return;
       }
@@ -356,7 +507,7 @@ export default {
           diaActual = k;
           if (multi) {
             const x = porDia.get(k), partido = enEstaPagina.get(k) < x.n; // el día sigue en la página anterior o en la siguiente: el total es el de todo el día
-            out.push(h('div.doc-dia', h('b', diaTxt(k)), h('span', `${x.n} ${x.n === 1 ? 'documento' : 'documentos'}${partido ? ' en el día' : ''}, total ${money(x.t / 100)}` + (partido ? `. En esta página: ${enEstaPagina.get(k)}` : ''))));
+            out.push(h('div.doc-dia', h('b', diaTxt(k)), h('span', `${num(x.n)} ${x.n === 1 ? 'documento' : 'documentos'}${partido ? (hayMas() ? ' cargados de ese día' : ' en el día') : ''}, total ${money(x.t / 100)}` + (partido ? `. En esta página: ${num(enEstaPagina.get(k))}` : ''))));
           }
           out.push(h('div.doc-cabeza', h('div.doc-cabeza-cols', h('span', 'Hora'), h('span', 'Documento'), h('span', 'Cliente'), h('span.der', 'Total'), h('span', 'Estado')), h('span.doc-cabeza-acc', 'Acciones')));
         }
@@ -364,9 +515,13 @@ export default {
       }
       zonaLista.replaceChildren(...out);
       // Encabezado de la lista: cuántos documentos hay y cuáles se ven. El hueco #doc-descargas es para los botones de descarga (Excel, CSV, PDF, XML) que se agregan aparte.
-      zonaCabeza.replaceChildren(
-        h('span.doc-conteo', paginas > 1 ? `Documentos ${(desde + 1).toLocaleString('es-CR')} a ${(desde + trozo.length).toLocaleString('es-CR')} de ${visibles.length.toLocaleString('es-CR')}` : `${visibles.length.toLocaleString('es-CR')} ${visibles.length === 1 ? 'documento' : 'documentos'}`),
-        zonaDescargas);
+      // Mientras falten documentos por cargar, los números dicen «cargados»: la lista y la búsqueda solo ven lo que está cargado
+      const cg = hayMas() ? ' cargados' : '';
+      const filtrando = !!est.q.trim() || est.filtro !== 'todos' || !!est.tarifa;
+      zonaCabeza.replaceChildren(...[
+        h('span.doc-conteo', paginas > 1 ? `Documentos ${num(desde + 1)} a ${num(desde + trozo.length)} de ${num(visibles.length)}${cg}` : `${num(visibles.length)} ${visibles.length === 1 ? 'documento' : 'documentos'}${hayMas() ? (visibles.length === 1 ? ' cargado' : ' cargados') : ''}`),
+        hayMas() && filtrando ? h('span.doc-conteo-nota', `La búsqueda y los filtros miran solo los ${num(cargados())} documentos cargados.`) : null,
+        zonaDescargas].filter(Boolean)); // replaceChildren escribiría «null» como texto
       pintarPaginas(paginas);
     }
 
@@ -384,12 +539,20 @@ export default {
         'Las notas de crédito (anulaciones, devoluciones y correcciones de monto) van con signo negativo y restan. Las notas de débito suman. Los documentos que Hacienda no aceptó se muestran, pero no suman: en «Suma al total» valen cero.',
       ];
       if (est.rango === 'hoy' && turnoDeAyer()) notas.push('«Hoy» empieza cuando se abrió el turno, el ' + diaCortoTxt(ymdDe(turnoDeAyer().abierto_en)) + ' a las ' + horaCorta(turnoDeAyer().abierto_en) + '.');
-      if (hayMas()) notas.push(`Estas fechas tienen ${num(est.total)} documentos y este archivo trae solo los ${num(cargados())} más recientes. Para tener los demás, toque «Cargar los documentos más antiguos» antes de descargar, o elija un rango de fechas más corto.`);
+      // Archivo parcial: si faltan documentos por cargar, el archivo lo dice arriba (subtítulo, que sale en Excel y en PDF) y en el nombre (que es lo único que viaja en el CSV), con el número REAL de filas
+      const parcial = hayMas();
+      const filtrado = !!q || est.filtro !== 'todos' || !!est.tarifa;
+      const cuales = est.orden === 'antiguos' ? 'más antiguos' : 'más recientes';
+      const faltanN = faltan();
+      const textoParcial = !parcial ? '' : filtrado
+        ? `ARCHIVO PARCIAL: trae ${num(filas.length)} ${filas.length === 1 ? 'fila' : 'filas'} que salen solo de los ${num(cargados())} documentos ${cuales} cargados; ${faltanN > 0 ? `faltan ${num(faltanN)} documentos por cargar` : 'la base avisa que hay más documentos'}.`
+        : `ARCHIVO PARCIAL: trae ${num(filas.length)} de los ${num(est.total)} documentos de estas fechas (los ${cuales}); ${faltanN > 0 ? `faltan ${num(faltanN)}` : 'la base avisa que hay más'}.`;
+      if (parcial) notas.push(textoParcial + (puedeMas() ? ' Para tener los demás, toque «Cargar» en la pantalla antes de descargar, o elija un rango de fechas más corto.' : ' Elija un rango de fechas más corto para tenerlos todos.'));
       return {
-        nombre: `Facturas emitidas ${nombrePeriodo(est.desde, est.hasta)}${filtroCorto ? ' ' + filtroCorto : ''}${paraArchivo(q, 30) ? ' búsqueda ' + paraArchivo(q, 30) : ''}`,
+        nombre: `Facturas emitidas ${nombrePeriodo(est.desde, est.hasta)}${filtroCorto ? ' ' + filtroCorto : ''}${paraArchivo(q, 30) ? ' búsqueda ' + paraArchivo(q, 30) : ''}${parcial ? (filtrado ? ` parcial ${num(filas.length)} ${filas.length === 1 ? 'fila' : 'filas'}${faltanN > 0 ? `, faltan ${num(faltanN)} sin cargar` : ''}` : ` parcial ${num(filas.length)} de ${num(est.total)}`) : ''}`,
         empresa: nombreLocal(soc), cedula: soc?.cedula || '',
         titulo: 'Facturas, tiquetes y notas de crédito emitidos',
-        subtitulo: 'Emitidos ' + textoRango(est.desde, est.hasta) + (filtroTxt ? ' · ' + filtroTxt : '') + (q ? ` · búsqueda: «${q}»` : ''),
+        subtitulo: (parcial ? textoParcial + ' · ' : '') + 'Emitidos ' + textoRango(est.desde, est.hasta) + (filtroTxt ? ' · ' + filtroTxt : '') + (q ? ` · búsqueda: «${q}»` : ''),
         cifras: 'netas', cifrasNota: 'Montos en colones con IVA incluido; las notas de crédito restan, las notas de débito suman y lo que Hacienda rechazó no suma',
         columnas: [
           { clave: 'fecha', titulo: 'Fecha y hora de emisión', tipo: 'fechahora' },
@@ -414,7 +577,7 @@ export default {
           const sg = signo(d), nc = d.tipo_doc === '03', anulado = !!d.nc_id, cuenta = d.estado !== 'rechazado';
           const dev = Number(d.parciales_n) || 0, deb = Number(d.debitos_n) || 0;
           const obs = [anulado ? `Anulado por la nota de crédito N.° ${numeroCorto(d.nc_consecutivo)}` : '',
-            (nc || d.tipo_doc === '02') && d.ref_consecutivo ? `Referencia a ${(NOMBRE_TIPO[d.ref_tipo] || 'documento').toLowerCase()} N.° ${numeroCorto(d.ref_consecutivo)}` : '',
+            (nc || d.tipo_doc === '02') && d.ref_consecutivo ? fraseReferencia(d) : '',
             d.reemplaza_a ? (d.reemplaza_consecutivo ? `Sustituye al documento N.° ${numeroCorto(d.reemplaza_consecutivo)}` : 'Sustituye a un documento anulado') : '',
             dev ? `Con devolución: ${money(d.parciales_total)} en ${dev} ${dev === 1 ? 'nota' : 'notas'}` : '', deb ? `Con nota de débito: ${money(d.debitos_total)} en ${deb} ${deb === 1 ? 'nota' : 'notas'}` : ''].filter(Boolean).join('. ');
           const detalle = d.estado === 'rechazado' || d.estado === 'error' ? (traducirHacienda(d.mensaje).resumen || '') : '';
@@ -467,7 +630,7 @@ export default {
       if (esVenta(d)) {
         if (anulado) segundo = null;
         else if (d.estado === 'aceptado' && (nDev > 0 || nDeb > 0)) segundo = h('button.btn.peligro.doc-bot', { type: 'button', disabled: true, 'aria-label': `Anular ${quien}. No disponible: ya tiene ${nDeb > 0 ? 'una nota de débito' : 'una devolución o una corrección'}` }, 'Anular'); // la base tampoco deja anular completo un documento con notas (admite_anulacion = false); en el detalle se ve por qué y qué sí se puede hacer
-        else if (d.estado === 'aceptado') segundo = h('button.btn.peligro.doc-bot', { type: 'button', 'aria-label': 'Anular ' + quien, onclick: () => abrirAnular(d, { alTerminar: () => cargar(true), alVerNC: (n) => abrirDetalle(n.id) }) }, 'Anular');
+        else if (d.estado === 'aceptado') segundo = h('button.btn.peligro.doc-bot', { type: 'button', 'aria-label': 'Anular ' + quien, onclick: () => abrirAnular(d, { alTerminar: () => refrescarTras(), alVerNC: (n) => abrirDetalle(n.id) }) }, 'Anular');
         else if (d.estado === 'rechazado' || d.estado === 'error') segundo = h('button.btn.doc-bot', { type: 'button', 'aria-label': (d.atendida ? 'Ver detalle de ' : 'Ver y atender ') + quien, onclick: () => abrirDetalle(d.id) }, d.atendida ? 'Ver detalle' : 'Ver y atender'); // el nombre accesible empieza con el mismo texto que se ve
       }
       // Todavía no hay nada que anular (Hacienda no ha aceptado el documento): se dice a la vista, no solo al pasar el mouse
@@ -481,7 +644,7 @@ export default {
           h('span.c-doc', h('span.nw', h('b', tipo), ' N.° ' + numeroCorto(d.consecutivo)),
             d.nombre_simple ? h('span.sub.rotulo', d.nombre_simple) : null, // Devolución, Corrección de monto, Anulación total, Anulación y sustitución, Deja sin efecto la anulación
             anulado ? h('span.sub.anul', `Anulado por la nota de crédito N.° ${numeroCorto(d.nc_consecutivo)}`) : null,
-            (nc || nd) && d.ref_consecutivo ? h('span.sub', `Referencia a ${(NOMBRE_TIPO[d.ref_tipo] || 'documento').toLowerCase()} N.° ${numeroCorto(d.ref_consecutivo)}`) : null,
+            (nc || nd) && d.ref_consecutivo ? h('span.sub', fraseReferencia(d)) : null,
             d.reemplaza_a ? h('span.sub', d.reemplaza_consecutivo ? `Sustituye al documento N.° ${numeroCorto(d.reemplaza_consecutivo)}` : 'Sustituye a un documento anulado') : null,
             nDev ? h('span.sub.nota', `Devuelto: −${money(d.parciales_total)}${notasTxt(nDev)}`) : null,
             nDeb ? h('span.sub.nota', `Nota de débito: +${money(d.debitos_total)}${notasTxt(nDeb)}`) : null),
@@ -500,11 +663,19 @@ export default {
     }
 
     /* ---------- detalle de un documento ---------- */
+    // ¿Esta venta ya se volvió a hacer? Sí cuando hay otro documento vivo (ni rechazado ni anulado) que la reemplaza (reemplaza_a) o que sale de su copia («Corrección de #N», como la nombra la base al copiarla).
+    // Solo se sabe con lo que está cargado en la lista: si el documento nuevo no está ahí no se afirma nada, y la base rechaza el duplicado con su propio mensaje (que la pantalla muestra tal cual).
+    const rehechoPor = (c) => {
+      if (!c || !esVenta(c)) return null;
+      const ref = c.venta?.numero ? 'Corrección de #' + c.venta.numero : null, t = new Date(c.fecha_emision).getTime();
+      return est.lista.find((r) => r.id !== c.id && esVenta(r) && r.estado !== 'rechazado' && !r.nc_id && (r.reemplaza_a === c.id || (!!ref && r.referencia === ref && new Date(r.fecha_emision).getTime() > t))) || null;
+    };
     async function abrirDetalle(id) {
       const caja = h('div.doc-det', h('p.cargando', 'Cargando el documento…'));
       let vivo = true;
       let firma = null; // lo último que se pintó; el refresco automático solo vuelve a pintar si el documento cambió
       let nCarga = 0;
+      let saldosVistos = false; // ya se pudieron leer las notas de este documento en una pintura anterior
       let estadoVisto = null; // el estado del documento en la última lectura: si Hacienda todavía no responde, la ventana se actualiza más seguido
       const borrador = { nota: '' }; // la nota que se está escribiendo no se pierde si la ventana se vuelve a pintar
       const m = modal({ titulo: 'Detalle del documento', contenido: caja, ancho: 780, alCerrar: () => { vivo = false; clearInterval(rapido); if (detalleActual?.caja === caja) detalleActual = null; } });
@@ -520,10 +691,12 @@ export default {
           if (!vivo || mi !== nCarga) return;
           estadoVisto = c?.estado || null;
           if (silencioso && falloNC) return; // si no se pudo ver la nota de crédito, mejor no cambiar lo que ya se ve
+          // Si la lectura de las notas falló esta vez (saldos vacíos) y antes sí se habían leído, se conserva lo anterior: no se apagan avisos ni se prenden botones por un fallo pasajero
+          if (silencioso && !an.saldos && saldosVistos) return;
           const { nc, saldos, ncAnulacion: ncAnula, saldosNC, sinEfecto } = an; // con la anulación dejada sin efecto, nc es null: el documento vuelve a valer
-          const nueva = JSON.stringify([c, nc, saldos, saldosNC, sinEfecto, falloNC]);
+          const nueva = JSON.stringify([c, nc, saldos, saldosNC, sinEfecto, falloNC, rehechoPor(c)?.id || null]);
           if (silencioso && nueva === firma) return; // nada cambió: no se toca la pantalla (ni el cursor, ni el teclado del celular)
-          firma = nueva;
+          firma = nueva; saldosVistos = !!saldos;
           // Si había un campo con el cursor adentro, después de pintar vuelve a quedar ahí, en el mismo lugar
           const foco = caja.contains(document.activeElement) && /^(INPUT|TEXTAREA)$/.test(document.activeElement.tagName)
             ? { etiqueta: document.activeElement.getAttribute('aria-label'), ini: document.activeElement.selectionStart, fin: document.activeElement.selectionEnd } : null;
@@ -564,10 +737,14 @@ export default {
         h('button.btn', { type: 'button', onclick: () => { ctx.cerrar(); abrirDetalle(nd.id); } }, 'Ver la nota de débito'))); }
       if ((esNC || esND) && c.original) {
         const sobreNota = c.original.tipo_doc === '03'; // una nota de débito que deja sin efecto la anulación se apoya en la nota de crédito
-        const queHace = esNC
-          ? ({ '01': 'Esta nota de crédito anula ese documento.', '06': 'Esta nota de crédito devuelve una parte de ese documento.', '02': 'Esta nota de crédito corrige el monto de ese documento: se había cobrado de más.' }[cod] || 'Esta nota de crédito corrige ese documento.')
-          : sobreNota ? 'Esta nota de débito deja sin efecto la anulación: el documento vuelve a valer.' : 'Esta nota de débito corrige el monto de ese documento: se había cobrado de menos.';
-        raiz.append(h('div.doc-aviso.ref', h('div', h('b', `Referencia a ${(NOMBRES_DOCUMENTO[c.original.tipo_doc] || 'documento').toLowerCase()} N.° ${numeroCorto(c.original.consecutivo)}. `), queHace, tipoNotaTxt ? h('div.doc-motivo', 'Tipo de nota: ' + tipoNotaTxt + '.') : null, c.motivo ? h('div.doc-motivo', 'Motivo: ' + c.motivo) : null),
+        const num_ = numeroCorto(c.original.consecutivo), a = conArticulo(c.original.tipo_doc);
+        // Lo que hace la nota, en palabras: anula, corrige o deja sin efecto la anulación (el código de Hacienda queda aparte, en «Tipo de nota»)
+        const [lead, queHace] = esNC
+          ? (['01', '13'].includes(cod) ? [`Esta nota anula ${a} N.° ${num_}.`, 'Deja sin efecto todo el documento.']
+            : cod === '06' ? [`Esta nota corrige ${a} N.° ${num_}.`, 'Devuelve una parte de ese documento.']
+              : cod === '02' ? [`Esta nota corrige ${a} N.° ${num_}.`, 'Corrige el monto: se había cobrado de más.'] : [`Esta nota corrige ${a} N.° ${num_}.`, ''])
+          : sobreNota ? [`Esta nota deja sin efecto la anulación de ${a} N.° ${num_}.`, 'El documento vuelve a valer.'] : [`Esta nota corrige ${a} N.° ${num_}.`, 'Corrige el monto: se había cobrado de menos.'];
+        raiz.append(h('div.doc-aviso.ref', h('div', h('b', lead + ' '), queHace, tipoNotaTxt ? h('div.doc-motivo', 'Tipo de nota: ' + tipoNotaTxt + '.') : null, c.motivo ? h('div.doc-motivo', 'Motivo: ' + c.motivo) : null),
           h('button.btn', { type: 'button', onclick: () => { ctx.cerrar(); abrirDetalle(c.original.id); } }, sobreNota ? 'Ver la nota de crédito' : 'Ver el documento original')));
       }
 
@@ -585,7 +762,10 @@ export default {
         const partes = [dinero('total_acreditado') > 0 ? `Lleva devuelto ${money(dinero('total_acreditado'))}.` : '', dinero('total_debitado') > 0 ? `Lleva ${money(dinero('total_debitado'))} en notas de débito.` : '',
           // «Lo que queda» solo se dice cuando no hay notas de débito: con ellas el valor real del documento sube y la base no manda ese número ya calculado
           sd && sd.saldo_total != null && !(dinero('total_debitado') > 0) ? `Valor que queda del documento: ${money(dinero('saldo_total'))}.` : ''].filter(Boolean).join(' ');
-        raiz.append(h('div.doc-aviso.ref.notas', h('div', h('b', otras.length === 1 ? 'Este documento tiene una nota de ajuste. ' : `Este documento tiene ${otras.length} notas de ajuste. `), partes, listaNotas(sd))));
+        // Qué notas tiene, en palabras de uso diario: una devolución o corrección (nota de crédito) o una nota de débito
+        const nCred = otras.filter((n) => n.tipo_doc === '03').length, nDeb = otras.length - nCred;
+        const tiene = [nCred ? (nCred === 1 ? 'una devolución o una corrección' : `${num(nCred)} devoluciones o correcciones`) : '', nDeb ? (nDeb === 1 ? 'una nota de débito' : `${num(nDeb)} notas de débito`) : ''].filter(Boolean).join(' y ');
+        raiz.append(h('div.doc-aviso.ref.notas', h('div', h('b', `Este documento tiene ${tiene}. `), partes, listaNotas(sd))));
       }
 
       // Encabezado y estado
@@ -614,11 +794,12 @@ export default {
           formatoDireccion(cliente) ? h('div', 'Dirección: ' + formatoDireccion(cliente)) : null)
           : h('p.tenue', c.tipo_doc === '04' ? 'Consumidor final: es un tiquete, no lleva datos del cliente.' : 'Sin datos del cliente.')));
 
-      // Líneas y totales
-      raiz.append(h('div.doc-seccion', h('h3', 'Lo que se facturó'),
+      // Líneas y totales. El título dice qué hace el documento: una factura lo que se facturó, una nota de crédito lo que se devuelve, una nota de débito lo que se cobra en esa nota.
+      // En el celular la columna «Precio con IVA» se oculta para que «Total» quepa entera: el precio de cada producto se lee debajo de su nombre.
+      raiz.append(h('div.doc-seccion', h('h3', esNC ? 'Lo que se devuelve' : esND ? 'Lo que se cobra en esta nota' : 'Lo que se facturó'),
         h('div.tabla-caja', h('table.tabla',
-          h('thead', h('tr', h('th', 'Cant.'), h('th', 'Descripción'), h('th.der', 'Precio con IVA'), h('th.der', 'Total'))),
-          h('tbody', lineas.map((l) => h('tr', h('td.cifra', num(l.cantidad)), h('td', l.descripcion || '', l.nota ? h('div.tenue', l.nota) : null), h('td.der', money(l.precio_final)), h('td.der', money(l.total_linea)))))))));
+          h('thead', h('tr', h('th', 'Cant.'), h('th', 'Descripción'), h('th.der.col-precio', 'Precio con IVA'), h('th.der', 'Total'))),
+          h('tbody', lineas.map((l) => h('tr', h('td.cifra', num(l.cantidad)), h('td', l.descripcion || '', l.nota ? h('div.tenue', l.nota) : null, h('div.tenue.doc-precio-cel', `${num(l.cantidad)} × ${money(l.precio_final)}`)), h('td.der.col-precio', money(l.precio_final)), h('td.der', money(l.total_linea)))))))));
       raiz.append(h('div.doc-totales',
         h('div.doc-pagos', h('div.doc-etq', esNC ? (cod === '01' ? 'Pagos del documento original' : 'Cómo se devuelve el dinero') : esND ? 'Cómo se paga la diferencia' : 'Pagos'),
           (c.pagos_snapshot || []).length ? c.pagos_snapshot.map((p) => h('div.doc-fila-t', h('span', (MEDIOS[p.medio] || p.medio) + (p.referencia ? ` (ref. ${p.referencia})` : '')), h('b', money(p.monto)))) : h('div.tenue', 'Sin pagos registrados')),
@@ -659,7 +840,7 @@ export default {
     /* ---------- acciones ---------- */
     async function ejecutar(b, fn) {
       b.disabled = true; b.dataset.ocupado = '1';
-      try { return await fn(); } catch (e) { toast(mensajeAmable(e), 'error', 7000); } finally { b.disabled = false; delete b.dataset.ocupado; }
+      try { return await fn(); } catch (e) { toast(mensajeAmable(e), 'error', 7000); } finally { b.disabled = b.dataset.apagado === '1'; delete b.dataset.ocupado; } // apagado = la acción ya no corresponde (por ejemplo, la venta ya se rehízo)
     }
     function accion({ texto, hint, clase = '', disabled = false, onclick }) {
       const b = h('button.btn.doc-acc' + (clase ? '.' + clase : ''), { type: 'button', disabled }, h('span.t', texto), hint ? h('small', hint) : null);
@@ -701,7 +882,7 @@ export default {
           ? accion({ texto: 'Reenviar a Hacienda', onclick: async () => {
             const r = await app.api.reenviar(c.id);
             toast(r?.estado === 'aceptado' ? 'Hacienda ya lo tiene aceptado.' : 'Se pidió reenviar el documento a Hacienda. Su estado cambiará solo.');
-            await ctx.repintar(true); await cargar(true);
+            await ctx.repintar(true); await refrescarTras();
           } })
           : accion({ texto: 'Reenviar a Hacienda', disabled: true, hint: c.estado === 'aceptado' ? 'No hace falta: Hacienda ya lo aceptó' : c.estado === 'rechazado' ? 'Un documento rechazado no se reenvía' : 'Se envía solo; si tarda, aparecerá este botón' }),
         hayCorreo && conCorreo
@@ -716,7 +897,7 @@ export default {
 
     function bloqueAnular(c, nc, ctx) {
       const g = h('div.doc-grupo.anular', h('h3', 'Corregir o anular'));
-      const repintar = async () => { await ctx.repintar(true); await cargar(true); };
+      const repintar = async () => { await ctx.repintar(true); await refrescarTras(); };
       const doc = { ...c, cliente: c.cliente_snapshot?.nombre || '' };
       const verNota = (n) => { ctx.cerrar(); abrirDetalle(n.id); };
       if (!nc && ctx.sinEfecto) { g.append(h('p.tenue', 'La anulación se dejó sin efecto, así que este documento vuelve a valer. Ya no admite más devoluciones, correcciones ni anulaciones.')); return g; }
@@ -725,9 +906,7 @@ export default {
         const sinEf = ctx.saldosNC?.admite_sin_efecto === true && nc.estado === 'aceptado';
         const docNC = { id: nc.id, tipo_doc: '03', consecutivo: nc.consecutivo, total: nc.total ?? c.total, fecha_emision: nc.fecha_emision, cliente: doc.cliente };
         g.append(...[h('p.tenue', `Este documento ya fue anulado con la nota de crédito N.° ${numeroCorto(nc.consecutivo)}. No se puede anular dos veces.`),
-          c.venta_id ? h('div.doc-botones',
-            accion({ texto: 'Hacer la venta de nuevo en Facturación', hint: 'Copia los productos a una cuenta nueva y abre Facturación.', onclick: async () => { ctx.cerrar(); await hacerVentaDeNuevo(app, c.venta_id, toast); } }),
-            accion({ texto: 'Hacer la venta de nuevo con otro cliente', hint: 'Primero elige al cliente; después abre Facturación.', onclick: async () => { selectorCliente(app, { titulo: 'Elegir el cliente de la venta nueva', alElegir: async (cl) => { ctx.cerrar(); await hacerVentaDeNuevo(app, c.venta_id, toast, cl?.id); } }); } })) : null,
+          c.venta_id ? bloqueRehacer(c, ctx) : null,
           sinEf ? h('div.doc-botones',
             accion({ texto: 'Dejar sin efecto la anulación', hint: 'Úselo si la anulación fue un error: el documento vuelve a valer.', onclick: async () => { dejarSinEfecto(app, docNC, { alTerminar: repintar, alVerNota: verNota }); } })) : null].filter(Boolean));
         return g;
@@ -742,12 +921,15 @@ export default {
         const motivoNotas = noNotas ? (String(ctx.saldos.motivo_no_admite || '').trim() || 'Este documento no admite devoluciones ni correcciones.') : '';
         const abrirParcial = (abrirla) => async () => { abrirla(app, doc, { alTerminar: repintar, alVerNota: verNota }); };
         g.append(...[h('p.tenue', 'Si la venta se hizo mal, se anula con una nota de crédito (código 01, anulación total). El documento original no se borra: queda guardado y enlazado a la nota. Si solo hay que devolver o corregir una parte, no hace falta anular todo: use «Devolver parte» o «Corregir un monto».'),
+          // Si no se pudieron leer las notas del documento, se dice: los botones quedan activos y es la base la que rechaza lo que no corresponda
+          !ctx.saldos && !ctx.falloNC ? h('div.doc-espera-caja', { role: 'note' }, h('p', h('b', 'No se pudo comprobar si tiene devoluciones.')), h('p', 'Revise la conexión. Mientras tanto no dé por hecho que no tiene devoluciones ni correcciones; si no corresponde, el sistema no deja anular.'),
+            h('div.doc-botones', h('button.btn', { type: 'button', 'data-reintentar': '1', onclick: (e) => ejecutar(e.currentTarget, () => ctx.repintar()) }, 'Intentar de nuevo'))) : null,
           bloq ? h('div.doc-espera-caja', { role: 'note' }, h('p', h('b', 'Este documento no se puede anular completo.')), h('p', permiso.motivo)) : null,
           noNotas ? h('div.doc-espera-caja', { role: 'note' }, h('p', h('b', 'No se puede devolver ni corregir una parte de este documento.')), h('p', motivoNotas)) : null,
           h('div.doc-botones',
             accion({ texto: 'Devolver parte', hint: noNotas ? 'No se puede: lea el aviso de arriba' : 'El cliente devuelve algunos productos y se le devuelve esa parte.', disabled: noNotas, onclick: abrirParcial(devolverParte) }),
             accion({ texto: 'Corregir un monto', hint: noNotas ? 'No se puede: lea el aviso de arriba' : 'Se cobró de más o de menos en un producto.', disabled: noNotas, onclick: abrirParcial(corregirMonto) }),
-            accion({ texto: esTiquete ? 'El cliente pide factura' : 'Corregir el cliente de la factura', hint: bloq ? 'No se puede: lea el aviso de arriba' : esTiquete ? 'Elige al cliente, anula el tiquete y deja la factura lista para cobrar.' : 'Elige al cliente correcto, anula y deja la venta lista para cobrar.', clase: 'primario', disabled: bloq, onclick: async () => { cambiarCliente(app, doc, { alTerminar: repintar }); } }),
+            accion({ texto: esTiquete ? 'El cliente pide factura' : 'Corregir el cliente de la factura', hint: bloq ? 'No se puede: lea el aviso de arriba' : esTiquete ? 'Anula el tiquete y deja la factura lista para cobrar con el cliente que usted elija.' : 'Anula la factura y deja la venta lista para cobrar con el cliente correcto.', clase: 'primario', disabled: bloq, onclick: async () => { cambiarCliente(app, doc, { alTerminar: repintar }); } }),
             accion({ texto: 'Anular con nota de crédito', hint: bloq ? 'No se puede: lea el aviso de arriba' : null, clase: 'peligro', disabled: bloq, onclick: async () => { abrirAnular(doc, { alTerminar: repintar, alVerNC: (n) => { ctx.cerrar(); abrirDetalle(n.id); } }); } }))].filter(Boolean));
       } else if (c.estado === 'rechazado') {
         g.append(h('p.tenue', 'Hacienda rechazó este comprobante, por eso no vale y no se le hace nota de crédito. Toque «Hacer la venta de nuevo en Facturación» para sacar uno correcto de inmediato.' + (SUSTITUYE_RECHAZADO ? ' El nuevo indicará que sustituye a este.' : '')), bloqueAtender(c, ctx));
@@ -770,7 +952,7 @@ export default {
     // Detalle de una nota de crédito: si es una anulación total aceptada, se puede dejar sin efecto con una nota de débito (admite_sin_efecto). Una devolución o una corrección no se deshace así.
     function bloqueSinEfecto(c, ctx) {
       if (!['01', '13'].includes(String(c.codigo_referencia || '01'))) return null;
-      const g = h('div.doc-grupo.anular', h('h3', 'Corregir esta anulación'));
+      const g = h('div.doc-grupo.anular', h('h3', 'Dejar sin efecto esta anulación'));
       const ya = sinEfectoDeSaldos(ctx.saldos);
       if (ya) { g.append(h('p.tenue', `Esta anulación ya se dejó sin efecto con la nota de débito N.° ${numeroCorto(ya.consecutivo)}.`)); return g; }
       const doc = { ...c, cliente: c.cliente_snapshot?.nombre || '' };
@@ -778,10 +960,42 @@ export default {
       const apagado = c.estado !== 'aceptado' || (sabe && !ctx.saldos.admite_sin_efecto);
       const hint = c.estado !== 'aceptado' ? 'Primero debe estar aceptada por Hacienda' : apagado ? 'No se puede en este momento' : 'Úselo si la anulación fue un error: el documento vuelve a valer.';
       g.append(h('p.tenue', 'Si esta anulación se hizo por error, se puede dejar sin efecto con una nota de débito: la venta vuelve a valer como estaba. Antes de hacerlo se le muestra todo para que lo revise.'),
-        h('div.doc-botones', accion({ texto: 'Dejar sin efecto la anulación', hint, disabled: apagado, onclick: async () => { dejarSinEfecto(app, doc, { alTerminar: async () => { await ctx.repintar(true); await cargar(true); }, alVerNota: (n) => { ctx.cerrar(); abrirDetalle(n.id); } }); } })));
+        h('div.doc-botones', accion({ texto: 'Dejar sin efecto la anulación', hint, disabled: apagado, onclick: async () => { dejarSinEfecto(app, doc, { alTerminar: async () => { await ctx.repintar(true); await refrescarTras(); }, alVerNota: (n) => { ctx.cerrar(); abrirDetalle(n.id); } }); } })));
       return g;
     }
     const esTiqueteTxt = (c) => (c.tipo_doc === '04' ? 'El cliente pide factura' : 'Corregir el cliente de la factura');
+
+    /* ---------- rehacer la venta: «Hacer la venta de nuevo» ---------- */
+    // Copia los productos a una cuenta nueva y recién entonces abre Facturación. Si la copia falla NO se abre Facturación ni se manda a armar la venta a mano: se muestra lo que dijo la base
+    // y un botón «Intentar de nuevo» (la base no duplica: si la copia ya se había creado, devuelve esa misma). Si la base dice que la venta ya se corrigió con otra venta cobrada, se dice con palabras y no se ofrece rehacerla.
+    function bloqueRehacer(c, ctx) {
+      const caja = h('div.doc-rehacer');
+      const hecha = rehechoPor(c);
+      const ver = hecha ? h('button.btn', { type: 'button', onclick: () => { ctx.cerrar(); abrirDetalle(hecha.id); } }, 'Ver el documento nuevo') : null;
+      const fallo = h('div.an-clon-fallo', { hidden: true, role: 'alert' });
+      const botones = [];
+      let enCopia = false;
+      const intentar = async (clienteId) => {
+        if (enCopia) return;
+        enCopia = true; fallo.hidden = true;
+        let r;
+        try { r = await copiarVentaParaRehacer(c.venta_id, clienteId); } finally { enCopia = false; }
+        if (r.ok) { ctx.cerrar(); abrirCuentaNueva(app, r.id, toast, r.sinCliente); return; }
+        const reintento = r.motivo === 'ya_corregida' ? null : r.motivo === 'sin_funcion' ? h('button.btn', { type: 'button', onclick: () => { ctx.cerrar(); app.ir('caja'); } }, 'Ir a Facturación')
+          : h('button.btn.primario', { type: 'button', 'data-reintentar-copia': '1', onclick: (e) => ejecutar(e.currentTarget, () => intentar(clienteId)) }, 'Intentar de nuevo');
+        fallo.replaceChildren(...[h('p', r.motivo === 'ya_corregida' ? (/no hace falta/i.test(r.mensaje) ? null : h('b', 'No hace falta hacer la venta de nuevo. ')) : h('b', 'No se pudo copiar la venta. '), r.mensaje), reintento].filter(Boolean));
+        fallo.hidden = false;
+        if (r.motivo === 'ya_corregida') botones.forEach((b) => { b.dataset.apagado = '1'; b.disabled = true; });
+        try { fallo.scrollIntoView({ block: 'nearest' }); } catch { /* nada */ }
+      };
+      const bUno = accion({ texto: 'Hacer la venta de nuevo en Facturación', hint: hecha ? 'Ya se hizo de nuevo' : 'Copia los productos a una cuenta nueva y abre Facturación.', disabled: !!hecha, onclick: () => intentar(null) });
+      const bOtro = accion({ texto: 'Hacer la venta de nuevo con otro cliente', hint: hecha ? 'Ya se hizo de nuevo' : 'Primero elija al cliente; después se abre Facturación.', disabled: !!hecha,
+        onclick: async () => { selectorCliente(app, { titulo: 'Elegir el cliente de la venta nueva', alElegir: async (cl) => { await intentar(cl?.id); } }); } });
+      botones.push(bUno, bOtro);
+      if (hecha) caja.append(h('div.doc-aviso.ref', h('div', h('b', `Esta venta ya se volvió a hacer con ${conArticulo(hecha.tipo_doc)} N.° ${numeroCorto(hecha.consecutivo)}. `), 'No hace falta hacerla otra vez. Si ese documento también tiene un error, anúlelo primero.'), ver));
+      caja.append(h('div.doc-botones', bUno, bOtro), fallo);
+      return caja;
+    }
 
     /* ---------- documento rechazado: «Ya lo atendí» y rehacer la venta ---------- */
     // «Ya lo atendí» saca el documento del aviso rojo del encabezado (fx_alerta_atender). El documento NO se borra: sigue en esta ventana y en Informes.
@@ -798,13 +1012,11 @@ export default {
           await alertaAtender(c.id, nota.value);
           toast('Quedó anotado como atendido. El documento sigue en esta ventana y en Informes.');
           app.alertas?.refrescar?.();
-          await ctx.repintar(true); await cargar(true);
+          await ctx.repintar(true); await refrescarTras();
         } });
         caja.append(h('label.etq', 'Nota (opcional)', h('small', 'Sirve para que otra persona sepa qué se hizo.'), nota), ya);
       }
-      if (esVenta(c) && c.venta_id) caja.append(h('div.doc-botones',
-        accion({ texto: 'Hacer la venta de nuevo en Facturación', hint: 'Copia los productos a una cuenta nueva y abre Facturación.', onclick: async () => { ctx.cerrar(); await hacerVentaDeNuevo(app, c.venta_id, toast); } }),
-        accion({ texto: 'Hacer la venta de nuevo con otro cliente', hint: 'Primero elige al cliente; después abre Facturación.', onclick: async () => { selectorCliente(app, { titulo: 'Elegir el cliente de la venta nueva', alElegir: async (cl) => { ctx.cerrar(); await hacerVentaDeNuevo(app, c.venta_id, toast, cl?.id); } }); } })));
+      if (esVenta(c) && c.venta_id) caja.append(bloqueRehacer(c, ctx));
       return caja;
     }
 
@@ -818,7 +1030,7 @@ export default {
     const reloj = setInterval(() => {
       if (document.hidden || !root.isConnected) return;
       const espera = est.rango === 'hoy' ? 15000 : est.rango === 'anterior' ? Infinity : 60000;
-      if (Date.now() - ultimaCarga >= espera) cargar(true);
+      if (Date.now() - ultimaCarga >= espera) cargar('auto');
       detalleActual?.repintar(true);
     }, 20000);
     // Si el aparato cambia de ancho (girar el celular), el tamaño de la página cambia: se vuelve a la primera

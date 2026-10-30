@@ -28,6 +28,7 @@
 .doc-sub{color:var(--tinta2);font-size:.9rem}
 
 /* Qué suma y qué no suma el total, y cómo cuadra con «Apertura y cierre de caja» */
+.doc-cuadre-zona{display:flex;flex-direction:column;gap:.7rem}
 .doc-cuadre-zona:empty{display:none}
 .doc-cuadre-caja{display:flex;flex-direction:column;gap:.45rem;padding:0 .2rem}
 .doc-cuadre-frase{margin:0;color:var(--tinta);font-size:.95rem}
@@ -40,6 +41,16 @@
 .doc-cuadre-fila b{white-space:nowrap}
 .doc-cuadre-fila.total{border-bottom:0;border-top:1px solid var(--tinta);margin-top:.1rem;font-size:1.08rem}
 
+/* Aviso de que faltan documentos por cargar: recuadro ámbar (el mismo de .an-aviso) con el botón para traerlos; en el celular el botón ocupa todo el ancho */
+.doc-faltan{align-items:stretch}
+.doc-faltan .doc-cuadre-frase{color:var(--tinta)}
+.doc-faltan .btn{align-self:flex-start}
+.doc-faltan .error-caja{margin:0}
+@media(max-width:560px){
+  .doc-faltan .btn{align-self:stretch;width:100%}
+  .doc-cuadre summary{max-width:none}
+}
+
 /* Búsqueda y filtros */
 .doc-buscar .campo{min-height:56px;font-size:1.1rem}
 .doc-filtros{display:flex;flex-wrap:wrap;gap:.5rem}
@@ -49,6 +60,7 @@
 .doc-tarifa{display:inline-flex;align-items:center;gap:.5rem;font-weight:600}
 .doc-tarifa .campo{min-height:48px;width:auto;min-width:11rem;font-weight:400}
 .doc-filtros .btn.alerta{border-color:var(--rojo);color:var(--rojo)}
+.doc-aviso-filtro{flex:1 0 100%;margin:0;color:var(--tinta2);font-size:.95rem}
 .doc-filtros .btn.alerta[aria-pressed=true]{background:var(--rojo);color:#fff}
 
 /* Lista: cada fila tiene la zona que se toca (detalle) y los botones Reimprimir / Anular */
@@ -76,6 +88,7 @@
 .doc-fbot{flex:0 0 var(--doc-acc);display:flex;gap:.5rem;align-items:stretch}
 .doc-fbot .btn{flex:1 1 0;min-width:0;min-height:48px;padding-inline:.5rem}
 .doc-fbot.una .btn{flex:0 0 calc(50% - .25rem)}
+.btn.doc-bot[disabled]{opacity:.7}  /* «Anular» apagado se sigue leyendo (con .5 el rojo sobre blanco quedaba en 2,6 a 1) */
 .doc-fila.nc .doc-ver{box-shadow:inset 4px 0 0 var(--rojo)}
 .doc-fila.nc .c-total{color:var(--rojo)}
 .doc-fila.nd .doc-ver{box-shadow:inset 4px 0 0 var(--ambar)}
@@ -95,6 +108,8 @@
 @media(max-width:820px){
   .doc-ver{grid-template-columns:3.4rem minmax(0,1fr) auto;grid-template-areas:"hora doc total" "cli cli est";gap:.35rem .6rem}
   .doc-ver .c-hora{grid-area:hora;font-size:.9rem;color:var(--tinta2)}.doc-ver .c-doc{grid-area:doc}.doc-ver .c-total{grid-area:total}
+  .doc-ver .c-doc .nw{white-space:normal;overflow-wrap:anywhere}  /* un número largo no se pega al total */
+  .doc-ver .c-total{padding-left:.4rem}
   .doc-ver .c-cli{grid-area:cli}.doc-ver .c-est{grid-area:est;justify-content:flex-end}  /* Con dos o más marcas («Aceptado por Hacienda» y «Anulado», «Con devolución»...) las marcas van en su propia línea: si no, ensanchan la última columna y dejan al nombre del documento casi sin espacio */
   .doc-ver:has(.c-est .chip+.chip){grid-template-areas:"hora doc total" "cli cli cli" "est est est"}
   .doc-ver:has(.c-est .chip+.chip) .c-est{justify-content:flex-start}
@@ -176,11 +191,16 @@
 .modal-fondo{grid-template-columns:minmax(0,1fr)}
 .doc-det .tabla th{white-space:normal}
 .doc-det .tabla td,.doc-det .tabla th{padding:.6rem .6rem}
+/* En el celular «Precio con IVA» se oculta (su dato sale bajo el nombre del producto) para que «Total» quepa entera */
+.doc-precio-cel{display:none}
+@media(max-width:480px){.doc-det .tabla .col-precio{display:none}.doc-precio-cel{display:block;font-size:.88rem}}
+.doc-rehacer{display:flex;flex-direction:column;gap:.7rem}
 .doc-ver .nw{white-space:nowrap}
 
 /* Encabezado de la lista y paginación (100 documentos por página en escritorio, 50 en celular) */
 .doc-lista-cab{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:.6rem;margin:.4rem 0 .2rem}
 .doc-conteo{font-weight:600;color:var(--tinta,#1d1a17)}
+.doc-conteo-nota{flex:1 0 100%;color:var(--tinta2);font-size:.92rem}
 .doc-descargas{display:flex;flex-wrap:wrap;gap:.5rem} /* hueco para los botones de descarga que se agregan aparte */
 .doc-descargas:empty{display:none}
 .doc-pags{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:.5rem;padding:1rem 0 1.6rem}

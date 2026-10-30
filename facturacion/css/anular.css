@@ -11,7 +11,7 @@
 .an-explica ul{margin:0;padding-left:1.2rem;display:flex;flex-direction:column;gap:.25rem}
 .an-motivos{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.5rem}
 .an-motivos .btn{min-height:52px;text-align:left;justify-content:flex-start}
-.an-motivos .btn[aria-pressed=true]{background:var(--rojo);border-color:var(--rojo);color:#fff}
+.an-motivos .btn[aria-pressed=true]{background:var(--tinta);border-color:var(--tinta);color:#fff}  /* el mismo color de «marcado» que en las notas y en los filtros */
 /* La base dice que el documento no se puede anular completo (fx_comprobante_saldos.admite_anulacion = false): su frase se muestra tal cual */
 .an-bloqueo{border:1px solid #e9b3b7;border-left:4px solid var(--rojo);background:var(--rojo-suave);border-radius:12px;padding:.8rem 1rem;display:flex;flex-direction:column;gap:.45rem}
 .an-bloqueo p{margin:0}
@@ -61,3 +61,10 @@
 }
 .an-aviso-botones{display:flex;flex-wrap:wrap;gap:.5rem;align-self:stretch}
 .an-aviso-botones .btn{flex:1 1 11rem;min-height:52px}
+
+/* «Hacer la venta de nuevo» que no se pudo: lo que dijo la base y un botón en palabras */
+.an-clon-fallo{border:1px solid #e9b3b7;border-left:4px solid var(--rojo);background:var(--rojo-suave);border-radius:12px;padding:.7rem 1rem;display:flex;flex-direction:column;gap:.5rem;align-items:flex-start}
+.an-clon-fallo[hidden]{display:none}
+.an-clon-fallo p{margin:0}
+.an-clon-fallo .btn{min-height:52px}
+@media(max-width:560px){.an-clon-fallo{align-items:stretch}}

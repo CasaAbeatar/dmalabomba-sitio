@@ -28,7 +28,9 @@
 .np-l-entrada label{display:flex;flex-direction:column;gap:.25rem;flex:1 1 11rem;font-weight:600;font-size:.9rem}
 .np-l-entrada .campo{text-align:right;font-size:1.15rem;font-variant-numeric:tabular-nums}
 .np-l-entrada .btn{flex:0 0 auto;min-width:9rem}
-.np-linea .campo[aria-invalid=true]{border-color:var(--rojo);box-shadow:0 0 0 3px rgba(184,22,34,.12)}
+/* El foco de un campo es neutro (borde de tinta y un halo gris): en una pantalla de dinero el rojo quiere decir «esto está mal» y solo se usa para un error, con su texto al lado */
+.np-cuerpo .campo:focus{border-color:var(--tinta);box-shadow:0 0 0 3px rgba(29,26,23,.15)}
+.np-cuerpo .campo[aria-invalid=true],.np-cuerpo .campo[aria-invalid=true]:focus{border-color:var(--rojo);box-shadow:0 0 0 3px rgba(184,22,34,.12)}
 .np-l-error{margin:0;color:var(--rojo-osc);font-weight:600;font-size:.92rem}
 .np-l-error[hidden],.np-l-sub[hidden],.np-pago-error[hidden]{display:none}
 .np-l-sub{margin:0;color:var(--verde);font-weight:600;font-size:.95rem;font-variant-numeric:tabular-nums}
@@ -55,10 +57,9 @@
 .np-pagos{display:flex;flex-direction:column;gap:.5rem}
 .np-pago{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,11rem);gap:.2rem .8rem;align-items:center;padding:.55rem 0;border-bottom:1px solid var(--linea)}
 .np-pago-medio{display:flex;flex-direction:column;min-width:0}
-.np-pago-medio small{color:var(--tinta2);font-size:.85rem;line-height:1.25}
+.np-pago-medio small{color:var(--tinta2);font-size:1rem;line-height:1.25}
 .np-pago-monto{display:flex;align-items:center;gap:.4rem}
 .np-pago-monto .campo{text-align:right;font-size:1.1rem;font-variant-numeric:tabular-nums}
-.np-pago .campo[aria-invalid=true]{border-color:var(--rojo);box-shadow:0 0 0 3px rgba(184,22,34,.12)}
 .np-moneda{font-weight:700;color:var(--tinta2)}
 .np-pago-error{grid-column:1/-1;margin:0;color:var(--rojo-osc);font-weight:600;font-size:.9rem}
 .np-pagos-pie{display:flex;flex-wrap:wrap;gap:.2rem 1rem;justify-content:space-between;align-items:baseline;padding-top:.2rem;font-variant-numeric:tabular-nums}
@@ -69,6 +70,10 @@
 /* Los botones de la parte de abajo */
 .np-pie .btn{min-height:56px}
 .np-pie .np-vivo{order:-1}
+.np-pie .np-estado{flex:1 0 100%;margin:0;color:var(--tinta2);font-size:.95rem}
+.np-pie .np-sin-deshacer{flex:1 0 100%}
+.np-pie .np-sin-deshacer[hidden]{display:none}
+.np-sin-turno{font-weight:600}
 
 @media(max-width:760px){
   .np-opciones{grid-template-columns:1fr}

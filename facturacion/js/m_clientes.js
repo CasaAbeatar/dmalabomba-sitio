@@ -3,7 +3,8 @@ import { h, debounce, TIPOS_ID, nombreLocal, nombrePropio, bloqueError } from '.
 import { api } from './api.js';
 import { clientesTodos, clienteActivar } from './api_clientes.js';
 import { toast, confirmar } from './util.js';
-import { abrirFormCliente } from './ui_cliente.js';
+import { abrirFormCliente, resumenDireccion } from './ui_cliente.js';
+import { estadoDireccion } from './direccion_cliente.js';
 import { tarifaHabitual } from './iva.js';
 import { infoActividad } from './actividades.js';
 import { cargarCss, diaCR, conBotonM, mensajeSeguro } from './ui_mant.js';
@@ -33,7 +34,10 @@ export default {
         tarifaHabitual(c) ? h('span.mt-sub', 'Tarifa de IVA habitual: ', h('span.chip.espera', tarifaHabitual(c).texto)) : null,
         c.correo ? h('span.mt-sub', 'Correo: ' + c.correo) : h('span.mt-sub', h('span.chip', 'Sin correo')),
         c.telefono ? h('span.mt-sub', 'Teléfono: ' + c.telefono) : null,
-        c.falta_direccion === true ? h('span.mt-sub', h('span.chip.suave', 'Falta la dirección'), ' No hace falta para facturar; se puede agregar al abrir el cliente.') : null),
+        // Dirección: sin ningún dato -> aviso suave; con algunos datos -> «Dirección incompleta» y cada dato con su rótulo («Sin dato» donde falta). Nada de esto impide facturar.
+        c.falta_direccion === true ? h('span.mt-sub', h('span.chip.suave', 'Sin dirección'), ' No hace falta para facturar; se puede agregar al abrir el cliente.')
+          : (c.direccion_incompleta === true || (!('direccion_incompleta' in c) && estadoDireccion(c) === 'parcial')) ? h('span.mt-sub', h('span.chip.suave', 'Dirección incompleta'), ' No hace falta para facturar.', resumenDireccion(c, { compacto: true }))
+          : null),
       h('div.mt-btns', h('button.btn', { type: 'button', onclick: () => abrir(c) }, 'Ver o editar'),
         (() => { const b = h('button.btn' + (c.activo === false ? '.primario' : ''), { type: 'button', onclick: () => conBotonM(b, async () => { if (c.activo !== false && !(await confirmar('¿Desactivar a «' + nombrePropio(c.nombre) + '»? Ya no aparecerá al buscar cliente para facturar. Sus facturas anteriores no cambian y se puede activar de nuevo.', { si: 'Sí, desactivar', no: 'No, volver', peligro: true }))) return; await clienteActivar(c.id, c.activo === false); toast(c.activo === false ? 'Cliente activado. Ya aparece al buscar cliente.' : 'Cliente desactivado. Ya no aparece al buscar cliente.'); await cargar(); }) }, c.activo === false ? 'Activar' : 'Desactivar'); return b; })()));
 

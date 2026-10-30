@@ -3,9 +3,10 @@ import { crearZonaEfectivo } from './ui_efectivo_rapido.js';
 import { crearFormularioApertura } from './ui_apertura.js';
 import { errorActividad, limpiarActividad } from './ui_cedula.js';
 import { selectorCliente } from './ui_cliente.js';
+import { estadoDireccion } from './direccion_cliente.js';
 import { apiM } from './api_mantenimiento.js';
 import { esTransitorio } from './api.js';
-import { reemplazoInfo, cobrarReemplazo } from './api_documentos.js';
+import { reemplazoInfo, cobrarReemplazo, esRespuestaDeNegocio } from './api_documentos.js';
 import { TARIFAS_IVA, tarifaDeLinea, desgloseIva, tarifaHabitual } from './iva.js';
 import { infoActividad, textoActividad } from './actividades.js';
 import { ordenarMenu } from './orden_menu.js';
@@ -141,13 +142,14 @@ function avisoCobroSinCaja(comp, app, aviso) {
       impEstado,
       h('div.botones',
         h('button.btn.primario.grande', { type: 'button', onclick: () => imprimir(aj.formato === 'carta' ? 'carta' : 'tiquete') }, aj.formato === 'carta' ? 'Imprimir factura carta' : 'Imprimir tiquete'),
-        h('button.btn', { type: 'button', onclick: () => app.ir('anular') }, 'Ver en «Anular y reimprimir»'))),
+        h('button.btn', { type: 'button', onclick: () => app.ir('anular', comp.id ? { comprobante: String(comp.id) } : null) }, 'Ver en «Anular y reimprimir»'))),
     botones: [{ texto: 'Listo', clase: 'primario', onclick: (c) => c() }] });
   if (aj.auto) imprimir(aj.formato === 'carta' ? 'carta' : 'tiquete');
 }
 
-// Dirección del cliente incompleta (solo avisa si la base mandó esos datos: así no se asusta a nadie por una llave que no llegó)
-const direccionIncompleta = (c) => !!c && ('provincia' in c || 'otras_senas' in c) && (!c.provincia || !c.canton || !c.distrito || String(c.otras_senas || '').trim().length < 5);
+// Cliente sin NINGÚN dato de dirección (solo avisa si la base mandó esos datos: así no se asusta a nadie por una llave que no llegó).
+// Una dirección a medias es normal y no se avisa: en el comprobante sale solo lo que el cliente sí tiene (js/direccion_cliente.js).
+const sinDireccion = (c) => !!c && ('provincia' in c || 'otras_senas' in c) && ['01', '02', '03', '04'].includes(String(c.tipo_id)) && estadoDireccion(c) === 'sin';
 
 // Busca por palabras parciales en cualquier orden, sin tildes ni mayúsculas; por código completo o por prefijo
 function buscarEn(productos, q) {
@@ -1161,15 +1163,31 @@ export default {
         const nota = est === 'aceptado' ? 'La nota de crédito que anuló el comprobante anterior ya fue aceptada por Hacienda.'
           : est === 'error' ? 'La nota de crédito que anuló el comprobante anterior no se pudo enviar a Hacienda. Esta venta se puede cobrar igual; conviene revisar esa nota en «Anular y reimprimir».'
             : est === 'enviado' || est === 'pendiente' ? 'La nota de crédito que anuló el comprobante anterior todavía está en camino a Hacienda. Esta venta se puede cobrar igual.' : '';
-        avisoRep.replaceChildren(
+        avisoRep.replaceChildren(...[
           h('strong', num0 ? `Esta venta reemplaza al comprobante N.° ${num0}` : 'Esta venta reemplaza a un comprobante anulado'),
           h('div.tenue-linea', 'Al cobrarla, el comprobante nuevo quedará con la referencia al anterior («Sustituye comprobante electrónico»).'),
-          nota ? h('div.tenue-linea.rep-nc' + (est === 'error' ? '.mal' : ''), nota) : null);
+          nota ? h('div.tenue-linea.rep-nc' + (est === 'error' ? '.mal' : ''), nota) : null].filter(Boolean)); // replaceChildren escribiría «null» como texto
         avisoRep.hidden = false;
+      }
+      // La base también puede decir que esta cuenta NO se puede cobrar como reemplazo: la anulación del comprobante original se dejó sin efecto (nota de débito), así que ese comprobante vuelve a valer.
+      // Su mensaje se muestra tal cual, con el modo de salir («Anular esta cuenta»), y mientras tanto no se cobra.
+      let bloqueo = ''; // texto de la base; '' = nada bloquea el cobro
+      const cajaBloqueo = h('div.error-caja.cobro-bloqueo', { hidden: true, role: 'alert' });
+      const salirAnulando = () => {
+        if (cobrando) return;
+        if (cur?.venta?.id !== ventaId) { toast('Esta cuenta ya no es la que está abierta. Cierre esta ventana y vuelva a intentarlo.', 'error', 6000); return; }
+        m.cerrar(); anularCuenta();
+      };
+      function bloquear(texto) {
+        bloqueo = String(texto || '').trim() || 'Esta cuenta no se puede cobrar.';
+        cajaBloqueo.replaceChildren(h('strong', 'Esta cuenta no se puede cobrar'), h('p', bloqueo),
+          h('button.btn.peligro', { type: 'button', 'data-anular-cuenta': '1', onclick: salirAnulando }, 'Anular esta cuenta'));
+        cajaBloqueo.hidden = false; avisoRep.hidden = true;
+        if (m) actualizar();
       }
       const reemplazoListo = Promise.race([reemplazoInfo(ventaId), new Promise((ok) => setTimeout(() => ok({ ok: false }), 5000))])
         .then((r) => { if (r && r.ok && r.reemplaza) { reemplazo = r; if (!terminado) pintarReemplazo(); } return r || { ok: false }; })
-        .catch(() => ({ ok: false }));
+        .catch((e) => { if (esRespuestaDeNegocio(e)) { if (!terminado) bloquear(e.message); return { ok: false, bloqueada: true }; } return { ok: false }; });
       const btnRevisar = h('button.btn', { type: 'button', hidden: true }, 'Revisar si se cobró');
       // Impresión: se usan los ajustes de este aparato (botón «Impresora»); aquí solo se muestran y se pueden abrir para cambiarlos
       const resImp = h('div.cobro-imp');
@@ -1194,6 +1212,7 @@ export default {
       const vistaPago = h('div.cobro',
         h('div.cobro-total', h('div.et', 'Total a cobrar (IVA incluido)'), montoTotal),
         avisoRep,
+        cajaBloqueo,
         resumen,
         listaPagos,
         h('div.cobro-doc', h('div', h('div', docTxt), h('div', cliTxt)), h('div.fila', btnElegir, btnQuitarCli)),
@@ -1264,7 +1283,7 @@ export default {
           cod ? null : h('small.tenue', 'Si el cliente declara IVA y pide que se anote su actividad, toque «Cambiar» y escriba el código.'),
           fueraDeLista ? h('div.act-aviso', 'Este código no está entre las actividades que Hacienda tiene para este cliente. Hacienda podría rechazar la factura.') : null,
           !cliente.correo ? h('div.act-aviso', 'Este cliente no tiene correo. La factura se emite igual, pero la copia impresa no le sirve como gasto o crédito: con el correo recibiría el archivo que sí le sirve. Puede agregarlo en Clientes.') : null,
-          direccionIncompleta(cliente) ? h('div.act-aviso', 'A este cliente le falta la dirección completa (provincia, cantón, distrito y otras señas). La factura se emite igual; complétela en Clientes cuando pueda.') : null,
+          sinDireccion(cliente) ? h('div.act-aviso', 'Este cliente no tiene dirección guardada. La factura se emite igual y sale sin dirección; puede agregarla en Clientes si el cliente la quiere.') : null,
         ].filter(Boolean));
       }
       function actualizar() {
@@ -1290,7 +1309,7 @@ export default {
         else if (r.ok) { resumen.classList.add('ok'); resumen.replaceChildren(h('span', 'Pago completo, sin vuelto'), h('span.grande', '✓')); }
         else { resumen.classList.add('falta'); resumen.replaceChildren(h('span', 'Falta por pagar'), h('span.grande', money(totalC / 100))); }
         btnCobrar.textContent = cobrando ? 'Cobrando…' : 'Cobrar ' + money(venta.total);
-        btnCobrar.disabled = cobrando || duda || !r.ok || !!b.malo;
+        btnCobrar.disabled = cobrando || duda || !!bloqueo || !r.ok || !!b.malo;
         btnOtro.disabled = cobrando || !b.v || !!r.error;
         btnVolver.disabled = cobrando;
       }
@@ -1402,7 +1421,7 @@ export default {
         if (vivo) exito(comp, vueltoLocal, aviso); else avisoCobroSinCaja(comp, app, aviso);
       }
       async function confirmarCobro() {
-        if (cobrando || terminado || duda || ventasEnCobro.has(ventaId)) return;
+        if (cobrando || terminado || duda || bloqueo || ventasEnCobro.has(ventaId)) return;
         const b = borrador();
         const r = calcularPagos(entradas(), totalC);
         if (b.malo || !r.ok) { conErr(r.error || 'Los pagos todavía no cubren el total.'); return; }
@@ -1414,8 +1433,11 @@ export default {
           // Si la base dice que es la copia de un comprobante anulado, se cobra como reemplazo; si dice que no lo es, como siempre.
           // Si no se pudo saber, se pregunta otra vez sin el tope de 5 s y, si tampoco se puede, NO se cobra a ciegas: un reemplazo cobrado como venta normal no se puede corregir después.
           let info = await reemplazoListo;
+          const noSeCobra = (texto) => { const x = new Error(texto); x.sinCobrar = true; x.yaMostrado = true; return x; }; // el bloqueo ya está a la vista: no se repite en el cuadro rojo de abajo
+          if (bloqueo) throw noSeCobra(bloqueo);
           if (!info || !info.ok) {
-            info = await reemplazoInfo(ventaId);
+            try { info = await reemplazoInfo(ventaId); }
+            catch (e2) { if (esRespuestaDeNegocio(e2)) { bloquear(e2.message); throw noSeCobra(e2.message); } throw e2; }
             if (info && info.ok && info.reemplaza) reemplazo = info;
           }
           if (!info || !info.ok) {
@@ -1427,7 +1449,14 @@ export default {
             ? await cobrarReemplazo(ventaId, rep.original_id, aplicados, cliente ? cliente.id : null, app.terminal, cliente ? actividadFactura : null)
             : await api.cobrar(ventaId, aplicados, cliente ? cliente.id : null, app.terminal, cliente ? actividadFactura : null);
         } catch (e) {
-          if (e && e.sinCobrar) { cobrando = false; ventasEnCobro.delete(ventaId); if (!vivo || !m) return; actualizar(); conErr(e.message); return; }
+          if (e && e.sinCobrar) { cobrando = false; ventasEnCobro.delete(ventaId); if (!vivo || !m) return; actualizar(); if (!e.yaMostrado) conErr(e.message); return; }
+          // fx_cobrar_reemplazo también vuelve a revisar la regla al cobrar: si la anulación del original se dejó sin efecto, la base lanza el mismo mensaje. Un error de negocio no deja nada cobrado,
+          // así que no hace falta preguntar si se cobró: se muestra el bloqueo con su salida.
+          if (reemplazo && esRespuestaDeNegocio(e) && /sin efecto/i.test(e.message || '') && /reemplazo/i.test(e.message || '')) {
+            cobrando = false; ventasEnCobro.delete(ventaId);
+            if (!vivo || !m) return;
+            bloquear(e.message); return;
+          }
           const v = await verificarCobro();
           if (v.estado === 'cobrado') {
             // Solo se habla de conexión si de verdad fue un problema de conexión; si el servidor dijo que la cuenta ya estaba cobrada, se dice eso
@@ -1519,7 +1548,7 @@ export default {
           h('button.btn', { type: 'button', onclick: () => imprimir(fmtPrincipal) }, aj.auto ? 'Imprimir otra vez' : 'Imprimir ' + nombrePrincipal),
           h('button.btn', { type: 'button', onclick: () => imprimir(fmtPrincipal === 'carta' ? 'tiquete' : 'carta') }, fmtPrincipal === 'carta' ? 'Imprimir tiquete' : 'Imprimir factura carta'),
           h('button.btn.suave', { type: 'button', onclick: () => cerrarM() }, 'Listo, cerrar'),
-          h('button.btn.peligro', { type: 'button', onclick: () => { cerrarM(); app.ir('anular'); } }, 'Me equivoqué: anular esta factura')));
+          h('button.btn.peligro', { type: 'button', onclick: () => { cerrarM(); app.ir('anular', comp.id ? { comprobante: String(comp.id) } : null); } }, 'Me equivoqué: anular esta factura')));
       const mo = modal({ titulo: 'Cobro listo', contenido, ancho: 520, alCerrar: () => { abierto = false; dejarDeVigilar(); if (vivo && buscador && fino()) buscador.inp.focus(); } });
       cerrarM = mo.cerrar;
       if (aj.auto) imprimir(fmtPrincipal);
