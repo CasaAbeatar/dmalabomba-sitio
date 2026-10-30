@@ -559,3 +559,20 @@
   .linea .linea-total{font-size:.9rem}
   .linea .linea-x{min-width:1.7rem}
 }
+
+/* Menos aire en Facturación (pedido de Emil, 30 oct 2026: «muchos espacios entre todo»). Los toques siguen siendo de 44 px en teléfono y tableta. */
+.caja-cuerpo{gap:.7rem}
+.caja-izq{gap:.3rem}
+.caja-catalogo{gap:.3rem;--mos-h:46px;--mos-gap:.3rem}
+.cajones,.productos,.opciones-grid{padding:.35rem}
+.buscador{padding:.2rem 0 .3rem}
+.buscador-inp{min-height:46px!important;font-size:1.05rem!important}
+.cuentas-bar{gap:.4rem}
+.cuentas-bar>.btn{min-height:44px}
+.cuenta-cab{padding:.3rem .7rem}
+.cuenta-cliente{padding:.3rem .7rem;gap:.3rem}
+.cuenta-pie{padding:.4rem .7rem .5rem;gap:.35rem}
+.linea{padding:.1rem 0}
+@media (min-width:900px){
+  .linea>.cant-inp,.linea>.precio-inp,.linea .linea-nombre,.linea .linea-x{min-height:40px}
+}
