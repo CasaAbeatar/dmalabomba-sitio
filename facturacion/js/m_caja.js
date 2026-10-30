@@ -931,7 +931,8 @@ export default {
         i.addEventListener('focus', () => llevarALaVista(i));
       });
       const tar = tarifaDeLinea(l);
-      const detalleCambiado = !!prod && !prod.descripcion_libre && l.descripcion !== prod.nombre;
+      const nombreBase = prod && !prod.descripcion_libre ? (String(prod.nombre_venta || '').trim() || prod.nombre) : null; // lo que el catálogo manda al tiquete
+      const detalleCambiado = !!prod && !prod.descripcion_libre && l.descripcion !== prod.nombre && l.descripcion !== nombreBase;
       const tarifaCambiada = !!prod && Number(l.tarifa_iva) !== Number(prod.tarifa_iva);
       const abierta = lineasAbiertas.has(l.id);
       // Solo se rotula lo que sale de lo normal: otra tarifa, otro detalle u otro precio que el del menú
@@ -942,7 +943,7 @@ export default {
       if (l.nota && !abierta) marcas.push(h('span.nota-vista', 'Nota: ' + l.nota));
       const id = l.id;
       // Nombre corto: lo que se lleva el cliente (la opción), sin repetir el producto. Si la línea tiene un detalle propio, se muestra ese.
-      const corto = (!detalleCambiado && prod?.modificador_nombre) ? String(prod.modificador_nombre).trim() : l.descripcion;
+      const corto = (!detalleCambiado && nombreBase) ? nombreBase : l.descripcion;
       const alternar = () => {
         if (abierta) lineasAbiertas.delete(id); else lineasAbiertas.add(id);
         pintarCuenta();
