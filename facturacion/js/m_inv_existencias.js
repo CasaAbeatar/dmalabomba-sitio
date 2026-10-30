@@ -18,7 +18,7 @@ export async function abrir(ctx, _id, pedido = {}) {
   const buscar = h('input.campo', { type: 'search', placeholder: 'Nombre del artículo o CABYS', 'aria-label': 'Buscar artículo', autocomplete: 'off' });
   buscar.addEventListener('input', debounce(() => { est.q = buscar.value.trim(); cargar(); }, 300));
   const ceros = h('input', { type: 'checkbox', onchange: () => { est.ceros = ceros.checked; cargar(); } });
-  const hoyCaja = h('div.inv-hoy-filtros', { role: 'group', 'aria-label': 'Ver solo' });
+  const hoyCaja = h('div.inv-hoy-filtros', { role: 'group', 'aria-label': 'Ver solo', hidden: true });
   const lista = h('div.inv-exis', cargando('Cargando existencias…'));
   const totales = h('div.inv-resumen');
   const admin = ctx.esAdmin ? h('div.inv-admin-btns',
@@ -28,9 +28,10 @@ export async function abrir(ctx, _id, pedido = {}) {
   document.addEventListener('inv:cambio', alCambio);
   ventana({ titulo: 'Existencias', contenido: [
     h('div.inv-ventana-cab', h('p', 'Lo que hay hoy en cada bodega y local, de las dos empresas. Toque un artículo para ver sus lotes y vencimientos. Valores al costo, sin IVA.'), admin),
+    hoyCaja,
     h('div.inv-filtros.cuatro', h('label.etq', 'Bodega o local', ubic), h('label.etq', 'Categoría', categ), h('label.etq.inv-buscar', 'Buscar', campoBusqueda(buscar, () => { est.q = ''; cargar(); }))),
     h('label.inv-casilla', ceros, h('span', 'Mostrar también los artículos en cero que tienen un mínimo')),
-    hoyCaja, lista, totales], alCerrar: () => { vivo = false; document.removeEventListener('inv:cambio', alCambio); } });
+    lista, totales], alCerrar: () => { vivo = false; document.removeEventListener('inv:cambio', alCambio); } });
 
   async function cargar() {
     const mia = ++seq;
@@ -48,6 +49,7 @@ export async function abrir(ctx, _id, pedido = {}) {
   const conVencido = (f) => Number(f.cantidad_vencida) > 0;
   function pintar() {
     const filas = est.datos.filas || [];
+    hoyCaja.hidden = false;
     const nP = filas.filter(vencePronto).length, nV = filas.filter(conVencido).length, nB = filas.filter((f) => f.bajo_minimo).length;
     const b = (id, t, n, clase) => h('button.btn.inv-seg' + (n && clase ? '.' + clase : ''), { type: 'button', 'aria-pressed': String(est.solo === id), onclick: () => { est.solo = est.solo === id ? '' : id; pintar(); } }, t, h('span.inv-cuenta', String(n)));
     poner(hoyCaja, h('span.hoy-et', 'Hoy'),

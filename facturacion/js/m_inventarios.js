@@ -65,15 +65,22 @@ export default {
       }
     }
 
+    // Las tarjetas de hoy y las secciones se crean una sola vez y después solo se ponen al día: así, al volver de una ventana, el foco regresa al botón que la abrió
+    const tarjetas = new Map();
     function tarjetaHoy({ n, titulo, texto, clase = '', boton, onclick, id }) {
-      return h('button.inv-hoy-tarj' + (clase ? '.' + clase : '') + (n ? '' : '.cero'), { type: 'button', onclick, 'data-hoy': id },
-        h('span.inv-hoy-n.cifra', num(n, 0)), h('span.inv-hoy-tit', titulo), h('span.inv-hoy-txt', texto), h('span.inv-hoy-ver', boton));
+      let b = tarjetas.get(id);
+      if (!b) { b = h('button', { type: 'button', 'data-hoy': id }); tarjetas.set(id, b); }
+      b.className = 'inv-hoy-tarj' + (clase ? ' ' + clase : '') + (n ? '' : ' cero');
+      b.onclick = onclick;
+      poner(b, h('span.inv-hoy-n.cifra', num(n, 0)), h('span.inv-hoy-tit', titulo), h('span.inv-hoy-txt', texto), h('span.inv-hoy-ver', boton));
+      return b;
     }
+    let partes = null; // { hoyTit, rejilla, extras, valor } cuando ya se pintó una vez
     function pintar(a, v) {
       const dias = Number(a.dias_aviso ?? ctx.cat?.config?.dias_aviso ?? 2);
       const vencidos = a.vencidos || [], pronto = a.vencen_pronto || [], bajo = a.bajo_minimo || [];
       const botar = vencidos.filter((x) => x.salio_hoy).length;
-      const tarjetas = [
+      const lista = [
         tarjetaHoy({ id: 'vencidos', n: vencidos.length, titulo: vencidos.length === 1 ? 'Vencido' : 'Vencidos', clase: vencidos.length ? 'urgente' : '',
           texto: vencidos.length ? [botar ? (botar === 1 ? '1 lote salió hoy del sistema: hay que botarlo.' : botar + ' lotes salieron hoy del sistema: hay que botarlos.') : '', vencidos.length - botar ? (vencidos.length - botar === 1 ? '1 todavía cuenta en el inventario.' : (vencidos.length - botar) + ' todavía cuentan en el inventario.') : ''].filter(Boolean).join(' ') : 'No hay nada vencido.',
           boton: 'Ver los vencidos', onclick: () => abrirSeccion('hoy', { foco: 'vencidos' }) }),
@@ -88,18 +95,23 @@ export default {
       if (a.notas_por_revisar > 0) extras.push(h('button.btn.inv-hoy-extra', { type: 'button', onclick: () => abrirSeccion('notas') }, plural(a.notas_por_revisar, 'nota de proveedor por revisar', 'notas de proveedor por revisar')));
       (a.conteos_abiertos || []).forEach((c) => extras.push(h('button.btn.inv-hoy-extra', { type: 'button', onclick: () => abrirSeccion('conteo', { conteo: c.id }) }, 'Conteo abierto en ' + c.ubicacion + (c.iniciado_por_nombre ? ' (lo empezó ' + c.iniciado_por_nombre + ')' : ''))));
 
-      const secciones = SECCIONES.filter((s) => !s.soloAdmin || ctx.esAdmin);
-      const menu = h('div.inv-menu', secciones.map((s) => h('button.inv-sec', { type: 'button', 'data-sec': s.id, onclick: () => abrirSeccion(s.id) },
-        h('span.inv-sec-tit', s.titulo), h('span.inv-sec-desc', s.desc), s.soloAdmin ? h('span.inv-sec-solo', 'Solo administradores') : null)));
-
-      poner(cuerpo, 
-        h('section.inv-hoy', { 'aria-labelledby': 'inv-hoy-tit' },
-          h('div.inv-hoy-cab', h('div', h('span.hoy-et', 'Hoy'), h('h2#inv-hoy-tit', diaLargo(ctx.hoy))),
-            h('p.tenue', 'La bodega central y los locales son de las dos empresas: Soda La Bomba y Pollos La Bomba ven lo mismo.')),
-          h('div.inv-hoy-rejilla', tarjetas),
-          extras.length ? h('div.inv-hoy-extras', extras) : null),
-        h('section.inv-secciones', { 'aria-labelledby': 'inv-sec-tit' }, h('h2#inv-sec-tit', '¿Qué quiere hacer?'), menu),
-        valor(v));
+      if (!partes || !partes.rejilla.isConnected) {
+        const secciones = SECCIONES.filter((s) => !s.soloAdmin || ctx.esAdmin);
+        const menu = h('div.inv-menu', secciones.map((s) => h('button.inv-sec', { type: 'button', 'data-sec': s.id, onclick: () => abrirSeccion(s.id) },
+          h('span.inv-sec-tit', s.titulo), h('span.inv-sec-desc', s.desc), s.soloAdmin ? h('span.inv-sec-solo', 'Solo administradores') : null)));
+        partes = { hoyTit: h('h2#inv-hoy-tit'), rejilla: h('div.inv-hoy-rejilla'), extras: h('div.inv-hoy-extras'), valor: h('div.inv-valor-caja') };
+        poner(cuerpo,
+          h('section.inv-hoy', { 'aria-labelledby': 'inv-hoy-tit' },
+            h('div.inv-hoy-cab', h('div', h('span.hoy-et', 'Hoy'), partes.hoyTit),
+              h('p.tenue', 'La bodega central y los locales son de las dos empresas: Soda La Bomba y Pollos La Bomba ven lo mismo.')),
+            partes.rejilla, partes.extras),
+          h('section.inv-secciones', { 'aria-labelledby': 'inv-sec-tit' }, h('h2#inv-sec-tit', '¿Qué quiere hacer?'), menu),
+          partes.valor);
+      }
+      partes.hoyTit.textContent = diaLargo(ctx.hoy);
+      poner(partes.rejilla, lista);
+      poner(partes.extras, extras); partes.extras.hidden = !extras.length;
+      poner(partes.valor, valor(v));
     }
 
     // Valor del inventario: total, por ubicación y por empresa de origen. Las barras son de línea fina y proporcionales al valor.
