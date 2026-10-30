@@ -365,7 +365,7 @@ export default {
       if (!ok) return;
       await conBotonM(btn, async () => { await api.productoGuardar(cuerpoProducto(p, { activo: !p.activo })); toast(p.activo ? 'Producto desactivado.' : 'Producto activado.'); await cargar(); });
     }
-    const cuerpoProducto = (p, extra = {}) => ({ sociedad_id: soc.id, cajon_id: p.cajon_id, codigo: p.codigo, nombre: p.nombre, cabys: p.cabys, precio_final: Number(p.precio_final), tarifa_iva: Number(p.tarifa_iva), activo: p.activo, precio_abierto: p.precio_abierto, nota: p.nota || null, producto_nombre: p.producto_nombre || null, modificador_nombre: p.modificador_nombre || null, descripcion_libre: !!p.descripcion_libre, ...extra });
+    const cuerpoProducto = (p, extra = {}) => ({ sociedad_id: soc.id, cajon_id: p.cajon_id, codigo: p.codigo, nombre: p.nombre, cabys: p.cabys, precio_final: Number(p.precio_final), tarifa_iva: Number(p.tarifa_iva), activo: p.activo, precio_abierto: p.precio_abierto, nota: p.nota || null, producto_nombre: p.producto_nombre || null, modificador_nombre: p.modificador_nombre || null, descripcion_libre: !!p.descripcion_libre, nombre_venta: p.nombre_venta || null, ...extra });
 
     /* ---------- Formulario de producto ---------- */
     async function abrirProducto({ modo, p, cajon, grupo }) {
@@ -384,6 +384,7 @@ export default {
       const codigo = soloDigitos(h('input.campo', { type: 'text', inputmode: 'numeric', autocomplete: 'off', readonly: esEd, value: esEd ? p.codigo : modo === 'modificador' ? siguienteModificador(grupo) : siguienteProducto(cajonInicial), 'aria-label': 'Código de 6 dígitos' }), 6);
       const decod = h('small.tenue');
       const nombre = h('textarea.campo', { rows: 2, maxlength: 150, 'aria-label': 'Nombre' }, esEd ? p.nombre : '');
+      const nombreVenta = h('input.campo', { type: 'text', maxlength: 150, autocomplete: 'off', placeholder: 'Déjelo vacío para usar el nombre de abajo', 'aria-label': 'Nombre en el tiquete', value: esEd ? (p.nombre_venta || '') : '' });
       const avisoNombre = h('div', { hidden: true });
       // Nombres de los niveles 2 y 3 (producto y opción). Caja arma la cascada con ellos.
       const grupoProds = modo === 'modificador' ? cat.productos.filter((x) => x.codigo.startsWith(grupo)) : [];
@@ -539,6 +540,7 @@ export default {
         const cuerpo = { sociedad_id: soc.id, cajon_id: cj.id, codigo: cod, nombre: nombre.value.trim(), cabys: cabysInp.value, precio_final: pr, tarifa_iva: Number(tarifa.value), activo: quedaActivo(), precio_abierto: abierto.checked, nota: nota.value.trim() || null,
           descripcion_libre: libre.checked, modificador_nombre: unToque ? null : (modNom.value.trim() || null) };
         if (!unToque) cuerpo.producto_nombre = prodNom.value.trim() || null;
+        cuerpo.nombre_venta = nombreVenta.value.trim() || null;
         if (!esEd) cuerpo.solo_nuevo = true; // el servidor avisa si el código ya existe, en vez de pisar otro artículo
         const btn = m.el.querySelector('.modal-pie .primario');
         await conBotonM(btn, async () => {
@@ -581,6 +583,7 @@ export default {
                 esEd ? null : h('div.fila', h('button.btn', { type: 'button', onclick: () => { codigo.value = modo === 'modificador' ? siguienteModificador(grupo) : siguienteProducto(selC.value); decodificar(); } }, 'Sugerir el siguiente código libre'))),
               avisosCodigo,
               bloqueNiveles,
+              campo('Nombre en el tiquete y la factura', nombreVenta, 'Es lo que lee el cliente, corto y claro: «Pechuga y ala», «Pizza Bomba», «Casado de pollo». Si lo deja vacío sale el nombre de abajo.'),
               campo('Nombre o descripción (el que sale en la factura)', nombre, 'Hasta 150 letras. Es el texto que sale en la factura. Si llena los nombres de arriba, este se arma solo y usted lo puede cambiar.'),
               avisoNombre)),
           h('fieldset', h('legend', 'CABYS y IVA'),
