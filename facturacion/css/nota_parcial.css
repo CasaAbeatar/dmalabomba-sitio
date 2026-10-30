@@ -74,6 +74,13 @@
 .np-pie .np-sin-deshacer{flex:1 0 100%}
 .np-pie .np-sin-deshacer[hidden]{display:none}
 .np-sin-turno{font-weight:600}
+/* Aviso de la caja en la revisión: ámbar si hay que abrirla antes de seguir, gris si solo se informa */
+.np-caja{display:flex;flex-direction:column;align-items:flex-start;gap:.6rem;margin-top:.6rem;padding:.7rem 1rem;border:1px solid var(--linea2);border-left:3px solid var(--tinta2);border-radius:12px;background:#fbf8f2}
+.np-caja p{margin:0}
+.np-caja.alto{border-color:#efd08f;border-left:4px solid var(--borde-ambar,#c98a12);background:var(--ambar-suave,#fff4da)}
+.np-caja[hidden]{display:none}
+.np-caja .btn{min-height:52px}
+.np-l-prorrata{margin:0;font-size:.9rem}
 
 /* «Revise primero»: hay una nota de este documento que quedó sin saberse */
 .np-previo .np-previo-estado{font-weight:600}

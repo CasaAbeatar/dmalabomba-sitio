@@ -3,6 +3,8 @@
 // fx_usuarios trae por usuario `empresas: [{ id, codigo, nombre_comercial }]`; de la fila del propio administrador salen las OTRAS empresas a las que él tiene acceso (casilla «También puede entrar a …»).
 import { h, modal, confirmar, pedir, conBoton, toast, fechaHora, pinDebil, conPunto, nombrePropio, nombreLocal, bloqueError, textoDeError } from './util.js';
 import { api } from './api.js';
+import { seguridad, normalizarSeguridad } from './api_seguridad.js';
+import { haceCuanto } from './api_respaldos.js';
 import { cargarCss, aviso, campo, soloDigitos, diaCR } from './ui_mant.js';
 
 // PIN temporal al azar de 4 números, con la misma regla que se exige al elegir uno (util.js pinDebil): sin repeticiones ni secuencias (1111, 1212, 1234, 4321)
@@ -24,6 +26,7 @@ export default {
     }
     const lista = h('div');
     const resumen = h('p.mt-nota');
+    const segEl = h('section.tarjeta.mt-seg', { 'aria-label': 'Seguridad del ingreso' });
     let usuarios = [];
     const esYo = (u) => String(u.usuario).toLowerCase() === String(app.usuario || '').toLowerCase();
     const miEmpresa = app.empresa?.nombre || 'esta empresa';
@@ -43,6 +46,7 @@ export default {
       }
       if (mi !== nCarga) return;
       usuarios = nuevos;
+      if (ultimaSeg) pintarSeguridad(); // con los usuarios a mano, cada aviso puede ofrecer «Reiniciar PIN»
       const hoy = diaCR(new Date());
       // Solo cuentan los usuarios activos, en los dos números de la frase y en la lista de arriba
       const hoyIng = (u) => u.activo && u.ultimo_ingreso && diaCR(u.ultimo_ingreso) === hoy;
@@ -78,6 +82,70 @@ export default {
             otrasEmpresas(u).map((e) => h('span.chip.gris', 'También entra a ' + nombreLocal(e))),
             u.debe_cambiar_pin ? h('span.chip.espera', 'Debe cambiar su PIN al entrar') : null)),
         h('div.mt-btns', btnNombre, btnPin, btnAdmin, btnActivo));
+    }
+
+    /* ---------- Seguridad del ingreso: avisos por muchos intentos fallidos de PIN (fx_login_alertas) ---------- */
+    // Qué conviene hacer según el tipo de aviso. El texto del aviso lo escribe la base; esto solo orienta.
+    const QUE_HACER = {
+      usuario_fallos: 'Si fue esa persona equivocándose, no pasa nada. Si no, reinicie su PIN.',
+      total_fallos: 'Pueden ser varias personas equivocándose, o alguien probando PIN. Si no hubo cambio de personal, vale la pena reiniciar el PIN de quien usted note raro.',
+      acierto_tras_fallos: 'Pregúntele a esa persona si fue ella. Si no fue, reinicie su PIN ahora.',
+    };
+    let nSeg = 0, ultimaSeg = null; // ultimaSeg = lo último que contestó fx_login_alertas (ya limpio); se vuelve a pintar cuando llega la lista de usuarios
+    async function cargarSeguridad() {
+      const mi = ++nSeg;
+      let r;
+      try { r = normalizarSeguridad(await seguridad.alertas()); } catch (e) {
+        if (mi !== nSeg) return;
+        ultimaSeg = null;
+        segEl.className = 'tarjeta mt-seg';
+        segEl.replaceChildren(h('h2', 'Seguridad del ingreso'), bloqueError({ titulo: 'No se pudieron cargar los avisos de ingreso', mensaje: textoDeError(e), alReintentar: () => cargarSeguridad() }));
+        return;
+      }
+      if (mi !== nSeg) return;
+      ultimaSeg = r;
+      pintarSeguridad();
+    }
+    function pintarSeguridad() {
+      const r = ultimaSeg;
+      if (!r) { if (!segEl.children.length) segEl.replaceChildren(h('h2', 'Seguridad del ingreso'), h('p.mt-nota', 'Revisando los avisos de ingreso…')); return; }
+      const pend = r.ultimas.filter((a) => !a.atendida), antes = r.ultimas.filter((a) => a.atendida);
+      // El número de pendientes lo cuenta la base sobre todos los avisos; la lista trae los 20 más nuevos
+      const masSinVer = Math.max(0, r.pendientes - pend.length);
+      segEl.className = 'tarjeta mt-seg' + (r.pendientes > 0 ? ' con-avisos' : '');
+      // replaceChildren escribe «null» si recibe un null: se quitan los huecos antes
+      segEl.replaceChildren(...[
+        h('div.mt-seg-cab', h('h2', 'Seguridad del ingreso'),
+          r.pendientes > 0 ? h('span.chip.mal', r.pendientes === 1 ? '1 aviso sin atender' : r.pendientes + ' avisos sin atender') : h('span.chip.ok', 'Sin avisos pendientes')),
+        h('p.mt-nota', 'Aquí aparece un aviso cuando alguien se equivoca muchas veces con el PIN. El ingreso nunca se bloquea: esto es solo para que usted se entere.'),
+        pend.length ? h('ul.mt-seg-lista', pend.map(avisoIngreso)) : (r.pendientes > 0 ? null : h('p.mt-seg-ok', 'No hay avisos de ingreso por atender.')),
+        masSinVer > 0 ? h('p.mt-nota', 'Hay ' + masSinVer + (masSinVer === 1 ? ' aviso más' : ' avisos más') + ' sin atender, más antiguos que los de arriba. Atienda estos y aparecerán.') : null,
+        pend.length ? h('p.mt-seg-pie', 'El aviso no dice desde qué aparato se hizo el intento: el sistema todavía no lo guarda.') : null,
+        antes.length ? h('details.mt-seg-antes', h('summary', 'Avisos ya atendidos (' + antes.length + ')'),
+          h('ul', antes.map((a) => h('li', h('span', fechaHora(a.creada_en) + ' · ' + a.mensaje), h('span.chip.gris', 'Atendido'))))) : null].filter(Boolean));
+    }
+
+    function avisoIngreso(a) {
+      const quien = a.usuario ? usuarios.find((u) => u.usuario === a.usuario) : null;
+      const btnAtender = h('button.btn.primario', { type: 'button', onclick: (e) => atenderAviso(a, e.currentTarget) }, 'Marcar como atendida');
+      const btnPin = quien && !esYo(quien) && quien.activo ? h('button.btn', { type: 'button', onclick: (e) => reiniciarPin(quien, e.currentTarget) }, 'Reiniciar PIN de ' + nombrePropio(quien.nombre || quien.usuario)) : null;
+      return h('li.mt-seg-aviso',
+        h('p.mt-seg-que', a.mensaje || 'Aviso de ingreso.'),
+        h('p.mt-seg-cuando', a.creada_en ? fechaHora(a.creada_en) + ' (' + haceCuanto(a.creada_en) + ')' : ''),
+        QUE_HACER[a.tipo] ? h('p.mt-seg-guia', QUE_HACER[a.tipo]) : null,
+        h('div.mt-seg-btns', btnAtender, btnPin));
+    }
+
+    async function atenderAviso(a, btn) {
+      const nota = await pedir({ titulo: 'Marcar como atendida', etiqueta: 'Nota (opcional)', multilinea: true, boton: 'Marcar como atendida', nota: 'Por ejemplo: «Era María, se equivocó» o «Se reinició el PIN». Hasta 300 letras.' });
+      if (nota == null) return;
+      if (nota.trim().length > 300) return toast('La nota puede tener hasta 300 letras.', 'error');
+      await conBoton(btn, async () => {
+        await seguridad.atender(a.id, nota.trim() || null);
+        toast('Aviso marcado como atendido.');
+        app.alertas?.refrescar?.(); // la insignia de Usuarios se pone al día
+        await cargarSeguridad();
+      });
     }
 
     async function cambiarNombre(u) {
@@ -165,7 +233,7 @@ export default {
       h('div.mt-cab',
         h('div', h('p', 'Las personas que pueden entrar al facturador de ', h('strong', miEmpresa), '. Nunca se elimina a nadie: se desactiva.')),
         h('div.mt-acciones', h('button.btn.primario.grande', { type: 'button', onclick: agregar }, 'Agregar usuario'))),
-      resumen, lista,
+      segEl, resumen, lista,
       // Lo de hoy primero (quién ingresó hoy); la explicación del PIN va al final y se abre con un botón grande
       h('details.tarjeta', { style: 'margin-top:1.2rem' },
         h('summary', 'Cómo funciona el PIN'),
@@ -176,6 +244,8 @@ export default {
           h('li', 'Nadie puede ver el PIN de otra persona, ni siquiera un administrador.'),
           h('li', 'Cada persona entra solo a la empresa que se le dio. Aquí se ven y se crean los usuarios de ' + miEmpresa + '.'),
           h('li', 'Dentro de la empresa todos los usuarios tienen acceso a todo. Solo esta pantalla de Usuarios es exclusiva de los administradores.'))));
+    pintarSeguridad(); // «Revisando…» mientras llega
+    cargarSeguridad(); // en paralelo con la lista de usuarios: si falla, la lista igual se ve
     await cargar();
   },
 };

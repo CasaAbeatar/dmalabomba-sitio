@@ -1,0 +1,66 @@
+/* Numeración y paso a facturas reales (Administración). Se suma a app.css, no lo reemplaza. */
+.num{max-width:980px;margin:0 auto;display:flex;flex-direction:column;gap:1rem}
+.num-cab{display:flex;flex-wrap:wrap;gap:.6rem 1rem;align-items:center;justify-content:space-between}
+.num-cab p{margin:0;color:var(--tinta2);flex:1 1 22rem}
+.num-cuerpo{display:flex;flex-direction:column;gap:1rem}
+.num h2{font-size:1.25rem}
+.num-h2{margin-top:.4rem}
+.num-nota{margin:.2rem 0;color:var(--tinta2);font-size:.92rem;line-height:1.4}
+
+/* El modo actual: grande y claro */
+.num-ambiente{padding:1.1rem 1.2rem;border-radius:14px;border:2px solid var(--borde-ambar);border-left-width:10px;background:var(--ambar-suave);color:#5c3d00}
+.num-ambiente.real{border-color:var(--borde-ok);background:var(--verde-suave);color:#14583a}
+.num-amb-et{font-size:.85rem;font-weight:600;text-transform:uppercase;letter-spacing:.05em;opacity:.85}
+.num-amb-g{font-size:2.2rem;font-weight:800;line-height:1.1;letter-spacing:-.01em;text-transform:uppercase;margin:.1rem 0 .3rem}
+.num-ambiente p{margin:.2rem 0}
+.num-amb-emp{font-size:.9rem;opacity:.85}
+
+/* El candado */
+.num-candado.cerrado{border-left:8px solid var(--rojo)}
+.num-candado.libre{border-left:8px solid var(--borde-ok)}
+.num-candado h2{margin-bottom:.3rem}
+.num-libre{margin:.2rem 0;font-weight:600;color:var(--verde)}
+.num-cerrado{margin:.2rem 0;font-weight:600}
+.num-motivos{list-style:none;margin:.5rem 0 0;padding:0;display:flex;flex-direction:column;gap:.6rem}
+.num-motivo{padding:.7rem .9rem;background:var(--rojo-suave);border:1px solid var(--borde-mal);border-radius:var(--r)}
+.num-motivo-t{margin:0;font-weight:700;color:var(--rojo-osc)}
+.num-motivo-a{margin:.3rem 0 0}
+.num-motivo-m{margin:.3rem 0 0;font-size:.95rem;overflow-wrap:anywhere}
+.num-mensaje{margin-top:.3rem}
+.num-mensaje summary{cursor:pointer;font-weight:600;min-height:48px;display:flex;align-items:center}
+.num-mensaje p{margin:0 0 .4rem;font-size:.9rem;overflow-wrap:anywhere}
+.num-solo-informa{margin:.7rem 0 0;font-size:.9rem;color:var(--tinta2)}
+
+/* Los números */
+.num-numeros{display:flex;flex-direction:column;gap:.7rem}
+.num-bloque-cab{display:flex;flex-wrap:wrap;gap:.4rem .8rem;align-items:center;justify-content:space-between;margin-bottom:.3rem}
+.num-filas{list-style:none;margin:.4rem 0 0;padding:0;display:flex;flex-direction:column}
+.num-fila{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1.4fr) auto;gap:.4rem 1rem;align-items:center;padding:.65rem 0;border-top:1px solid var(--linea)}
+.num-fila:first-child{border-top:0}
+.num-fila-t{overflow-wrap:anywhere}
+.num-fila-n{display:flex;flex-direction:column;gap:.1rem}
+.num-sig strong{font-size:1.2rem}
+.num-ult{font-size:.88rem;color:var(--tinta2)}
+.num-fila .btn.chico{min-height:48px}
+@media(max-width:700px){.num-fila{grid-template-columns:1fr}.num-fila .btn{width:100%}}
+
+/* La ventana de «Fijar el último número» */
+.num-form{display:flex;flex-direction:column;gap:.7rem}
+.num-form p{margin:0}
+.num-vista{font-weight:600;min-height:1.4em}
+
+/* El paso guiado */
+.num-paso{display:flex;flex-direction:column;gap:.8rem}
+.num-subpaso{padding:.8rem .9rem;border:1px solid var(--linea2);border-radius:var(--r);background:#fff}
+.num-subpaso.hecho{background:var(--verde-suave);border-color:var(--borde-ok)}
+.num-subpaso p{margin:.25rem 0}
+.num-confirmar{display:flex;flex-direction:column;gap:.5rem}
+.num-paso-t{font-weight:700;margin:0}
+.num-frase{font-weight:800;letter-spacing:.01em}
+.num-confirmar .btn{align-self:flex-start}
+@media(max-width:560px){.num-confirmar .btn{align-self:stretch}.num-amb-g{font-size:1.8rem}}
+
+/* Cajas de aviso y etiqueta gris (propias, para no depender de otra hoja) */
+.num-aviso{padding:.7rem .9rem;border-radius:var(--r);border:1px solid var(--linea2);background:#f4f1ea;font-size:.94rem;line-height:1.4}
+.num-aviso.ambar{background:var(--ambar-suave);border-color:var(--borde-ambar);color:#6b4500}
+.num .chip.gris,.rsp .chip.gris{color:var(--tinta2);background:#f1ece1}

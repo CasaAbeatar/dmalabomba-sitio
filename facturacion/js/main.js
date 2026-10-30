@@ -1,10 +1,11 @@
 // Arranque del facturador: inicio de sesión (código de empresa, usuario y PIN), cabecera, inicio con módulos, navegación por dirección (#) y avisos.
 // Nunca se muestra dentro de otra página (un marco): GitHub Pages no deja poner cabeceras y una etiqueta meta no admite frame-ancestors, así que se corta aquí.
 if (window.top !== window.self) { document.documentElement.replaceChildren(); throw new Error('El facturador no se muestra dentro de otra página.'); }
-import { sb, api, entrar, salir, consultarEmpresa, normalizarEmpresa, esTransitorio, esSesionVencida } from './api.js';
+import { sb, api, entrar, salir, consultarEmpresa, normalizarEmpresa, esTransitorio, esSesionVencida, esPinObligatorio } from './api.js';
 import { h, toast, modal, conBoton, esqueleto, bloqueError, nombreLocal, cerrarVentanas, asentarVentanas, popEsDeVentana, conPunto, pinDebil, textoDeError, MSG_SIN_INTERNET } from './util.js';
 import { buscar, padreDe } from './modulos.js';
 import { pantallaInicio, pantallaAdmin, pintarInsignias } from './ui_inicio.js';
+import { crearAvisosAdmin } from './avisos_admin.js';
 
 const raiz = document.getElementById('app');
 const pausa = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -24,6 +25,7 @@ let pinDeEntrada = null; // { pin, hasta }
 const recordarPinDeEntrada = (pin) => { pinDeEntrada = /^\d{4}$/.test(String(pin)) ? { pin: String(pin), hasta: Date.now() + VIDA_PIN_DE_ENTRADA } : null; };
 const olvidarPinDeEntrada = () => { pinDeEntrada = null; };
 const pinDeEntradaVigente = () => (pinDeEntrada && Date.now() < pinDeEntrada.hasta ? pinDeEntrada.pin : '');
+let cambioPinActivo = false; // true mientras se ve la pantalla de cambio obligatorio de PIN: evita abrirla dos veces cuando varias llamadas contestan lo mismo a la vez
 
 // Estado compartido con los módulos
 export const app = {
@@ -40,6 +42,8 @@ export const app = {
   moduloActual: null, // el módulo (o pantalla) que se ve: una entrada de modulos.js o INICIO
   recepcion: null, // { pendientes_en_plazo, vencen_pronto, vencidas } de las facturas recibidas; alimenta las insignias de Contable y Administración
   inventario: null, // { vencidos, vencen_pronto, bajo_minimo, por_recibir, notas_por_revisar, urgente } de fx_inv_alertas_resumen; alimenta la insignia de Inventarios
+  respaldo: null, // solo administradores: { problemas, urgente, mensaje, ultimo_respaldo, ultima_prueba, alertas } de fx_respaldo_alertas_resumen (avisos_admin.js); alimenta la franja del encabezado y la insignia de Respaldos
+  seguridad: null, // solo administradores: { pendientes, ultimas } de fx_login_alertas (avisos_admin.js); alimenta la insignia de Usuarios
   pedido: null, // lo que una pantalla le pide a la otra al abrirla (por ejemplo { filtro: 'problemas' }); el módulo lo lee al empezar
   // Avisos del encabezado. datos = { rechazados, pendientes, recepcion_por_responder, ultimos, desde }. refrescar() vuelve a preguntar de inmediato.
   alertas: { datos: null, refrescar: () => actualizarAlertas(true), fijarRecepcion: (c) => { if (c) { recepcionCache = { pendientes_en_plazo: Number(c.pendientes_en_plazo ?? 0), vencen_pronto: Number(c.vencen_pronto ?? 0), vencidas: vencidasDe(c) }; recepcionHora = Date.now(); } fijarRecepcion(recepcionCache && c ? recepcionCache : c); } },
@@ -288,6 +292,7 @@ function problemaPinNuevo(actual, nuevo, otra) {
 }
 // pedirActual = true fuerza el campo «PIN actual» (cuando no se recuerda el PIN con el que se entró, o el servidor no lo aceptó). aviso = una frase para arriba de los campos.
 function pantallaCambioPin({ pedirActual = false, aviso = '' } = {}) {
+  cambioPinActivo = true;
   raiz.replaceChildren();
   // Si la persona acaba de entrar con su PIN en esta pantalla, ese PIN ya se comprobó: no se le pide otra vez (ahí se equivocaban y el freno de fx_pin_cambiar las dejaba fuera).
   // Si recargó la página con la sesión abierta no hay nada que recordar y el campo se muestra como siempre.
@@ -349,7 +354,7 @@ function cambiarPinDialogo() {
 //   sub       «‹ Administración» + «Inicio» + título (los módulos que viven dentro de Administración)
 //   facturar  una sola fila delgada: «‹ Inicio», título, caja y «Anular factura» (deja el máximo de espacio a la caja)
 // Arriba va siempre una franja con el nombre del negocio y, si aplica, MODO DE PRUEBAS.
-let cab, vista, alertaEl, redEl, menuEl, tituloEl, volverEl, inicioEl;
+let cab, vista, alertaEl, redEl, menuEl, tituloEl, volverEl, inicioEl, avisosAdmin;
 const EMPRESAS_CON_COLOR = ['pollos', 'soda'];
 // Código corto de la empresa de la sesión ('pollos' | 'soda'); decide el color de la franja
 const codigoEmpresa = (s) => { const c = String(s?.codigo ?? '').toLowerCase(); return EMPRESAS_CON_COLOR.includes(c) ? c : 'pollos'; };
@@ -437,6 +442,7 @@ async function actualizarAlertas(forzar = false) {
   alUltimo = Date.now();
   const mi = ++alSeq, soc = app.socId;
   actualizarInventario(mi);
+  avisosAdmin?.actualizar(() => mi === alSeq && !!app.ctx); // solo administradores: respaldos (franja y insignia) y avisos de ingreso (insignia de Usuarios)
   try {
     const { alertas } = await import('./api_documentos.js');
     const a = await alertas(soc);
@@ -456,6 +462,8 @@ async function actualizarAlertas(forzar = false) {
     if (mi === alSeq && soc === app.socId) fijarRecepcion(recepcionCache);
   } catch (e) { if (!esTransitorio(e) && !esSesionVencida(e)) console.warn('Avisos del encabezado no disponibles:', e?.message || e); }
 }
+// Repinta las insignias de las tarjetas que se ven (lo usan los avisos de administrador cuando llega una cifra nueva)
+function repintarInsignias() { if (cab && vista && (app.moduloActual === INICIO || app.moduloActual?.pantalla === 'admin')) pintarInsignias(vista, app); }
 // Insignia de Inventarios (fx_inv_alertas_resumen, una consulta liviana): se pide junto con los avisos, sin cargar el módulo. La bodega es del grupo: no depende de la empresa.
 async function actualizarInventario(mi) {
   try {
@@ -769,6 +777,7 @@ function armarApp(reciente = false) {
       h('div.sin-red-btns',
         h('button.btn.chico', { type: 'button', onclick: abrirAyudaSinRed }, 'Qué hacer y qué no hacer'),
         h('button.btn.chico', { type: 'button', onclick: (e) => conBoton(e.currentTarget, async () => { await app.refrescar(); mostrarRed(false); toast('Conexión recuperada.'); }) }, 'Revisar ahora'))));
+  avisosAdmin = app.admin ? crearAvisosAdmin(app, { alCambiar: repintarInsignias }) : null; // la franja de respaldos va justo debajo del aviso rojo de Hacienda
   menuEl = h('div.cab-usuario',
     h('button.btn.cab-menu', { type: 'button', 'aria-haspopup': 'true', 'aria-expanded': 'false', 'aria-controls': 'cab-panel', onclick: () => abrirMenu(!menuEl.classList.contains('abierto')) }, 'Menú ▾'),
     h('div#cab-panel.cab-panel',
@@ -788,7 +797,7 @@ function armarApp(reciente = false) {
       // Atajo siempre visible: anular una factura no debe esconderse dentro de otra pantalla. Lleva a «Anular y reimprimir» con el cursor en el buscador.
       h('button.btn.cab-anular', { type: 'button', onclick: irAAnular }, 'Anular y reimprimir'),
       menuEl),
-    alertaEl, redEl);
+    alertaEl, avisosAdmin ? avisosAdmin.el : null, redEl);
   raiz.append(cab, vista);
   if (window.ResizeObserver) new ResizeObserver(() => sincronizarAlturas()).observe(cab);
   pintarCabecera();
@@ -820,9 +829,9 @@ async function cerrarSesion() {
     document.querySelectorAll('#toasts .toast').forEach((t) => t.remove());
     await salir().catch(() => {});
     olvidarPinDeEntrada();
-    app.ctx = null; app.socId = null; app.moduloActual = null; app.pedido = null; app.alertas.datos = null; app.recepcion = null; app.inventario = null;
+    app.ctx = null; app.socId = null; app.moduloActual = null; app.pedido = null; app.alertas.datos = null; app.recepcion = null; app.inventario = null; app.respaldo = null; app.seguridad = null;
     recepcionCache = null; recepcionHora = 0; veniaDe = null;
-    cab = vista = alertaEl = redEl = menuEl = tituloEl = volverEl = inicioEl = null;
+    cab = vista = alertaEl = redEl = menuEl = tituloEl = volverEl = inicioEl = avisosAdmin = null; cambioPinActivo = false;
     document.body.classList.remove('fx-caja');
     iconoPestana(null);
     const st = document.documentElement.style;
@@ -834,6 +843,18 @@ async function cerrarSesion() {
   } finally { cerrando = false; }
 }
 
+
+// Cambio de PIN obligatorio en medio del trabajo: cuando cualquier llamada contesta con el código PT409 (api.js avisa con 'app:pin-obligatorio'), se va a la pantalla de cambio de PIN de siempre.
+// Al guardar el PIN nuevo, arrancar() vuelve a la misma dirección (#) donde la persona estaba. Se detienen los avisos y se cierran las ventanas; las cuentas abiertas están guardadas en el sistema.
+// Hoy la base TODAVÍA no manda este código: el requisito no está activado y esto no se ve.
+document.addEventListener('app:pin-obligatorio', () => {
+  if (!app.ctx || cambioPinActivo || cerrando) return;
+  clearInterval(alTimer); alSeq++; irSeq++;
+  try { limpieza?.(); } catch { /* nada */ }
+  limpieza = null;
+  cerrarVentanas();
+  pantallaCambioPin({ aviso: 'Antes de seguir, elija su PIN nuevo.' });
+});
 
 /* ---------- Arranque ---------- */
 // reciente = true cuando se acaba de iniciar sesión: si la primera consulta cae por sesión, se repite una vez antes de rendirse
@@ -852,6 +873,8 @@ async function arrancar(reciente = false) {
   try {
     app.ctx = await cargarContexto(reciente);
   } catch (e) {
+    // La base exige elegir un PIN nuevo antes de contestar cualquier cosa (código PT409): se va a la pantalla de cambio de PIN y, al guardarlo, arrancar() sigue desde aquí
+    if (esPinObligatorio(e)) return pantallaCambioPin({ aviso: 'Antes de seguir, elija su PIN nuevo.' });
     if (esSesionVencida(e) || esSinAcceso(e)) {
       olvidarPinDeEntrada();
       await salir().catch(() => {});
@@ -868,6 +891,7 @@ async function arrancar(reciente = false) {
   // El PIN de entrada solo se guarda en memoria para el cambio obligatorio: si no hay cambio pendiente, se olvida de una vez
   if (!app.ctx.debe_cambiar_pin) olvidarPinDeEntrada();
   if (app.ctx.debe_cambiar_pin) return pantallaCambioPin();
+  cambioPinActivo = false;
   // La empresa de la sesión la dice el servidor (empresa_sesion). Mientras una sesión no esté atada a ninguna (servicio de acceso viejo), se usa la que se escogió
   // al entrar en este aparato y, como último respaldo, 'pollos'.
   const sociedades = app.ctx.sociedades;

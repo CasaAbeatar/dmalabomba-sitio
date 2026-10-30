@@ -74,6 +74,9 @@ function datosResumen(est) {
     preciosCambiados: Math.max(0, Math.floor(Number(est.precios_cambiados || 0))),
     // Ventas cobradas cuyo documento Hacienda no aceptó (fx_turno_estado.rechazadas_n y rechazadas_total). Siguen contadas en el total: la plata sí se cobró.
     rechazadasN: Number(est.rechazadas_n || 0), rechazadasTotal: Number(est.rechazadas_total || 0),
+    // Notas hechas en este turno sobre una venta de otro turno o sin turno (fx_turno_estado.notas_otros_turnos_n y notas_otros_turnos_total; el total ya trae el signo: crédito resta, débito suma).
+    // Ya están dentro de los ajustes de arriba: solo se muestran para explicar por qué las ventas netas de este turno pueden bajar aunque hoy no se haya anulado nada de lo vendido hoy.
+    otrosN: Math.max(0, Math.floor(Number(est.notas_otros_turnos_n || 0)) || 0), otrosTotal: Number(est.notas_otros_turnos_total || 0) || 0,
   };
 }
 
@@ -109,6 +112,14 @@ function textoAjustes(d) {
   return h('p.tenue-linea.ajustes-turno', `De ese total: ${partes.join('; ')}. Con esos ajustes, lo vendido es ${money(neto)}.`);
 }
 
+// «Notas de otros turnos: 1 nota hecha hoy sobre una venta de otro turno (resta ₡5 000,00).» Solo sale si hay alguna.
+function textoOtrosTurnos(d) {
+  if (!(d.otrosN > 0)) return null;
+  const uno = d.otrosN === 1, t = Math.round(d.otrosTotal * 100) / 100;
+  const efecto = t < 0 ? `resta ${money(Math.abs(t))}` : t > 0 ? `suma ${money(t)}` : 'no cambia el total';
+  return h('p.tenue-linea.otros-turnos', `Notas de otros turnos: ${d.otrosN} ${uno ? 'nota hecha' : 'notas hechas'} en este turno sobre ${uno ? 'una venta' : 'ventas'} de otro turno (${efecto}). Cuentan aquí porque este es el turno en que salió o entró ese dinero.`);
+}
+
 // Filas de la cuenta: abrió + ventas + cobros de notas de débito + entradas - salidas - devoluciones = debe haber
 function bloqueCalculo(d, { alAnularSalida, alAnularEntrada, extra } = {}) {
   return h('div.calc',
@@ -138,6 +149,7 @@ function bloqueVentas(d, { alVer, nota } = {}) {
       h('div.dato.total', h('div.et', 'Total vendido'), h('div.val', money(d.totalVentas)), h('div.det', d.ventas + (d.ventas === 1 ? ' venta' : ' ventas') + ', IVA incluido'))),
     d.rechazadasN > 0 ? h('div.aviso-rechazadas', { role: 'note' }, h('span', textoRechazadas(d)), alVer ? h('button.btn.chico', { type: 'button', onclick: alVer }, 'Ver esos documentos') : null) : null,
     textoAjustes(d),
+    textoOtrosTurnos(d),
     nota || null,
     d.preciosCambiados > 0 ? h('p.precios-cambiados', textoPreciosCambiados(d)) : null,
     h('p.tenue-linea', 'Solo el efectivo se cuenta a mano. Tarjeta, SINPE Móvil y transferencia los suma el sistema con cada cobro.'));

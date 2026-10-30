@@ -121,3 +121,6 @@ th button.ord .flecha{color:var(--rojo)}
   #impresion-resumen .gr .barra.ambar{fill:#F3A62C;-webkit-print-color-adjust:exact;print-color-adjust:exact}
   #impresion-resumen .gr .zona{display:none}
 }
+.kpi-aparte{margin-top:.2rem;padding-top:.35rem;border-top:1px dashed var(--borde,#e4d9c3)}
+.lis-sin-turno{display:block;font-weight:400;margin-top:.15rem}
+.lis-ambiente{margin:.2rem 0 .6rem;font-size:.9rem;font-weight:600;color:#6b4600}

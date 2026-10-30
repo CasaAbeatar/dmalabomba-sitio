@@ -27,6 +27,9 @@ export default {
     const turnoSel = h('select.campo', { 'aria-label': 'Turno', onchange: () => { est.turno = turnoSel.value; cargar(est.desde, est.hasta, true); } });
     const turnoCaja = h('label.etq.lis-turno', 'Ver solo un turno de caja (opcional)', turnoSel);
     const rotulo = h('p.lis-rotulo');
+    // fx_listados2 trae `ambiente` (solo cuenta los comprobantes del modo vigente de la empresa, 27f): se dice, para que nadie tome cifras de prueba por ventas reales
+    // ni se pregunte adónde fueron las de prueba cuando el sistema pase a facturas reales.
+    const ambienteEl = h('p.lis-ambiente', { hidden: true, role: 'note' });
     const resumenEl = h('div');
     const cuerpo = h('div');
     // Franja que acompaña a toda la pantalla mientras se ve la muestra, para que nadie la confunda con ventas reales
@@ -38,12 +41,13 @@ export default {
         h('div.fila', crearDescarga(() => informeCompleto(), { texto: 'Descargar todo el informe', etiqueta: 'Descargar todo el informe de ventas, con una hoja por tabla' }),
           h('button.btn', { type: 'button', onclick: (e) => imprimir(e.currentTarget) }, 'Imprimir resumen'))),
       h('div.tarjeta.lis-filtros', periodo.el, turnoCaja),
-      demoBanner, rotulo, resumenEl, cuerpo);
+      demoBanner, rotulo, ambienteEl, resumenEl, cuerpo);
 
     async function cargar(desde, hasta, mismoTurno) {
       est.desde = desde; est.hasta = hasta;
       const mia = ++ficha;
       rotulo.textContent = 'Mostrando ' + textoRango(desde, hasta) + (est.turno ? ' · un solo turno' : ' · todos los turnos') + '. Colones (₡), IVA incluido salvo donde se indique.';
+      ambienteEl.hidden = true;
       limpiezas.splice(0).forEach((f) => f());
       resumenEl.replaceChildren(); cuerpo.replaceChildren(h('p.cargando', 'Cargando ventas…'));
       try {
@@ -52,7 +56,12 @@ export default {
         else datos = await listados2(app.soc.id, desde, hasta, est.turno || null);
         if (mia !== ficha) return;
         est.datos = datos;
+        // Con «un solo turno», fx_listados2 devuelve el turno COMPLETO (turno_rango), aunque empiece antes o termine después de las fechas escogidas: el rótulo dice eso y no el rango de fechas
+        if (est.turno && datos.turno_rango) rotulo.textContent = 'Mostrando ' + textoTurnoRango(datos.turno_rango) + ' Colones (₡), IVA incluido salvo donde se indique.';
         demoBanner.hidden = !est.demo;
+        const amb = !est.demo && datos.ambiente === 'sandbox' ? 'Modo de pruebas: estas cifras son de prueba y no son ventas reales.'
+          : !est.demo && datos.ambiente === 'produccion' ? 'Facturas reales: solo se cuentan los comprobantes reales. Los de la época de pruebas no aparecen aquí.' : '';
+        ambienteEl.textContent = amb; ambienteEl.hidden = !amb;
         if (!mismoTurno) llenarTurnos(datos.por_turno || []);
         est.abiertos = new Set(); est.filtro = ''; est.verTodos = false; est._iniciado = false;
         pintar();
@@ -70,6 +79,13 @@ export default {
           : `desde las ${horaCorta(t.abierto_en)} hasta el ${fechaCorta(t.cerrado_en)} a las ${horaCorta(t.cerrado_en)}`;
       return `Turno del ${dia0} ${cuando}`;
     }
+    // «un solo turno, completo: abrió el 28/10/2026 a las 18:29 y cerró el 29/10/2026 a las 02:15.» (turno_rango de fx_listados2: abierto_en, cerrado_en, desde y hasta)
+    function textoTurnoRango(tr, mayuscula = false) {
+      if (!tr || !tr.abierto_en) return mayuscula ? 'Un solo turno de caja.' : 'un solo turno de caja.';
+      const abrio = `abrió el ${fechaCorta(tr.abierto_en)} a las ${horaCorta(tr.abierto_en)}`;
+      const cerro = tr.cerrado_en ? ` y cerró el ${fechaCorta(tr.cerrado_en)} a las ${horaCorta(tr.cerrado_en)}` : ' y sigue abierto';
+      return `${mayuscula ? 'Un' : 'un'} solo turno, completo: ${abrio}${cerro}. Se ve todo el turno aunque empiece antes o termine después de las fechas de arriba.`;
+    }
     const turnosRecientes = (turnos) => [...turnos].sort((a, b) => new Date(b.abierto_en) - new Date(a.abierto_en));
     function llenarTurnos(turnos) {
       turnoSel.replaceChildren(h('option', { value: '' }, 'Todos los turnos'));
@@ -86,18 +102,20 @@ export default {
 
     /* ---------- lo que se descarga ---------- */
     // Encabezado común de todas las descargas: empresa, rango en palabras, turno escogido y, si se ven datos de muestra, que no son ventas reales
-    const baseDescarga = (que) => ({
-      nombre: (est.demo ? 'Ejemplo ' : '') + que + ' ' + nombrePeriodo(est.desde, est.hasta) + (est.turno ? ' un turno' : ''),
+    const baseDescarga = (que) => { const tr = est.datos?.turno_rango || null; return {
+      nombre: (est.demo ? 'Ejemplo ' : '') + que + ' ' + (est.turno && tr ? nombrePeriodo(tr.desde || est.desde, tr.hasta || est.hasta) : nombrePeriodo(est.desde, est.hasta)) + (est.turno ? ' un turno' : ''),
       empresa: nomSoc, cedula: app.soc?.cedula || '',
-      subtitulo: textoRango(est.desde, est.hasta) + (est.turno ? ' · ' + (turnoSel.selectedOptions[0]?.textContent || 'un solo turno de caja') : ' · todos los turnos') + (est.demo ? ' · DATOS DE EJEMPLO, NO SON VENTAS REALES' : ''),
-    });
+      subtitulo: (est.turno && tr?.abierto_en ? textoTurnoRango(tr, true) : textoRango(est.desde, est.hasta) + (est.turno ? ' · ' + (turnoSel.selectedOptions[0]?.textContent || 'un solo turno de caja') : ' · todos los turnos')) + (est.demo ? ' · DATOS DE EJEMPLO, NO SON VENTAS REALES' : ''),
+    }; };
     const conBase = (que, tabla) => ({ ...baseDescarga(que), ...tabla });
     const redondea = (n, d = 2) => { const k = 10 ** d; return Math.round((+n || 0) * k) / k; };
     const NOTA_NETAS = 'Montos con IVA incluido, sin las ventas anuladas con nota de crédito. Se restan las devoluciones parciales y se suman las notas de débito por monto, en el día en que se hizo cada nota';
     // Estos desgloses (hora, medio de pago, servicio y producto) ya restan las devoluciones parciales y suman las notas de débito por monto (fx_listados2, migración fx_23a):
     // cada nota cae en la fila de la venta original, salvo el medio de pago, que usa el de la propia nota.
     const AVISO_PARCIALES = ' Ya restan las devoluciones parciales y suman las notas de débito por monto.';
-    const kpi = (titulo, valor, nota, extra) => h('div.tarjeta.kpi' + (extra ? '.' + extra : ''), h('div.kpi-t', titulo), h('div.kpi-v.cifra', valor), h('div.kpi-n', nota));
+    // Informes cuenta el IVA de todo lo emitido que Hacienda no rechazó (fx_listados2: estado distinto de rechazado, así que incluye lo que todavía está pendiente). El «IVA del mes» de Contable (fx_iva_mes) cuenta solo lo aceptado.
+    const NOTA_IVA_CONTABLE = 'Esta cifra incluye comprobantes todavía pendientes de Hacienda. El «IVA del mes» de Contable cuenta solo los aceptados, por eso pueden no coincidir.';
+    const kpi = (titulo, valor, nota, extra, aparte) => h('div.tarjeta.kpi' + (extra ? '.' + extra : ''), h('div.kpi-t', titulo), h('div.kpi-v.cifra', valor), h('div.kpi-n', nota), aparte ? h('div.kpi-n.kpi-aparte', aparte) : null);
 
     function tablaSimple(cols, filas, pie) {
       return h('div.tabla-caja', h('table.tabla', h('thead', h('tr', cols.map((c) => h('th' + (c.der ? '.der' : ''), c.t)))),
@@ -144,7 +162,7 @@ export default {
           kpi('Notas de crédito (se restan)', (r.notas_credito > 0 ? '−' : '') + money(r.notas_credito), `${r.notas_credito_n} ${r.notas_credito_n === 1 ? 'nota' : 'notas'} de crédito con IVA incluido. Son ventas anuladas, devueltas en parte o corregidas.`),
           nNd ? kpi('Notas de débito (se suman)', '+' + money(r.notas_debito), `${nNd} ${nNd === 1 ? 'nota' : 'notas'} de débito con IVA incluido. Son cobros adicionales sobre ventas ya facturadas.`) : null,
           kpi('Ventas netas', money(r.ventas_netas), nNd ? 'Ventas brutas, menos notas de crédito, más notas de débito. Incluyen el IVA.' : 'Ventas brutas menos notas de crédito. Incluyen el IVA.', 'resalta'),
-          kpi('IVA dentro de las ventas netas', money(r.iva_neto), `Sin IVA, las ventas netas serían ${money(baseNeta)}.`),
+          kpi('IVA dentro de las ventas netas', money(r.iva_neto), `Sin IVA, las ventas netas serían ${money(baseNeta)}.`, '', NOTA_IVA_CONTABLE),
           kpi('Documentos emitidos', num(r.docs_emitidos, 0), nNd ? 'Facturas y tiquetes electrónicos. Las notas de crédito y de débito no se cuentan aquí.' : 'Facturas y tiquetes electrónicos. Las notas de crédito no se cuentan aquí.'),
           kpi('Promedio por venta', money(ticket), 'Ventas netas entre el número de ventas vigentes. Con IVA incluido.')),
         rech.n > 0 ? avisoRechazados(rech) : null,
@@ -294,22 +312,34 @@ export default {
     }
 
     /* ---------- turnos, cajeros, IVA ---------- */
+    // «Sin turno» (sin_turno de fx_listados2, 28d): lo del periodo que no cayó en ningún turno de caja, para que los turnos más esta fila sumen el total del periodo.
+    // Son las notas que no mueven efectivo hechas con la caja cerrada y los documentos sin cuenta de caja. Solo sale si tiene algo.
+    const sinTurnoDe = (d) => { const s0 = d.sin_turno; return s0 && (Math.floor(+s0.ventas || 0) > 0 || Math.abs(+s0.total || 0) > 0.004) ? { ventas: Math.max(0, Math.floor(+s0.ventas || 0)), total: +s0.total || 0 } : null; };
+    const NOTA_SIN_TURNO = 'Notas que no mueven efectivo hechas con la caja cerrada, y documentos sin cuenta de caja. No entran en ningún cierre de caja.';
     function tablaTurnos(d) {
       const filas = [...(d.por_turno || [])].sort((x, y) => new Date(x.abierto_en) - new Date(y.abierto_en)); // en el archivo van del más antiguo al más reciente
-      if (!filas.length) return null;
+      const sin = sinTurnoDe(d);
+      if (!filas.length && !sin) return null;
       return {
         titulo: 'Ventas por turno de caja', cifras: 'netas', cifrasNota: NOTA_NETAS,
         columnas: [{ clave: 'abrio', titulo: 'Abrió (fecha y hora)', tipo: 'fechahora' }, { clave: 'cerro', titulo: 'Cerró (fecha y hora)', tipo: 'fechahora' }, { clave: 'por', titulo: 'Abierto por', tipo: 'texto' }, { clave: 'ventas', titulo: 'Ventas (número)', tipo: 'numero', dec: 0 }, { clave: 'total', titulo: 'Monto con IVA (₡)', tipo: 'moneda' }],
-        filas: filas.map((t) => ({ abrio: t.abierto_en, cerro: t.cerrado_en || 'Sigue abierto', por: t.abierto_por ? nombrePropio(t.abierto_por) : '', ventas: +t.ventas, total: +t.total })),
+        filas: [...filas.map((t) => ({ abrio: t.abierto_en, cerro: t.cerrado_en || 'Sigue abierto', por: t.abierto_por ? nombrePropio(t.abierto_por) : '', ventas: +t.ventas, total: +t.total })),
+          ...(sin ? [{ abrio: 'Sin turno', cerro: '', por: NOTA_SIN_TURNO, ventas: sin.ventas, total: sin.total }] : [])],
         totales: { ventas: 'suma', total: 'suma' },
-        notas: ['Ordenado del turno más antiguo al más reciente.'],
+        notas: ['Ordenado del turno más antiguo al más reciente. Cada nota cuenta en el turno en que se hizo.', ...(sin ? ['«Sin turno» va al final y es parte del total: ' + NOTA_SIN_TURNO] : [])],
       };
     }
     function seccionTurnos(d) {
-      const filas = turnosRecientes(d.por_turno || []); if (!filas.length) return null;
-      return seccion('Por turno de caja', 'Cada turno abre y cierra la caja. El más reciente va primero. Monto de las ventas vigentes (sin anuladas), con IVA.', () => conBase('Ventas por turno de caja', tablaTurnos(d)),
-        tablaSimple([{ t: 'Turno' }, { t: 'Abrió' }, { t: 'Cerró' }, { t: 'Ventas', der: 1 }, { t: 'Monto con IVA', der: 1 }],
-          filas.map((t) => [t.abierto_por ? 'Abrió ' + nombrePropio(t.abierto_por) : 'Turno', fechaHora(t.abierto_en), t.cerrado_en ? fechaHora(t.cerrado_en) : 'Sigue abierto', num(t.ventas, 0), money(t.total)])));
+      const filas = turnosRecientes(d.por_turno || []), sin = sinTurnoDe(d);
+      if (!filas.length && !sin) return null;
+      const suma = (k) => filas.reduce((a, t) => a + (+t[k] || 0), 0) + (sin ? (k === 'total' ? sin.total : sin.ventas) : 0);
+      const totalFilas = suma('total'), netas = +d.resumen?.ventas_netas || 0;
+      const filasTabla = [...filas.map((t) => [t.abierto_por ? 'Abrió ' + nombrePropio(t.abierto_por) : 'Turno', fechaHora(t.abierto_en), t.cerrado_en ? fechaHora(t.cerrado_en) : 'Sigue abierto', num(t.ventas, 0), money(t.total)]),
+        ...(sin ? [[h('span', h('b', 'Sin turno'), h('small.tenue.lis-sin-turno', NOTA_SIN_TURNO)), '', '', num(sin.ventas, 0), money(sin.total)]] : [])];
+      return seccion('Por turno de caja', 'Cada turno abre y cierra la caja; el más reciente va primero. Cada nota cuenta en el turno en que se hizo. Monto neto (restadas las notas de crédito y sumadas las de débito), con IVA.' + (sin ? ' «Sin turno» reúne lo que no pertenece a ningún turno, para que las filas sumen el total.' : ''), () => conBase('Ventas por turno de caja', tablaTurnos(d)),
+        tablaSimple([{ t: 'Turno' }, { t: 'Abrió' }, { t: 'Cerró' }, { t: 'Ventas', der: 1 }, { t: 'Monto con IVA', der: 1 }], filasTabla,
+          h('tr', h('td', { colspan: 3 }, 'Total de las filas'), h('td.der', num(suma('ventas'), 0)), h('td.der', money(totalFilas)))),
+        Math.abs(totalFilas - netas) > 0.005 ? h('p.lis-aviso', `Las filas suman ${money(totalFilas)} y las ventas netas del resumen ${money(netas)}. La diferencia puede venir de una venta anulada en un periodo distinto al de la venta.`) : null);
     }
     function tablaCajeros(d) {
       const filas = d.por_cajero || []; if (!filas.length || (filas.length === 1 && filas[0].cajero === 'Sin registrar')) return null;
@@ -543,7 +573,7 @@ export default {
       const top = (d.productos || []).filter((x) => !x.abierto).sort((a, b) => b.total - a.total).slice(0, 15);
       hoja = h('div#impresion-resumen',
         h('h1', 'Resumen de ventas · ' + nomSoc),
-        h('p', textoRango(est.desde, est.hasta) + (est.turno ? ' · un solo turno' : ' · todos los turnos') + (est.demo ? ' · DATOS DE EJEMPLO, NO SON VENTAS REALES' : '')),
+        h('p', (est.turno && d.turno_rango?.abierto_en ? textoTurnoRango(d.turno_rango, true) : textoRango(est.desde, est.hasta) + (est.turno ? ' · un solo turno' : ' · todos los turnos')) + (est.demo ? ' · DATOS DE EJEMPLO, NO SON VENTAS REALES' : '')),
         h('p.sm', 'Colones (₡). Todas las cifras incluyen IVA salvo donde se indique. Las notas de crédito se restan' + ((+r.notas_debito_n || 0) > 0 ? ' y las notas de débito se suman.' : '.')),
         h('table.imp-kpi', h('tbody',
           [['Ventas brutas (antes de notas de crédito)', money(r.ventas_brutas)], ['Notas de crédito (se restan)', '−' + money(r.notas_credito)],

@@ -2,7 +2,8 @@
 // Reemplaza a ui_salidas.js en las pantallas que quieran las dos cosas juntas (Apertura y cierre de caja y Facturación).
 // Regla de caja: debe haber en caja = fondo + ventas en efectivo + ENTRADAS - salidas - devoluciones en efectivo.
 import { h, money, leerNumero, toast, modal, conBoton, textoDeError, horaCorta, esqueleto } from './util.js';
-import { efectivo } from './api_avisos.js';
+import { efectivo, avisos } from './api_avisos.js';
+import { estadoAvisos, textoGuardado, textoAnular } from './avisos_texto.js';
 
 /* ---------- Hoja de estilos (css/avisos.css), una sola vez ---------- */
 let cssListo = null;
@@ -24,8 +25,14 @@ export const MOTIVOS = {
   salida: ['Pago a proveedor', 'Compra de hielo', 'Devolución de dinero (la venta ya está anulada)', 'Otro'],
   entrada: ['Refuerzo de cambio', 'Aporte de gerencia', 'Otro'],
 };
-// Esta línea va después de guardar: la página no puede saber si el aviso salió, por eso va en futuro
-export const TEXTO_GUARDADO = 'Guardado. Se avisará a quienes reciben avisos.';
+// La línea que va después de guardar dice cómo están de verdad los avisos (fx_avisos_resumen, avisos_texto.js): en modo de prueba no se envían por WhatsApp y con 0 personas nadie los recibe.
+// Mientras no se sepa, solo «Guardado.»: ningún texto promete un aviso que el sistema todavía no manda.
+export const TEXTO_GUARDADO = 'Guardado.';
+// El estado de los avisos de esta empresa, o null si no se pudo leer (no se detiene nada por eso)
+async function leerEstadoAvisos(socId) {
+  if (!socId) return null;
+  try { return estadoAvisos(await avisos.resumen(socId)); } catch { return null; }
+}
 
 const suma = (l) => Math.round(l.reduce((s, x) => s + Number(x.monto || 0), 0) * 100) / 100;
 // Totales de una lista de movimientos (sin contar los anulados)
@@ -67,18 +74,20 @@ export function listaMovimientos(movs, { alAnular, vacio = 'Todavía no hay entr
 
 /* ---------- Anular con motivo ---------- */
 // Pide el motivo y anula. Devuelve true si se anuló.
-export function anularMovimiento(mov) {
+export function anularMovimiento(mov, { socId } = {}) {
   return new Promise((fin) => {
     const entrada = mov.tipo === 'entrada';
     let hecho = false;
     const motivo = h('textarea.campo', { rows: 3, maxlength: 200, placeholder: 'Ej. se anotó dos veces por error', 'aria-label': 'Motivo de la anulación' });
     const err = h('div.error-caja', { hidden: true, role: 'alert' });
+    const lineaAnular = h('p.tenue-linea', { hidden: true });
+    leerEstadoAvisos(socId).then((e) => { const t = textoAnular(e); if (t) { lineaAnular.textContent = t; lineaAnular.hidden = false; } });
     const m = modal({
       titulo: entrada ? 'Anular entrada de efectivo' : 'Anular salida de efectivo', ancho: 480,
       alCerrar: () => { if (!hecho) fin(false); },
       contenido: h('div.col',
         h('p.conf', (entrada ? 'La entrada de ' : 'La salida de ') + money(mov.monto) + ' (' + mov.motivo + ') ' + (entrada ? 'dejará de contarse en la caja.' : 'dejará de restarse: el dinero vuelve a contarse como si estuviera en la caja.')),
-        h('p.tenue-linea', 'Se avisará a quienes reciben avisos por WhatsApp.'),
+        lineaAnular,
         h('label.etq', 'Motivo de la anulación (obligatorio)', motivo),
         err),
       botones: [
@@ -100,8 +109,10 @@ export function anularMovimiento(mov) {
 
 /* ---------- Ventana para registrar una entrada o una salida y ver los movimientos del turno ---------- */
 // tipo: cuál queda escogida al abrir ('salida' o 'entrada'). alCambiar() se llama cada vez que cambia algo (para repintar el cierre de caja).
-export async function abrirEfectivo({ turnoId, tipo = 'salida', alCambiar } = {}) {
+export async function abrirEfectivo({ turnoId, socId, tipo = 'salida', alCambiar } = {}) {
   await cargarCssAvisos();
+  let estadoAv = null; // cómo están los avisos (se lee una vez al abrir; sin socId no se lee)
+  leerEstadoAvisos(socId).then((e) => { estadoAv = e; });
   let actual = tipo === 'entrada' ? 'entrada' : 'salida';
   let vivo = true;
   const monto = h('input.campo.efe-monto-campo', { type: 'text', inputmode: 'decimal', placeholder: '0', autocomplete: 'off', 'aria-label': 'Monto en colones' });
@@ -145,7 +156,7 @@ export async function abrirEfectivo({ turnoId, tipo = 'salida', alCambiar } = {}
       if (!vivo) return;
       const t = totales(l);
       resumen.textContent = l.some((m) => !m.anulada) ? `Entradas del turno: + ${money(t.entradas)}. Salidas del turno: - ${money(t.salidas)}.` : '';
-      zona.replaceChildren(listaMovimientos(l, { alAnular: async (m) => { if (await anularMovimiento(m)) { await refrescar(); alCambiar?.(); } } }));
+      zona.replaceChildren(listaMovimientos(l, { alAnular: async (m) => { if (await anularMovimiento(m, { socId })) { await refrescar(); alCambiar?.(); } } }));
     } catch (e) { if (vivo) zona.replaceChildren(h('div.error-caja', textoDeError(e))); }
   }
 
@@ -157,7 +168,8 @@ export async function abrirEfectivo({ turnoId, tipo = 'salida', alCambiar } = {}
     if (m.length < 3) { err.textContent = actual === 'entrada' ? 'Escriba de dónde viene el dinero (es obligatorio).' : 'Escriba para qué salió el dinero (es obligatorio).'; err.hidden = false; motivo.focus(); return; }
     await (actual === 'entrada' ? efectivo.entradaRegistrar(turnoId, v, m) : efectivo.salidaRegistrar(turnoId, v, m));
     monto.value = ''; motivo.value = ''; pintarChips();
-    guardado.hidden = false; // Guardado. Se avisará a quienes reciben avisos.
+    guardado.textContent = textoGuardado(estadoAv); // dice el estado real de los avisos (prueba, sin personas o activo), nunca promete uno
+    guardado.hidden = false;
     await refrescar();
     alCambiar?.();
     monto.focus();
