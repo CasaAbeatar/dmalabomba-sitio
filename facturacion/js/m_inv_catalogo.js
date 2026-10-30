@@ -2,7 +2,7 @@
 // ubicaciones, reglas CABYS, la memoria de equivalencias, correcciones y ajustes, y la configuración.
 import { h, money, num, fechaHora, debounce, campoBusqueda } from './util.js';
 import { inv, cant } from './api_inventarios.js';
-import { ventana, dialogo, cargando, falla, vacio, aviso, cantTxt, unidadTxt, plural, empresaChip, accionSegura, repetidaTxt, enfocar, toastOk, elegirArticulo, opcionDeArticulo, poner } from './m_inv_comun.js';
+import { ventana, dialogo, cargando, falla, vacio, aviso, cantTxt, unidadTxt, plural, empresaChip, accionSegura, botonSeguro, repetidaTxt, enfocar, toastOk, elegirArticulo, opcionDeArticulo, poner, dma, numFactura, proveedorTxt, chipEmpresaId } from './m_inv_comun.js';
 
 const SUB = [
   { id: 'articulos', titulo: 'Artículos', desc: 'Lo que se guarda en bodega: unidad, CABYS, vencimiento y mínimos' },
@@ -10,7 +10,7 @@ const SUB = [
   { id: 'ubicaciones', titulo: 'Ubicaciones', desc: 'La bodega central, los locales y otros lugares' },
   { id: 'cabys', titulo: 'Reglas CABYS', desc: 'Qué categoría sugerir según el código CABYS de la factura' },
   { id: 'memoria', titulo: 'Memoria de equivalencias', desc: 'Lo que el sistema recuerda de cada proveedor al recibir' },
-  { id: 'ajustes', titulo: 'Correcciones y ajustes', desc: 'Corregir existencias, entrada manual y abrir una factura por su clave' },
+  { id: 'ajustes', titulo: 'Correcciones y ajustes', desc: 'Corregir existencias, entrada manual, líneas «No es de inventario» y abrir una factura por su clave' },
   { id: 'config', titulo: 'Configuración', desc: 'Desde qué fecha entran las facturas y con cuántos días se avisa' },
 ];
 
@@ -265,6 +265,53 @@ function formMemoria(ctx, r, alGuardar) {
 }
 
 /* ---------- Correcciones y ajustes ---------- */
+// Las líneas marcadas «No es de inventario», por la fecha en que se marcaron (fx_inv_ignoradas, contrato 5.6 bis). Sirve para encontrar una línea que alguien marcó por error
+// sin saber de qué factura venía, y devolverla a «Por recibir». Si la factura está rechazada en Contable no se ofrece devolverla: igual no se podría recibir.
+const ymdMas = (ymd, n) => { const d = new Date(String(ymd) + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
+function seccionIgnoradas(ctx) {
+  const hoy = ctx.cat.hoy || new Date().toISOString().slice(0, 10);
+  let seq = 0, q = '';
+  const desde = h('input.campo', { type: 'date', value: ymdMas(hoy, -30), max: hoy, 'aria-label': 'Marcadas desde' });
+  const hasta = h('input.campo', { type: 'date', value: hoy, max: hoy, 'aria-label': 'Marcadas hasta' });
+  const buscar = h('input.campo', { type: 'search', placeholder: 'Proveedor, factura, descripción o motivo', 'aria-label': 'Buscar entre las líneas marcadas', autocomplete: 'off' });
+  const lista = h('div.inv-lista-ign', { 'aria-live': 'polite' });
+  async function cargar() {
+    const mia = ++seq;
+    if (!desde.value || !hasta.value || desde.value > hasta.value) { poner(lista, aviso('espera', h('p', 'Revise las fechas: la fecha final no puede ser anterior a la inicial.'))); return; }
+    poner(lista, cargando());
+    let d; try { d = await inv.ignoradas(desde.value, hasta.value, q, 200); } catch (e) { if (mia === seq) poner(lista, falla(e, cargar)); return; }
+    if (mia !== seq) return;
+    const filas = d.lineas || [];
+    poner(lista,
+      filas.length ? h('p.tenue.inv-chico', plural(d.n, 'línea marcada', 'líneas marcadas') + ' en ' + plural(d.facturas, 'factura', 'facturas') + '.' + (d.truncado ? ' Se muestran las primeras ' + filas.length + ': acorte las fechas o busque por proveedor.' : '')) : null,
+      ...(filas.length ? filas.map(fila) : [vacio(q ? 'Ninguna línea marcada coincide con esa búsqueda.' : 'No hay líneas marcadas «No es de inventario» en esas fechas.')]));
+  }
+  function fila(r) {
+    const zona = h('div');
+    const rechazada = r.puede_recibir === false;
+    const pie = [];
+    if (!rechazada) {
+      const { boton } = botonSeguro('Volver a «Por recibir»', '', { zona, ocupado: 'Devolviendo…',
+        hacer: (idem) => inv.deshacerIgnorar(r.clave, [r.linea], idem),
+        alTerminar: (res, { repetida }) => { toastOk('La línea volvió a «Por recibir».' + repetidaTxt(repetida)); return cargar(); } });
+      pie.push(boton);
+    }
+    pie.push(h('button.btn', { type: 'button', onclick: async () => (await import('./m_inv_recibir.js')).abrirFactura(ctx, r.clave) }, 'Abrir la factura'));
+    return h('article.inv-linea.decidida.ignorada', { 'data-clave': r.clave, 'data-linea': r.linea },
+      h('div.inv-linea-cab', h('div.inv-linea-desc', h('strong', r.descripcion || 'Línea ' + r.linea), chipEmpresaId(ctx.cat, r.sociedad_id, r.sociedad_nombre))),
+      h('p.inv-linea-res', proveedorTxt(r.proveedor_nombre) + ' · factura N.° ' + numFactura(r.consecutivo) + ', línea ' + r.linea + ' · ' + cantTxt(r.cantidad, r.unidad) + ' · ' + money(r.subtotal_crc) + ' sin IVA'),
+      h('p.inv-linea-res', 'Marcada el ' + dma(r.marcada_dia || r.marcada_en) + (r.marcada_por_nombre || r.marcada_por ? ' por ' + (r.marcada_por_nombre || r.marcada_por) : '') + (r.motivo ? ': «' + r.motivo + '»' : '. Sin motivo.')),
+      rechazada ? aviso('espera', h('p', 'Esta factura está rechazada en Contable y no se puede recibir al inventario, así que no se devuelve a «Por recibir».')) : null,
+      h('div.inv-linea-pie', pie, zona));
+  }
+  desde.addEventListener('change', cargar); hasta.addEventListener('change', cargar);
+  buscar.addEventListener('input', debounce(() => { q = buscar.value.trim(); cargar(); }, 300));
+  setTimeout(cargar, 0);
+  return h('section.inv-grupo', h('h3', 'Líneas marcadas «No es de inventario»'),
+    h('p.tenue.inv-chico', 'Aquí aparecen las líneas que alguien marcó como «No es de inventario» (un flete, un servicio, tornillos). Si una se marcó por error, se devuelve a «Por recibir» y se recibe como cualquier otra.'),
+    h('div.inv-form-fila.tres', h('label.etq', 'Marcadas desde', desde), h('label.etq', 'Hasta', hasta), h('label.etq.inv-buscar', 'Buscar', campoBusqueda(buscar, () => { q = ''; buscar.value = ''; cargar(); }))),
+    lista);
+}
 async function verAjustes(ctx) {
   const mover = () => import('./m_inv_mover.js');
   const clave = texto('', { inputmode: 'numeric', maxlength: 50, 'aria-label': 'Clave de la factura (50 números)', placeholder: '50 números' });
@@ -275,6 +322,7 @@ async function verAjustes(ctx) {
     h('div.inv-acciones-grandes',
       h('button.btn.grande', { type: 'button', onclick: async () => (await mover()).formAjuste(ctx, {}) }, 'Corregir existencias'),
       h('button.btn.grande', { type: 'button', onclick: async () => (await mover()).formEntradaManual(ctx, {}) }, 'Entrada manual')),
+    seccionIgnoradas(ctx),
     h('section.inv-grupo', h('h3', 'Abrir una factura por su clave'),
       h('p.tenue.inv-chico', 'Para deshacer una recepción o un «No es de inventario» de una factura que ya no está en «Por recibir». La clave está en Contable, en «Datos técnicos».'),
       h('div.inv-form-fila', h('label.etq', 'Clave de la factura', clave), h('div.etq', h('span', ' '), h('button.btn.primario', { type: 'button', onclick: async () => {

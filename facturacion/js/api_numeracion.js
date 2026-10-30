@@ -25,7 +25,9 @@ export const NOMBRE_TIPO = {
   '01': 'Factura electrónica', '02': 'Nota de débito', '03': 'Nota de crédito', '04': 'Tiquete electrónico',
   '05': 'Aceptación de una factura de proveedor', '06': 'Aceptación parcial de una factura de proveedor', '07': 'Rechazo de una factura de proveedor',
 };
-export const nombreTipo = (t, dado) => (typeof dado === 'string' && dado.trim() ? dado.trim() : NOMBRE_TIPO[t] || 'Documento ' + t);
+// La base nombra los tipos en minúscula («factura», «nota de crédito»): en pantalla empiezan con mayúscula
+const mayus = (x) => x.charAt(0).toLocaleUpperCase('es') + x.slice(1);
+export const nombreTipo = (t, dado) => mayus(typeof dado === 'string' && dado.trim() ? dado.trim() : NOMBRE_TIPO[t] || 'Documento ' + t);
 export const esRespuesta = (t) => t === '05' || t === '06' || t === '07';
 
 const entero = (x, def = null) => { const n = Number(x); return Number.isFinite(n) ? Math.floor(n) : def; };
