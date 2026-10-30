@@ -200,6 +200,18 @@
 .mt-seg-guia{margin:.4rem 0 0;font-size:.95rem}
 .mt-seg-btns{display:flex;flex-wrap:wrap;gap:.5rem;margin-top:.6rem}
 .mt-seg-pie{margin:0;font-size:.85rem;color:var(--tinta2)}
+.mt-seg-origen{margin:.3rem 0 0;font-size:.95rem;overflow-wrap:anywhere}
+.mt-apa{margin:0 0 1rem;display:flex;flex-direction:column;gap:.5rem}
+.mt-apa h2{font-size:1.2rem}
+.mt-apa .mt-nota{margin:0}
+.mt-apa-grupo h3{margin:.6rem 0 .4rem;font-size:1rem}
+.mt-apa-lista{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:.5rem}
+.mt-apa-item{display:flex;flex-wrap:wrap;gap:.5rem 1rem;align-items:center;justify-content:space-between;padding:.7rem .9rem;border:1px solid var(--linea);border-radius:var(--r);background:#fff}
+.mt-apa-item.inactivo{background:#f5f1e8;color:var(--tinta2)}
+.mt-apa-datos{min-width:0;flex:1 1 14rem}
+.mt-apa-datos strong{display:block;overflow-wrap:anywhere}
+.mt-apa-linea{margin:.15rem 0 0;font-size:.9rem;color:var(--tinta2);overflow-wrap:anywhere}
+.mt-apa-ver{display:flex;align-items:center;gap:.6rem;min-height:48px;cursor:pointer}
 .mt-seg-antes summary{cursor:pointer;font-weight:600;min-height:48px;display:flex;align-items:center}
 .mt-seg-antes ul{list-style:none;margin:0;padding:0}
 .mt-seg-antes li{display:flex;flex-wrap:wrap;gap:.3rem .8rem;align-items:center;justify-content:space-between;padding:.5rem 0;border-top:1px solid var(--linea);font-size:.92rem}

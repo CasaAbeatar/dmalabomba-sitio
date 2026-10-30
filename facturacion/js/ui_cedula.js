@@ -298,7 +298,7 @@ export function crearCampoIdentificacion(opts = {}) {
     dup = null; pintarDup();
     if (!opts.revisarDuplicado) return;
     const d = ident.value;
-    if (d.length < 9 || errorLocal()) return;
+    if (d.length < (llevaLetras(tipoActual()) ? 5 : 9) || errorLocal()) return; // un pasaporte puede tener menos de 9 letras y números; una cédula, no
     if (!nuevo && d === String(c.identificacion)) return;
     const mi = seqDup;
     timDup = setTimeout(async () => {

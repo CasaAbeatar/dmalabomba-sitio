@@ -4,15 +4,20 @@
 
 export const NOTA_SIMULADO = 'Los avisos por WhatsApp todavía no se envían de verdad; el sistema los registra y los enviará cuando se active el envío.';
 
-// Los eventos que la base sabe avisar (fx_avisos_destinatario_guardar solo acepta estos cuatro). No existe uno para devoluciones de efectivo hechas con una nota de crédito.
+// Los eventos que la base sabe avisar (fact.avisos_eventos(); fx_avisos_destinatario_guardar solo acepta estos cinco). `nuevo`: viene marcado al agregar una persona (fact.avisos_eventos_por_defecto()).
+// devolucion_efectivo: la base lo genera cuando se emite una nota de crédito que devuelve efectivo (anulación, devolución o corrección; trigger sobre fact.comprobantes).
 export const EVENTOS = [
   { clave: 'salida', titulo: 'Salidas de efectivo', ayuda: 'Cada vez que sale dinero de la caja.', nuevo: true },
   { clave: 'entrada', titulo: 'Entradas de efectivo', ayuda: 'Cada vez que entra dinero a la caja y no es una venta.', nuevo: true },
   { clave: 'anulacion_movimiento', titulo: 'Anulaciones de salidas y entradas', ayuda: 'Cuando se anula una salida o una entrada ya anotada.', nuevo: true },
+  { clave: 'devolucion_efectivo', titulo: 'Devolución de efectivo por una nota de crédito', ayuda: 'Cuando se devuelve efectivo al cliente con una nota de crédito: una anulación, una devolución o una corrección de monto.', nuevo: true },
   { clave: 'cierre_con_diferencia', titulo: 'Cierre de caja con diferencia', ayuda: 'Cuando el efectivo contado no coincide con el que debía haber.', nuevo: false },
 ];
 export const TITULO_EVENTO = Object.fromEntries(EVENTOS.map((e) => [e.clave, e.titulo]));
-export const NOTA_DEVOLUCIONES = 'Las devoluciones de dinero hechas con una nota de crédito todavía no generan aviso. Una devolución anotada como salida de efectivo sí.';
+// Para no avisar dos veces lo mismo: la devolución de efectivo con nota de crédito ya avisa sola, no hay que anotarla además como salida de efectivo.
+export const NOTA_DEVOLUCIONES = 'Una devolución de efectivo hecha con una nota de crédito avisa por sí sola: no hace falta anotarla además como salida de efectivo.';
+const CUENTA = ['', 'una', 'dos', 'tres', 'cuatro', 'cinco', 'seis'];
+export const cuantasCosas = () => (CUENTA[EVENTOS.length] || String(EVENTOS.length)) + (EVENTOS.length === 1 ? ' cosa' : ' cosas');
 
 const entero = (x) => { const n = Math.floor(Number(x)); return Number.isFinite(n) && n > 0 ? n : 0; };
 const personas = (n) => n + (n === 1 ? ' persona' : ' personas');

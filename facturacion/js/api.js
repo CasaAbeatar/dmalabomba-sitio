@@ -91,7 +91,8 @@ export function sesionRestaurada() { sesionAvisada = false; marcarRed(true); }
 const esErrorSesion = (r) => r.status === 401 || /^(PGRST30[123]|PT401)$/.test(String(r.error?.code || ''));
 // Cambio de PIN obligatorio: cualquier llamada puede contestar con el código PT409 (o con la pista 'cambiar_pin') cuando la base exige elegir un PIN nuevo antes de seguir.
 // Se avisa con el evento 'app:pin-obligatorio' y main.js lleva a la pantalla de cambio de PIN y regresa a donde estaba; la respuesta sigue su camino normal (error de negocio con el texto del sistema).
-// Hoy la base TODAVÍA no manda este código (fx_chk no lo tiene): queda listo para el día que se active. No se lee el texto del mensaje.
+// La base ya lo EXIGE (fx_chk: interruptor pin_cambio_obligatorio): a quien tiene un PIN temporal, toda función contesta HTTP 409, código PT409, pista 'cambiar_pin', salvo fx_contexto, fx_pin_cambiar y cerrar sesión.
+// fx_chk corre antes de cualquier escritura: una llamada rechazada así NO hizo nada. No se lee el texto del mensaje.
 export const esPinObligatorio = (e) => !!e && (e.codigo === 'PT409' || e.hint === 'cambiar_pin');
 const esErrorPin = (r) => String(r.error?.code || '') === 'PT409' || r.error?.hint === 'cambiar_pin';
 // Intenta renovar la sesión una sola vez a la vez. 'ok' | 'vencida' (el servidor la rechazó) | 'red' (no hubo conexión)
