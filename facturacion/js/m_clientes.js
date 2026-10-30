@@ -15,7 +15,7 @@ export default {
   async mount(root, app) {
     await cargarCss();
     const soc = app.soc;
-    const q = h('input.mt-buscar', { type: 'search', placeholder: 'Nombre, cédula, correo o teléfono', autocomplete: 'off', 'aria-label': 'Buscar cliente' });
+    const q = h('input.mt-buscar', { type: 'search', placeholder: 'Nombre, nombre comercial, cédula, correo o teléfono', autocomplete: 'off', 'aria-label': 'Buscar cliente' });
     const lista = h('div');
     const resumen = h('p.mt-nota');
     let n = 0;

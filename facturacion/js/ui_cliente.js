@@ -377,7 +377,7 @@ export function abrirFormCliente(app, cliente, { alGuardar, alCambiarEstado, tit
 export function selectorCliente(app, { alElegir, titulo = 'Elegir cliente' } = {}) {
   cargarCss();
   const soc = app.soc;
-  const q = h('input.mt-buscar', { type: 'search', placeholder: 'Nombre, cédula, correo o teléfono', autocomplete: 'off', 'aria-label': 'Buscar cliente' });
+  const q = h('input.mt-buscar', { type: 'search', placeholder: 'Nombre, nombre comercial, cédula, correo o teléfono', autocomplete: 'off', 'aria-label': 'Buscar cliente' });
   const lista = h('div.mt-lista.mt-lista-sel', { style: 'margin-top:.8rem', tabindex: '0', 'aria-label': 'Lista de clientes: deslice hacia abajo para ver más' });
   let m, n = 0;
   const elegir = (cl) => { m.cerrar(); alElegir?.(cl); };
@@ -392,7 +392,7 @@ export function selectorCliente(app, { alElegir, titulo = 'Elegir cliente' } = {
       const r = await api.clientes(soc.id, q.value.trim());
       if (mi !== n) return;
       lista.replaceChildren(...(r.length ? r.map((cl) => h('div.mt-item',
-        h('div.mt-datos', h('span.mt-nombre', nombrePropio(cl.nombre)), h('span.mt-sub', (TIPOS_ID[cl.tipo_id] || '') + ' ' + (cl.identificacion || '') + (cl.correo ? ' · ' + cl.correo : '')),
+        h('div.mt-datos', h('span.mt-nombre', nombrePropio(cl.nombre)), cl.nombre_comercial ? h('span.mt-sub', 'Nombre comercial: ' + nombrePropio(cl.nombre_comercial)) : null, h('span.mt-sub', (TIPOS_ID[cl.tipo_id] || '') + ' ' + (cl.identificacion || '') + (cl.correo ? ' · ' + cl.correo : '')),
           tarifaHabitual(cl) ? h('span.mt-sub', h('span.chip.espera', 'Paga ' + tarifaHabitual(cl).texto)) : null,
           cl.verificado === false ? h('span.mt-sub', h('span.chip.espera', 'Sin verificar en Hacienda'), ' Revise el número antes de cobrar: si no existe, Hacienda rechaza la factura.') : null,
           !cl.correo ? h('span.mt-sub', h('span.chip.mal', 'Falta el correo'), ' Se escribe al cobrar; sin él no se puede cobrar a su nombre.') : null,
