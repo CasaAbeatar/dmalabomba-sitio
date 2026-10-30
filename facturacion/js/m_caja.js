@@ -1,5 +1,6 @@
 // Caja: la pantalla que usa el cajero todo el día (abrir caja, cuentas, productos, prefactura y cobro).
 import { crearFormularioApertura } from './ui_apertura.js';
+import { crearZonaEfectivo } from './ui_efectivo_rapido.js';
 import { errorActividad, limpiarActividad } from './ui_cedula.js';
 import { selectorCliente } from './ui_cliente.js';
 import { estadoDireccion } from './direccion_cliente.js';
@@ -671,6 +672,7 @@ export default {
       lista.addEventListener('scroll', pistaViva, { passive: true });
       // «Impresora» va en la misma fila que «Nueva cuenta» (antes ocupaba una fila entera casi vacía)
       barraCuentas.replaceChildren(envoltura, h('button.btn.primario', { type: 'button', onclick: seguro(nuevaCuenta) }, 'Nueva cuenta'),
+        h('button.btn.btn-efectivo', { type: 'button', onclick: seguro(abrirEfectivo) }, 'Efectivo'),
         h('button.btn.btn-impresora', { type: 'button', onclick: seguro(async () => { try { (await imp()).abrirAjustesImpresion(); } catch (e) { toast(textoDeError(e), 'error', 6000); } }) }, 'Impresora'));
       // La cuenta activa se deja a la vista y se revisa si quedan cuentas escondidas hacia un lado
       requestAnimationFrame(() => {
@@ -1032,7 +1034,7 @@ export default {
     }
 
     // Neto sin IVA e IVA de la cuenta, calculados línea por línea (el precio final ya trae el IVA)
-    function desgloseIva() {
+    function pieDesgloseIva() {
       if (!cur || !cur.lineas.length) return null;
       const r2 = (x) => Math.round(x * 100) / 100;
       let neto = 0, iva = 0; const tasas = new Set();
@@ -1042,6 +1044,16 @@ export default {
       }
       const rot = tasas.size === 1 ? 'IVA ' + String([...tasas][0]).replace('.', ',') + ' %' : 'IVA';
       return h('div.desglose', h('div', h('span', 'Neto sin IVA'), h('span', money(r2(neto)))), h('div', h('span', rot), h('span', money(r2(iva)))));
+    }
+
+    // Entradas y salidas de efectivo: un botón siempre a la vista; las cajas se abren en una ventana y no ocupan lugar junto a la cuenta
+    function abrirEfectivo() {
+      if (!turnoMostrado) { toast('Abra la caja para anotar entradas y salidas de efectivo.', 'error'); return; }
+      zonaEfectivo?.destruir();
+      const zona = crearZonaEfectivo({ turnoId: turnoMostrado, enFlujo: true, motivos: { entrada: app.ctx?.motivos_entrada_efectivo, salida: app.ctx?.motivos_salida_efectivo } });
+      zonaEfectivo = zona;
+      modal({ titulo: 'Entradas y salidas de efectivo', ancho: 640, contenido: zona.el, botones: [{ texto: 'Cerrar', onclick: (c) => c() }],
+        alCerrar: () => { zona.destruir(); if (zonaEfectivo === zona) zonaEfectivo = null; } });
     }
 
     function pintarCuenta(irAlFinal) {
@@ -1077,7 +1089,7 @@ export default {
         h('div.cuenta-pie',
           v.estado === 'prefacturada' ? h('div.aviso-pref' + (v.prefactura_vigente === false ? '.vieja' : ''), h('strong', 'PREFACTURA N.° ' + (v.prefactura_numero || '') + (Number(v.prefactura_revision) > 1 ? ' · revisión ' + v.prefactura_revision : '')),
             v.prefactura_vigente === false ? 'La cuenta cambió después de imprimir la prefactura. Imprima una nueva para que el cliente vea el total correcto.' : 'No es una factura: es solo para que el cliente revise su cuenta.') : null,
-          desgloseIva(),
+          pieDesgloseIva(),
           h('div.pie-cobro',
             h('div.total-fila', h('span.et', 'Total a pagar (IVA incluido)'), h('div.total-monto', { 'aria-live': 'polite' }, money(v.total))),
             h('button.btn.primario.grande.btn-cobrar-aside', { type: 'button', disabled: !puede, onclick: seguro(abrirCobro) }, 'Cobrar')),
