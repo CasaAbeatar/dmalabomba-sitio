@@ -304,3 +304,10 @@ export const opcionDeArticulo = (a) => ({ id: a.id, nombre: a.nombre, unidad: a.
 // Una frase del resultado de una salida o traslado: «Pollo entero: 2,5 kg (₡5 375,00)»
 export const lineaItem = (it, unidad) => `${it.articulo}: ${cantTxt(it.cantidad, unidad || it.unidad)} (${money(it.valor)} sin IVA)`;
 export const toastOk = (t) => toast(t, 'ok', 4500);
+
+/* ---------- Bolsas del inventario simple ---------- */
+export const GRUPOS = { comida_preparada: 'Comida preparada', unitario: 'Unitarios', suministro: 'Suministros' };
+/** Bolsa a la que pertenece un artículo según la categoría (null si la categoría no tiene bolsa) */
+export const grupoDe = (cat, art) => (cat?.categorias || []).find((c) => c.id === art?.categoria_id)?.grupo || null;
+/** El inventario arranca en modo simple; «completo» lo activa un administrador en Configuración */
+export const esSimple = (cat) => (cat?.config?.modo || 'simple') !== 'completo';

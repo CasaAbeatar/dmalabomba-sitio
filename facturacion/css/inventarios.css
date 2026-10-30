@@ -402,3 +402,9 @@ body:has(.inv-fondo) .cabecera:has(.cab-usuario.abierto){z-index:120}
 @media(max-width:700px){.inv-acciones-grandes .btn{flex:1 1 100%}}
 .inv-conteo-linea .inv-unidad,.inv-item .inv-unidad{min-width:5.2rem}
 .inv-razon{display:block;color:var(--tinta2);font-size:.86rem;overflow-wrap:anywhere}
+
+/* Inventario simple: la línea de recibir pide menos. Dónde se guarda y Vence se esconden (si no hay lugar por omisión, dónde se guarda se muestra); la conversión solo en unitarios */
+.inv-simple .inv-c-vence{display:none}
+.inv-simple:not(.inv-ver-ubic) .inv-c-ubic{display:none}
+.inv-simple:not([data-grupo="unitario"]) .inv-c-conv{display:none}
+.inv-resumen-simple{margin:.1rem 0 .4rem}

@@ -7,7 +7,7 @@ import { inv, cant, dinero } from './api_inventarios.js';
 import {
   ventana, dialogo, cargando, falla, vacio, aviso, cantTxt, costoTxt, unidadTxt, dma, diaTxt, plural, empresaChip, numFactura, proveedorTxt, tipoDocTxt,
   accionSegura, botonSeguro, rotular, repetidaTxt, campoCantidad, leerCantidad, leerMonto, selectUbicacion, nombreUbicacion, elegirArticulo, opcionDeArticulo,
-  enfocar, toastOk, norm, poner, ymdCR, proveedorPartes } from './m_inv_comun.js';
+  enfocar, toastOk, norm, poner, ymdCR, proveedorPartes, GRUPOS, grupoDe, esSimple } from './m_inv_comun.js';
 
 // Estado contable (contrato 3.2) a color: verde aceptada, ámbar con aviso, rojo no entra
 const CLASE_ESTADO = { aceptada: 'ok', parcial: 'espera', plazo_vencido: 'espera', rechazada: 'mal', rechazo_en_tramite: 'mal', rechazada_por_hacienda: 'mal' };
@@ -310,17 +310,20 @@ export async function abrirFactura(ctx, clave, { previa = null } = {}) {
     const ignorarBtn = h('button.btn' + (sug.no_inventario ? '.ambar' : ''), { type: 'button', onclick: () => pedirIgnorar(ctx, f, [l.linea], () => cargar()) }, 'No es de inventario');
     const campos = h('div.inv-linea-campos',
       h('div.inv-campo-art', h('span.etq', 'Artículo del inventario'), h('div.inv-art-fila', nombreArt, btnArt)),
-      h('label.etq', h('span', 'Conversión'), h('span.inv-con-unidad', h('span.inv-pre', 'Cada «' + (l.unidad || 'unidad') + '» de la factura trae'), factor, h('span.inv-unidad.inv-u-art')), factorEco),
+      h('label.etq.inv-c-conv', h('span', 'Conversión'), h('span.inv-con-unidad', h('span.inv-pre', 'Cada «' + (l.unidad || 'unidad') + '» de la factura trae'), factor, h('span.inv-unidad.inv-u-art')), factorEco),
       cantidad.el,
-      h('label.etq', 'Dónde se guarda', ubic),
-      h('div.etq', h('span', 'Vence'), vence, venceEco, h('label.inv-casilla.chica', noVence, h('span', 'No vence'))),
+      h('label.etq.inv-c-ubic', 'Dónde se guarda', ubic),
+      h('div.etq.inv-c-vence', h('span', 'Vence'), vence, venceEco, h('label.inv-casilla.chica', noVence, h('span', 'No vence'))),
       h('div.inv-costo-fila', h('span.inv-costo-et', 'Costo sin IVA:'), costoTxtEl, costoDet));
     const sugTxt = sugerenciaTxt(sug);
-    const el = h('article.inv-linea', { 'data-linea': l.linea },
+    const simple = esSimple(cat);
+    const resumen = h('p.tenue.inv-chico.inv-resumen-simple');
+    const el = h('article.inv-linea' + (simple ? '.inv-simple' : ''), { 'data-linea': l.linea },
       h('div.inv-linea-cab',
         h('label.inv-recibir-chk', chk, h('span', 'Recibir esta línea')),
         descLinea(l)),
       sugTxt ? h('p.inv-sug' + (sug.no_inventario ? '.no-inv' : ''), h('span.inv-sug-et', 'Sugerencia: '), sugTxt) : null,
+      simple ? resumen : null,
       campos,
       h('div.inv-linea-pie', ignorarBtn, zona));
 
@@ -330,7 +333,8 @@ export async function abrirFactura(ctx, clave, { previa = null } = {}) {
       btnArt.textContent = art ? 'Cambiar artículo' : 'Escoger artículo';
       el.querySelector('.inv-u-art').textContent = art ? unidadTxt(art.unidad, 2) + ' del artículo' : 'del artículo';
       cantidad.unidad(art?.unidad || '');
-      if (!cambiar) return;
+      el.dataset.grupo = grupoDe(cat, art) || '';
+      if (!cambiar) { pintarResumen(); return; }
       // Valores por omisión de ese artículo: los de la sugerencia si es el mismo; si no, la regla del contrato (3.3)
       const mismo = art && sug.articulo_id === art.id;
       const fac = mismo && sug.factor != null ? Number(sug.factor) : sug.factor_sugerido != null ? Number(sug.factor_sugerido) : 1;
@@ -339,7 +343,15 @@ export async function abrirFactura(ctx, clave, { previa = null } = {}) {
       ubic.value = (mismo && sug.ubicacion_id) || ubicacionPorOmision(art) || '';
       const ven = mismo ? sug.vence_en : venceDe(art);
       venceEditada = false; noVence.checked = !ven; vence.disabled = !ven; vence.value = ven || '';
-      pintarFactor(); pintarCosto(); pintarVence();
+      pintarFactor(); pintarCosto(); pintarVence(); pintarResumen();
+    }
+    // Modo simple: lo que no se pide se dice en una línea, para que se vea a dónde va la mercadería
+    function pintarResumen() {
+      if (!simple) return;
+      const g = grupoDe(cat, art);
+      el.classList.toggle('inv-ver-ubic', !ubic.value);
+      const donde = ubic.value ? (ubic.selectedOptions[0]?.textContent || '') : '';
+      resumen.textContent = !art ? '' : 'Bolsa: ' + (GRUPOS[g] || 'sin bolsa') + (donde ? ' · se guarda en ' + donde : '') + (noVence.checked ? ' · no vence' : vence.value ? ' · vence el ' + dma(vence.value) : '');
     }
     function ubicacionPorOmision(a) {
       if (!a) return '';

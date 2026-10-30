@@ -338,13 +338,14 @@ async function verConfig(ctx) {
   const c = ctx.cat.config || {};
   const desde = h('input.campo', { type: 'date', value: c.recepcion_desde || '', 'aria-label': 'Facturas emitidas desde' });
   const dias = texto(c.dias_aviso ?? 2, { inputmode: 'numeric', maxlength: 2, 'aria-label': 'Días de aviso' });
+  const completo = h('input', { type: 'checkbox', checked: c.modo === 'completo', 'aria-label': 'Sistema completo de inventario' });
   const zona = h('div');
   const ok = h('button.btn.primario', { type: 'button' }, 'Guardar la configuración');
   const acc = accionSegura({ boton: ok, zona, ocupado: 'Guardando…',
     hacer: () => {
       if (!/^\d{4}-\d{2}-\d{2}$/.test(desde.value)) throw new Error('Escoja la fecha desde la que entran las facturas.');
       const n = enteroONulo(dias.value, 'Días de aviso', 0, 30); if (n == null) throw new Error('Escriba con cuántos días de anticipación se avisa (0 a 30).');
-      return inv.configGuardar({ recepcion_desde: desde.value, dias_aviso: n });
+      return inv.configGuardar({ recepcion_desde: desde.value, dias_aviso: n, modo: completo.checked ? 'completo' : 'simple' });
     },
     alTerminar: async () => { toastOk('Configuración guardada.'); await recargar(ctx); } });
   ok.addEventListener('click', () => acc.ejecutar());
@@ -352,6 +353,7 @@ async function verConfig(ctx) {
     h('div.inv-form',
       h('label.etq', 'Facturas emitidas desde', desde, h('small', 'Solo las facturas emitidas desde este día salen en «Por recibir».')),
       h('label.etq', 'Avisar con cuántos días de anticipación', dias, h('small', 'El aviso «Vencen pronto» incluye hoy y los próximos días que diga aquí (0 a 30).')),
+      h('label.inv-casilla', completo, h('span', h('strong', 'Sistema completo de inventario'), h('small', 'Apagado (inventario simple): al recibir una factura no se pregunta dónde se guarda ni el vencimiento, y la conversión solo se pide en los unitarios. Encendido: se pide todo el detalle en cada línea.'))),
       zona, h('div.inv-barra-btns', ok))] });
   enfocar(v.cuerpo);
 }
