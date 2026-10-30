@@ -52,10 +52,10 @@ function insigniaUsuarios(app) {
 
 export const MODULOS = [
   // Inicio: los cinco módulos principales, en este orden (3 arriba y 2 más anchos abajo en pantalla ancha; una columna en celular)
-  { id: 'caja', titulo: 'Facturación', descripcion: 'Cobrar una venta, cuentas en espera, para llevar y express', grupo: 'principal', ruta: 'facturar', icono: 'facturar', orden: 10, destacado: true, cargar: () => import('./m_caja.js') },
-  { id: 'anular', alias: ['documentos'], titulo: 'Anular y reimprimir', descripcion: 'Anular una factura o tiquete, o volver a imprimirlo', grupo: 'principal', ruta: 'anular', icono: 'impresora', orden: 20, cargar: () => import('./m_documentos.js') },
+  { id: 'caja', emite: true, titulo: 'Facturación', descripcion: 'Cobrar una venta, cuentas en espera, para llevar y express', grupo: 'principal', ruta: 'facturar', icono: 'facturar', orden: 10, destacado: true, cargar: () => import('./m_caja.js') },
+  { id: 'anular', emite: true, alias: ['documentos'], titulo: 'Anular y reimprimir', descripcion: 'Anular una factura o tiquete, o volver a imprimirlo', grupo: 'principal', ruta: 'anular', icono: 'impresora', orden: 20, cargar: () => import('./m_documentos.js') },
   { id: 'clientes', titulo: 'Clientes', descripcion: 'Buscar, agregar o corregir clientes', grupo: 'principal', ruta: 'clientes', icono: 'personas', orden: 30, cargar: () => import('./m_clientes.js') },
-  { id: 'turno', alias: ['admin/cierre', 'cierre'], titulo: 'Apertura y cierre de caja', descripcion: 'Abrir la caja, contar el efectivo y cerrar el turno', grupo: 'principal', ruta: 'turno', icono: 'caja', orden: 40, cargar: () => import('./m_turno.js') },
+  { id: 'turno', emite: true, alias: ['admin/cierre', 'cierre'], titulo: 'Apertura y cierre de caja', descripcion: 'Abrir la caja, contar el efectivo y cerrar el turno', grupo: 'principal', ruta: 'turno', icono: 'caja', orden: 40, cargar: () => import('./m_turno.js') },
   // Administración: su descripción sale de los módulos del grupo «admin» y su insignia es la primera que tenga alguno de ellos
   { id: 'admin', titulo: 'Administración', grupo: 'principal', ruta: 'admin', icono: 'ajustes', orden: 50, pantalla: 'admin' },
   // Dentro de Administración
@@ -101,5 +101,7 @@ export function descripcionDe(m, app) {
     const t = modulosDe('admin', app).map((x, i) => (i === 0 ? x.titulo : x.titulo.charAt(0).toLowerCase() + x.titulo.slice(1)));
     return t.length > 1 ? t.slice(0, -1).join(', ') + ' y ' + t[t.length - 1] : t.join('');
   }
+  // Empresa «solo recepción» (hoy Soda): Facturar no está habilitado aquí, y la tarjeta lo dice sin entrar
+  if (m.emite && app?.soc?.puede_emitir === false) return 'No disponible en esta empresa';
   return m.descripcion || '';
 }

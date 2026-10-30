@@ -29,7 +29,8 @@ export function icono(nombre) {
 /* ---------- Tarjeta de un módulo ---------- */
 function textoInsignia(i) { return i ? h('span.mod-insignia' + (i.urgente ? '.urgente' : ''), i.texto) : null; }
 export function tarjetaModulo(m, app, alAbrir) {
-  return h('button.mod-tarjeta' + (m.destacado ? '.destacada' : ''), { type: 'button', 'data-mod': m.id, onclick: () => alAbrir(m) },
+  const bloq = !!m.emite && app?.soc?.puede_emitir === false;
+  return h('button.mod-tarjeta' + (m.destacado && !bloq ? '.destacada' : '') + (bloq ? '.bloqueada' : ''), { type: 'button', 'data-mod': m.id, onclick: () => alAbrir(m) },
     icono(m.icono),
     h('span.mod-titulo', m.titulo),
     h('span.mod-desc', descripcionDe(m, app)),

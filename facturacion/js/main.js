@@ -726,6 +726,8 @@ async function mostrar(dest, forzar = false, { sinFoco = false } = {}) {
     if (tipo === 'inicio') diferir(() => { import('./m_caja.js').catch(() => {}); }); // la caja es lo que más se usa: queda lista antes del primer toque
     return;
   }
+  // Empresa «solo recepción» (hoy Soda): Facturar no está habilitado. La base de datos igual lo impide (fact.config 'sociedades_emisoras'); aquí se dice con palabras.
+  if (dest.emite && app.soc && app.soc.puede_emitir === false) { vista.replaceChildren(pantallaSoloRecepcion()); return; }
   vista.replaceChildren(esqueleto(4));
   try {
     const mod = (await dest.cargar()).default;
@@ -748,6 +750,12 @@ async function mostrar(dest, forzar = false, { sinFoco = false } = {}) {
   } finally {
     if (mi === irSeq) app.pedido = null;
   }
+}
+function pantallaSoloRecepcion() {
+  const nombre = app.soc?.nombre_comercial || app.soc?.nombre || 'Esta empresa';
+  return h('section.solo-recepcion', h('h1', 'Facturar no está habilitado'),
+    h('p', nombre + ' sigue facturando con su sistema actual. Aquí se usa para recibir y revisar las facturas de los proveedores, el inventario y lo demás.'),
+    h('button.btn.primario.grande', { type: 'button', onclick: () => ir('inicio') }, 'Volver al inicio'));
 }
 const diferir = (f) => (window.requestIdleCallback ? window.requestIdleCallback(f, { timeout: 3000 }) : setTimeout(f, 1200));
 
