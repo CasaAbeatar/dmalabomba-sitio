@@ -210,6 +210,7 @@ export const api = {
   // {id?,solo_nuevo?,sociedad_id,tipo_id,identificacion,nombre,nombre_comercial,correo(opcional),telefono,provincia,canton,distrito,barrio,otras_senas,actividad_codigo ("5610.0" o 6 números),notas,sin_verificar_motivo}.
   // El servidor decide verificado/verificado_en/actividades con la caché de Hacienda; el navegador no puede declararlo.
   clienteGuardar: (p) => rpc('fx_cliente_guardar', { p }),
+  clienteCorreoCorregir: (soc, cliente, correo) => rpc('fx_cliente_correo_corregir', { p_soc: soc, p_cliente: cliente, p_correo: correo }),
   clienteCedulaCorregir: (soc, cliente, identificacion, tipo = null) => rpc('fx_cliente_cedula_corregir', { p_soc: soc, p_cliente: cliente, p_identificacion: identificacion, p_tipo: tipo }),
   // Turnos y caja
   turnoAbrir: (soc, terminal, fondo = 0) => rpc('fx_turno_abrir', { p_soc: soc, p_terminal: terminal, p_fondo: fondo }),
