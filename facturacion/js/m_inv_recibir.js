@@ -354,7 +354,7 @@ export async function abrirFactura(ctx, clave, { previa = null, recibirSugeridas
     // Buscador del rubro: se escribe parte del nombre (ej. «snack») y sale la lista de todos los rubros; al escoger uno, la categoría se ajusta sola
     const idLista = 'rubros-' + String(f.clave).slice(-8) + '-' + l.linea;
     const datos = h('datalist', { id: idLista }, ...(cat.categorias || []).filter((c) => c.activo !== false).map((c) => h('option', { value: c.nombre, label: GRUPOS[c.grupo] || '' })));
-    const buscar = h('input.campo.inv-buscar-rubro', { type: 'text', list: idLista, autocomplete: 'off', placeholder: 'Escriba para buscar el rubro…', 'aria-label': 'Buscar el rubro de la línea ' + l.linea, onfocus: (e) => e.target.select() });
+    const buscar = h('input.campo.inv-buscar-rubro', { type: 'text', list: idLista, autocomplete: 'off', placeholder: 'Escriba para buscar el rubro…', 'aria-label': 'Buscar el rubro de la línea ' + l.linea, onfocus: (e) => { e.target.dataset.prev = e.target.value; e.target.placeholder = e.target.value || 'Escriba para buscar el rubro…'; e.target.value = ''; }, onblur: (e) => { if (!e.target.value.trim()) e.target.value = nombreRubro(); } });
     const nombreRubro = () => (cat.categorias || []).find((x) => x.id === rubro.value)?.nombre || '';
     buscar.addEventListener('change', () => {
       const t = norm(buscar.value);
