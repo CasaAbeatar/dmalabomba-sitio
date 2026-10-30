@@ -395,7 +395,7 @@ export function selectorCliente(app, { alElegir, titulo = 'Elegir cliente' } = {
         h('div.mt-datos', h('span.mt-nombre', nombrePropio(cl.nombre)), h('span.mt-sub', (TIPOS_ID[cl.tipo_id] || '') + ' ' + (cl.identificacion || '') + (cl.correo ? ' · ' + cl.correo : '')),
           tarifaHabitual(cl) ? h('span.mt-sub', h('span.chip.espera', 'Paga ' + tarifaHabitual(cl).texto)) : null,
           cl.verificado === false ? h('span.mt-sub', h('span.chip.espera', 'Sin verificar en Hacienda'), ' Revise el número antes de cobrar: si no existe, Hacienda rechaza la factura.') : null,
-          !cl.correo ? h('span.mt-sub', h('span.chip.espera', 'Sin correo'), ' Pida el correo al cliente.') : null,
+          !cl.correo ? h('span.mt-sub', h('span.chip.mal', 'Falta el correo'), ' Se escribe al cobrar; sin él no se puede cobrar a su nombre.') : null,
           /^0+$/.test(String(cl.identificacion || '')) ? h('span.mt-sub', h('span.chip.mal', 'Falta la cédula correcta'), ' Se escribe al cobrar; sin ella no se puede cobrar a su nombre.') : null),
         h('div.mt-btns', h('button.btn.primario', { type: 'button', onclick: () => elegir(cl) }, 'Elegir')))) : [h('div.vacio', q.value ? 'No hay clientes con eso. Toque «Agregar cliente nuevo» para guardarlo.' : 'Todavía no hay clientes guardados. Toque «Agregar cliente nuevo» para guardar el primero.')]));
     } catch (e) { if (mi === n) lista.replaceChildren(h('div.error-caja', mensajeSeguro(e, 'No se pudo cargar la lista de clientes. Revise la conexión e intente de nuevo.'))); }

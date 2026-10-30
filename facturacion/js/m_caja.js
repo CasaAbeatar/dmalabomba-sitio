@@ -1273,29 +1273,36 @@ export default {
         const rest = r.error ? 0 : r.falta;
         inpMonto.value = rest > 0 ? (rest / 100).toFixed(2).replace(/\.00$/, '') : '';
       }
-      // Cédula pendiente (en ceros): no se cobra hasta escribir la cédula correcta, aquí mismo. La base también lo frena (fx_cobrar).
-      const cedulaPendiente = () => !!cliente && /^0+$/.test(String(cliente.identificacion || ''));
+      // Datos que faltan para facturar (cédula en ceros, correo vacío): no se cobra hasta escribirlos aquí mismo. La base también lo frena (fx_cobrar).
+      const sinCedula = () => !!cliente && /^0+$/.test(String(cliente.identificacion || ''));
+      const sinCorreo = () => !!cliente && ['01', '02', '03', '04'].includes(String(cliente.tipo_id)) && !String(cliente.correo || '').trim();
+      const cedulaPendiente = () => sinCedula() || sinCorreo(); // nombre histórico: «falta un dato obligatorio»
       function bloqueCedulaPendiente() {
         if (!cedulaPendiente()) return null;
-        const inp = h('input', { type: 'text', inputmode: 'numeric', autocomplete: 'off', 'aria-label': 'Cédula correcta del cliente', placeholder: 'Escriba la cédula', maxlength: 20 });
-        const err = h('div.error-caja', { hidden: true });
-        const btn = h('button.btn.primario', { type: 'button' }, 'Guardar cédula');
-        const guardar = async () => {
-          err.hidden = true;
-          btn.disabled = true;
-          try {
-            const nuevo = await api.clienteCedulaCorregir(socId, cliente.id, inp.value);
-            cliente = { ...cliente, ...nuevo };
-            if (cur?.cliente?.id === cliente.id) cur = { ...cur, cliente: { ...cur.cliente, ...nuevo } };
-            toast('Cédula guardada. Ya puede cobrar.');
-            pintarCliente(); actualizar();
-          } catch (e) { err.textContent = textoDeError ? textoDeError(e) : String(e.message || e); err.hidden = false; btn.disabled = false; }
+        const caja = (aria, ph, accion, etq, ok, modo) => {
+          const inp = h('input', { type: 'text', inputmode: modo, autocomplete: 'off', 'aria-label': aria, placeholder: ph, maxlength: 200 });
+          const err = h('div.error-caja', { hidden: true });
+          const btn = h('button.btn.primario', { type: 'button' }, etq);
+          const guardar = async () => {
+            err.hidden = true; btn.disabled = true;
+            try {
+              const nuevo = await accion(inp.value);
+              cliente = { ...cliente, ...nuevo };
+              if (cur?.cliente?.id === cliente.id) cur = { ...cur, cliente: { ...cur.cliente, ...nuevo } };
+              toast(ok);
+              pintarCliente(); actualizar();
+            } catch (e) { err.textContent = textoDeError(e); err.hidden = false; btn.disabled = false; }
+          };
+          btn.addEventListener('click', guardar);
+          inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); guardar(); } });
+          return [h('div.cc-ced-fila', inp, btn), err];
         };
-        btn.addEventListener('click', guardar);
-        inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); guardar(); } });
-        return h('div.cc-aviso-tipo.mal.cc-cedula-pendiente', { role: 'alert' },
-          h('div', 'Este cliente tiene la cédula pendiente. No se puede cobrar a su nombre hasta escribir la cédula correcta.'),
-          h('div.cc-ced-fila', inp, btn), err);
+        const partes = [];
+        if (sinCedula()) partes.push(h('div', 'Falta la cédula correcta de este cliente. No se puede cobrar a su nombre hasta escribirla.'),
+          ...caja('Cédula correcta del cliente', 'Escriba la cédula', (v) => api.clienteCedulaCorregir(socId, cliente.id, v), 'Guardar cédula', 'Cédula guardada.', 'numeric'));
+        if (sinCorreo()) partes.push(h('div', 'Falta el correo de este cliente: es adonde se envía la factura. No se puede cobrar hasta escribirlo.'),
+          ...caja('Correo del cliente', 'correo@ejemplo.com', (v) => api.clienteCorreoCorregir(socId, cliente.id, v), 'Guardar correo', 'Correo guardado.', 'email'));
+        return h('div.cc-aviso-tipo.mal.cc-cedula-pendiente', { role: 'alert' }, ...partes);
       }
       function pintarCliente() {
         docTxt.textContent = 'Documento: ' + (cliente ? TIPOS_DOC['01'] : TIPOS_DOC['04'] + ' (sin cliente)');
@@ -1340,7 +1347,7 @@ export default {
             h('button.btn', { type: 'button', onclick: () => vistaActividad() }, 'Cambiar')),
           cod ? null : h('small.tenue', 'Si el cliente declara IVA y pide que se anote su actividad, toque «Cambiar» y escriba el código.'),
           fueraDeLista ? h('div.act-aviso', 'Este código no está entre las actividades que Hacienda tiene para este cliente. Hacienda podría rechazar la factura.') : null,
-          !cliente.correo ? h('div.act-aviso.mal', h('strong', 'Pida el correo al cliente. '), correoActivo(app)
+          (!cliente.correo && !sinCorreo()) ? h('div.act-aviso', correoActivo(app)
             ? 'Este cliente no tiene correo. La factura se emite igual, pero la copia impresa no le sirve como gasto o crédito: con el correo recibiría el archivo que sí le sirve. Puede agregarlo en Clientes.'
             : 'Este cliente no tiene correo guardado. La factura se emite igual. Hoy el sistema no envía correos: entregue el comprobante impreso. Puede agregar el correo en Clientes para cuando se active el envío.') : null,
           (cliente.exoneraciones || []).length ? h('div.act-aviso.info', 'Este cliente tiene ' + cliente.exoneraciones.length + ' exoneración(es) registrada(s) (' + cliente.exoneraciones.map((x) => x.documento).join(', ') + '). Todavía no se aplican solas al cobrar: el sistema solo lo recuerda.') : null,
