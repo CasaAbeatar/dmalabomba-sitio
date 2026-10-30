@@ -280,6 +280,7 @@ body:has(.inv-fondo) .cabecera:has(.cab-usuario.abierto){z-index:120}
 .inv-form[hidden],.inv-form-fin[hidden]{display:none}
 .inv-form-fila{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.8rem 1rem;align-items:start}
 .inv-form-fila.tres{grid-template-columns:repeat(3,minmax(0,1fr))}
+.inv-lista-ign{display:flex;flex-direction:column;gap:.6rem}
 .inv-form-fin{display:flex;flex-direction:column;gap:.8rem}
 .inv-form-otra{display:flex;flex-wrap:wrap;gap:.6rem;justify-content:flex-end}
 .inv-items-caja{display:flex;flex-direction:column;gap:.6rem}

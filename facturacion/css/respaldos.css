@@ -7,6 +7,8 @@
 .alerta-resp .btn.alerta-ver{flex:0 0 auto;min-width:84px;background:#fff;color:#5c3d00;border-color:#d9b25f}
 .alerta-resp.urgente .btn.alerta-ver{color:var(--rojo-osc);border-color:#fff}
 .alerta-resp.urgente :focus-visible{outline-color:#fff}
+/* En pantalla baja app.css corta el aviso rojo con «…» en una línea. Aquí el aviso de respaldos es lo único que explica qué pasó: puede ocupar hasta 3 líneas y no se corta a la mitad. */
+.alerta-resp .alerta-texto strong{white-space:normal;text-overflow:clip;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;overflow:hidden;overflow-wrap:anywhere}
 
 /* Pantalla */
 .rsp{max-width:980px;margin:0 auto;display:flex;flex-direction:column;gap:1rem}

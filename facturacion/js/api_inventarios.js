@@ -70,6 +70,8 @@ export const inv = {
   equivalencias: (q = '', limite = 200) => leer('fx_inv_equivalencias', { p_q: q, p_limite: limite }),
   cabysReglas: () => leer('fx_inv_cabys_reglas'),
   notasProveedor: (estado = 'por_revisar', limite = 100) => leer('fx_inv_notas_proveedor', { p_estado: estado, p_limite: limite }),
+  // Las líneas marcadas «No es de inventario» por la fecha en que se marcaron (contrato 5.6 bis, migración 24j). desde y hasta: AAAA-MM-DD; sin ellas, los últimos 30 días.
+  ignoradas: (desde = null, hasta = null, q = '', limite = 200) => leer('fx_inv_ignoradas', { p_desde: desde, p_hasta: hasta, p_q: q, p_limite: limite }),
 
   /* ---------- Operación (cualquier usuario). idem = la clave de la intención ---------- */
   // lineas: [{ clave, linea, articulo_id, factor?, cantidad?, ubicacion_id?, vence_en?, sin_vencimiento?, costo_unitario?, recordar?, nota? }]

@@ -83,15 +83,15 @@ export default {
 
     async function alternar(p, btn) {
       const activa = p.activo === true;
-      if (activa && !(await confirmar('¿Dejar de avisarle a ' + (p.nombre || 'esta persona') + '? No se borra: puede volver a activarla cuando quiera.', { si: 'Sí, dejar de avisarle', no: 'No, volver' }))) return;
+      if (activa && !(await confirmar('¿Dejar de avisarle a ' + (nombrePropio(p.nombre || '') || 'esta persona') + '? No se borra: puede volver a activarla cuando quiera.', { si: 'Sí, dejar de avisarle', no: 'No, volver' }))) return;
       await conBoton(btn, async () => {
         await avisos.guardar(app.socId, { id: p.id, nombre: p.nombre, telefono: p.telefono, eventos: p.eventos, monto_minimo: p.monto_minimo, activo: !activa });
-        toast(activa ? 'Listo. Ya no se le avisa a ' + (p.nombre || 'esa persona') + '.' : 'Listo. Se le avisará a ' + (p.nombre || 'esa persona') + '.');
+        toast(activa ? 'Listo. Ya no se le avisa a ' + (nombrePropio(p.nombre || '') || 'esa persona') + '.' : 'Listo. Se le avisará a ' + (nombrePropio(p.nombre || '') || 'esa persona') + '.');
         await cargar();
       });
     }
     async function probar(p, btn) {
-      if (!(await confirmar('Se prepara un aviso de prueba para ' + (p.nombre || 'esta persona') + '. Dirá que es una prueba y no es un movimiento de caja real.', { si: 'Sí, preparar la prueba', no: 'No, volver' }))) return;
+      if (!(await confirmar('Se prepara un aviso de prueba para ' + (nombrePropio(p.nombre || '') || 'esta persona') + '. Dirá que es una prueba y no es un movimiento de caja real.', { si: 'Sí, preparar la prueba', no: 'No, volver' }))) return;
       await conBoton(btn, async () => {
         const r = await avisos.probar(app.socId, p.id);
         toast(r && r.modo === 'real' ? 'Aviso de prueba en camino por WhatsApp.' : 'Aviso de prueba registrado. En modo de prueba no se envía por WhatsApp.', 'ok', 6000);

@@ -14,7 +14,8 @@ export function textoAvisoRespaldo(r, baja = false) {
   const mas = r.problemas > 1 ? ' Hay ' + (r.problemas - 1) + (r.problemas === 2 ? ' aviso más.' : ' avisos más.') : '';
   const msg = String(r.mensaje || 'El respaldo tiene un problema.').trim();
   const msgP = /[.!?]$/.test(msg) ? msg : msg + '.';
-  if (baja) return { titulo: 'Respaldos: ' + msgP + mas, detalle: '' };
+  // En una línea corta, la cantidad va primero para que, si el texto se corta al final, no se pierda: «Respaldos (2 avisos): La copia de los datos falló…»
+  if (baja) return { titulo: 'Respaldos' + (r.problemas > 1 ? ' (' + r.problemas + ' avisos)' : '') + ': ' + msgP, detalle: '' };
   return {
     titulo: r.problemas === 1 ? 'Hay un aviso sobre los respaldos.' : 'Hay ' + r.problemas + ' avisos sobre los respaldos.',
     detalle: msgP + mas + ' Toque «Ver respaldos» para ver qué pasó.',

@@ -4,6 +4,7 @@
 import { h, money, num, fechaHora, horaCorta, debounce, modal, conBoton, toast, nombrePropio, nombreLocal, campoBusqueda, hoyCR, sumaDias } from './util.js';
 import { recibidas, recibida, respuestaGuardada, responder, calcularRespuesta, consultarRespuesta, revisarCorreo, alertasRecepcion, atenderAviso, otraCedula, ivaMes, ivaMesDetalle } from './api_recepcion.js';
 import { mensajeAmable } from './api_documentos.js';
+import { inv } from './api_inventarios.js';
 import { selectorPeriodo, textoRango } from './periodo.js';
 import { crearDescarga, nombrePeriodo } from './descargas.js';
 
@@ -63,9 +64,62 @@ export function estadoFila(f) {
 // Insignia del tipo de comprobante: la nota de crédito resta y la de débito suma (k)
 const chipTipo = (t) => (esNC(t) ? h('span.chip.rec-tipo.nc', 'Nota de crédito: resta') : esND(t) ? h('span.chip.rec-tipo.nd', 'Nota de débito: suma') : null);
 
+/* ---------- Inventarios: lo que Contable le dice a la persona sobre la bodega ---------- */
+// Datos: fx_inv_factura_estado (CONTRATO_INVENTARIOS.md 5.6). La misma respuesta viene dentro del detalle de la factura, en «inventario».
+// Los textos dicen lo que de verdad pasa: rechazar una factura en Contable NO mueve nada en la bodega (la mercadería sigue en las existencias y no se descuenta nada).
+// Los nombres entre « » son los de los botones y secciones de Inventarios, tal como se ven allá (m_inv_recibir.js, m_inv_notas.js, m_inv_mover.js).
+const esDocInv = (t) => t === 'FacturaElectronica' || t === 'TiqueteElectronico';
+function leerInv(x, tipo) {
+  if (!x || typeof x !== 'object') return null;
+  const n = (v) => Math.max(0, Math.floor(+v || 0));
+  const rec = n(x.lineas_recibidas);
+  // Una nota de crédito o de débito no entra a la bodega: no tiene líneas por recibir (lo mismo que dice Inventarios en su propia pantalla)
+  return { rec, tot: n(x.lineas_total), ign: n(x.lineas_ignoradas), pen: esDocInv(tipo) ? n(x.lineas_pendientes) : 0, valor: +x.valor_recibido || 0, tiene: rec > 0 || x.tiene_inventario === true };
+}
+const lineasInv = (n) => plural(n, 'línea', 'líneas');
+const TXT_BODEGA_NO_CAMBIA = 'Rechazar una factura en Contable no saca nada de la bodega: la mercadería sigue en las existencias y no se descuenta nada.';
+const TXT_CORREGIR_BODEGA = 'Para corregir la bodega, en Inventarios use «Deshacer la recepción» (solo una persona administradora, y solo si ese lote todavía no se ha tocado) o registre una salida como «Devolución a proveedor».';
+const TXT_NOTA_PROVEEDOR = 'Cuando el proveedor emita su nota de crédito y llegue al correo, aparece en Inventarios, en «Notas de proveedor».';
+// Líneas que faltan por recibir cuando la factura se rechaza: ya no se pueden recibir, pero sí marcar «No es de inventario»
+const txtPendientesRechazo = (n) => (n === 1
+  ? 'La línea que falta por recibir ya no se va a poder recibir. Si no es de inventario, márquela «No es de inventario» en Inventarios.'
+  : `Las ${num(n, 0)} líneas que faltan por recibir ya no se van a poder recibir. Si no son de inventario, márquelas «No es de inventario» en Inventarios.`);
+
+/** Aviso que se ve ANTES de rechazar una factura. i: lo que dice Inventarios (leerInv), o null si no se pudo saber. */
+function avisoRechazoInv(i) {
+  if (i === null) {
+    return h('div.lis-aviso.rec-inv-aviso', h('p', h('strong', 'No se pudo revisar Inventarios. ')),
+      h('p', 'Si de esta factura ya entró mercadería a la bodega, rechazarla en Contable no la saca: la mercadería sigue en las existencias y no se descuenta nada.'));
+  }
+  if (i.tiene) {
+    return h('div.lis-aviso.rec-inv-aviso', h('p', h('strong', 'Esta factura ya tiene inventario recibido'), ` (${num(i.rec, 0)} de ${lineasInv(i.tot)}).`),
+      h('ul', h('li', TXT_BODEGA_NO_CAMBIA), h('li', TXT_CORREGIR_BODEGA), h('li', TXT_NOTA_PROVEEDOR), i.pen > 0 ? h('li', txtPendientesRechazo(i.pen)) : null));
+  }
+  if (i.pen > 0) return h('p.lis-aviso.rec-inv-aviso', `Esta factura tiene ${lineasInv(i.pen)} por recibir en Inventarios. ${txtPendientesRechazo(i.pen)}`);
+  return null;
+}
+/** Bloque «Inventarios» del detalle de una factura. boton: «Ver en Inventarios». Sale solo si hay inventario recibido, líneas por recibir o líneas marcadas «No es de inventario». */
+function bloqueInventario(i, rechazada, boton) {
+  if (!i || !(i.tiene || i.pen > 0 || i.ign > 0)) return null;
+  const partes = [];
+  if (i.tiene) {
+    partes.push(h('p', h('strong', 'Esta factura ya tiene inventario recibido'), ` (${num(i.rec, 0)} de ${lineasInv(i.tot)}${i.valor > 0 ? `, ${money(i.valor)} al costo, sin IVA` : ''}).`));
+    if (i.pen > 0) partes.push(h('p', rechazada ? txtPendientesRechazo(i.pen) : `${i.pen === 1 ? 'Falta por recibir 1 línea' : 'Faltan por recibir ' + num(i.pen, 0) + ' líneas'}. Se reciben en Inventarios, en «Por recibir».`));
+    if (rechazada) partes.push(h('p.tenue', 'La factura está rechazada, pero eso no sacó nada de la bodega: lo que se recibió sigue en las existencias. ' + TXT_CORREGIR_BODEGA + ' ' + TXT_NOTA_PROVEEDOR));
+  } else if (i.pen > 0) {
+    partes.push(h('p', rechazada
+      ? `Todavía no se recibió nada de esta factura. ${txtPendientesRechazo(i.pen)}`
+      : `Todavía no se recibió nada de esta factura: ${i.pen === 1 ? 'falta por recibir 1 línea' : 'faltan por recibir ' + num(i.pen, 0) + ' líneas'}. Se reciben en Inventarios, en «Por recibir».`));
+  }
+  if (i.ign > 0) partes.push(h('p.tenue', `${plural(i.ign, 'línea está marcada', 'líneas están marcadas')} «No es de inventario»: no entra${i.ign === 1 ? '' : 'n'} a la bodega.${rechazada ? '' : ' Si fue un error, se devuelve a «Por recibir» desde Inventarios.'}`));
+  return h('section.rec-inv', { 'aria-label': 'Inventarios' }, h('div.rec-inv-cab', h('h3', 'Inventarios'), boton), ...partes);
+}
+
 export default {
   id: 'recepcion', titulo: 'Contable',
   async mount(root, app) {
+    // Lo que pidió otra pantalla ({ clave, buscar } desde «Ir a Contable» de Inventarios). main.js lo borra apenas termina mount, así que se copia aquí, antes de cualquier espera.
+    const pedido = app.pedido && typeof app.pedido === 'object' ? { ...app.pedido } : null;
     if (!document.getElementById('css-recepcion')) document.head.append(h('link', { id: 'css-recepcion', rel: 'stylesheet', href: cssUrl }));
     const soc = app.soc; const nomLocal = nombreLocal(soc);
     let ficha = 0, vivo = true;
@@ -332,7 +386,15 @@ export default {
         const [a, b] = await Promise.allSettled([recibida(clave), respuestaGuardada(clave)]);
         if (a.status === 'rejected') throw a.reason;
         d = a.value; guardada = b.status === 'fulfilled' ? b.value : null;
-      } catch (e) { poner(cuerpo, h('div.error-caja', 'No se pudo abrir la factura. ' + mensajeAmable(e, 'Revise la conexión e intente de nuevo.'))); return; }
+      } catch (e) {
+        // Contable solo muestra las facturas de la empresa de la sesión (la base dice «Esta sesión es de otra empresa.» si la factura es de la otra, y «No se encontró esa factura» si no existe); Inventarios es de las dos
+        const msg = String(e?.message || '');
+        poner(cuerpo, h('div.error-caja', /otra empresa/i.test(msg)
+          ? `Esta factura es de la otra empresa del grupo, no de ${nomLocal || 'esta empresa'}: en Contable se responde desde una sesión de esa empresa. En Inventarios sí se puede ver.`
+          : /no se encontr/i.test(msg) ? `No se encontró esa factura entre las de ${nomLocal || 'esta empresa'}.`
+          : 'No se pudo abrir la factura. ' + mensajeAmable(e, 'Revise la conexión e intente de nuevo.')));
+        return;
+      }
       const f = d.factura, nota = esNC(f.tipo), sg = nota ? '−' : '';
       const e = estadoFila({ ...d, ...f, requiere: d.requiere, dias_restantes: d.dias_restantes });
       const dato = (t, v) => h('div.rec-dato', h('small', t), h('div', v));
@@ -342,6 +404,9 @@ export default {
       const avisos = [d.aviso_buzon, d.lineas_aviso, d.verificacion_nota, d.del_grupo ? 'La emitió la otra empresa del grupo: es una compra normal y hay que responderla.' : ''].filter(Boolean);
       const respuesta = h('div.rec-resp');
       pintarRespuesta(respuesta, d, guardada, clave, cuerpo, e);
+      // Inventarios: la misma factura vista desde la bodega (m_inv_recibir.js abre una factura por su clave). Rechazada = lo que Inventarios llama «Rechazada, no entra».
+      const rechazada = d.receptor_estado === '3' || (d.hacienda_estado === '3' && d.hacienda_cuadra !== false);
+      const btnInventarios = h('button.btn', { type: 'button', onclick: tocable(() => app.ir('inventarios', { seccion: 'factura', clave })) }, 'Ver en Inventarios');
       const desg = Array.isArray(d.desglose) ? d.desglose : [];
       poner(cuerpo, 
         ...(aviso ? [h('div.' + (aviso.mal ? 'error-caja' : 'rec-ok'), aviso.texto || aviso)] : []),
@@ -353,8 +418,8 @@ export default {
           dato('Emitida', fechaHora(f.fecha)), dato('Llegó al correo', fechaHora(f.llego)), dato('Correo', f.buzon || 'sin dato'),
           dato('Compra para', d.local ? d.local.nombre : (f.receptor_nombre || 'sin dato')), dato('Cédula del receptor', f.receptor_cedula || 'sin dato'), dato('Condición de venta', { '01': 'Contado', '02': 'Crédito' }[f.condicion_venta] || f.condicion_venta || 'sin dato'),
           dato('Respuesta de Hacienda al proveedor', hacTxt), moneda ? dato('Moneda', `${f.moneda}, tipo de cambio ${num(f.tipo_cambio, 5)}`) : null,
-          d.credito && d.credito.texto ? dato('Crédito fiscal', d.credito.texto) : null,
-          d.inventario && d.inventario.tiene_inventario ? dato('Inventarios', `${plural(+d.inventario.lineas_recibidas || 0, 'línea recibida', 'líneas recibidas')} en bodega`) : null),
+          d.credito && d.credito.texto ? dato('Crédito fiscal', d.credito.texto) : null),
+        bloqueInventario(leerInv(d.inventario, f.tipo), rechazada, btnInventarios),
         h('h3', 'Líneas de la factura'),
         lineas.length ? h('div.tabla-caja', h('table.tabla', h('thead', h('tr', h('th', '#'), h('th', 'Detalle'), h('th.der', 'Cantidad'), h('th.der', 'Precio unitario'), h('th.der', 'Sin IVA'), h('th.der', 'IVA'), h('th.der', 'Total'))),
           h('tbody', lineas.map((l) => h('tr', h('td', l.linea > 999 ? '' : l.linea), h('td', l.detalle || '', l.cabys ? h('small.tenue', ' CABYS ' + l.cabys) : null), h('td.der', { 'data-et': 'Cantidad' }, num(l.cantidad, 3)), h('td.der', { 'data-et': 'Precio' }, money(l.precio_unitario)), h('td.der', { 'data-et': 'Sin IVA' }, money(l.subtotal)), h('td.der', { 'data-et': 'IVA' }, money(l.impuesto)), h('td.der', { 'data-et': 'Total' }, money(l.total_linea)))))))
@@ -458,7 +523,12 @@ export default {
         m.el.classList.add('rec-modal', 'rec-dlg-modal');
         bloquear(true); enCamino.hidden = true; // mientras la ventana está abierta, los botones de abajo no se pueden tocar
         const total = moneda() ? +f.total_orig : +f.total, mon = f.moneda || 'CRC';
-        const valores = { condicion: '01', proporcion: '', monto: '', motivo: '' };
+        const valores = { condicion: '01', proporcion: '', monto: '', motivo: '', entiendeInv: false };
+        // Inventarios: al abrir el rechazo se pregunta de nuevo (la bodega pudo cambiar desde que se abrió la factura). Si no se logra, vale lo que traía el detalle; si tampoco hay, se avisa que no se pudo revisar.
+        let iInv = leerInv(d.inventario, f.tipo), invCargado = tipo !== 'rechazar', pintarZonaInv = () => {}, pedirCasilla = () => {};
+        const invListo = tipo === 'rechazar'
+          ? inv.facturaEstado(clave).then((x) => { const v = leerInv(x, f.tipo); if (v) iInv = v; }).catch(() => {}).then(() => { invCargado = true; if (!cerrada) pintarZonaInv(); })
+          : Promise.resolve();
         pintarDatos();
 
         function pie(...botones) { return h('div.rec-pie', ...botones); }
@@ -497,7 +567,9 @@ export default {
               cuenta.textContent = usado > libre ? `El motivo es muy largo: Hacienda recibirá solo las primeras ${libre} letras.` : `Quedan ${libre - usado} letras. Hacienda recibirá: «${prefijo()}${motivo.value.trim() || '…'}».`;
             };
             monto.addEventListener('input', ver); motivo.addEventListener('input', ver); ver();
+            const iParcial = leerInv(d.inventario, f.tipo);
             partes.push(h('p', `Use esta opción si solo una parte de ${quien} es correcta. El total es ${montoTexto(total, mon)}.`),
+              iParcial && iParcial.tiene ? h('p.lis-aviso', `Esta factura ya tiene ${plural(iParcial.rec, 'línea recibida', 'líneas recibidas')} en Inventarios. Aceptarla solo en parte no cambia la bodega: revise en Inventarios que lo recibido sea lo que sí llegó.`) : null,
               h('label.etq', `Monto que sí acepta, con IVA${mon !== 'CRC' ? ' (en ' + mon + ', la moneda de la factura)' : ''}`, monto, ncTxt),
               h('label.etq', 'Motivo: qué parte no acepta y por qué', motivo, cuenta),
               radioCondiciones());
@@ -507,8 +579,25 @@ export default {
             const cuenta = h('small.tenue');
             const ver = () => { valores.motivo = motivo.value; const u = largo(motivo.value.trim()); cuenta.textContent = u > 160 ? 'El motivo es muy largo: máximo 160 letras.' : `Hacienda lo recibe junto con la respuesta. Quedan ${160 - u} letras.`; };
             motivo.addEventListener('input', ver); ver();
-            partes.push(h('p', `Va a avisar a Hacienda que NO acepta ${quien}.`), h('label.etq', 'Motivo: por qué rechaza esta factura', motivo, cuenta));
-            if (d.inventario && d.inventario.tiene_inventario) partes.push(h('p.lis-aviso', `Esta factura ya tiene ${plural(+d.inventario.lineas_recibidas || 0, 'línea recibida', 'líneas recibidas')} en Inventarios. Si la rechaza, revise también la bodega.`));
+            // Aviso de Inventarios ANTES de pedir el motivo: si ya hay mercadería recibida, hay que marcar la casilla para poder seguir
+            const zonaInv = h('div.rec-inv-zona', { 'aria-live': 'polite' });
+            let chkInv = null, faltaInv = null;
+            pintarZonaInv = () => {
+              chkInv = faltaInv = null;
+              if (!invCargado) { poner(zonaInv, h('p.tenue.rec-inv-espera', 'Revisando si esta factura ya tiene inventario recibido…')); return; }
+              const pide = iInv === null || iInv.tiene;
+              if (pide) {
+                faltaInv = h('p.error-caja.rec-inv-falta', { hidden: true, role: 'alert' }, 'Marque esta casilla para poder seguir: rechazar la factura no cambia lo que hay en la bodega.');
+                chkInv = h('input', { type: 'checkbox', checked: !!valores.entiendeInv, onchange: (ev) => { valores.entiendeInv = ev.target.checked; if (ev.target.checked) faltaInv.hidden = true; } });
+              }
+              poner(zonaInv, avisoRechazoInv(iInv), pide ? h('label.rec-inv-confirma', chkInv, h('span', iInv === null
+                ? 'Entiendo que, si ya entró mercadería de esta factura a la bodega, rechazarla no la saca.'
+                : 'Entiendo que rechazar esta factura no saca la mercadería de la bodega.')) : null, faltaInv);
+            };
+            // Sin la casilla no se sigue: el mensaje sale pegado a la casilla (abajo, junto a los botones, en el celular quedaría tapado) y el foco va a ella
+            pedirCasilla = () => { if (!faltaInv) return; faltaInv.hidden = false; faltaInv.scrollIntoView({ block: 'center' }); chkInv.focus({ preventScroll: true }); };
+            pintarZonaInv();
+            partes.push(h('p', `Va a avisar a Hacienda que NO acepta ${quien}.`), zonaInv, h('label.etq', 'Motivo: por qué rechaza esta factura', motivo, cuenta));
           }
           const bRev = h('button.btn.primario', { type: 'button' }, 'Revisar antes de enviar');
           bRev.addEventListener('click', () => conBoton(bRev, async () => {
@@ -527,7 +616,13 @@ export default {
               const libre = 160 - largo(`Se acepta ${montoTexto(n, mon)} de ${montoTexto(total, mon)}. `);
               motivo = Array.from(motivo).slice(0, libre).join('');
             }
-            if (tipo === 'rechazar') { if (largo(motivo) < 5) return mal('Escriba el motivo del rechazo con un poco más de detalle (al menos 5 letras).'); if (largo(motivo) > 160) return mal('El motivo es muy largo: máximo 160 letras.'); }
+            if (tipo === 'rechazar') {
+              if (largo(motivo) < 5) return mal('Escriba el motivo del rechazo con un poco más de detalle (al menos 5 letras).');
+              if (largo(motivo) > 160) return mal('El motivo es muy largo: máximo 160 letras.');
+              await invListo; // la revisión de Inventarios termina antes de seguir: el aviso nunca se salta
+              if (cerrada) return;
+              if ((iInv === null || iInv.tiene) && !valores.entiendeInv) return pedirCasilla();
+            }
             let c;
             try { c = await calcularRespuesta(clave, tipo, motivo, extra); } catch (ex) { return mal(mensajeAmable(ex, 'No se pudo revisar la respuesta. Intente de nuevo.')); }
             if (cerrada) return;
@@ -548,6 +643,7 @@ export default {
           if (c.con_xml === false && c.mensaje !== 3) notas.push('No se encontró el desglose de impuestos de esta factura: el cálculo toma todo el impuesto como IVA.');
           if (esNC(f.tipo) && c.mensaje !== 3) notas.push('Es una nota de crédito: al aceptarla, este IVA se resta del crédito fiscal del mes.');
           if (esND(f.tipo) && c.mensaje !== 3) notas.push('Es una nota de débito: al aceptarla, este IVA se suma al crédito fiscal del mes.');
+          if (c.mensaje === 3 && iInv && iInv.tiene) notas.push(`Esta factura tiene inventario recibido (${num(iInv.rec, 0)} de ${lineasInv(iInv.tot)}): este rechazo no cambia la bodega. Se corrige en Inventarios.`);
           if (cm !== 'CRC') notas.push(`Los montos van en ${cm}, la moneda de la factura${c.tipo_cambio ? `, con tipo de cambio ${num(c.tipo_cambio, 5)}` : ''}.`);
           const p = r.previa;
           if (p && p.estado == null) notas.push('Llegó por correo un aviso de que esta factura ya se respondió desde otro sistema (sin verificar). Si ya se respondió, no la envíe otra vez.');
@@ -762,8 +858,18 @@ export default {
       };
     }
 
-    cargar();
+    // Pedido de otra pantalla (Inventarios: «Ir a Contable»). Con la clave de 50 dígitos se abre esa factura; la búsqueda por número solo sirve de respaldo si la clave no vino.
+    const claveDePedido = String(pedido?.clave || '').replace(/\s+/g, '');
+    const textoDePedido = String(pedido?.buscar || '').trim().slice(0, 100);
+    const abrirPedido = /^\d{50}$/.test(claveDePedido);
+    if (!abrirPedido && textoDePedido) {
+      // «Todas las facturas» de este mes, con el número ya escrito en el buscador (la lista de pendientes no mostraría una factura que ya tiene respuesta)
+      est.vista = 'todas'; est.q = textoDePedido; buscar.value = textoDePedido;
+      periodo.elegir('mes');
+    } else cargar();
     cargarAvisos();
+    // Un instante después de que main.js termine de mostrar la pantalla, para que su foco inicial no le quite el foco a la ventana
+    if (abrirPedido) setTimeout(() => { if (vivo) abrirDetalle(claveDePedido).catch(() => {}); }, 0);
     return () => { vivo = false; ficha++; };
   },
 };

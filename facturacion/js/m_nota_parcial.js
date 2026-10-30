@@ -323,6 +323,7 @@ function mostrarResultado({ clase, credito, orig: o, nota, pagos, totalCalc, tur
     ...bloquesDinero.filter(Boolean),
     aviso ? h('div.an-aviso.np-sin-turno', h('p', aviso)) : null,
     h('p', estadoTxt),
+    clase === 'sinefecto' && nota && nota.estado !== 'aceptado' ? h('p', 'Hasta que Hacienda la acepte, a la venta no se le pueden hacer devoluciones ni correcciones.') : null,
     h('p.tenue', correoTxt(clase, o)),
     h('div.an-botones', imp, ver, h('button.btn.primario', { type: 'button', onclick: () => r.cerrar() }, 'Cerrar'))) });
   ignorarToqueDeFondo(r);
@@ -707,7 +708,9 @@ function abrir(app, d, clase, { alTerminar, alVerNota } = {}) {
       h('div.an-explica', h('p', h('b', 'Qué pasa si sigue:')), h('ul',
         h('li', `Se crea una nota de débito por ${total}.`),
         h('li', 'La venta vuelve a valer como estaba antes de anularla.'),
-        h('li', 'Después de esto, el documento original ya no admite más devoluciones ni correcciones.'))),
+        // Regla de la base (23i, CONTRATO_NC_SQL.md 8.10): con la nota de débito aceptada el documento vuelve a admitir devoluciones y correcciones; mientras Hacienda no la acepte, ninguna nota; y no se anula completo por segunda vez.
+        h('li', 'Cuando Hacienda acepte la nota de débito, a la venta se le podrán hacer devoluciones y correcciones otra vez. Mientras no la acepte, no se le puede hacer ninguna nota.'),
+        h('li', 'La venta no se puede anular completa por segunda vez. Si hay que devolver todo, use «Devolver parte» con todas las líneas.'))),
       lineas.length ? h('div.an-lineas', h('div.an-lineas-tit', 'Lo que volvería a valer'),
         lineas.slice(0, 8).map((l) => h('div.an-linea', h('span', `${num(l.cantidad)} × ${l.descripcion || 'Producto'}`), h('span.der', money(l.total_linea)))),
         lineas.length > 8 ? h('small.tenue', `y ${lineas.length - 8} productos más`) : null) : null];

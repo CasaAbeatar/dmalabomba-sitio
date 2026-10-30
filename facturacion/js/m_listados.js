@@ -335,10 +335,11 @@ export default {
       const suma = (k) => filas.reduce((a, t) => a + (+t[k] || 0), 0) + (sin ? (k === 'total' ? sin.total : sin.ventas) : 0);
       const totalFilas = suma('total'), netas = +d.resumen?.ventas_netas || 0;
       const filasTabla = [...filas.map((t) => [t.abierto_por ? 'Abrió ' + nombrePropio(t.abierto_por) : 'Turno', fechaHora(t.abierto_en), t.cerrado_en ? fechaHora(t.cerrado_en) : 'Sigue abierto', num(t.ventas, 0), money(t.total)]),
-        ...(sin ? [[h('span', h('b', 'Sin turno'), h('small.tenue.lis-sin-turno', NOTA_SIN_TURNO)), '', '', num(sin.ventas, 0), money(sin.total)]] : [])];
+        ...(sin ? [[h('b', 'Sin turno'), '', '', num(sin.ventas, 0), money(sin.total)]] : [])]; // la explicación va debajo de la tabla: en una celda angosta del celular quedaba una fila altísima
       return seccion('Por turno de caja', 'Cada turno abre y cierra la caja; el más reciente va primero. Cada nota cuenta en el turno en que se hizo. Monto neto (restadas las notas de crédito y sumadas las de débito), con IVA.' + (sin ? ' «Sin turno» reúne lo que no pertenece a ningún turno, para que las filas sumen el total.' : ''), () => conBase('Ventas por turno de caja', tablaTurnos(d)),
         tablaSimple([{ t: 'Turno' }, { t: 'Abrió' }, { t: 'Cerró' }, { t: 'Ventas', der: 1 }, { t: 'Monto con IVA', der: 1 }], filasTabla,
           h('tr', h('td', { colspan: 3 }, 'Total de las filas'), h('td.der', num(suma('ventas'), 0)), h('td.der', money(totalFilas)))),
+        sin ? h('p.tenue.lis-sin-turno', h('b', '«Sin turno»: '), NOTA_SIN_TURNO) : null,
         Math.abs(totalFilas - netas) > 0.005 ? h('p.lis-aviso', `Las filas suman ${money(totalFilas)} y las ventas netas del resumen ${money(netas)}. La diferencia puede venir de una venta anulada en un periodo distinto al de la venta.`) : null);
     }
     function tablaCajeros(d) {

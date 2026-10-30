@@ -223,7 +223,9 @@ export async function abrirFactura(ctx, clave, { previa = null } = {}) {
           h('p.tenue', tipoDocTxt(f.tipo) + ' N.° ' + numFactura(f.consecutivo) + ' · emitida ' + diaTxt(f.fecha) + ' · cédula del proveedor ' + (f.proveedor_cedula || 'sin dato'))),
         h('div.inv-fac-emp', h('small', 'A nombre de'), empresaChip(f.sociedad_nombre, f.sociedad_codigo))),
       h('div.inv-fac-estado', chipContable(ec), h('span.inv-fac-total.cifra', 'Total con IVA ' + money(f.total)), f.moneda && f.moneda !== 'CRC' ? h('span.tenue', 'Factura en ' + f.moneda + ', tipo de cambio ' + num(f.tipo_cambio, 2)) : null),
-      !puede ? aviso('mal', h('p', h('strong', (ec.texto || 'Rechazada, no entra') + '. '), 'No se puede recibir al inventario. ' + (ec.estado === 'rechazada_por_hacienda' ? 'Espere la factura que la reemplace.' : 'Si la mercadería no se quedó, márquela «No es de inventario».')))
+      !puede ? aviso('mal', h('p', h('strong', (ec.texto || 'Rechazada, no entra') + '. '), 'No se puede recibir al inventario. ' + (ec.estado === 'rechazada_por_hacienda' ? 'Espere la factura que la reemplace.' : 'Si la mercadería no se quedó, márquela «No es de inventario».')),
+          // Lo mismo que le dice Contable antes de rechazar (m_recepcion.js): rechazar no mueve la bodega
+          lineas.some((l) => l.estado === 'recibida') ? h('p', 'Lo que ya se recibió sigue en la bodega: rechazar la factura en Contable no lo saca. Para corregirlo, use «Deshacer la recepción» en cada línea (solo una persona administradora, y solo si ese lote todavía no se ha tocado) o registre una salida como «Devolución a proveedor», en «Salidas y mermas».') : null)
         : (f.aviso || ec.aviso) ? aviso('espera', h('p', f.aviso || ec.aviso)) : null,
       h('div.inv-enlaces', contableAqui
         ? h('button.btn', { type: 'button', onclick: () => ctx.app.ir('recepcion', { clave: f.clave, buscar: numFactura(f.consecutivo) }) }, 'Ir a Contable (factura N.° ' + numFactura(f.consecutivo) + ')')
