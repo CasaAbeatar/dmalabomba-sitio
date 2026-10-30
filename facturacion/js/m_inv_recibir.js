@@ -346,9 +346,24 @@ export async function abrirFactura(ctx, clave, { previa = null, recibirSugeridas
     let bolsa = grupoDeRubro(rubro.value);
     const selCat = h('select.campo', { 'aria-label': 'Categoría de la línea ' + l.linea }, ...['comida_preparada', 'unitario', 'suministro'].map((g) => h('option', { value: g }, GRUPOS[g])));
     const llenarRubros = (g) => { const v = rubro.value; rubro.replaceChildren(h('option', { value: '' }, 'Escoja el rubro…'), ...(cat.categorias || []).filter((c) => c.activo !== false && c.grupo === g).map((c) => h('option', { value: c.id }, c.nombre))); rubro.value = grupoDeRubro(v) === g ? v : ''; if (!rubro.value) { const op = [...rubro.options].filter((o) => o.value); const sg = sug.categoria_id && op.find((o) => o.value === sug.categoria_id); rubro.value = sg ? sg.value : op[0]?.value || ''; } };
-    const pintarBotones = () => { bolsa = grupoDeRubro(rubro.value) || bolsa; selCat.value = bolsa || ''; el.dataset.bolsa = bolsa; };
+    const pintarBotones = () => { bolsa = grupoDeRubro(rubro.value) || bolsa; selCat.value = bolsa || ''; el.dataset.bolsa = bolsa; if (typeof buscar !== 'undefined') buscar.value = (cat.categorias || []).find((x) => x.id === rubro.value)?.nombre || ''; };
     selCat.addEventListener('change', () => { bolsa = selCat.value; errorRubro.textContent = ''; if (art && grupoDe(cat, art) !== bolsa) { art = null; pintarArticulo(true); } llenarRubros(bolsa); pintarBolsa(); pintarBotones(); });
     filaRubro.append(h('label.etq', h('span', 'Categoría'), selCat));
+    // Buscador del rubro: se escribe parte del nombre (ej. «snack») y sale la lista de todos los rubros; al escoger uno, la categoría se ajusta sola
+    const idLista = 'rubros-' + String(f.clave).slice(-8) + '-' + l.linea;
+    const datos = h('datalist', { id: idLista }, ...(cat.categorias || []).filter((c) => c.activo !== false).map((c) => h('option', { value: c.nombre, label: GRUPOS[c.grupo] || '' })));
+    const buscar = h('input.campo.inv-buscar-rubro', { type: 'text', list: idLista, autocomplete: 'off', placeholder: 'Escriba para buscar el rubro…', 'aria-label': 'Buscar el rubro de la línea ' + l.linea, onfocus: (e) => e.target.select() });
+    const nombreRubro = () => (cat.categorias || []).find((x) => x.id === rubro.value)?.nombre || '';
+    buscar.addEventListener('change', () => {
+      const t = norm(buscar.value);
+      if (!t) { buscar.value = nombreRubro(); return; }
+      const cs = (cat.categorias || []).filter((c) => c.activo !== false);
+      const c = cs.find((x) => norm(x.nombre) === t) || (cs.filter((x) => norm(x.nombre).includes(t)).length === 1 ? cs.find((x) => norm(x.nombre).includes(t)) : null);
+      if (!c) { errorRubro.textContent = 'No hay un rubro con ese nombre: escoja uno de la lista.'; return; }
+      errorRubro.textContent = ''; bolsa = c.grupo; llenarRubros(c.grupo); rubro.value = c.id; rubro.dispatchEvent(new Event('change'));
+    });
+    rubro.hidden = true;
+    rubro.parentElement.append(buscar, datos);
     const campos = h('div.inv-linea-campos',
       h('label.etq.inv-c-conv', h('span', 'Conversión'), h('span.inv-con-unidad', h('span.inv-pre', 'Cada «' + (l.unidad || 'unidad') + '» de la factura trae'), factor, h('span.inv-unidad.inv-u-art')), factorEco),
       h('label.etq.inv-c-ubic', 'Dónde se guarda', ubic),
