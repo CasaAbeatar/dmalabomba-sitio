@@ -99,7 +99,7 @@ export default {
       est.filtro = 'problemas';
       if (pedido.desde && /^\d{4}-\d{2}-\d{2}$/.test(pedido.desde) && pedido.desde < est.hasta) { est.rango = 'otro'; est.desde = pedido.desde; }
     }
-    const alFinal = pedido?.foco === 'buscar'; // el botón rojo «Anular factura» del encabezado trae el cursor al buscador
+    const alFinal = pedido?.foco === 'buscar'; // el botón rojo «Anular y reimprimir» del encabezado trae el cursor al buscador
     const verDocumento = typeof pedido?.comprobante === 'string' ? pedido.comprobante : null; // «Me equivoqué» del cobro abre el documento recién emitido
     let detalleActual = null;
     let ultimaCarga = 0;
@@ -245,7 +245,7 @@ export default {
       } else if (modo === 'actualizar') { est.cargando = true; est.error = null; est.errorActualizar = null; est.firma = null; est.errorMas = null; est.avisoNuevos = null; pintar(); }
       if (silencioso) silenciosos++;
       try {
-        // Lo más reciente va arriba (igual que en «Anular factura»): lo último que hizo la cajera se ve sin bajar
+        // Lo más reciente va arriba (igual que siempre en «Anular y reimprimir»): lo último que hizo la cajera se ve sin bajar
         if (est.rango === 'hoy') { const [d0, h0] = rangoDe('hoy'); if (d0 !== est.desde || h0 !== est.hasta) { [est.desde, est.hasta] = [d0, h0]; pintarControles(); } } // la caja se cerró o cambió el día mientras tanto
         // «Hoy» con un turno que abrió en un día anterior arranca en la hora de apertura
         const desdeTurno = est.rango === 'hoy' && turnoDeAyer() ? new Date(turnoDeAyer().abierto_en).getTime() : 0;
@@ -1098,7 +1098,7 @@ export default {
     /* ---------- arranque y actualización automática ---------- */
     pintarControles();
     await cargar();
-    if (alFinal) buscador.focus(); // desde el botón rojo «Anular factura»: el cursor queda en el buscador
+    if (alFinal) buscador.focus(); // desde el botón rojo «Anular y reimprimir»: el cursor queda en el buscador
     if (verDocumento) abrirDetalle(verDocumento); // desde «Me equivoqué» del cobro: se abre el documento recién emitido
     // Los documentos cambian de estado solos (en cola, enviado, aceptado): «Hoy» se actualiza cada 20 segundos. Un mes entero pesa mucho más:
     // «Este mes» y «Cualquier fecha» se actualizan cada minuto y «Mes anterior» solo con el botón «Actualizar».
