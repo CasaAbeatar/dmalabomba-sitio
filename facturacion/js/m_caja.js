@@ -1030,6 +1030,19 @@ export default {
         avisoTarifaCliente(cl, aplicarTarifaCliente));
     }
 
+    // Neto sin IVA e IVA de la cuenta, calculados línea por línea (el precio final ya trae el IVA)
+    function desgloseIva() {
+      if (!cur || !cur.lineas.length) return null;
+      const r2 = (x) => Math.round(x * 100) / 100;
+      let neto = 0, iva = 0; const tasas = new Set();
+      for (const l of cur.lineas) {
+        const pct = Number(tarifaDeLinea(l).pct) || 0; tasas.add(pct);
+        const n = r2(Number(l.total_linea) / (1 + pct / 100)); neto += n; iva += r2(Number(l.total_linea) - n);
+      }
+      const rot = tasas.size === 1 ? 'IVA ' + String([...tasas][0]).replace('.', ',') + ' %' : 'IVA';
+      return h('div.desglose', h('div', h('span', 'Neto sin IVA'), h('span', money(r2(neto)))), h('div', h('span', rot), h('span', money(r2(iva)))));
+    }
+
     function pintarCuenta(irAlFinal) {
       if (!asideCuenta) return;
       const scroll = asideCuenta.querySelector('.cuenta-lineas')?.scrollTop || 0;
@@ -1063,6 +1076,7 @@ export default {
         h('div.cuenta-pie',
           v.estado === 'prefacturada' ? h('div.aviso-pref' + (v.prefactura_vigente === false ? '.vieja' : ''), h('strong', 'PREFACTURA N.° ' + (v.prefactura_numero || '') + (Number(v.prefactura_revision) > 1 ? ' · revisión ' + v.prefactura_revision : '')),
             v.prefactura_vigente === false ? 'La cuenta cambió después de imprimir la prefactura. Imprima una nueva para que el cliente vea el total correcto.' : 'No es una factura: es solo para que el cliente revise su cuenta.') : null,
+          desgloseIva(),
           h('div.pie-cobro',
             h('div.total-fila', h('span.et', 'Total a pagar (IVA incluido)'), h('div.total-monto', { 'aria-live': 'polite' }, money(v.total))),
             h('button.btn.primario.grande.btn-cobrar-aside', { type: 'button', disabled: !puede, onclick: seguro(abrirCobro) }, 'Cobrar')),

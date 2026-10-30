@@ -576,3 +576,19 @@
 @media (min-width:900px){
   .linea>.cant-inp,.linea>.precio-inp,.linea .linea-nombre,.linea .linea-x{min-height:40px}
 }
+
+/* Cierre de la cuenta como tiquete: línea negra fina, neto e IVA en pequeño y el total sin recuadros */
+.cuenta-pie{border-top:1.5px solid var(--tinta);background:var(--papel)}
+.desglose{font-size:.85rem;color:var(--tinta2);font-variant-numeric:tabular-nums}
+.desglose>div{display:flex;justify-content:space-between;padding:.05rem 0}
+.pie-cobro{flex-direction:column;align-items:stretch;gap:.35rem}
+.pie-cobro .total-fila{flex-direction:row;justify-content:space-between;align-items:baseline}
+.pie-cobro .btn-cobrar-aside{flex:none;width:100%}
+/* Diseño aprobado: línea negra fina sobre neto e IVA, «Cobrar» en negro y «Anular esta cuenta» como enlace */
+.cuenta-pie{border-top:0;padding-top:.2rem}
+.desglose{border-top:1.5px solid var(--tinta);padding-top:.35rem}
+.pie-cobro .btn-cobrar-aside{background:var(--tinta);border-color:var(--tinta);color:#fff;min-height:46px}
+.pie-cobro .btn-cobrar-aside:hover{background:#000;border-color:#000}
+.pie-cobro .btn-cobrar-aside[disabled]{background:var(--tinta);border-color:var(--tinta);opacity:.35}
+.acciones-cuenta .btn.peligro{background:none;border:0;min-height:36px;color:var(--tinta2);text-decoration:underline;font-weight:500;font-size:.9rem}
+.acciones-cuenta .btn.peligro:hover{color:var(--rojo)}
