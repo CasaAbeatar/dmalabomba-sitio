@@ -81,6 +81,10 @@ table.tabla{width:100%;border-collapse:collapse;font-size:.95rem}
 .cab-franja{background:var(--acento);color:var(--acento-texto)}
 .cab-franja-in{max-width:1400px;margin:0 auto;padding:.1rem 1rem;min-height:26px;display:flex;align-items:center;justify-content:space-between;gap:.6rem}
 .cab-emp{font-size:.88rem;font-weight:700;letter-spacing:.04em;text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* El nombre del negocio y el logo son botones que llevan al inicio: se ven como texto y como imagen, con área de toque cómoda */
+button.cab-emp{appearance:none;background:none;border:0;color:inherit;font-family:inherit;text-align:left;padding:.4rem 0;margin:-.4rem 0;cursor:pointer;border-radius:4px;max-width:70%}
+button.cab-emp:hover{text-decoration:underline}
+button.marca{appearance:none;background:none;border:0;padding:0;color:inherit;cursor:pointer;border-radius:6px}
 .cab-franja .amb{flex:0 0 auto;font-size:.74rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;border-radius:6px;padding:.05rem .5rem;white-space:nowrap}
 .cab-franja .amb-prueba{background:#1d1a17;color:#f3a62c;border:1px solid #1d1a17}
 .cab-franja .amb-prod{background:#fff;color:var(--rojo-osc);border:1px solid #fff}
@@ -183,19 +187,18 @@ main#vista{max-width:1400px;margin:0 auto;padding:1rem}
 .login .logos img{height:54px}
 .login h1{text-align:center;margin-bottom:.2rem}
 .login p.sub{text-align:center;color:var(--tinta2);margin:0 0 1.2rem}
-.pin-puntos{display:flex;justify-content:center;gap:.9rem;margin:.9rem 0}
-.pin-puntos i{width:16px;height:16px;border-radius:50%;border:1.5px solid var(--borde-control,#8f8672);display:block}
-.pin-puntos i.lleno{background:var(--rojo);border-color:var(--rojo)}
-.teclado{display:grid;grid-template-columns:repeat(3,1fr);gap:.6rem}
-.teclado button{min-height:62px;font-size:1.5rem;font-weight:600;border:1px solid var(--borde-control,#8f8672);background:#fff;border-radius:var(--r);cursor:pointer}
-.teclado button:active{background:var(--rojo-suave)}
-.teclado button.texto{font-size:.95rem}
+/* PIN: un campo común que se escribe con el teclado. Con el celular sale el teclado de números. */
+.login .etq{margin:0 0 .8rem}
+.campo.campo-pin{min-height:56px;font-size:1.6rem;font-weight:600;text-align:center;letter-spacing:.45em}
+.campo.campo-pin::placeholder{font-size:1rem;font-weight:400;letter-spacing:normal}
+.entrar-boton{width:100%;margin-top:.4rem}
 .login .entrando{margin:.4rem 0;text-align:center;color:var(--tinta2);font-weight:600}
 /* Entrada por empresa: paso del código y empresa reconocida */
-.campo.grande{min-height:64px;font-size:1.5rem;font-weight:600;text-align:center;letter-spacing:.03em}
-.login .emp-etq{font-size:1.05rem;text-align:center}
-.emp-ayuda{margin:.5rem 0 0;color:var(--tinta2);text-align:center;font-size:.95rem}
-.emp-seguir{width:100%;margin-top:.9rem}
+.emp-opciones{display:grid;gap:.8rem}
+.emp-opcion{display:flex;align-items:center;gap:1rem;width:100%;min-height:76px;padding:.8rem 1.1rem;border:1.5px solid var(--borde-control,#8f8672);border-left:7px solid var(--rojo);border-radius:var(--r);background:#fff;text-align:left;cursor:pointer;font:inherit}
+.emp-opcion[data-emp=soda]{border-left-color:var(--ambar)}
+.emp-opcion:active{background:var(--rojo-suave)}
+.emp-opcion:disabled{opacity:.5;cursor:wait}
 .emp-aviso{margin:.7rem 0 0;padding:.75rem .9rem;border:1px solid var(--borde-ambar);background:var(--ambar-suave);border-radius:var(--r);color:#5c3b00;font-weight:600}
 .login.login-usuario{max-width:420px}
 .emp-reconocida{display:grid;grid-template-columns:auto 1fr;gap:.6rem .9rem;align-items:center;padding:.9rem 1rem;margin-bottom:1rem;border:1.5px solid var(--borde-control,#8f8672);border-left:7px solid var(--rojo);border-radius:var(--r);background:#fff}
@@ -207,7 +210,6 @@ main#vista{max-width:1400px;margin:0 auto;padding:1rem}
 .emp-ced{font-size:.9rem;color:var(--tinta2)}
 .emp-cambiar{grid-column:1 / -1;width:100%;min-height:52px}
 .sv-quien{display:grid;gap:.15rem;margin:0 0 .5rem;color:var(--tinta2)}
-.teclado button:disabled{opacity:.5;cursor:wait}
 .error-caja{margin:.6rem 0;padding:.7rem .9rem;border:1px solid #e9b3b7;background:var(--rojo-suave);border-radius:var(--r);color:var(--rojo-osc);font-weight:500}
 
 /* Buscadores: sin la «x» pequeña del navegador; el borrado se hace con el botón escrito «Borrar búsqueda» */
