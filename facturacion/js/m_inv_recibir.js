@@ -259,7 +259,7 @@ export async function abrirFactura(ctx, clave, { previa = null } = {}) {
         ? h('button.btn', { type: 'button', onclick: () => ctx.app.ir('recepcion', { clave: f.clave, buscar: numFactura(f.consecutivo) }) }, 'Ir a Contable (factura N.° ' + numFactura(f.consecutivo) + ')')
         : h('p.tenue.inv-chico', 'Esta factura es de ' + (f.sociedad_nombre || 'la otra empresa') + ': en Contable se responde desde una sesión de esa empresa.')),
       pend.length ? h('section.inv-grupo', h('h3', 'Líneas por recibir', h('span.inv-cuenta', String(pend.length))),
-        puede ? h('p.tenue.inv-chico', 'Escoja el rubro de cada línea y marque «Recibir esta línea»: el artículo se crea solo con el nombre de la factura y de él salen la bolsa, dónde se guarda y cuánto dura. «Detalles» solo se abre si hay algo que corregir. Los costos son sin IVA.') : null,
+        puede ? h('p.tenue.inv-chico', 'Escoja el rubro de cada línea y marque «Recibir». Entra por su valor sin IVA a la bolsa del rubro.') : null,
         h('div.inv-lineas-acciones', puede ? marcarTodas : null, ignorarToda),
         h('div.inv-lineas', formas.map((x) => x.el)),
         puede ? h('div.inv-barra-recibir',
@@ -303,7 +303,7 @@ export async function abrirFactura(ctx, clave, { previa = null } = {}) {
     const nombreNuevo = h('input.campo', { type: 'text', maxlength: 120, autocomplete: 'off', 'aria-label': 'Nombre del artículo de la línea ' + l.linea, value: (sug.articulo || l.descripcion || '').slice(0, 120) });
     // Lo que la persona decide es el rubro, y de él sale la bolsa (comida preparada, unitario o suministro). El nombre interno del artículo se toma de la factura y solo se cambia en «Detalles».
     const bolsaEl = h('span.inv-bolsa-dice');
-    const pintarBolsa = () => { const c = (cat.categorias || []).find((x) => x.id === rubro.value); bolsaEl.textContent = c ? 'Va a la bolsa: ' + (GRUPOS[c.grupo] || 'sin bolsa') + (c.grupo === 'unitario' ? '' : ' (se lleva en colones)') : ''; filaNombre.hidden = !!art || !c || c.grupo !== 'unitario'; };
+    const pintarBolsa = () => { const c = (cat.categorias || []).find((x) => x.id === rubro.value); bolsaEl.textContent = c ? 'Va a la bolsa: ' + (GRUPOS[c.grupo] || 'sin bolsa') + (c.grupo === 'unitario' ? '' : ' (se lleva en colones)') : ''; filaNombre.hidden = !!art || !c || c.grupo !== 'unitario'; el.classList.toggle('por-valor', !!c && c.grupo !== 'unitario'); };
     rubro.addEventListener('change', () => { errorRubro.textContent = ''; pintarBolsa(); });
     const filaRubro = h('div.inv-rubro-fila', h('label.etq', h('span', 'Rubro'), rubro), bolsaEl);
     const filaNombre = h('label.etq.inv-c-nombre', h('span', 'Nombre interno del artículo (sale de la factura; cámbielo solo si hace falta)'), nombreNuevo);
@@ -334,7 +334,7 @@ export async function abrirFactura(ctx, clave, { previa = null } = {}) {
     const resumen = h('p.tenue.inv-chico.inv-resumen-simple');
     const el = h('article.inv-linea' + (simple ? '.inv-simple' : ''), { 'data-linea': l.linea },
       h('div.inv-linea-cab',
-        h('label.inv-recibir-chk', chk, h('span', 'Recibir esta línea')),
+        h('label.inv-recibir-chk', chk, h('span', 'Recibir')),
         descLinea(l)),
       sugTxt ? h('p.inv-sug' + (sug.no_inventario ? '.no-inv' : ''), h('span.inv-sug-et', 'Sugerencia: '), sugTxt) : null,
       resumen,
