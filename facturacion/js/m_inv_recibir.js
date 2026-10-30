@@ -259,7 +259,7 @@ export async function abrirFactura(ctx, clave, { previa = null } = {}) {
         ? h('button.btn', { type: 'button', onclick: () => ctx.app.ir('recepcion', { clave: f.clave, buscar: numFactura(f.consecutivo) }) }, 'Ir a Contable (factura N.° ' + numFactura(f.consecutivo) + ')')
         : h('p.tenue.inv-chico', 'Esta factura es de ' + (f.sociedad_nombre || 'la otra empresa') + ': en Contable se responde desde una sesión de esa empresa.')),
       pend.length ? h('section.inv-grupo', h('h3', 'Líneas por recibir', h('span.inv-cuenta', String(pend.length))),
-        puede ? h('p.tenue.inv-chico', 'Escoja el rubro de cada línea y marque «Recibir». Entra por su valor sin IVA a la bolsa del rubro.') : null,
+        puede ? h('p.tenue.inv-chico', 'Toque la bolsa de cada línea. Lo que no es de inventario (costos, servicios) va en «No es de inventario».') : null,
         h('div.inv-lineas-acciones', puede ? marcarTodas : null, ignorarToda),
         h('div.inv-lineas', formas.map((x) => x.el)),
         puede ? h('div.inv-barra-recibir',
@@ -304,7 +304,7 @@ export async function abrirFactura(ctx, clave, { previa = null } = {}) {
     // Lo que la persona decide es el rubro, y de él sale la bolsa (comida preparada, unitario o suministro). El nombre interno del artículo se toma de la factura y solo se cambia en «Detalles».
     const bolsaEl = h('span.inv-bolsa-dice');
     const pintarBolsa = () => { const c = (cat.categorias || []).find((x) => x.id === rubro.value); bolsaEl.textContent = c ? 'Va a la bolsa: ' + (GRUPOS[c.grupo] || 'sin bolsa') + (c.grupo === 'unitario' ? '' : ' (se lleva en colones)') : ''; filaNombre.hidden = !!art || !c || c.grupo !== 'unitario'; el.classList.toggle('por-valor', !!c && c.grupo !== 'unitario'); };
-    rubro.addEventListener('change', () => { errorRubro.textContent = ''; pintarBolsa(); });
+    rubro.addEventListener('change', () => { errorRubro.textContent = ''; pintarBolsa(); if (rubro.value && bolsa && !chk.checked && !art) { chk.checked = true; chk.dispatchEvent(new Event('change')); } });
     const filaRubro = h('div.inv-rubro-fila', h('label.etq', h('span', 'Rubro'), rubro), bolsaEl);
     const filaNombre = h('label.etq.inv-c-nombre', h('span', 'Nombre interno del artículo (sale de la factura; cámbielo solo si hace falta)'), nombreNuevo);
     const errorRubro = h('small.inv-eco.mal');
@@ -322,6 +322,20 @@ export async function abrirFactura(ctx, clave, { previa = null } = {}) {
     const costoDet = h('details.inv-corregir', h('summary', 'Corregir el costo'), h('label.etq', 'Costo sin IVA por unidad del artículo (₡)', costoInput, h('small', 'Solo si el costo de la factura no es el correcto. Déjelo vacío para usar el de la factura.')));
     const zona = h('div');
     const ignorarBtn = h('button.btn' + (sug.no_inventario ? '.ambar' : ''), { type: 'button', onclick: () => pedirIgnorar(ctx, f, [l.linea], () => cargar()) }, 'No es de inventario');
+    // Cada línea se manda a una bolsa con un toque; el rubro (desglose dentro de la bolsa) sale después
+    const grupoDeRubro = (id) => (cat.categorias || []).find((x) => x.id === id)?.grupo || '';
+    let bolsa = grupoDeRubro(rubro.value);
+    const llenarRubros = (g) => { const v = rubro.value; rubro.replaceChildren(h('option', { value: '' }, 'Escoja el rubro…'), ...(cat.categorias || []).filter((c) => c.activo !== false && c.grupo === g).map((c) => h('option', { value: c.id }, c.nombre))); rubro.value = grupoDeRubro(v) === g ? v : ''; if (!rubro.value) { const op = [...rubro.options].filter((o) => o.value); if (op.length === 1) rubro.value = op[0].value; } };
+    const botonesBolsa = ['comida_preparada', 'unitario', 'suministro'].map((g) => h('button.btn.inv-bolsa-btn', { type: 'button', 'data-g': g, onclick: () => elegirBolsa(g) }, GRUPOS[g]));
+    const filaBolsas = h('div.inv-bolsas', { role: 'group', 'aria-label': 'Bolsa de la línea ' + l.linea }, ...botonesBolsa);
+    const pintarBotones = () => { botonesBolsa.forEach((b) => b.setAttribute('aria-pressed', String(chk.checked && bolsa === b.dataset.g))); filaRubro.classList.toggle('sin-bolsa', !bolsa); el.dataset.bolsa = bolsa; };
+    function elegirBolsa(g) {
+      if (chk.checked && bolsa === g) { chk.checked = false; el.classList.remove('marcada'); pintarBotones(); cambio(); return; }
+      bolsa = g; errorRubro.textContent = '';
+      if (art && grupoDe(cat, art) !== g) { art = null; pintarArticulo(true); }
+      llenarRubros(g); pintarBolsa(); pintarBotones();
+      if (rubro.value) { if (!chk.checked) { chk.checked = true; chk.dispatchEvent(new Event('change')); } } else rubro.focus();
+    }
     const campos = h('div.inv-linea-campos',
       h('label.etq.inv-c-conv', h('span', 'Conversión'), h('span.inv-con-unidad', h('span.inv-pre', 'Cada «' + (l.unidad || 'unidad') + '» de la factura trae'), factor, h('span.inv-unidad.inv-u-art')), factorEco),
       h('label.etq.inv-c-ubic', 'Dónde se guarda', ubic),
@@ -337,6 +351,7 @@ export async function abrirFactura(ctx, clave, { previa = null } = {}) {
         h('label.inv-recibir-chk', chk, h('span', 'Recibir')),
         descLinea(l)),
       sugTxt ? h('p.inv-sug' + (sug.no_inventario ? '.no-inv' : ''), h('span.inv-sug-et', 'Sugerencia: '), sugTxt) : null,
+      filaBolsas,
       resumen,
       filaRubro, errorRubro,
       h('div.inv-fila-cant', cantidad.el),
@@ -465,7 +480,8 @@ export async function abrirFactura(ctx, clave, { previa = null } = {}) {
     function guardarEstado() {
       memoria.set(l.linea, { art, factor: factor.value, cantidad: cantidad.leer(), tocada: cantidadTocada, ubic: ubic.value, vence: vence.value, editada: venceEditada, noVence: noVence.checked, costoAbierto: costoDet.open, costo: costoInput.value, marcada: chk.checked });
     }
-    pintarArticulo(true); pintarBolsa();
+    if (bolsa) llenarRubros(bolsa); else if (art) bolsa = grupoDe(cat, art) || '';
+    pintarArticulo(true); pintarBolsa(); pintarBotones();
     const previo = memoria.get(l.linea);
     if (previo) {
       if (previo.art) { art = articulos.find((a) => a.id === previo.art.id) || previo.art; pintarArticulo(false); }
@@ -476,6 +492,7 @@ export async function abrirFactura(ctx, clave, { previa = null } = {}) {
       chk.checked = previo.marcada && !!art; el.classList.toggle('marcada', chk.checked);
       pintarFactor(); pintarCosto(); pintarVence();
     }
+    el.addEventListener('change', () => setTimeout(pintarBotones, 0)); chk.addEventListener('change', () => setTimeout(pintarBotones, 0));
     el.addEventListener('input', guardarEstado); el.addEventListener('change', guardarEstado); costoDet.addEventListener('toggle', guardarEstado);
     return {
       el,
