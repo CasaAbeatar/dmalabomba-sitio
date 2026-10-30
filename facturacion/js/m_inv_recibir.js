@@ -135,7 +135,7 @@ async function abrirLista(ctx) {
       h('ul.inv-fac-lineas', (f.lineas || []).slice(0, 8).map((l) => h('li', h('span.inv-fl-desc', l.descripcion), h('span.inv-fl-sug' + (sugRecibe(l) ? '' : '.sin'), sugTexto(l)), h('span.tenue.cifra', num(l.cantidad, 3) + ' ' + (l.unidad || ''))))),
       (f.lineas || []).length > 8 ? h('p.tenue.inv-chico', 'y ' + plural(f.lineas.length - 8, 'línea más', 'líneas más')) : null,
       h('div.inv-fac-btns',
-        puede && (f.lineas || []).some(sugRecibe) ? h('button.btn.primario', { type: 'button', onclick: () => abrirFactura(ctx, f.clave, { previa: f, recibirSugeridas: true }) }, (f.lineas || []).every(sugRecibe) ? 'Recibir todas las líneas' : 'Recibir las líneas con sugerencia') : null,
+        puede && (f.lineas || []).some(sugRecibe) ? h('button.btn.primario', { type: 'button', onclick: () => abrirFactura(ctx, f.clave, { previa: f, recibirSugeridas: true, alRecibir: () => cargar() }) }, (f.lineas || []).every(sugRecibe) ? 'Recibir todas las líneas' : 'Recibir las líneas con sugerencia') : null,
         h('button.btn', { type: 'button', onclick: () => abrirFactura(ctx, f.clave, { previa: f }) }, puede ? 'Escoger qué líneas recibir' : 'Ver la factura'),
         ignorarToda));
   }
@@ -192,13 +192,15 @@ export function pedirIgnorar(ctx, f, lineas, alTerminar) {
 /* =====================================================================================================================
    Ventana de una factura: recibir sus líneas
    ===================================================================================================================== */
-export async function abrirFactura(ctx, clave, { previa = null, recibirSugeridas = false } = {}) {
+export async function abrirFactura(ctx, clave, { previa = null, recibirSugeridas = false, alRecibir = null } = {}) {
   let autoRecibir = recibirSugeridas;
+  let silencioso = recibirSugeridas; // «Recibir todas» desde la lista: no se abre la ventana salvo que algo necesite revisarse
   const cat = ctx.cat;
   let vivo = true;
   const cuerpo = h('div.inv-factura', cargando('Cargando la factura…'));
   const resultado = h('div.inv-resultado', { 'aria-live': 'polite' });
-  ventana({ titulo: 'Factura de proveedor', volver: 'Por recibir', contenido: [resultado, cuerpo], alCerrar: () => { vivo = false; } });
+  const mostrar = () => { if (!silencioso) return; silencioso = false; ventana({ titulo: 'Factura de proveedor', volver: 'Por recibir', contenido: [resultado, cuerpo], alCerrar: () => { vivo = false; } }); };
+  if (!silencioso) { silencioso = true; mostrar(); }
   const recordados = new Map(); // línea -> sugerencia que trajo la lista (por si la consulta de la factura no la repite)
   (previa?.lineas || []).forEach((l) => recordados.set(l.linea, l.sugerencia));
   let articulos = [];
@@ -235,8 +237,10 @@ export async function abrirFactura(ctx, clave, { previa = null, recibirSugeridas
         if (problemas.length) { sel.find((x) => x.problema())?.enfocarProblema(); throw new Error(problemas[0]); }
         return inv.recibir(sel.map((x) => ({ ...x.datos(), recordar: recordar.checked })), idem);
       },
+      alFallar: () => mostrar(),
       alTerminar: async (r, { repetida }) => {
         const rec = r.recibidas || [];
+        if (silencioso) { silencioso = false; vivo = false; ctx.articulos.olvidar(); toastOk((rec.length === 1 ? 'Se recibió 1 línea' : 'Se recibieron ' + rec.length + ' líneas') + ' de ' + proveedorTxt(f.proveedor_nombre) + '.' + repetidaTxt(repetida)); alRecibir?.(); return; }
         poner(resultado, aviso('ok',
           h('p', h('strong', rec.length === 1 ? 'Se recibió 1 línea.' : 'Se recibieron ' + rec.length + ' líneas.'), repetidaTxt(repetida)),
           h('ul.inv-res-lista', rec.map((x) => h('li', `Línea ${x.linea}: ${x.articulo}, ${cantTxt(x.cantidad, x.unidad)} a ${x.ubicacion}` + (x.vence_en ? ', vence el ' + dma(x.vence_en) : ', no vence') + `, ${costoTxt(x.costo_unitario)} por ${unidadTxt(x.unidad, 1)} (${money(x.valor)} sin IVA). Empresa de origen: ${x.sociedad_origen_nombre || 'sin dato'}.`))),
@@ -283,7 +287,7 @@ export async function abrirFactura(ctx, clave, { previa = null, recibirSugeridas
         for (const x of formas) if (x.sugerida()) await x.marcarOCrear();
         contar();
         const sel = marcadas();
-        if (sel.length && sel.every((x) => !x.problema())) accRecibir.ejecutar();
+        if (sel.length && sel.every((x) => !x.problema())) { const r = await accRecibir.ejecutar(); if (r == null) mostrar(); } else mostrar();
       })();
     }
   }
