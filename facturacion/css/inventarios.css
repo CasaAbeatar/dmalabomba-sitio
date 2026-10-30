@@ -502,3 +502,24 @@ body:has(.inv-fondo) .cabecera:has(.cab-usuario.abierto){z-index:120}
   .inv-simple .inv-rubro-fila,.inv-simple.por-valor .inv-rubro-fila{grid-column:1/-1}
   .inv-simple .inv-linea-pie{grid-column:1/-1}
 }
+.inv-bolsas .inv-bolsa-btn[aria-pressed="true"]{background:var(--tinta,#1b1b1b);border-color:var(--tinta,#1b1b1b);color:#fff}
+
+/* Versión final: una fila por línea con Rubro y Categoría sugeridos, «Recibir» y «No es de inventario» */
+.inv-linea.inv-simple{grid-template-columns:minmax(0,2fr) minmax(0,3fr) auto auto;gap:.2rem .7rem}
+.inv-simple .inv-recibir-chk{display:flex;grid-row:1;grid-column:3;min-height:44px;padding:.2rem .7rem}
+.inv-simple .inv-linea-desc{grid-row:1;grid-column:1}
+.inv-simple .inv-rubro-fila,.inv-simple.por-valor .inv-rubro-fila,.inv-simple.en-colones .inv-rubro-fila{grid-row:1;grid-column:2;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:.5rem}
+.inv-simple .inv-rubro-fila .etq>span{display:block;font-size:.74rem;font-weight:600;color:var(--tinta2)}
+.inv-simple .inv-rubro-fila .campo{min-height:44px}
+.inv-simple .inv-linea-pie{grid-row:1;grid-column:4}
+.inv-simple .inv-sug:not(.no-inv){display:block;grid-column:1/-1;padding:.15rem .5rem;font-size:.78rem}
+.inv-simple .inv-fila-cant{grid-row:2;grid-column:1/-1}
+.inv-simple:not([data-bolsa="unitario"]) .inv-fila-cant{display:none}
+@media(max-width:900px){
+  .inv-linea.inv-simple{grid-template-columns:minmax(0,1fr) auto}
+  .inv-simple .inv-linea-desc,.inv-simple .inv-rubro-fila,.inv-simple.por-valor .inv-rubro-fila{grid-row:auto;grid-column:1/-1}
+  .inv-simple .inv-recibir-chk{grid-row:auto;grid-column:1}
+  .inv-simple .inv-linea-pie{grid-row:auto;grid-column:2}
+  .inv-simple .inv-fila-cant{grid-row:auto}
+}
+@media(max-width:560px){.inv-simple .inv-rubro-fila{grid-template-columns:minmax(0,1fr)}}

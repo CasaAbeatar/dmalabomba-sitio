@@ -304,7 +304,7 @@ export async function abrirFactura(ctx, clave, { previa = null } = {}) {
     // Lo que la persona decide es el rubro, y de él sale la bolsa (comida preparada, unitario o suministro). El nombre interno del artículo se toma de la factura y solo se cambia en «Detalles».
     const bolsaEl = h('span.inv-bolsa-dice');
     const pintarBolsa = () => { const c = (cat.categorias || []).find((x) => x.id === rubro.value); bolsaEl.textContent = c ? 'Va a la bolsa: ' + (GRUPOS[c.grupo] || 'sin bolsa') + (c.grupo === 'unitario' ? '' : ' (se lleva en colones)') : ''; filaNombre.hidden = !!art || !c || c.grupo !== 'unitario'; el.classList.toggle('por-valor', !!c && c.grupo !== 'unitario'); };
-    rubro.addEventListener('change', () => { errorRubro.textContent = ''; pintarBolsa(); if (rubro.value && bolsa && !chk.checked && !art) { chk.checked = true; chk.dispatchEvent(new Event('change')); } });
+    rubro.addEventListener('change', () => { errorRubro.textContent = ''; if (art && art.categoria_id !== rubro.value) { art = null; chk.checked = false; el.classList.remove('marcada'); pintarArticulo(true); rubro.value = rubro.value; cambio(); } pintarBolsa(); pintarBotones(); });
     const filaRubro = h('div.inv-rubro-fila', h('label.etq', h('span', 'Rubro'), rubro), bolsaEl);
     const filaNombre = h('label.etq.inv-c-nombre', h('span', 'Nombre interno del artículo (sale de la factura; cámbielo solo si hace falta)'), nombreNuevo);
     const errorRubro = h('small.inv-eco.mal');
@@ -322,20 +322,14 @@ export async function abrirFactura(ctx, clave, { previa = null } = {}) {
     const costoDet = h('details.inv-corregir', h('summary', 'Corregir el costo'), h('label.etq', 'Costo sin IVA por unidad del artículo (₡)', costoInput, h('small', 'Solo si el costo de la factura no es el correcto. Déjelo vacío para usar el de la factura.')));
     const zona = h('div');
     const ignorarBtn = h('button.btn' + (sug.no_inventario ? '.ambar' : ''), { type: 'button', onclick: () => pedirIgnorar(ctx, f, [l.linea], () => cargar()) }, 'No es de inventario');
-    // Cada línea se manda a una bolsa con un toque; el rubro (desglose dentro de la bolsa) sale después
+    // Dos decisiones por línea, las dos ya sugeridas: el rubro (por CABYS o memoria) y la categoría (la bolsa a la que pertenece ese rubro)
     const grupoDeRubro = (id) => (cat.categorias || []).find((x) => x.id === id)?.grupo || '';
     let bolsa = grupoDeRubro(rubro.value);
-    const llenarRubros = (g) => { const v = rubro.value; rubro.replaceChildren(h('option', { value: '' }, 'Escoja el rubro…'), ...(cat.categorias || []).filter((c) => c.activo !== false && c.grupo === g).map((c) => h('option', { value: c.id }, c.nombre))); rubro.value = grupoDeRubro(v) === g ? v : ''; if (!rubro.value) { const op = [...rubro.options].filter((o) => o.value); if (op.length === 1) rubro.value = op[0].value; } };
-    const botonesBolsa = ['comida_preparada', 'unitario', 'suministro'].map((g) => h('button.btn.inv-bolsa-btn', { type: 'button', 'data-g': g, onclick: () => elegirBolsa(g) }, GRUPOS[g]));
-    const filaBolsas = h('div.inv-bolsas', { role: 'group', 'aria-label': 'Bolsa de la línea ' + l.linea }, ...botonesBolsa);
-    const pintarBotones = () => { botonesBolsa.forEach((b) => b.setAttribute('aria-pressed', String(chk.checked && bolsa === b.dataset.g))); filaRubro.classList.toggle('sin-bolsa', !bolsa); el.dataset.bolsa = bolsa; };
-    function elegirBolsa(g) {
-      if (chk.checked && bolsa === g) { chk.checked = false; el.classList.remove('marcada'); pintarBotones(); cambio(); return; }
-      bolsa = g; errorRubro.textContent = '';
-      if (art && grupoDe(cat, art) !== g) { art = null; pintarArticulo(true); }
-      llenarRubros(g); pintarBolsa(); pintarBotones();
-      if (rubro.value) { if (!chk.checked) { chk.checked = true; chk.dispatchEvent(new Event('change')); } } else rubro.focus();
-    }
+    const selCat = h('select.campo', { 'aria-label': 'Categoría de la línea ' + l.linea }, ...['comida_preparada', 'unitario', 'suministro'].map((g) => h('option', { value: g }, GRUPOS[g])));
+    const llenarRubros = (g) => { const v = rubro.value; rubro.replaceChildren(h('option', { value: '' }, 'Escoja el rubro…'), ...(cat.categorias || []).filter((c) => c.activo !== false && c.grupo === g).map((c) => h('option', { value: c.id }, c.nombre))); rubro.value = grupoDeRubro(v) === g ? v : ''; if (!rubro.value) { const op = [...rubro.options].filter((o) => o.value); const sg = sug.categoria_id && op.find((o) => o.value === sug.categoria_id); rubro.value = sg ? sg.value : op[0]?.value || ''; } };
+    const pintarBotones = () => { bolsa = grupoDeRubro(rubro.value) || bolsa; selCat.value = bolsa || ''; el.dataset.bolsa = bolsa; };
+    selCat.addEventListener('change', () => { bolsa = selCat.value; errorRubro.textContent = ''; if (art && grupoDe(cat, art) !== bolsa) { art = null; pintarArticulo(true); } llenarRubros(bolsa); pintarBolsa(); pintarBotones(); });
+    filaRubro.append(h('label.etq', h('span', 'Categoría'), selCat));
     const campos = h('div.inv-linea-campos',
       h('label.etq.inv-c-conv', h('span', 'Conversión'), h('span.inv-con-unidad', h('span.inv-pre', 'Cada «' + (l.unidad || 'unidad') + '» de la factura trae'), factor, h('span.inv-unidad.inv-u-art')), factorEco),
       h('label.etq.inv-c-ubic', 'Dónde se guarda', ubic),
@@ -351,7 +345,6 @@ export async function abrirFactura(ctx, clave, { previa = null } = {}) {
         h('label.inv-recibir-chk', chk, h('span', 'Recibir')),
         descLinea(l)),
       sugTxt ? h('p.inv-sug' + (sug.no_inventario ? '.no-inv' : ''), h('span.inv-sug-et', 'Sugerencia: '), sugTxt) : null,
-      filaBolsas,
       resumen,
       filaRubro, errorRubro,
       h('div.inv-fila-cant', cantidad.el),
@@ -363,7 +356,7 @@ export async function abrirFactura(ctx, clave, { previa = null } = {}) {
       el.classList.toggle('en-colones', enColones());
       nombreArt.classList.toggle('falta', !art);
       btnArt.textContent = art ? 'Cambiar artículo' : 'Escoger uno que ya existe';
-      filaRubro.hidden = !!art; filaNombre.hidden = true; errorRubro.textContent = ''; if (art && art.categoria_id) rubro.value = art.categoria_id;
+      filaRubro.hidden = !!art && !simple; filaNombre.hidden = true; errorRubro.textContent = ''; if (art && art.categoria_id) rubro.value = art.categoria_id;
       el.querySelector('.inv-u-art').textContent = art ? unidadTxt(art.unidad, 2) + ' del artículo' : 'del artículo';
       cantidad.unidad(art?.unidad || '');
       el.dataset.grupo = grupoDe(cat, art) || '';
@@ -435,7 +428,7 @@ export async function abrirFactura(ctx, clave, { previa = null } = {}) {
     factor.addEventListener('input', () => { cantidadTocada = false; const fv = leerFactor(); if (Number.isFinite(fv) && fv > 0) cantidad.poner(Math.round(Number(l.cantidad) * fv * 1000) / 1000); pintarFactor(); pintarCosto(); cambio(); });
     chk.addEventListener('change', async () => {
       if (chk.checked && !art) { chk.checked = false; if (await asegurarArticulo()) chk.checked = true; }
-      el.classList.toggle('marcada', chk.checked); cambio();
+      el.classList.toggle('marcada', chk.checked); pintarBotones(); cambio();
     });
     // Sin artículo todavía: se crea con el nombre y el rubro de esta línea (o se usa el que ya tenga ese nombre) y se llenan solos la bolsa, dónde se guarda y el vencimiento
     async function asegurarArticulo() {
@@ -498,7 +491,7 @@ export async function abrirFactura(ctx, clave, { previa = null } = {}) {
       el,
       marcada: () => chk.checked,
       marcarSiTiene: () => { if (art) { chk.checked = true; el.classList.add('marcada'); } },
-      marcarOCrear: async () => { if (art || rubro.value) { if (await asegurarArticulo()) { chk.checked = true; el.classList.add('marcada'); } } },
+      marcarOCrear: async () => { if (art || rubro.value) { if (await asegurarArticulo()) { chk.checked = true; el.classList.add('marcada'); pintarBotones(); } } },
       alCambiar: (fn) => avisarCambio.push(fn),
       problema() {
         if (!art) return 'Línea ' + l.linea + ': escoja el artículo.';
