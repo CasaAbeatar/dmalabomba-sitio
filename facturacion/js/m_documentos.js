@@ -996,8 +996,9 @@ export default {
           // Si no se pudieron leer las notas del documento, se dice: los botones quedan activos y es la base la que rechaza lo que no corresponda
           !ctx.saldos && !ctx.falloNC ? h('div.doc-espera-caja', { role: 'note' }, h('p', h('b', 'No se pudo comprobar si tiene devoluciones.')), h('p', 'Revise la conexión. Mientras tanto no dé por hecho que no tiene devoluciones ni correcciones; si no corresponde, el sistema no deja anular.'),
             h('div.doc-botones', h('button.btn', { type: 'button', 'data-reintentar': '1', onclick: (e) => ejecutar(e.currentTarget, () => ctx.repintar()) }, 'Intentar de nuevo'))) : null,
+          // (su botón lleva otra marca que el del aviso de arriba: hacen lo mismo, pero así cada uno se encuentra solo)
           sinComprobar ? h('div.doc-espera-caja', { role: 'note' }, h('p', h('b', 'No se puede anular ni corregir todavía.')), h('p', 'Primero hay que comprobar si este documento ya está anulado y no se pudo. Revise la conexión y toque «Intentar de nuevo».'),
-            h('div.doc-botones', h('button.btn', { type: 'button', 'data-reintentar': '1', onclick: (e) => ejecutar(e.currentTarget, () => ctx.repintar()) }, 'Intentar de nuevo'))) : null,
+            h('div.doc-botones', h('button.btn', { type: 'button', 'data-reintentar-comprobar': '1', onclick: (e) => ejecutar(e.currentTarget, () => ctx.repintar()) }, 'Intentar de nuevo'))) : null,
           bloq ? h('div.doc-espera-caja', { role: 'note' }, h('p', h('b', 'Este documento no se puede anular completo.')), h('p', permiso.motivo)) : null,
           noNotas ? h('div.doc-espera-caja', { role: 'note' }, h('p', h('b', 'No se puede devolver ni corregir una parte de este documento.')), h('p', motivoNotas)) : null,
           h('div.doc-botones',

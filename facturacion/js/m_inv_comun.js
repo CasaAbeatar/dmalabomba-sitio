@@ -63,7 +63,15 @@ export function venceTxt(dias, venceEn) {
 export const claseVence = (dias, aviso = 2) => (dias == null ? '' : dias < 0 ? 'mal' : dias <= aviso ? 'espera' : '');
 // Número corto del consecutivo de una factura: los últimos 10 dígitos sin ceros a la izquierda
 export const numFactura = (c) => { const n = parseInt(String(c || '').slice(-10), 10); return Number.isFinite(n) ? String(n) : String(c || ''); };
-export const proveedorTxt = (n) => nombrePropio(String(n || 'Proveedor sin nombre'));
+// Proveedor: Hacienda lo trae como «RAZÓN SOCIAL (Nombre comercial)». En bodega se conoce por el nombre comercial: ese va en grande y la razón social debajo.
+export function proveedorPartes(n) {
+  const t = String(n || '').trim();
+  const m = t.match(/^(.*?)\s*\(([^()]+)\)\s*$/);
+  if (!t) return { nombre: 'Proveedor sin nombre', razon: '' };
+  if (!m || !m[1]) return { nombre: nombrePropio(t), razon: '' };
+  return { nombre: nombrePropio(m[2]), razon: nombrePropio(m[1]) };
+}
+export const proveedorTxt = (n) => proveedorPartes(n).nombre;
 const TIPOS_DOC = { FacturaElectronica: 'Factura electrónica', TiqueteElectronico: 'Tiquete electrónico', NotaCreditoElectronica: 'Nota de crédito', NotaDebitoElectronica: 'Nota de débito' };
 export const tipoDocTxt = (t) => TIPOS_DOC[t] || t || 'Comprobante';
 

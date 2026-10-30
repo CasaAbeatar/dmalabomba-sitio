@@ -100,7 +100,6 @@ export default {
           extras.length ? h('div.inv-hoy-extras', extras) : null),
         h('section.inv-secciones', { 'aria-labelledby': 'inv-sec-tit' }, h('h2#inv-sec-tit', '¿Qué quiere hacer?'), menu),
         valor(v));
-      if (pedido?.seccion) { const p = pedido; pedido = null; abrirSeccion(p.seccion, p); }
     }
 
     // Valor del inventario: total, por ubicación y por empresa de origen. Las barras son de línea fina y proporcionales al valor.
@@ -128,6 +127,8 @@ export default {
     const alCambiar = () => { clearTimeout(tCambio); tCambio = setTimeout(() => { if (vivo) cargarHoy(); }, 400); };
     document.addEventListener('inv:cambio', alCambiar);
     await cargarHoy();
+    // Lo que pidió otra pantalla (por ejemplo { seccion: 'factura', clave } desde Contable) se abre aunque lo de hoy no haya cargado
+    if (pedido?.seccion && vivo) { const p = pedido; pedido = null; abrirSeccion(p.seccion, p); }
     return () => { vivo = false; seq++; clearTimeout(tCambio); document.removeEventListener('inv:cambio', alCambiar); };
   },
 };

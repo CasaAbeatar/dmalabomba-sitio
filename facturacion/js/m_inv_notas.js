@@ -3,7 +3,7 @@
 // (fx_inv_nota_ignorar), que se puede volver a revisar (fx_inv_nota_reabrir).
 import { h, money, num, fechaHora } from './util.js';
 import { inv } from './api_inventarios.js';
-import { ventana, dialogo, cargando, falla, vacio, aviso, cantTxt, dma, plural, empresaChip, numFactura, proveedorTxt, tipoDocTxt, selectUbicacion, botonSeguro, accionSegura, repetidaTxt, enfocar, toastOk, poner } from './m_inv_comun.js';
+import { ventana, dialogo, cargando, falla, vacio, aviso, cantTxt, dma, plural, empresaChip, numFactura, proveedorTxt, proveedorPartes, tipoDocTxt, selectUbicacion, botonSeguro, accionSegura, repetidaTxt, enfocar, toastOk, poner } from './m_inv_comun.js';
 
 const ESTADOS = [['por_revisar', 'Por revisar'], ['devuelta', 'Mercadería devuelta'], ['ignorada', 'No afectan el inventario'], ['todas', 'Todas']];
 const ESTADO_TXT = { por_revisar: ['Por revisar', 'espera'], devuelta: ['Mercadería devuelta', 'ok'], ignorada: ['No afecta el inventario', ''] };
@@ -53,7 +53,7 @@ export async function abrir(ctx) {
         })));
     return h('article.inv-nota', { 'data-clave': n.clave },
       h('div.inv-fac-cab',
-        h('div.inv-fac-prov', h('strong', proveedorTxt(n.proveedor_nombre)), h('small', tipoDocTxt(n.tipo) + ' N.° ' + numFactura(n.consecutivo) + ' · ' + dma(n.fecha) + ' · total ' + money(n.total) + (n.moneda && n.moneda !== 'CRC' ? ' (' + n.moneda + ')' : ''))),
+        h('div.inv-fac-prov', h('strong', proveedorTxt(n.proveedor_nombre)), proveedorPartes(n.proveedor_nombre).razon ? h('small', proveedorPartes(n.proveedor_nombre).razon) : null, h('small', tipoDocTxt(n.tipo) + ' N.° ' + numFactura(n.consecutivo) + ' · ' + dma(n.fecha) + ' · total ' + money(n.total) + (n.moneda && n.moneda !== 'CRC' ? ' (' + n.moneda + ')' : ''))),
         h('div.inv-fac-emp', h('small', 'A nombre de'), empresaChip(n.sociedad_nombre, (cat.empresas || []).find((e) => e.id === n.sociedad_id)?.codigo))),
       h('div.inv-fac-estado', h('span.chip' + (cl ? '.' + cl : ''), et), n.motivo ? h('small', 'Motivo: ' + n.motivo) : null, n.decidido_por_nombre ? h('small', 'Lo decidió ' + n.decidido_por_nombre + (n.decidido_en ? ', ' + fechaHora(n.decidido_en) : '')) : null),
       !credito ? aviso('info', h('p', 'Una nota de débito no devuelve mercadería: solo se marca «No afecta el inventario».')) : null,
