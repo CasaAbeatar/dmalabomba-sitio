@@ -22,13 +22,15 @@
 //   destacado     opcional: tarjeta roja (la acción principal)
 //   pantalla      opcional: en lugar de `cargar`, una pantalla que arma main.js con los módulos del grupo (solo 'admin')
 
-// Texto de la insignia de Contable (facturas recibidas por responder y las que vencen pronto), con la cifra que traen fx_alertas o Recepción
+// Texto de la insignia de Contable (facturas recibidas por responder, las que vencen pronto y las que ya vencieron), con la cifra que traen fx_alertas o Recepción.
+// Sigue visible cuando todo lo pendiente ya venció; «vencidas» (plazo ya pasado, llegaron en los últimos 25 días) se distingue de «vencen pronto» (2 días hábiles o menos).
 function insigniaContable(app) {
   const c = app.recepcion;
-  const n = Number(c?.pendientes_en_plazo ?? 0);
-  if (!(n > 0)) return null;
-  const v = Math.min(n, Math.max(0, Number(c?.vencen_pronto ?? 0)));
-  return { texto: n + ' por responder' + (v > 0 ? ' · ' + v + (v === 1 ? ' vence pronto' : ' vencen pronto') : ''), urgente: v > 0 };
+  const n = Math.max(0, Number(c?.pendientes_en_plazo ?? 0) || 0), venc = Math.max(0, Number(c?.vencidas ?? 0) || 0);
+  if (!(n > 0) && !(venc > 0)) return null;
+  const v = Math.min(n, Math.max(0, Number(c?.vencen_pronto ?? 0) || 0));
+  const partes = [n > 0 ? n + ' por responder' : '', v > 0 ? v + (v === 1 ? ' vence pronto' : ' vencen pronto') : '', venc > 0 ? venc + (venc === 1 ? ' vencida' : ' vencidas') : ''].filter(Boolean);
+  return { texto: partes.join(' · '), urgente: v > 0 || venc > 0 };
 }
 
 export const MODULOS = [

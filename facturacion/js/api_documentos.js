@@ -19,7 +19,8 @@ import { hoyCR, sumaDias, numeroDoc, traducirHacienda } from './util.js';
 export const faltaFuncion = (e) => !!e && (e.codigo === 'PGRST202' || e.codigo === '42883' || e.estado === 404);
 // ¿Es una respuesta de negocio escrita por una función nuestra (código P0001 o PT4xx), con un texto ya en español pensado para mostrarse tal cual?
 // (No es la esErrorDeNegocio de api.js: aquella mira la clase de la falla y también cuenta como «negocio» una función que no existe; esta solo deja pasar lo que escribió una función nuestra.)
-export const esRespuestaDeNegocio = (e) => !!e && /^(P0001|PT[1-4]\d\d)$/.test(String(e.codigo || ''));
+// Además de mirar el código, exige que api.js la haya clasificado como «negocio»: una sesión vencida llega con el código PT401 (también PT4xx) pero NO es una respuesta del negocio, y no debe bloquear nada.
+export const esRespuestaDeNegocio = (e) => !!e && e.tipo === 'negocio' && e.sesion !== true && /^(P0001|PT[1-4]\d\d)$/.test(String(e.codigo || ''));
 
 // Lista del rango. Cada fila trae además nc_id, nc_consecutivo, nc_estado (solo si fue anulada por completo: una devolución parcial deja nc_id en null) y ref_consecutivo, ref_tipo (si es una nota).
 // Llaves nuevas por fila (CONTRATO_NC_SQL.md, 8.2), que valen null o 0 en un documento normal: codigo_referencia, codigo_nombre, nombre_simple (el rótulo en palabras simples), reemplaza_a,
@@ -255,9 +256,11 @@ export async function ventaClonarConCliente(ventaId, clienteId = null) {
 // Copia las líneas de una venta anulada o rechazada a una cuenta nueva (lo que hace «Hacer la venta de nuevo»). NUNCA navega: devuelve el resultado y la pantalla decide.
 //   { ok: true, id, sinCliente }                        la cuenta nueva ya existe (id). sinCliente = se copió sin el cliente elegido, hay que elegirlo en Facturación.
 //   { ok: false, motivo: 'ya_corregida', mensaje }      la base dice que esa venta ya se corrigió con otra venta: no hay nada que rehacer (el texto es el de la base, tal cual).
+//   { ok: false, motivo: 'vigente', mensaje, sinReintento: true }   la base dice que esa venta sigue vigente: primero hay que anularla; el texto es el de la base y no se ofrece «Intentar de nuevo» (daría lo mismo)
 //   { ok: false, motivo: 'sin_funcion', mensaje }       la base todavía no tiene la copia automática: solo en ese caso hay que armar la venta a mano en Facturación.
 //   { ok: false, motivo: 'red' | 'tiempo' | 'error', mensaje }  la copia falló: se dice lo que pasó y se puede intentar de nuevo (la base no duplica: si la cuenta ya se había creado, devuelve esa misma).
 const YA_CORREGIDA = /ya se corrigi[oó] con/i;
+const SIGUE_VIGENTE = /sigue vigente/i; // «La venta … sigue vigente en Hacienda. Para corregirla, primero anúlela…»: repetir la copia dará lo mismo hasta que se anule
 export async function copiarVentaParaRehacer(ventaId, clienteId = null) {
   if (!ventaId) return { ok: false, motivo: 'error', mensaje: 'No se encontró la venta de este documento, así que no se pudo copiar. Ábrala desde Facturación.' };
   let nueva;
@@ -265,6 +268,7 @@ export async function copiarVentaParaRehacer(ventaId, clienteId = null) {
   catch (e) {
     const m = String(e?.message || '');
     if (esRespuestaDeNegocio(e) && YA_CORREGIDA.test(m)) return { ok: false, motivo: 'ya_corregida', mensaje: m };
+    if (esRespuestaDeNegocio(e) && SIGUE_VIGENTE.test(m)) return { ok: false, motivo: 'vigente', mensaje: m, sinReintento: true }; // se muestra el texto de la base tal cual, sin «Intentar de nuevo»
     if (e?.tipo === 'red') return { ok: false, motivo: 'red', mensaje: 'No hay conexión con internet. Revise la conexión e intente de nuevo; si la copia ya se había hecho, no se duplica.' };
     if (e?.tipo === 'tiempo' || e?.tipo === 'ocupado') return { ok: false, motivo: 'tiempo', mensaje: 'La respuesta tardó demasiado. Intente de nuevo; si la copia ya se había hecho, no se duplica.' };
     return { ok: false, motivo: 'error', mensaje: mensajeAmable(e) };

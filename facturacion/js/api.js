@@ -307,6 +307,14 @@ export async function funcion(nombre, cuerpo = {}, opciones = {}) {
 // Código de empresa como lo escribe la persona: sin importar mayúsculas, tildes ni espacios ("Pollós", " POLLOS " y "po llos" son "pollos"). Igual que en el servidor.
 export const normalizarEmpresa = (v) => String(v ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, '').slice(0, 60);
 
+// Token del aparato de confianza (ronda 5): el servidor lo emite al entrar bien y este aparato lo guarda (solo comodidad de seguridad: con \u00e9l, la persona de siempre nunca espera las demoras del ingreso).
+// Se guarda por usuario (cada usuario tiene el suyo). Es un texto base64url. Si el navegador no deja guardar, no pasa nada: el ingreso funciona igual y el servidor emite otro la pr\u00f3xima vez.
+// Al cambiar el PIN, el servidor deja sin valor los tokens de ese usuario; el guardado aqu\u00ed se vuelve in\u00fatil solo y se reemplaza en el siguiente ingreso correcto.
+const APARATO_PREFIJO = 'fx_ap:';
+const aparatoValido = (v) => typeof v === 'string' && /^[A-Za-z0-9_-]{20,64}$/.test(v);
+function aparatoGuardado(usuario) { try { const v = localStorage.getItem(APARATO_PREFIJO + String(usuario || '').toLowerCase()); return aparatoValido(v) ? v : ''; } catch { return ''; } }
+function guardarAparato(usuario, token) { try { if (aparatoValido(token)) localStorage.setItem(APARATO_PREFIJO + String(usuario || '').toLowerCase(), token); } catch { /* sin almacenamiento: el ingreso funciona igual */ } }
+
 // Un intento al servicio de acceso (facturador-acceso): máximo 20 segundos. Devuelve la respuesta y su cuerpo ya leído (j es null si no era JSON).
 async function intentoAcceso(cuerpo) {
   const ctrl = new AbortController();
@@ -350,6 +358,13 @@ const MSG_ACCESO_MUCHOS = 'Hay mucho movimiento en este momento y no se pudo ent
 function errorDeAcceso(r, j) {
   const estado = r.ok ? (ESTADO_DE_MOTIVO[j.motivo] || 400) : r.status;
   const motivo = j.motivo || '';
+  // Ronda 5: el servidor pide esperar unos segundos (demora acotada, no bloqueo). No se repite solo (tipo negocio); la pantalla muestra una cuenta regresiva y vuelve a habilitar el botón.
+  if (r.status === 429 && motivo === 'espera') {
+    const s = Math.max(1, Math.min(60, Number(j.espera) || 5));
+    const e = new ErrorApi(typeof j.error === 'string' && j.error.trim() ? j.error : `Espere ${s} segundos e intente de nuevo.`, { tipo: 'negocio', estado: 429, motivo: 'espera' });
+    e.espera = s;
+    return e;
+  }
   if (r.status === 429) return new ErrorApi(MSG_ACCESO_MUCHOS, { tipo: 'ocupado', estado, motivo });
   if (r.status >= 500) return new ErrorApi(MSG_OCUPADO, { tipo: 'ocupado', estado, motivo });
   if (motivo === 'empresa_desconocida') return new ErrorApi(MSG_EMPRESA_DESCONOCIDA, { tipo: 'negocio', estado, motivo });
@@ -394,12 +409,15 @@ export async function consultarEmpresa(escrito, { alReintentar } = {}) {
 // Devuelve la respuesta del servicio: { ok, nombre, debe_cambiar_pin, empresa?: { id, codigo, codigo_acceso, nombre, nombre_comercial, cedula, ambiente } }.
 // `empresa` puede faltar mientras el servicio de acceso nuevo no esté en marcha: quien llama usa la empresa que ya reconoció en el primer paso.
 export async function entrar(empresa, usuario, pin, { alReintentar } = {}) {
+  const u = String(usuario ?? '');
   return conReintento(async () => {
-    const { r, j } = await intentoAcceso({ empresa: normalizarEmpresa(empresa), usuario, pin });
+    // Se manda el token de este aparato (si lo hay): con él, el servidor salta las demoras del ingreso para esta persona.
+    const { r, j } = await intentoAcceso({ empresa: normalizarEmpresa(empresa), usuario, pin, aparato: aparatoGuardado(u) });
     if (sinRespuestaClara(r, j)) throw MSG_SIN_RESPUESTA(r);
     if (!j.ok) throw errorDeAcceso(r, j);
     const { error } = await sb.auth.setSession({ access_token: j.access_token, refresh_token: j.refresh_token });
     if (error) throw new ErrorApi('No se pudo abrir la sesión. Intente de nuevo.', { tipo: 'ocupado' });
+    if (typeof j.aparato_token === 'string') guardarAparato(u, j.aparato_token); // el servidor emitió un token para este aparato: se guarda para la próxima vez
     sesionRestaurada();
     reintentarSalidas(); // si un cierre de sesión anterior no llegó al servidor, se repite ahora que hay conexión
     return j;

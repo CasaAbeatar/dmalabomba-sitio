@@ -31,7 +31,7 @@
 
 import { api } from './api.js';
 import { tarifaDeLinea } from './iva.js';
-import { textoDireccion as direccionCliente } from './direccion_cliente.js';
+import { textoDireccion as direccionCliente, unirDireccion } from './direccion_cliente.js';
 import { h, esc, money, num, r2, modal, toast, conBoton, textoDeError, fechaCorta, horaCorta, nombrePropio, TIPOS_ID, TIPOS_SERVICIO, MEDIOS } from './util.js';
 
 /* ------------------------------------------------------------------ constantes */
@@ -136,15 +136,9 @@ function direccion(x) {
   if (x.barrio) lugar.push(titulo(x.barrio));
   if (prov === 4 && cant === 10) lugar.push(DISTRITOS_SARAPIQUI[dist] || '', 'Sarapiquí', 'Heredia');
   else if (PROVINCIAS[prov]) lugar.push(PROVINCIAS[prov]);
-  const senas = titulo(x.otras_senas);
-  // si las señas ya mencionan el lugar (p. ej. "Frente a Gasolinera JyJ Horquetas") no se repite, ni tampoco un nombre repetido
-  const vistos = new Set();
-  const resto = lugar.filter((l) => {
-    const k = String(l || '').trim().toLowerCase();
-    if (!k || vistos.has(k) || senas.toLowerCase().includes(k)) return false;
-    vistos.add(k); return true;
-  });
-  return [senas, ...resto].filter(Boolean).join(', ');
+  // si las señas ya mencionan el lugar (p. ej. "Frente a Gasolinera JyJ Horquetas") no se repite, ni tampoco un nombre repetido.
+  // El criterio está en js/direccion_cliente.js (unirDireccion: palabra completa, sin tildes ni mayúsculas) y es el mismo de la dirección del cliente y de fn/pdf.ts.
+  return unirDireccion(titulo(x.otras_senas), lugar);
 }
 const fechaLinea = (d) => d ? fechaCorta(d) + ' ' + horaCorta(d) : '';
 const numCorto = (cons) => { const n = parseInt(String(cons || '').slice(-10), 10); return Number.isFinite(n) ? String(n) : ''; };

@@ -34,7 +34,7 @@ const ESTADO_NOTA = { pendiente: 'Por enviar a Hacienda', enviado: 'Enviada a Ha
 export function textoNota(n) {
   const debito = n.tipo_doc === '02';
   const rotulo = n.nombre_simple || n.codigo_nombre || '';
-  return `${debito ? 'Nota de débito' : 'Nota de crédito'}${rotulo ? ': ' + rotulo : ''} N.° ${numeroCorto(n.consecutivo)} · ${debito ? '+' : '−'}⁠${money(n.total)} ·${ESTADO_NOTA[n.estado] || n.estado}`;
+  return `${debito ? 'Nota de débito' : 'Nota de crédito'}${rotulo ? ': ' + rotulo : ''} N.° ${numeroCorto(n.consecutivo)} · ${debito ? '+' : '−'}⁠${money(n.total)} · ${ESTADO_NOTA[n.estado] || n.estado}`;
 }
 // Lista de las demás notas vivas del documento (devoluciones, correcciones y notas de débito) o null si no tiene ninguna. La anulación total no va aquí: se dice aparte.
 export function listaNotas(saldos) {
@@ -62,12 +62,13 @@ function pagosDe(c) {
   return [...por].filter(([, m]) => m > 0).map(([medio, monto]) => ({ medio, monto }));
 }
 const COMO_DEVOLVER = {
-  efectivo: (m) => `Efectivo ${money(m)}: entréguelo de la caja. El cierre de caja ya lo descuenta, así que no lo anote además como salida de efectivo.`,
+  efectivo: (m, cierre) => `Efectivo ${money(m)}: entréguelo de la caja.${cierre ? ' El cierre de caja ya lo descuenta, así que no lo anote además como salida de efectivo.' : ''}`,
   tarjeta: (m) => `Tarjeta ${money(m)}: la devolución se hace a la misma tarjeta, por el datáfono.`,
   sinpe: (m) => `SINPE Móvil ${money(m)}: devuélvalo por SINPE al mismo número.`,
   transferencia: (m) => `Transferencia ${money(m)}: devuélvala por transferencia a la misma cuenta.`,
 };
-export const lineasDevolver = (pagos) => pagos.map((p) => h('li', (COMO_DEVOLVER[p.medio] || ((m) => `${MEDIOS[p.medio] || p.medio} ${money(m)}: devuélvalo por el mismo medio.`))(p.monto)));
+// cierre = false cuando la nota no entra en ningún cierre de caja (no hay turno abierto) o no se sabe: entonces no se habla del cierre
+export const lineasDevolver = (pagos, { cierre = true } = {}) => pagos.map((p) => h('li', (COMO_DEVOLVER[p.medio] || ((m) => `${MEDIOS[p.medio] || p.medio} ${money(m)}: devuélvalo por el mismo medio.`))(p.monto, cierre)));
 const pagoTxt = (pagos) => pagos.map((p) => `${MEDIOS[p.medio] || p.medio} ${money(p.monto)}`).join(', ');
 
 function bloqueDinero(motivo, pagos) {
@@ -99,10 +100,16 @@ class FalloNota extends Error {
   constructor(mensaje, { dudoso = false } = {}) { super(mensaje); this.dudoso = dudoso; }
 }
 const esDeRed = (e) => e?.transitorio === true || ['red', 'tiempo', 'ocupado'].includes(e?.tipo);
+// Tras una respuesta perdida la base puede seguir guardando un buen rato (hasta ~18 s: espera de conexión, bloqueo y la propia consulta). Una lectura sin la nota solo vale como «no se anuló nada» pasados 35 s desde la falla.
+const MS_RELEER = 4500, MS_SEGURO = 35000;
+const ahoraMs = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
+const esperar = (ms) => new Promise((r) => setTimeout(r, ms));
+const textoTodavia = (falloMs) => `Todavía no se puede asegurar. Espere unos ${Math.max(5, Math.ceil(Math.max(MS_SEGURO - (ahoraMs() - falloMs), 0) / 5000) * 5)} segundos y toque «Revisar si quedó anulado». No toque «Anular» otra vez todavía.`;
 
 // Crea la nota de crédito. Si la respuesta no llega (se cayó el internet o tardó), averigua si la nota quedó creada antes de decir que falló.
 // Devuelve { nc, yaExistia }. Lanza FalloNota con un texto listo para mostrar.
-async function emitirNota(app, d, razon) {
+// marca.falloMs queda con el momento de la falla de la escritura, para que la ventana cuente desde ahí.
+async function emitirNota(app, d, razon, marca = {}) {
   if (typeof navigator !== 'undefined' && navigator.onLine === false) throw new FalloNota('No hay conexión con internet, así que no se anuló nada. Cuando vuelva la conexión, intente de nuevo.');
   try {
     return { nc: await app.api.notaCredito(d.id, razon, app.terminal), yaExistia: false };
@@ -119,11 +126,16 @@ async function emitirNota(app, d, razon) {
       return { nc: r.nc, yaExistia: true };
     }
     if (esDeRed(e)) {
+      marca.falloMs = ahoraMs();
+      const noSeSupo = () => new FalloNota('No se pudo confirmar si el documento quedó anulado. No toque «Anular» otra vez todavía: cuando vuelva la conexión, revise la lista. Si dice «Anulado», ya está listo.', { dudoso: true });
       let nc;
-      try { nc = (await anulacionDe(d.id)).nc; }
-      catch { throw new FalloNota('No se pudo confirmar si el documento quedó anulado. No toque «Anular» otra vez todavía: cuando vuelva la conexión, revise la lista. Si dice «Anulado», ya está listo.', { dudoso: true }); }
+      try { nc = (await anulacionDe(d.id)).nc; } catch { throw noSeSupo(); }
       if (nc) return { nc, yaExistia: false };
-      throw new FalloNota('No hubo conexión y no se anuló nada. Puede intentarlo de nuevo.');
+      // Una lectura sin la nota no prueba que no se hizo: la base puede estar terminando de guardar. Se mira otra vez a los pocos segundos y, si sigue sin aparecer, se dice que no se pudo confirmar.
+      await esperar(MS_RELEER);
+      try { nc = (await anulacionDe(d.id)).nc; } catch { throw noSeSupo(); }
+      if (nc) return { nc, yaExistia: false };
+      throw new FalloNota('No se pudo confirmar si la anulación quedó hecha. Espere unos segundos y toque «Revisar si quedó anulado». No toque «Anular» otra vez todavía.', { dudoso: true });
     }
     if (/debe estar aceptado|no est[aá] aceptado/i.test(msg)) throw new FalloNota('Hacienda todavía no acepta este documento, así que no se puede anular. Espere a que aparezca como «Aceptado por Hacienda».');
     throw new FalloNota(msg);
@@ -239,11 +251,13 @@ export function anularDocumento(app, d, { alTerminar, alVerNC, alCambiarCliente,
   const vuelo = (v) => { enVuelo = v; volver.disabled = v; };
   const rotuloSeguir = () => (bloqueado ? 'No se puede anular' : dudoso ? 'Revisar si quedó anulado' : 'Anular');
   let dudoso = false; // se perdió la respuesta y no se pudo comprobar si la nota quedó creada: el botón pasa a «Revisar si quedó anulado»
+  let falloMs = null; // cuándo falló la escritura que dejó la duda (para no decir «no se anuló nada» antes de tiempo)
   const revisar = async () => {
     vuelo(true); seguir.disabled = true; error.hidden = true;
     try {
       const nc = (await anulacionDe(d.id)).nc;
       if (nc) { dudoso = false; vuelo(false); m.cerrar(); resultado(nc, { motivo: elegido, yaExistia: false }); try { await alTerminar?.(nc); } catch { /* nada */ } return; }
+      if (falloMs != null && ahoraMs() - falloMs < MS_SEGURO) { error.textContent = textoTodavia(falloMs); error.hidden = false; return; } // sigue la duda: no se afirma nada
       dudoso = false; error.textContent = 'No se anuló nada. Puede intentarlo de nuevo.'; error.hidden = false; seguir.textContent = 'Anular';
     } catch { error.textContent = 'Todavía no hay conexión para comprobarlo. Espere unos segundos y toque «Revisar si quedó anulado».'; error.hidden = false; }
     finally { vuelo(false); seguir.disabled = bloqueado; seguir.textContent = rotuloSeguir(); }
@@ -251,6 +265,7 @@ export function anularDocumento(app, d, { alTerminar, alVerNC, alCambiarCliente,
   const seguir = h('button.btn.peligro.grande', { type: 'button', onclick: async () => {
     if (enVuelo || bloqueado) return;
     if (dudoso) return revisar();
+    let volverAlBoton = false;
     const det = detalle.value.trim();
     if (!elegido) { error.textContent = 'Escoja uno de los motivos de arriba.'; error.hidden = false; return; }
     if (elegido === M_OTRO && det.length < 5) { error.textContent = 'Escriba cuál fue el motivo (mínimo 5 letras).'; error.hidden = false; detalle.focus(); return; }
@@ -265,16 +280,22 @@ export function anularDocumento(app, d, { alTerminar, alVerNC, alCambiarCliente,
       if (bloqueado) return;
       seguir.textContent = rotuloSeguir();
       const ok = await confirmarAnulacion(d, razon, soporta07);
-      if (!ok) return;
+      if (!ok) { volverAlBoton = true; return; } // «No, volver»: el teclado queda otra vez en «Anular», donde estaba
       seguir.textContent = 'Anulando, espere…';
-      const { nc, yaExistia } = await emitirNota(app, d, razon);
+      const marca = { falloMs: null };
+      let nota;
+      try { nota = await emitirNota(app, d, razon, marca); } finally { if (marca.falloMs != null) falloMs = marca.falloMs; }
+      const { nc, yaExistia } = nota;
       vuelo(false); m.cerrar();
       resultado(nc, { motivo: elegido, yaExistia });
       try { await alTerminar?.(nc); } catch { /* la lista se actualiza sola en unos segundos */ }
     } catch (e) {
-      error.textContent = e instanceof FalloNota ? e.message : mensajeAmable(e); error.hidden = false;
+      error.textContent = e instanceof FalloNota ? e.message : mensajeAmable(e); error.hidden = false; volverAlBoton = true; // el error se lee y el teclado queda en el botón
       if (e instanceof FalloNota && e.dudoso) { dudoso = true; Promise.resolve(alTerminar?.(null)).catch(() => {}); }
-    } finally { vuelo(false); seguir.disabled = bloqueado; seguir.textContent = rotuloSeguir(); }
+    } finally {
+      vuelo(false); seguir.disabled = bloqueado; seguir.textContent = rotuloSeguir();
+      if (volverAlBoton && m.el.isConnected && !seguir.disabled) { try { seguir.focus({ preventScroll: true }); } catch { /* nada */ } }
+    }
   } }, 'Anular');
 
   const m = modal({ titulo: 'Anular ' + (d.tipo_doc === '01' ? 'factura' : 'tiquete'), ancho: 640,
@@ -301,6 +322,12 @@ export function anularDocumento(app, d, { alTerminar, alVerNC, alCambiarCliente,
   };
   const cargaSaldos = saldosDe(d.id).then(async (s) => {
     if (!m.el.isConnected) return;
+    // No se pudo leer (saldosDe devuelve null): se puede seguir (la base rechaza lo que no corresponda), pero se dice con las mismas palabras que el detalle del documento, no en silencio
+    if (!s) {
+      zonaBloqueo.replaceChildren(h('div.an-aviso.an-sin-saldos', { role: 'note' }, h('p', h('b', 'No se pudo comprobar si tiene devoluciones.')),
+        h('p', 'Revise la conexión. Mientras tanto no dé por hecho que no tiene devoluciones ni correcciones; si no corresponde, el sistema no deja anular.')));
+      return;
+    }
     const permiso = permiteAnular(s);
     if (!permiso.sabe || permiso.permite) { const a = avisoParcial(s, false); if (a) zonaParcial.replaceChildren(a); return; }
     bloqueado = true;
@@ -309,18 +336,21 @@ export function anularDocumento(app, d, { alTerminar, alVerNC, alCambiarCliente,
     const notas = listaNotas(s);
     const yaAnulada = anulacionDeSaldos(s); // otra persona (u otro aparato) ya lo anuló
     // La anulación puede haberse dejado sin efecto con una nota de débito (cuelga de la nota de crédito): entonces el documento vuelve a valer y «ya está anulado» no sería cierto
-    const sinEfecto = yaAnulada ? sinEfectoDeSaldos(await saldosDe(yaAnulada.id)) : null;
+    // (Desde fx_23i los saldos del documento ya traen esa nota de débito 01; si no, se mira en los saldos de la nota de crédito.)
+    const sinEfecto = sinEfectoDeSaldos(s) || (yaAnulada ? sinEfectoDeSaldos(await saldosDe(yaAnulada.id)) : null);
     if (!m.el.isConnected) return;
+    // Con la anulación sin efecto, lo que se puede hacer lo dice la base (no se inventa aquí): su frase de por qué no se anula completo (motivo_no_anulacion) y, si admite_notas,
+    // la opción de devolver una parte o corregir un monto. Con la nota de débito 01 aceptada la base sí admite devoluciones y correcciones; mientras Hacienda no la acepta, no.
     zonaBloqueo.replaceChildren(h('div.an-bloqueo', { role: 'alert' },
       h('p.an-bloqueo-tit', sinEfecto ? 'La anulación de este documento se dejó sin efecto' : yaAnulada ? 'Este documento ya está anulado' : 'Este documento no se puede anular completo'),
-      sinEfecto ? h('p', `Se dejó sin efecto con la nota de débito N.° ${numeroCorto(sinEfecto.consecutivo)}. El documento vuelve a valer, pero ya no admite más devoluciones, correcciones ni anulaciones.`)
+      sinEfecto ? h('p', `Con la nota de débito N.° ${numeroCorto(sinEfecto.consecutivo)}, el documento vuelve a valer.`)
         : yaAnulada ? h('p', textoNota(yaAnulada)) : null,
-      sinEfecto ? null : h('p', permiso.motivo),
+      h('p', permiso.motivo),
       notas ? h('div.an-notas-caja', h('div.an-etq', 'Notas que ya tiene este documento'), notas) : null,
-      sinEfecto ? null : avisoParcial(s, true)));
+      avisoParcial(s, true)));
     seguir.disabled = true; seguir.textContent = rotuloSeguir();
     error.hidden = true;
-    if (anulacionDeSaldos(s)) Promise.resolve(alTerminar?.(null)).catch(() => { /* la lista se actualiza sola en unos segundos */ }); // ya estaba anulado: la lista debe ponerse al día
+    if (yaAnulada && !sinEfecto) Promise.resolve(alTerminar?.(null)).catch(() => { /* la lista se actualiza sola en unos segundos */ }); // ya estaba anulado: la lista debe ponerse al día
   }).catch(() => {}).finally(() => { saldosListos = true; });
   return m;
 
@@ -340,7 +370,7 @@ export function anularDocumento(app, d, { alTerminar, alVerNC, alCambiarCliente,
       try { rr = await copiarVentaParaRehacer(ventaId, clienteId); } finally { enCopia = false; }
       if (rr.ok) { r.cerrar(); abrirCuentaNueva(app, rr.id, toast, rr.sinCliente); return; }
       fallo.replaceChildren(...[h('p', rr.motivo === 'ya_corregida' ? (/no hace falta/i.test(rr.mensaje) ? null : h('b', 'No hace falta hacer la venta de nuevo. ')) : h('b', 'No se pudo copiar la venta. '), rr.mensaje),
-        rr.motivo === 'ya_corregida' ? null : rr.motivo === 'sin_funcion' ? h('button.btn', { type: 'button', onclick: () => { r.cerrar(); app.ir('caja'); } }, 'Ir a Facturación')
+        rr.motivo === 'ya_corregida' || rr.sinReintento ? null : rr.motivo === 'sin_funcion' ? h('button.btn', { type: 'button', onclick: () => { r.cerrar(); app.ir('caja'); } }, 'Ir a Facturación')
           : h('button.btn.primario', { type: 'button', 'data-reintentar-copia': '1', onclick: () => copiar(ventaId, clienteId) }, 'Intentar de nuevo')].filter(Boolean)); // replaceChildren escribiría «null» como texto
       fallo.hidden = false;
       if (rr.motivo === 'ya_corregida') { yaCorregida = true; r.el.querySelectorAll('[data-hacer-de-nuevo]').forEach((x) => { x.disabled = true; }); }
@@ -431,15 +461,17 @@ export function cambiarCliente(app, d, { alTerminar } = {}) {
     } else if (sinPermiso()) {
       aviso.hidden = false; aviso.className = 'an-aviso';
       const notas = listaNotas(saldos);
-      aviso.replaceChildren(h('p', h('b', 'Este documento no se puede anular completo. ')),
-        h('p', notaSinEfecto ? `La anulación se dejó sin efecto con la nota de débito N.° ${numeroCorto(notaSinEfecto.consecutivo)}. El documento vuelve a valer, pero ya no admite más devoluciones, correcciones ni anulaciones.` : sinPermiso().motivo),
-        ...(notas ? [h('div.an-etq', 'Notas que ya tiene este documento'), notas] : []));
+      aviso.replaceChildren(...[h('p', h('b', 'Este documento no se puede anular completo. ')),
+        // Con la anulación sin efecto el documento vuelve a valer; por qué no se anula completo otra vez lo dice la base (motivo_no_anulacion), tal cual
+        notaSinEfecto ? h('p', `La anulación se dejó sin efecto con la nota de débito N.° ${numeroCorto(notaSinEfecto.consecutivo)}, así que el documento vuelve a valer.`) : null,
+        h('p', sinPermiso().motivo),
+        ...(notas ? [h('div.an-etq', 'Notas que ya tiene este documento'), notas] : [])].filter(Boolean)); // replaceChildren escribiría «null» como texto
     }
     const puede = !!cliente && (estado === 'aceptado' || rechazado || !!nc) && !enVuelo && !sinPermiso() && !yaCorregida;
     principal.disabled = !puede;
     principal.textContent = enVuelo ? 'Trabajando, espere…' : nc ? 'Dejar lista la venta nueva con este cliente' : rechazado ? 'Hacer la venta de nuevo con este cliente'
       : esTiquete ? 'Anular el tiquete y armar la factura' : 'Anular la factura y armarla con el cliente correcto';
-    porque.textContent = puede || enVuelo ? '' : yaCorregida ? 'La venta nueva ya existe. Ciérrela esta ventana.' : sinPermiso() ? 'No se puede seguir con este documento. Lea el aviso de arriba.' : !cliente ? 'Primero elija al cliente.' : 'Todavía no se puede seguir: espere a que Hacienda acepte el documento.';
+    porque.textContent = puede || enVuelo ? '' : yaCorregida ? 'La venta nueva ya existe. Cierre esta ventana.' : sinPermiso() ? 'No se puede seguir con este documento. Lea el aviso de arriba.' : !cliente ? 'Primero elija al cliente.' : 'Todavía no se puede seguir: espere a que Hacienda acepte el documento.';
     volver.disabled = enVuelo;
   }
 
@@ -493,7 +525,7 @@ export function cambiarCliente(app, d, { alTerminar } = {}) {
     if (!vivo || !s) return;
     saldos = s;
     const ya = anulacionDeSaldos(s);
-    const sinEfecto = ya && !nc ? sinEfectoDeSaldos(await saldosDe(ya.id)) : null;
+    const sinEfecto = !nc ? (sinEfectoDeSaldos(s) || (ya ? sinEfectoDeSaldos(await saldosDe(ya.id)) : null)) : null; // desde fx_23i los saldos del documento ya traen la nota de débito 01
     if (!vivo) return;
     if (ya && !nc && !sinEfecto) nc = ya;
     notaSinEfecto = sinEfecto;

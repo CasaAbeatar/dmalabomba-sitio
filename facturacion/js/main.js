@@ -38,10 +38,10 @@ export const app = {
   // La empresa de esta sesión: sale de la sociedad que devuelve el servidor, no de lo que haya en el aparato. codigo = el que se escribe para entrar.
   get empresa() { const s = this.soc; return s ? { id: s.id, codigo: String(s.codigo_acceso || s.codigo || '').toLowerCase(), nombre: nombreLocal(s), cedula: s.cedula || null } : null; },
   moduloActual: null, // el módulo (o pantalla) que se ve: una entrada de modulos.js o INICIO
-  recepcion: null, // { pendientes_en_plazo, vencen_pronto } de las facturas recibidas; alimenta las insignias de Contable y Administración
+  recepcion: null, // { pendientes_en_plazo, vencen_pronto, vencidas } de las facturas recibidas; alimenta las insignias de Contable y Administración
   pedido: null, // lo que una pantalla le pide a la otra al abrirla (por ejemplo { filtro: 'problemas' }); el módulo lo lee al empezar
   // Avisos del encabezado. datos = { rechazados, pendientes, recepcion_por_responder, ultimos, desde }. refrescar() vuelve a preguntar de inmediato.
-  alertas: { datos: null, refrescar: () => actualizarAlertas(true), fijarRecepcion: (c) => { if (c) { recepcionCache = { pendientes_en_plazo: Number(c.pendientes_en_plazo ?? 0), vencen_pronto: Number(c.vencen_pronto ?? 0) }; recepcionHora = Date.now(); } fijarRecepcion(c); } },
+  alertas: { datos: null, refrescar: () => actualizarAlertas(true), fijarRecepcion: (c) => { if (c) { recepcionCache = { pendientes_en_plazo: Number(c.pendientes_en_plazo ?? 0), vencen_pronto: Number(c.vencen_pronto ?? 0), vencidas: vencidasDe(c) }; recepcionHora = Date.now(); } fijarRecepcion(recepcionCache && c ? recepcionCache : c); } },
   async refrescar() { // recarga sociedades y turno; avisa a la cabecera y a quien escuche
     this.ctx = await api.contexto();
     pintarCabecera();
@@ -208,6 +208,20 @@ function pantallaUsuario(emp, mensaje) {
   });
   const cambiar = h('button.btn.emp-cambiar', { type: 'button', onclick: () => { if (!ocupado) pantallaCodigo({ codigo: emp.codigo }); } }, 'Cambiar de empresa'); // el código queda escrito y seleccionado: si fue un toque sin querer, basta «Continuar»
   const bloquear = (si) => { ocupado = si; pad.bloquear(si); usuario.disabled = si; cambiar.disabled = si; };
+  // Cuenta regresiva cuando el servidor pide esperar (demora acotada del ingreso, nunca un bloqueo). No borra lo digitado; al llegar a 0 vuelve a habilitar el teclado.
+  let relojEspera = null;
+  function cuentaEspera(seg) {
+    if (relojEspera) clearInterval(relojEspera);
+    let queda = seg;
+    bloquear(true);
+    const pintar = () => mostrarError('Espere ' + queda + ' segundo' + (queda === 1 ? '' : 's') + ' e intente de nuevo.');
+    pintar();
+    relojEspera = setInterval(() => {
+      queda -= 1;
+      if (queda <= 0) { clearInterval(relojEspera); relojEspera = null; mostrarError(''); bloquear(false); if (!usuario.value) usuario.focus(); }
+      else pintar();
+    }, 1000);
+  }
   async function intentar() {
     if (ocupado) return;
     if (!usuario.value.trim()) { pad.limpiar(); mostrarError('Escriba su usuario.'); usuario.focus(); return; }
@@ -227,6 +241,8 @@ function pantallaUsuario(emp, mensaje) {
       if (!esErrorEsperado(e)) console.error(e);
       // La empresa dejó de existir o de estar habilitada entre el paso 1 y ahora: se vuelve al código con el mensaje
       if (e && (e.motivo === 'empresa_desconocida' || e.motivo === 'empresa_no_habilitada')) { pantallaCodigo({ codigo: emp.codigo, [e.motivo === 'empresa_no_habilitada' ? 'aviso' : 'error']: textoErrorAcceso(e) }); return; }
+      // El servidor pide esperar unos segundos (hubo muchos intentos desde esta conexión o con este usuario): cuenta regresiva, sin borrar el PIN ya escrito
+      if (e && e.motivo === 'espera') { mostrarEstado(''); cuentaEspera(Math.max(1, Number(e.espera) || 5)); return; }
       pad.limpiar();
       alertar(e);
       mostrarEstado('');
@@ -406,10 +422,12 @@ function verAlertas() {
   app.ir('anular', { filtro: 'problemas', desde: a?.desde || null });
 }
 // Cifra de facturas recibidas por responder: la misma que muestra Contable. Alimenta las insignias de las tarjetas de Contable y de Administración.
+// Vencidas para la insignia: las que llegaron en los últimos 25 días con el plazo ya pasado (fx_alertas.recepcion_vencidas, o vencidas_recientes del conteo de Contable)
+function vencidasDe(c) { return Math.max(0, Number(c?.vencidas ?? c?.recepcion_vencidas ?? c?.vencidas_recientes ?? 0) || 0); }
 function fijarRecepcion(c) {
-  const n = Number(c?.pendientes_en_plazo ?? 0);
-  // Ámbar: hay facturas por responder dentro del plazo. Rojo: algunas vencen pronto (en 2 días hábiles o menos).
-  app.recepcion = c && n > 0 ? { pendientes_en_plazo: n, vencen_pronto: Math.max(0, Number(c.vencen_pronto ?? 0)) } : null;
+  const n = Number(c?.pendientes_en_plazo ?? 0), venc = vencidasDe(c);
+  // Ámbar: hay facturas por responder dentro del plazo. Rojo: algunas vencen pronto (en 2 días hábiles o menos) o ya vencieron. Con solo vencidas la insignia sigue visible.
+  app.recepcion = c && (n > 0 || venc > 0) ? { pendientes_en_plazo: n, vencen_pronto: Math.max(0, Number(c.vencen_pronto ?? 0)), vencidas: venc } : null;
   if (cab && vista && (app.moduloActual === INICIO || app.moduloActual?.pantalla === 'admin')) pintarInsignias(vista, app);
 }
 async function actualizarAlertas(forzar = false) {
@@ -425,7 +443,10 @@ async function actualizarAlertas(forzar = false) {
     if (a.recepcion_por_responder != null) {
       // fx_alertas trae recepcion_vencen_pronto. Si una versión vieja de la función no lo manda, se conserva lo que Recepción haya visto si la cifra no cambió
       const antes = recepcionCache && recepcionCache.pendientes_en_plazo === a.recepcion_por_responder ? recepcionCache.vencen_pronto : 0;
-      recepcionCache = { pendientes_en_plazo: a.recepcion_por_responder, vencen_pronto: a.recepcion_vencen_pronto != null ? a.recepcion_vencen_pronto : antes };
+      // recepcion_vencidas: si la función todavía no la trae, se usa la que vio Contable (o el conteo de Recepción cada 5 minutos)
+      let venc = a.recepcion_vencidas != null ? Number(a.recepcion_vencidas) : recepcionCache?.vencidas;
+      if (venc == null || (a.recepcion_vencidas == null && Date.now() - recepcionHora > 5 * 60 * 1000)) { try { const { contarPendientes } = await import('./api_recepcion.js'); venc = vencidasDe(await contarPendientes(soc)); recepcionHora = Date.now(); } catch { venc = venc ?? 0; } }
+      recepcionCache = { pendientes_en_plazo: a.recepcion_por_responder, vencen_pronto: a.recepcion_vencen_pronto != null ? a.recepcion_vencen_pronto : antes, vencidas: venc };
     } else if (!recepcionCache || Date.now() - recepcionHora > 5 * 60 * 1000) {
       // Sin fx_alertas, la cifra sale de Recepción (cada 5 minutos, porque trae toda la lista)
       try { const { contarPendientes } = await import('./api_recepcion.js'); recepcionCache = await contarPendientes(soc); recepcionHora = Date.now(); } catch { /* queda la anterior */ }
@@ -535,6 +556,15 @@ function mostrarSesionVencida() {
       if (vista) vista.querySelectorAll('[data-reintentar]').forEach((b) => b.click());
     } catch (e) {
       if (!esErrorEsperado(e)) console.error(e);
+      // El servidor pide esperar unos segundos: cuenta regresiva en esta ventana, sin borrar el PIN escrito
+      if (e && e.motivo === 'espera') {
+        estado.hidden = true; pad.bloquear(true);
+        let queda = Math.max(1, Number(e.espera) || 5);
+        const pintar = () => mostrarError('Espere ' + queda + ' segundo' + (queda === 1 ? '' : 's') + ' e intente de nuevo.');
+        pintar();
+        const tt = setInterval(() => { queda -= 1; if (queda <= 0) { clearInterval(tt); mostrarError(''); pad.bloquear(false); } else pintar(); }, 1000);
+        return;
+      }
       pad.limpiar(); mostrarError(textoErrorAcceso(e, { cambiarEmpresa: false })); estado.hidden = true; pad.bloquear(false);
     }
   }
