@@ -57,11 +57,12 @@ export async function abrir(ctx, _id, pedido = {}) {
 export async function abrirConteo(ctx, id, inicial = null) {
   if (!id) return;
   let vivo = true, mostrar = false, datos = null, filtro = '';
-  const anotados = new Map(); // articulo_id -> { campo, guardado }
+  const anotados = new Map(); // articulo_id -> { campo, guardado } de las líneas que se ven
+  const borrador = new Map(); // articulo_id -> lo escrito y todavía no guardado: sobrevive cuando la ventana se vuelve a pintar (mostrar lo del sistema, agregar un artículo)
   const cuerpo = h('div.inv-conteo', cargando('Cargando el conteo…'));
   const resultado = h('div', { 'aria-live': 'polite' });
   const sinGuardar = () => [...anotados.values()].filter((x) => x.campo.input.value.trim() !== x.guardado).length;
-  ventana({ titulo: 'Conteo', volver: 'Conteo físico', contenido: [resultado, cuerpo], alCerrar: () => { vivo = false; },
+  const v = ventana({ titulo: 'Conteo', volver: 'Conteo físico', contenido: [resultado, cuerpo], alCerrar: () => { vivo = false; },
     bloqueo: () => (sinGuardar() ? 'Hay cantidades anotadas sin guardar. Toque «Guardar lo contado» (o «Descartar lo no guardado») antes de salir.' : '') });
 
   async function cargar() {
@@ -71,12 +72,13 @@ export async function abrirConteo(ctx, id, inicial = null) {
   function pintar() {
     const c = datos.conteo || {}, lineas = datos.lineas || [];
     const abierto = c.estado === 'abierto';
+    const tit = v.el.querySelector('.modal-tit h2'); if (tit && c.ubicacion) tit.textContent = 'Conteo de ' + c.ubicacion;
     anotados.clear();
     const contadas = lineas.filter((l) => l.contado != null).length;
     const zona = h('div');
     const estadoGuardar = h('p.inv-sin-guardar', { 'aria-live': 'polite' });
     const btnGuardar = h('button.btn.primario.grande', { type: 'button' }, 'Guardar lo contado');
-    const pintarEstado = () => { const n = sinGuardar(); poner(estadoGuardar, n ? plural(n, 'artículo anotado sin guardar', 'artículos anotados sin guardar') : 'Todo lo anotado está guardado.', n ? h('button.btn.chico.suave', { type: 'button', onclick: () => { anotados.forEach((x) => x.campo.poner(x.guardado === '' ? '' : x.guardado.replace(',', '.'))); pintarEstado(); } }, 'Descartar lo no guardado') : null); estadoGuardar.classList.toggle('pendiente', n > 0); };
+    const pintarEstado = () => { const n = sinGuardar(); poner(estadoGuardar, n ? plural(n, 'artículo anotado sin guardar', 'artículos anotados sin guardar') : 'Todo lo anotado está guardado.', n ? h('button.btn.chico.suave', { type: 'button', onclick: () => { borrador.clear(); anotados.forEach((x) => x.campo.poner(x.guardado === '' ? '' : x.guardado.replace(',', '.'))); pintarEstado(); } }, 'Descartar lo no guardado') : null); estadoGuardar.classList.toggle('pendiente', n > 0); };
     const accGuardar = accionSegura({ boton: btnGuardar, zona, ocupado: 'Guardando…',
       hacer: (idem) => {
         const items = [];
@@ -88,15 +90,16 @@ export async function abrirConteo(ctx, id, inicial = null) {
         if (!items.length) throw new Error('No hay nada nuevo que guardar. Escriba lo que contó en cada artículo.');
         return inv.conteoRegistrar(id, items, idem);
       },
-      alTerminar: (r, { repetida }) => { datos = r; toastOk('Se guardó lo contado.' + repetidaTxt(repetida)); pintar(); } });
+      alTerminar: (r, { repetida }) => { datos = r; borrador.clear(); toastOk('Se guardó lo contado.' + repetidaTxt(repetida)); pintar(); } });
     btnGuardar.addEventListener('click', () => accGuardar.ejecutar());
     const buscar = h('input.campo', { type: 'search', placeholder: 'Buscar un artículo de la lista', 'aria-label': 'Buscar en el conteo', value: filtro, autocomplete: 'off' });
     const listaEl = h('div.inv-conteo-lineas');
     const ver = h('input', { type: 'checkbox', checked: mostrar, onchange: () => { mostrar = ver.checked; pintar(); } });
     const lineaEl = (l) => {
-      const campo = campoCantidad({ etiqueta: 'Contado', unidad: l.unidad, min0: true, valor: l.contado ?? '', alCambiar: () => pintarEstado() });
+      const guardado = l.contado == null ? '' : String(l.contado).replace('.', ',');
+      const campo = campoCantidad({ etiqueta: 'Contado', unidad: l.unidad, min0: true, valor: borrador.has(l.articulo_id) ? borrador.get(l.articulo_id) : guardado, alCambiar: () => { borrador.set(l.articulo_id, campo.input.value); pintarEstado(); } });
       if (!abierto) campo.input.disabled = true;
-      anotados.set(l.articulo_id, { campo, guardado: campo.input.value.trim(), nombre: l.articulo });
+      anotados.set(l.articulo_id, { campo, guardado, nombre: l.articulo });
       const dif = l.diferencia != null ? Number(l.diferencia) : null;
       return h('div.inv-conteo-linea' + (l.contado != null ? '.contada' : ''), { 'data-art': l.articulo_id, 'data-nombre': norm(l.articulo) },
         h('div.inv-conteo-art', h('strong', l.articulo), h('small', [l.categoria, 'se cuenta en ' + unidadTxt(l.unidad || 'unidad', 2)].filter(Boolean).join(' · ')),
@@ -171,7 +174,7 @@ export async function abrirConteo(ctx, id, inicial = null) {
     const zona = h('div');
     const { boton } = botonSeguro('Sí, cancelar el conteo', 'peligro', { zona, ocupado: 'Cancelando…',
       hacer: (idem) => { const m = motivo.value.trim(); if (m && m.length < 3) throw new Error('El motivo tiene que tener al menos 3 letras, o déjelo vacío.'); return inv.conteoCancelar(id, m || null, idem); },
-      alTerminar: async (r, { repetida }) => { anotados.clear(); d.cerrar(); toastOk('El conteo se canceló. No cambió nada del inventario.' + repetidaTxt(repetida)); await cargar(); } });
+      alTerminar: async (r, { repetida }) => { anotados.clear(); borrador.clear(); d.cerrar(); toastOk('El conteo se canceló. No cambió nada del inventario.' + repetidaTxt(repetida)); await cargar(); } });
     const d = dialogo({ titulo: 'Cancelar el conteo', ancho: 520, contenido: [h('p', 'Lo anotado se descarta y el inventario no cambia.'), h('label.etq', 'Motivo (opcional)', motivo), zona], botones: [{ texto: 'No, volver', onclick: (c) => c() }] });
     d.el.querySelector('.modal-pie').append(boton);
   }
