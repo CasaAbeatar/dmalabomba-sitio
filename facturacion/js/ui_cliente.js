@@ -286,7 +286,7 @@ export function abrirFormCliente(app, cliente, { alGuardar, alCambiarEstado, tit
   pintarTarifa();
   const bloqueTarifa = h('fieldset', h('legend', 'Tarifa de IVA habitual de este cliente'),
     h('div.col',
-      h('small.tenue', 'Si este cliente casi siempre paga una tarifa distinta del IVA normal (por ejemplo una universidad pública paga 2 %), escójala aquí. Nunca se aplica sola: al elegir al cliente en Facturación, el sistema avisa y ofrece un botón para aplicarla.'),
+      h('small.tenue', 'La tarifa habitual de todo cliente es 13 % (IVA normal) y ya viene marcada. Si este cliente casi siempre paga otra tarifa (por ejemplo una universidad pública paga 2 %), escójala aquí. Nunca se aplica sola: al elegir al cliente en Facturación, el sistema avisa y ofrece un botón para aplicarla.'),
       traeLlave === false ? aviso('ambar', 'Esta opción todavía no se puede guardar en este sistema. Estará lista cuando se termine la actualización. Mientras tanto, la tarifa se cambia producto por producto al cobrar.') : null,
       h('div.mt-tarifas', { role: 'group', 'aria-label': 'Tarifa de IVA habitual' }, botonesTarifa),
       tarAyuda));
