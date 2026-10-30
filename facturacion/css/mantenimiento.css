@@ -215,3 +215,10 @@
 .mt-seg-antes summary{cursor:pointer;font-weight:600;min-height:48px;display:flex;align-items:center}
 .mt-seg-antes ul{list-style:none;margin:0;padding:0}
 .mt-seg-antes li{display:flex;flex-wrap:wrap;gap:.3rem .8rem;align-items:center;justify-content:space-between;padding:.5rem 0;border-top:1px solid var(--linea);font-size:.92rem}
+
+/* Lista de «Elegir cliente»: barra de desplazamiento siempre visible y ancha, con margen para que tocarla nunca caiga sobre un botón «Elegir» */
+.mt-lista-sel{max-height:min(58vh,520px);overflow-y:scroll;overscroll-behavior:contain;padding-right:26px;scrollbar-width:auto;scrollbar-color:#8a8473 #ece7da}
+.mt-lista-sel::-webkit-scrollbar{width:18px}
+.mt-lista-sel::-webkit-scrollbar-track{background:#ece7da;border-radius:9px}
+.mt-lista-sel::-webkit-scrollbar-thumb{background:#8a8473;border-radius:9px;border:3px solid #ece7da;min-height:48px}
+.mt-lista-sel:focus-visible{outline:2px solid var(--linea2);outline-offset:2px}

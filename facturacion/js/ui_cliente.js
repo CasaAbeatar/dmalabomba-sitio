@@ -77,11 +77,14 @@ export function abrirFormCliente(app, cliente, { alGuardar, alCambiarEstado, tit
   };
 
   const comercial = h('input.campo', { type: 'text', autocomplete: 'off', value: c.nombre_comercial || '', 'aria-label': 'Nombre comercial' });
-  // Hasta 4 correos: el primero es el principal (el que se informa a Hacienda) y la factura se envía a todos
+  // Hasta 8 correos: el primero es el principal (el que se informa a Hacienda) y la factura se envía a todos. Se ven 4 espacios; «Agregar otro correo» muestra los demás de a uno.
   const previos = String(c.correo || '').split(/[,;\s]+/).map((x) => x.trim()).filter(Boolean);
-  const rotulosCorreo = [CORREO_OBLIGATORIO ? 'Correo principal (obligatorio)' : 'Correo principal', 'Correo 2 (opcional)', 'Correo 3 (opcional)', 'Correo 4 (opcional)'];
+  const rotulosCorreo = [CORREO_OBLIGATORIO ? 'Correo principal (obligatorio)' : 'Correo principal', ...[2, 3, 4, 5, 6, 7, 8].map((n) => 'Correo ' + n + ' (opcional)')];
   const correos = rotulosCorreo.map((r, i) => h('input.campo', { type: 'text', inputmode: 'email', autocapitalize: 'none', autocomplete: 'off', spellcheck: 'false', maxlength: 160, value: previos[i] || '', 'aria-label': r }));
   const avisoCorreo = h('small.tenue');
+  let visiblesCorreo = 4; // el principal y 3 opcionales; los demás aparecen al llenarse o con «Agregar otro correo»
+  const cajasCorreo = correos.slice(1).map((x, i) => campo(rotulosCorreo[i + 1], x));
+  const btnMasCorreo = h('button.btn', { type: 'button', onclick: () => { visiblesCorreo = Math.min(correos.length, visiblesCorreo + 1); refrescarCorreo(); correos[visiblesCorreo - 1].focus(); } }, 'Agregar otro correo');
   const telefono = h('input.campo', { type: 'tel', autocomplete: 'off', value: c.telefono || '', 'aria-label': 'Teléfono' });
   const notas = h('textarea.campo', { rows: 2, 'aria-label': 'Notas' }, c.notas || '');
   // Barrio y señas sin maxlength: el navegador cuenta un emoji como 2 y lo cortaría a la mitad. El tope se cuenta en caracteres, como la base, y se avisa en palabras.
@@ -142,10 +145,14 @@ export function abrirFormCliente(app, cliente, { alGuardar, alCambiarEstado, tit
   dist.addEventListener('change', ajustarRejilla);
 
   const refrescarCorreo = () => {
+    const llenos = correos.reduce((a, x, i) => (x.value.trim() ? i + 1 : a), 0);
+    visiblesCorreo = Math.min(correos.length, Math.max(visiblesCorreo, llenos));
+    cajasCorreo.forEach((el, i) => { el.hidden = i + 1 >= visiblesCorreo; });
+    btnMasCorreo.hidden = visiblesCorreo >= correos.length;
     const n = correos.filter((x) => x.value.trim()).length;
     avisoCorreo.textContent = !n ? (CORREO_OBLIGATORIO ? 'Falta el correo principal: es adonde se envía la factura.' : 'Sin correo, la factura no se envía por correo: solo se puede imprimir.')
       : n > 1 ? 'La factura se enviará al mismo tiempo a estos ' + n + ' correos.'
-      : previos.length > correos.length ? 'Este cliente tenía más de 4 correos. Al guardar solo se conservan los primeros 4.' : '';
+      : previos.length > correos.length ? 'Este cliente tenía más de ' + correos.length + ' correos. Al guardar solo se conservan los primeros ' + correos.length + '.' : '';
   };
   correos.forEach((x) => x.addEventListener('input', refrescarCorreo));
   refrescarCorreo();
@@ -290,8 +297,9 @@ export function abrirFormCliente(app, cliente, { alGuardar, alCambiarEstado, tit
   const masBloque = h('div.mt-form', { hidden: esNuevo, id: 'mt-mas-datos' },
     h('fieldset', h('legend', 'Otros correos (opcionales)'),
       h('div.col',
-        h('small.tenue', 'Puede agregar hasta 3 correos más: a todos se les enviará la factura con su PDF y sus archivos para Hacienda.'),
-        h('div.rejilla.dos', correos.slice(1).map((x, i) => campo(rotulosCorreo[i + 1], x))))),
+        h('small.tenue', 'Puede agregar hasta 7 correos más: a todos se les enviará la factura con su PDF y sus archivos para Hacienda.'),
+        h('div.rejilla.dos', cajasCorreo),
+        btnMasCorreo)),
     h('fieldset', h('legend', 'Contacto'),
       h('div.col',
         campo('Nombre comercial (si tiene)', comercial),
@@ -370,7 +378,7 @@ export function selectorCliente(app, { alElegir, titulo = 'Elegir cliente' } = {
   cargarCss();
   const soc = app.soc;
   const q = h('input.mt-buscar', { type: 'search', placeholder: 'Nombre, cédula, correo o teléfono', autocomplete: 'off', 'aria-label': 'Buscar cliente' });
-  const lista = h('div.mt-lista', { style: 'margin-top:.8rem' });
+  const lista = h('div.mt-lista.mt-lista-sel', { style: 'margin-top:.8rem', tabindex: '0', 'aria-label': 'Lista de clientes: deslice hacia abajo para ver más' });
   let m, n = 0;
   const elegir = (cl) => { m.cerrar(); alElegir?.(cl); };
   // Si lo escrito en el buscador parece una cédula, el cliente nuevo ya empieza con ese número
@@ -387,7 +395,8 @@ export function selectorCliente(app, { alElegir, titulo = 'Elegir cliente' } = {
         h('div.mt-datos', h('span.mt-nombre', nombrePropio(cl.nombre)), h('span.mt-sub', (TIPOS_ID[cl.tipo_id] || '') + ' ' + (cl.identificacion || '') + (cl.correo ? ' · ' + cl.correo : '')),
           tarifaHabitual(cl) ? h('span.mt-sub', h('span.chip.espera', 'Paga ' + tarifaHabitual(cl).texto)) : null,
           cl.verificado === false ? h('span.mt-sub', h('span.chip.espera', 'Sin verificar en Hacienda'), ' Revise el número antes de cobrar: si no existe, Hacienda rechaza la factura.') : null,
-          !cl.correo ? h('span.mt-sub', h('span.chip', 'Sin correo')) : null),
+          !cl.correo ? h('span.mt-sub', h('span.chip.espera', 'Sin correo'), ' Pida el correo al cliente.') : null,
+          /^0+$/.test(String(cl.identificacion || '')) ? h('span.mt-sub', h('span.chip.mal', 'Falta la cédula correcta'), ' Se escribe al cobrar; sin ella no se puede cobrar a su nombre.') : null),
         h('div.mt-btns', h('button.btn.primario', { type: 'button', onclick: () => elegir(cl) }, 'Elegir')))) : [h('div.vacio', q.value ? 'No hay clientes con eso. Toque «Agregar cliente nuevo» para guardarlo.' : 'Todavía no hay clientes guardados. Toque «Agregar cliente nuevo» para guardar el primero.')]));
     } catch (e) { if (mi === n) lista.replaceChildren(h('div.error-caja', mensajeSeguro(e, 'No se pudo cargar la lista de clientes. Revise la conexión e intente de nuevo.'))); }
   };
