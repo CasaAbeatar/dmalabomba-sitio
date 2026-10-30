@@ -1273,6 +1273,30 @@ export default {
         const rest = r.error ? 0 : r.falta;
         inpMonto.value = rest > 0 ? (rest / 100).toFixed(2).replace(/\.00$/, '') : '';
       }
+      // Cédula pendiente (en ceros): no se cobra hasta escribir la cédula correcta, aquí mismo. La base también lo frena (fx_cobrar).
+      const cedulaPendiente = () => !!cliente && /^0+$/.test(String(cliente.identificacion || ''));
+      function bloqueCedulaPendiente() {
+        if (!cedulaPendiente()) return null;
+        const inp = h('input', { type: 'text', inputmode: 'numeric', autocomplete: 'off', 'aria-label': 'Cédula correcta del cliente', placeholder: 'Escriba la cédula', maxlength: 20 });
+        const err = h('div.error-caja', { hidden: true });
+        const btn = h('button.btn.primario', { type: 'button' }, 'Guardar cédula');
+        const guardar = async () => {
+          err.hidden = true;
+          btn.disabled = true;
+          try {
+            const nuevo = await api.clienteCedulaCorregir(socId, cliente.id, inp.value);
+            cliente = { ...cliente, ...nuevo };
+            if (cur?.cliente?.id === cliente.id) cur = { ...cur, cliente: { ...cur.cliente, ...nuevo } };
+            toast('Cédula guardada. Ya puede cobrar.');
+            pintarCliente(); actualizar();
+          } catch (e) { err.textContent = textoDeError ? textoDeError(e) : String(e.message || e); err.hidden = false; btn.disabled = false; }
+        };
+        btn.addEventListener('click', guardar);
+        inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); guardar(); } });
+        return h('div.cc-aviso-tipo.mal.cc-cedula-pendiente', { role: 'alert' },
+          h('div', 'Este cliente tiene la cédula pendiente. No se puede cobrar a su nombre hasta escribir la cédula correcta.'),
+          h('div.cc-ced-fila', inp, btn), err);
+      }
       function pintarCliente() {
         docTxt.textContent = 'Documento: ' + (cliente ? TIPOS_DOC['01'] : TIPOS_DOC['04'] + ' (sin cliente)');
         cliTxt.textContent = cliente ? 'Cliente: ' + nombrePropio(cliente.nombre) + ' · ' + cliente.identificacion : '¿El cliente necesita factura a su nombre? Elíjalo aquí antes de cobrar.';
@@ -1280,7 +1304,8 @@ export default {
         btnElegir.textContent = cliente ? 'Cambiar cliente' : 'Elegir cliente (factura)';
         btnQuitarCli.hidden = !cliente;
         const avTipo = avisoTipoCliente(cliente);
-        tipoIdEl.hidden = !avTipo; tipoIdEl.replaceChildren(...(avTipo ? [avTipo] : []));
+        const pend = bloqueCedulaPendiente();
+        tipoIdEl.hidden = !avTipo && !pend; tipoIdEl.replaceChildren(...[avTipo, pend].filter(Boolean));
         pintarTarifa();
         pintarActividad();
       }
@@ -1315,9 +1340,10 @@ export default {
             h('button.btn', { type: 'button', onclick: () => vistaActividad() }, 'Cambiar')),
           cod ? null : h('small.tenue', 'Si el cliente declara IVA y pide que se anote su actividad, toque «Cambiar» y escriba el código.'),
           fueraDeLista ? h('div.act-aviso', 'Este código no está entre las actividades que Hacienda tiene para este cliente. Hacienda podría rechazar la factura.') : null,
-          !cliente.correo ? h('div.act-aviso', correoActivo(app)
+          !cliente.correo ? h('div.act-aviso.mal', h('strong', 'Pida el correo al cliente. '), correoActivo(app)
             ? 'Este cliente no tiene correo. La factura se emite igual, pero la copia impresa no le sirve como gasto o crédito: con el correo recibiría el archivo que sí le sirve. Puede agregarlo en Clientes.'
             : 'Este cliente no tiene correo guardado. La factura se emite igual. Hoy el sistema no envía correos: entregue el comprobante impreso. Puede agregar el correo en Clientes para cuando se active el envío.') : null,
+          (cliente.exoneraciones || []).length ? h('div.act-aviso.info', 'Este cliente tiene ' + cliente.exoneraciones.length + ' exoneración(es) registrada(s) (' + cliente.exoneraciones.map((x) => x.documento).join(', ') + '). Todavía no se aplican solas al cobrar: el sistema solo lo recuerda.') : null,
           sinDireccion(cliente) ? h('div.act-aviso', 'Este cliente no tiene dirección guardada. La factura se emite igual y sale sin dirección; puede agregarla en Clientes si el cliente la quiere.') : null,
         ].filter(Boolean));
       }
@@ -1347,7 +1373,7 @@ export default {
         if (bloqueo) { resumen.className = 'cobro-resumen falta'; resumen.replaceChildren(h('span', 'No se cobra esta cuenta: no entregue vuelto. Si ya recibió dinero por ella, devuélvalo.')); }
         btnCobrar.textContent = cobrando ? 'Cobrando…' : 'Cobrar ' + money(venta.total);
         // Con el cobro bloqueado el botón se ve apagado pero sigue recibiendo el toque (aunque falte el monto): el toque lleva la vista al aviso (no cobra) y al lado se dice por qué
-        btnCobrar.disabled = cobrando || (!bloqueo && (duda || !r.ok || !!b.malo));
+        btnCobrar.disabled = cobrando || cedulaPendiente() || (!bloqueo && (duda || !r.ok || !!b.malo));
         btnCobrar.classList.toggle('bloqueado', !!bloqueo); if (bloqueo) btnCobrar.setAttribute('aria-disabled', 'true'); else btnCobrar.removeAttribute('aria-disabled');
         razonCobro.hidden = !bloqueo; razonCobro.parentElement?.classList.toggle('con-razon', !!bloqueo);
         btnOtro.disabled = cobrando || !b.v || !!r.error;

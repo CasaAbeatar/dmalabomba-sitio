@@ -507,3 +507,7 @@
 .cc-aviso-tipo.mal{border-color:var(--borde-mal);background:var(--rojo-suave);color:var(--rojo-osc);font-weight:600}
 .cobro-tipo-id[hidden]{display:none}
 .cobro-tipo-id .cc-aviso-tipo{margin:0}
+
+.act-aviso.mal{border-color:var(--borde-mal);background:var(--rojo-suave);color:var(--rojo-osc)}
+.cc-cedula-pendiente .cc-ced-fila{display:flex;gap:.5rem;margin-top:.5rem;flex-wrap:wrap}
+.cc-cedula-pendiente input{flex:1 1 11rem;min-height:44px;padding:.4rem .7rem;border:1px solid var(--linea2);border-radius:var(--r);font-size:1rem;background:#fff;color:var(--tinta)}
