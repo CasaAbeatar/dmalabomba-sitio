@@ -352,6 +352,7 @@ export async function abrirFactura(ctx, clave, { previa = null } = {}) {
       el.querySelector('.inv-u-art').textContent = art ? unidadTxt(art.unidad, 2) + ' del artículo' : 'del artículo';
       cantidad.unidad(art?.unidad || '');
       el.dataset.grupo = grupoDe(cat, art) || '';
+      if (simple && el.dataset.grupo === 'unitario') detalles.open = true; // en modo simple no hay cajón: los campos del unitario salen a la vista
       if (!cambiar) { pintarResumen(); return; }
       // Valores por omisión de ese artículo: los de la sugerencia si es el mismo; si no, la regla del contrato (3.3)
       const mismo = art && sug.articulo_id === art.id;
