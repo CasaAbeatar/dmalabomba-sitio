@@ -719,7 +719,7 @@ async function mostrar(dest, forzar = false, { sinFoco = false } = {}) {
     const alAbrir = (m) => ir(m.id);
     vista.replaceChildren(tipo === 'inicio'
       ? pantallaInicio(app, { alAbrir, alCerrarCaja: () => ir('turno'), alAbrirCaja: () => ir('caja') })
-      : pantallaAdmin(app, { alAbrir }));
+      : pantallaAdmin(app, { alAbrir, cambiarPin: cambiarPinDialogo }));
     app.pedido = null;
     if (!sinFoco) enfocarInicial(dest);
     if (tipo === 'inicio') diferir(() => { import('./m_caja.js').catch(() => {}); }); // la caja es lo que más se usa: queda lista antes del primer toque
@@ -789,7 +789,6 @@ function armarApp(reciente = false) {
     h('button.btn.cab-menu', { type: 'button', 'aria-haspopup': 'true', 'aria-expanded': 'false', 'aria-controls': 'cab-panel', onclick: () => abrirMenu(!menuEl.classList.contains('abierto')) }, 'Menú ▾'),
     h('div#cab-panel.cab-panel',
       h('span.cab-sesion', 'Sesión de ', h('strong', app.ctx.nombre || app.usuario)),
-      h('button.btn.chico', { type: 'button', onclick: () => { abrirMenu(false); cambiarPinDialogo(); } }, 'Cambiar mi PIN'),
       h('button.btn.chico', { type: 'button', onclick: () => { abrirMenu(false); cerrarSesion(); } }, 'Cerrar sesión')));
   volverEl = h('button.btn.cab-volver', { type: 'button' });
   inicioEl = h('button.btn.cab-inicio', { type: 'button', onclick: () => subir('inicio') }, 'Inicio');
@@ -802,7 +801,6 @@ function armarApp(reciente = false) {
       tituloEl,
       h('div.cab-estado', h('span.estado-turno')),
       // Atajo siempre visible: anular una factura no debe esconderse dentro de otra pantalla. Lleva a «Anular y reimprimir» con el cursor en el buscador.
-      h('button.btn.cab-anular', { type: 'button', onclick: irAAnular }, 'Anular y reimprimir'),
       menuEl),
     alertaEl, avisosAdmin ? avisosAdmin.el : null, redEl);
   raiz.append(cab, vista);
