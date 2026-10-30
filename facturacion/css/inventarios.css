@@ -414,3 +414,15 @@ body:has(.inv-fondo) .cabecera:has(.cab-usuario.abierto){z-index:120}
 .inv-cabys-fila{border-top:1px solid var(--linea2);padding:.4rem 0}
 .inv-cabys-fila summary{display:flex;align-items:baseline;gap:.5rem;cursor:pointer;min-height:44px;align-items:center}
 .inv-cabys-fila summary .cifra{margin-left:auto}
+
+/* Recibir líneas: fila compacta por línea; lo demás queda en «Detalles» */
+.inv-rubro-fila{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:.6rem 1rem;align-items:end}
+.inv-bolsa-dice{font-weight:600;color:var(--rojo-osc,#8a1017);min-height:44px;display:flex;align-items:center}
+.inv-c-nombre[hidden]{display:none}
+.inv-rubro-fila[hidden]{display:none}
+.inv-fila-cant{max-width:22rem}
+.inv-detalles{border-top:1px dashed var(--linea);padding-top:.5rem}
+.inv-detalles>summary{cursor:pointer;font-weight:600;min-height:44px;display:flex;align-items:center;color:var(--tinta2)}
+.inv-detalles[open]>summary{margin-bottom:.6rem}
+.inv-detalles .inv-campo-art{margin-bottom:.7rem}
+@media (max-width:640px){.inv-rubro-fila{grid-template-columns:minmax(0,1fr)}}

@@ -96,6 +96,8 @@ export const inv = {
   ajustar: (ubicacion, items, motivo, idem) => escribir('fx_inv_ajustar', { p_ubicacion: ubicacion, p_items: items, p_motivo: motivo, p_idem: idem }),
   entradaManual: (ubicacion, sociedad, items, motivo, idem) => escribir('fx_inv_entrada_manual', { p_ubicacion: ubicacion, p_sociedad: sociedad, p_items: items, p_motivo: motivo, p_idem: idem }),
   recepcionDeshacer: (clave, linea, motivo, idem) => escribir('fx_inv_recepcion_deshacer', { p_clave: clave, p_linea: linea, p_motivo: motivo, p_idem: idem }),
+  // Cualquier sesión: crea el artículo desde una línea de factura con solo el rubro (si ya existe uno con ese nombre, devuelve ese)
+  articuloRapido: (nombre, categoria, cabys, unidad) => escribir('fx_inv_articulo_rapido', { p_nombre: nombre, p_categoria_id: categoria, p_cabys: cabys || null, p_unidad: unidad || null }),
   articuloGuardar: (p, idem) => escribir('fx_inv_articulo_guardar', { p, p_idem: idem }),
   categoriaGuardar: (p, idem) => escribir('fx_inv_categoria_guardar', { p, p_idem: idem }),
   ubicacionGuardar: (p, idem) => escribir('fx_inv_ubicacion_guardar', { p, p_idem: idem }),
