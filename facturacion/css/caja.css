@@ -523,3 +523,39 @@
 .esq-cuenta{display:flex;flex-direction:column;gap:.15rem;text-align:left;padding:.7rem;min-height:5.5rem;border:2px solid var(--borde,#c9c9c9);border-radius:.7rem;background:var(--fondo-2,#fff);font:inherit;cursor:pointer}
 .esq-cuenta b{font-size:1.05rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .esq-cuenta.prefact{border-color:var(--borde-ambar,#a87400)}
+
+/* Cuenta como tabla: Producto | Cant. | Precio | Total | × (propuesta aprobada por Emil, 30 oct 2026) */
+.lineas-cab,.linea{display:grid;grid-template-columns:minmax(0,1fr) 3.6rem 5.2rem 4.8rem 2.2rem;grid-template-areas:none;align-items:center;column-gap:.4rem}
+.lineas-cab{font-size:.72rem;text-transform:uppercase;letter-spacing:.04em;color:var(--tinta2);padding:.2rem 0 .15rem}
+.lineas-cab span:nth-child(2){text-align:center}.lineas-cab span:nth-child(3),.lineas-cab span:nth-child(4){text-align:right}
+.linea{padding:.4rem 0}
+.linea>*{grid-area:auto}
+.linea .linea-nombre{display:block;text-align:left;background:none;border:0;padding:.3rem 0;min-height:44px;font:inherit;font-weight:600;font-size:.98rem;line-height:1.2;color:var(--tinta);overflow-wrap:anywhere;cursor:pointer}
+.linea[aria-expanded=true] .linea-nombre,.linea.abierta .linea-nombre{text-decoration:underline}
+.linea>.cant-inp,.linea>.precio-inp{width:100%;min-height:44px;font-size:1rem;padding:.3rem .25rem}
+.linea>.cant-inp{text-align:center}
+.linea>.precio-inp{text-align:right;padding-right:.45rem}
+.linea .linea-total{min-width:0;font-size:.98rem}
+.linea .linea-x{min-width:2.2rem;min-height:44px;background:none;border:0;color:var(--rojo,#b5121f);font-size:1.5rem;line-height:1;cursor:pointer;padding:0}
+.linea>.linea-sub,.linea>.linea-pie{grid-column:1/-1}
+@media (max-width:640px){
+  .lineas-cab,.linea{grid-template-columns:minmax(0,1fr) 3rem 4.4rem 4.2rem 2rem;column-gap:.3rem}
+  .linea .linea-nombre{font-size:.95rem}
+}
+
+/* Menos aire en Facturación (30 oct 2026): "tenemos muchos espacios entre todo" */
+.cuenta-cab{padding:.5rem .7rem}
+.cuenta-lineas{padding:0 .7rem}
+.cuenta-pie{padding:.5rem .7rem}
+.cuenta-cliente{padding:.4rem 0}
+.linea{padding:.2rem 0}
+.caja-cuerpo{gap:.7rem}
+.caja-izq{gap:.35rem}
+.cuentas-bar{gap:.4rem}
+@media (max-width:640px){
+  .lineas-cab,.linea{grid-template-columns:minmax(0,1fr) 2.7rem 4rem 3.7rem 1.7rem;column-gap:.25rem}
+  .linea .linea-nombre{overflow-wrap:break-word;word-break:normal;hyphens:auto;font-size:.92rem}
+  .linea>.cant-inp,.linea>.precio-inp{font-size:.95rem;padding-left:.15rem;padding-right:.3rem}
+  .linea .linea-total{font-size:.9rem}
+  .linea .linea-x{min-width:1.7rem}
+}

@@ -26,7 +26,7 @@ input[type=checkbox],input[type=radio]{width:24px;height:24px;accent-color:var(-
 .bloque-error-tit{margin:0;font-weight:700;color:var(--tinta);font-size:1.05rem}
 
 /* Botones: grandes, con texto, borde fino */
-.btn{display:inline-flex;align-items:center;justify-content:center;gap:.5rem;min-height:48px;padding:.6rem 1.15rem;border:1px solid var(--borde-control,#8f8672);background:var(--papel);border-radius:var(--r);font-weight:600;cursor:pointer;text-align:center;transition:background .12s,border-color .12s,transform .05s}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:.4rem;min-height:44px;padding:.4rem .9rem;border:1px solid var(--borde-control,#8f8672);background:var(--papel);border-radius:var(--r);font-weight:600;cursor:pointer;text-align:center;transition:background .12s,border-color .12s,transform .05s}
 .btn:hover{border-color:var(--tinta)}
 .btn:active{transform:translateY(1px)}
 .btn.primario{background:var(--rojo);border-color:var(--rojo);color:#fff}
@@ -35,28 +35,28 @@ input[type=checkbox],input[type=radio]{width:24px;height:24px;accent-color:var(-
 .btn.peligro{background:#fff;border-color:var(--rojo);color:var(--rojo)}
 .btn.peligro:hover{background:var(--rojo-suave)}
 .btn.suave{background:transparent}
-.btn.grande{min-height:60px;font-size:1.1rem;padding:.8rem 1.4rem}
-.btn.chico{min-height:48px;padding:.35rem .9rem;font-size:.92rem}
+.btn.grande{min-height:52px;font-size:1.08rem;padding:.55rem 1.2rem}
+.btn.chico{min-height:44px;padding:.25rem .75rem;font-size:.92rem}
 .btn[disabled]{opacity:.5;cursor:not-allowed}
 .btn[data-ocupado]{opacity:.6}
-.fila{display:flex;gap:.6rem;flex-wrap:wrap;align-items:center}
+.fila{display:flex;gap:.4rem;flex-wrap:wrap;align-items:center}
 .fila.sep{justify-content:space-between}
-.col{display:flex;flex-direction:column;gap:.6rem}
+.col{display:flex;flex-direction:column;gap:.4rem}
 .crece{flex:1 1 auto;min-width:0}
 
 /* Campos */
-.campo,select.campo,textarea.campo{width:100%;min-height:48px;padding:.6rem .8rem;border:1px solid var(--borde-control,#8f8672);border-radius:var(--r);background:#fff;font:inherit;color:inherit}
+.campo,select.campo,textarea.campo{width:100%;min-height:44px;padding:.4rem .7rem;border:1px solid var(--borde-control,#8f8672);border-radius:var(--r);background:#fff;font:inherit;color:inherit}
 .campo:focus{outline:none;border-color:var(--rojo);box-shadow:0 0 0 3px rgba(184,22,34,.12)}
-.etq{display:flex;flex-direction:column;gap:.3rem;font-weight:600;font-size:.92rem}
+.etq{display:flex;flex-direction:column;gap:.15rem;font-weight:600;font-size:.92rem}
 .etq small{font-weight:400}
 .rejilla{display:grid;gap:.8rem;grid-template-columns:repeat(auto-fit,minmax(220px,1fr))}
 .rejilla.dos{grid-template-columns:repeat(2,1fr)}
 @media(max-width:560px){.rejilla.dos{grid-template-columns:1fr}}
 
 /* Tarjetas y tablas */
-.tarjeta{background:var(--papel);border:1px solid var(--linea);border-radius:14px;padding:1rem;box-shadow:var(--sombra)}
-.tarjeta>h2,.tarjeta>h3{margin-bottom:.6rem}
-.vacio{padding:2rem 1rem;text-align:center;color:var(--tinta2);border:1px dashed var(--linea2);border-radius:14px}
+.tarjeta{background:var(--papel);border:1px solid var(--linea);border-radius:12px;padding:.7rem;box-shadow:var(--sombra)}
+.tarjeta>h2,.tarjeta>h3{margin-bottom:.4rem}
+.vacio{padding:1rem .8rem;text-align:center;color:var(--tinta2);border:1px dashed var(--linea2);border-radius:14px}
 .tabla-caja{overflow-x:auto;border:1px solid var(--linea);border-radius:14px;background:var(--papel)}
 table.tabla{width:100%;border-collapse:collapse;font-size:.95rem}
 .tabla th{text-align:left;font-weight:600;font-size:.8rem;text-transform:uppercase;letter-spacing:.04em;color:var(--tinta2);padding:.7rem .8rem;border-bottom:1px solid var(--linea);white-space:nowrap}

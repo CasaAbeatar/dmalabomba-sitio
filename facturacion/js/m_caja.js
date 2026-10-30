@@ -912,14 +912,7 @@ export default {
       const qty = h('input.campo.cant-inp', { type: 'text', inputmode: 'decimal', value: plano(cantidad), 'aria-label': 'Cantidad de ' + l.descripcion, autocomplete: 'off' });
       const pendiente = sinPrecioLinea(l);
       const precio = h('input.campo.precio-inp' + (pendiente ? '.pendiente' : ''), { type: 'text', inputmode: 'decimal', value: pendiente ? '' : plano(l.precio_final), placeholder: pendiente ? 'Escriba el precio' : '', 'aria-label': 'Precio final con IVA de cada ' + l.descripcion, autocomplete: 'off' });
-      // El detalle, la cantidad y el precio se cambian ahí mismo, en la línea: un toque y se escribe (sin ventana de opciones)
-      const detalle = h('input.campo.det-inp', { type: 'text', maxlength: 200, value: l.descripcion, 'aria-label': 'Detalle de ' + l.descripcion + ' (sale en la factura)', autocomplete: 'off' });
-      detalle.addEventListener('change', () => {
-        const t = detalle.value.trim();
-        if (t.length < 2) { toast('El detalle no puede quedar vacío.', 'error'); detalle.value = l.descripcion; return; }
-        if (t !== l.descripcion) editar({ descripcion: t });
-      });
-      detalle.addEventListener('focus', () => detalle.select());
+      // Cantidad y precio se cambian ahí mismo, en la fila; el nombre (corto) abre las opciones de la línea
       const nota = h('input.campo.nota-inp', { type: 'text', maxlength: 120, value: l.nota || '', placeholder: 'Ej. sin cebolla', 'aria-label': 'Nota de ' + l.descripcion, autocomplete: 'off' });
       const editar = (cambio, aviso) => accion(async () => { cur = await api.lineaEditar(l.id, cambio); repintar(); if (aviso) toast(aviso); });
       qty.addEventListener('change', () => {
@@ -933,7 +926,7 @@ export default {
         if (cents(v) !== cents(l.precio_final) || pendiente) editar({ precio: v });
       });
       nota.addEventListener('change', () => { if (nota.value.trim() !== (l.nota || '')) editar({ nota: nota.value.trim() }); });
-      [qty, precio, nota, detalle].forEach((i) => {
+      [qty, precio, nota].forEach((i) => {
         i.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); i.blur(); } });
         i.addEventListener('focus', () => llevarALaVista(i));
       });
@@ -948,18 +941,19 @@ export default {
       if (editada) marcas.push(h('span.amb', 'Precio cambiado (el menú dice ' + money(prod.precio_final) + ')'));
       if (l.nota && !abierta) marcas.push(h('span.nota-vista', 'Nota: ' + l.nota));
       const id = l.id;
-      const mas = h('button.btn.mas-btn', { type: 'button', 'aria-expanded': String(abierta), 'aria-label': (abierta ? 'Cerrar las opciones de ' : 'Abrir las opciones de ') + l.descripcion,
-        onclick: () => {
-          if (abierta) lineasAbiertas.delete(id); else lineasAbiertas.add(id);
-          pintarCuenta();
-          asideCuenta?.querySelector('[data-linea="' + id + '"]')?.scrollIntoView({ block: 'nearest' });
-        } }, abierta ? 'Cerrar' : 'Opciones');
+      // Nombre corto: lo que se lleva el cliente (la opción), sin repetir el producto. Si la línea tiene un detalle propio, se muestra ese.
+      const corto = (!detalleCambiado && prod?.modificador_nombre) ? String(prod.modificador_nombre).trim() : l.descripcion;
+      const alternar = () => {
+        if (abierta) lineasAbiertas.delete(id); else lineasAbiertas.add(id);
+        pintarCuenta();
+        asideCuenta?.querySelector('[data-linea="' + id + '"]')?.scrollIntoView({ block: 'nearest' });
+      };
+      const nombreBtn = h('button.linea-nombre', { type: 'button', 'aria-expanded': String(abierta), title: l.descripcion, 'aria-label': (abierta ? 'Cerrar las opciones de ' : 'Abrir las opciones de ') + l.descripcion, onclick: alternar }, corto);
+      const quitar = h('button.linea-x', { type: 'button', 'aria-label': 'Quitar ' + l.descripcion + ' de la cuenta', title: 'Quitar de la cuenta', onclick: () => accion(async () => { cur = await api.lineaQuitar(l.id); lineasAbiertas.delete(l.id); repintar(); toast('Quitado: ' + l.descripcion); }) }, '×');
       return h('div.linea' + (editada ? '.editada' : '') + (detalleCambiado || tarifaCambiada ? '.personalizada' : '') + (abierta ? '.abierta' : ''), { 'data-linea': l.id },
-        h('div.linea-nombre', detalle),
-        h('label.cant', h('span.mini-et', 'Cantidad'), qty),
-        h('label.precio-c', h('span.mini-et', 'Precio c/u'), precio),
-        h('div.linea-total', money(l.total_linea)),
-        mas,
+        nombreBtn, qty, precio,
+        h('div.linea-total', money(l.total_linea).replace(/,00$/, '')),
+        quitar,
         marcas.length ? h('div.linea-sub', marcas) : null,
         abierta ? h('div.linea-pie',
           h('label.etq.pie-nota', 'Nota para esta línea', nota),
@@ -1060,7 +1054,7 @@ export default {
         : null;
       // El cliente y su aviso de tarifa van dentro de la parte que se desliza: así nunca le quitan lugar a las líneas
       const lineas = h('div.cuenta-lineas', panelCliente(),
-        h('div.cuenta-items', cur.lineas.length ? cur.lineas.map(filaLinea) : h('div.vacio', { style: 'margin:.8rem 0' }, 'La cuenta está vacía. Toque un producto o búsquelo arriba.')));
+        h('div.cuenta-items', cur.lineas.length ? [h('div.lineas-cab', { 'aria-hidden': 'true' }, h('span', 'Producto'), h('span', 'Cant.'), h('span', 'Precio'), h('span', 'Total'), h('span')), ...cur.lineas.map(filaLinea)] : h('div.vacio', { style: 'margin:.8rem 0' }, 'La cuenta está vacía. Toque un producto o búsquelo arriba.')));
       asideCuenta.replaceChildren(
         h('div.cuenta-cab',
           h('div', h('h2', (TIPOS_SERVICIO[v.tipo_servicio] || v.tipo_servicio) + ' ' + numCuenta(v.numero)), h('div.sub', detalle || (v.tipo_servicio === 'buffet' ? 'Sin nombre' : 'Falta el nombre'))),
