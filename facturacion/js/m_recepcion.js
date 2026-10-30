@@ -34,7 +34,7 @@ const largo = (t) => Array.from(String(t || '')).length;
 const poner = (el, ...xs) => el.replaceChildren(...xs.flat(Infinity).filter((x) => x != null && x !== false && x !== ''));
 // Condición del IVA (nota 18 del anexo v4.4), en palabras para quien responde
 const CONDICIONES = [
-  { c: '01', t: 'Todo el IVA se usa como crédito fiscal', d: 'Lo normal en compras para el negocio: mercadería, insumos y servicios. El IVA que pagó se resta del IVA que se le paga a Hacienda en la declaración del mes.' },
+  { c: '01', t: 'Todo el IVA se usa como crédito fiscal', d: 'Lo normal en compras para el negocio: productos, insumos y servicios. El IVA que pagó se resta del IVA que se le paga a Hacienda en la declaración del mes.' },
   { c: '02', t: 'Solo una parte del IVA se usa como crédito fiscal', d: 'Cuando la compra se usa en parte para algo que no es del negocio o la tarifa que se puede acreditar es menor. Escriba el porcentaje; el resto del IVA se suma al gasto.' },
   { c: '03', t: 'Es un bien de capital (equipo, maquinaria, mobiliario)', d: 'El IVA se usa como crédito fiscal y la compra queda como un activo del negocio, no como gasto del mes.' },
   { c: '04', t: 'Es un gasto: el IVA no se usa como crédito fiscal', d: 'El IVA pagado no se resta en la declaración del IVA. Todo el monto, con el IVA, se registra como gasto.' },
@@ -443,7 +443,7 @@ export default {
         h('div.rec-acciones', ...acciones), enCamino,
         h('ul.rec-ayuda',
           h('li', h('strong', 'Aceptar: '), 'la compra llegó completa y la factura está correcta. Después se elige cómo se usa el IVA: todo como crédito fiscal, solo una parte, bien de capital o gasto.'),
-          h('li', h('strong', 'Aceptar parcialmente: '), 'solo una parte de la compra está correcta (por ejemplo, llegó menos mercadería o un precio está mal). Se escribe el monto que sí acepta y el motivo; el proveedor tiene que hacer una nota de crédito por el resto.'),
+          h('li', h('strong', 'Aceptar parcialmente: '), 'solo una parte de la compra está correcta (por ejemplo, llegaron menos productos o un precio está mal). Se escribe el monto que sí acepta y el motivo; el proveedor tiene que hacer una nota de crédito por el resto.'),
           h('li', h('strong', 'Rechazar: '), 'la compra no es de la empresa o la factura está mal en todo. Se escribe el motivo; el proveedor tiene que anularla con una nota de crédito.')),
         err].filter(Boolean));
 

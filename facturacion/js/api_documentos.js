@@ -178,6 +178,27 @@ export const reenviarCorreoA = (id, { correo = null, usarCliente = false } = {})
   ? rpc('fx_reenviar_correo', { p_id: id, p_correo: String(correo || '').trim() || null, p_usar_cliente: !!usarCliente })
   : reenviarCorreo(id));
 
+// Tipos de identificación que admite una factura (sql/30a, fx_tipos_identificacion_permitidos('01'), solo lee): { tipos:[{tipo,nombre,permitido,mensaje,aviso}], permitidos:[...] }.
+// Se pide una vez por sesión. Si la base todavía no la tiene, null para siempre (sin aviso: la base igual frena el cobro con su propio mensaje); si falla por otra cosa, se vuelve a pedir la próxima vez.
+let tiposIdPromesa = null;
+export function tiposIdentificacion() {
+  if (!tiposIdPromesa) {
+    tiposIdPromesa = rpc('fx_tipos_identificacion_permitidos', { p_tipo_doc: '01' })
+      .then((r) => (r && typeof r === 'object' && Array.isArray(r.tipos) ? r : null))
+      .catch((e) => { if (!faltaFuncion(e)) tiposIdPromesa = null; return null; });
+  }
+  return tiposIdPromesa;
+}
+// Qué decir de un cliente en una factura según esa lectura: { bloquea: true, texto } si Hacienda no la acepta (el texto es el de la base, tal cual),
+// { bloquea: false, texto } si la base trae una advertencia para ese tipo (06), o null si no hay nada que decir o no se sabe.
+export function avisoTipoId(tipos, tipoId) {
+  const t = tipos?.tipos?.find((x) => x && x.tipo === String(tipoId || ''));
+  if (!t) return null;
+  if (t.permitido === false) return { bloquea: true, texto: String(t.mensaje || '').trim() || 'Hacienda no acepta factura para este tipo de identificación. Quite el cliente y cobre: sale un tiquete.' };
+  const av = String(t.aviso || '').trim();
+  return av ? { bloquea: false, texto: av } : null;
+}
+
 // Frase para mostrar cuando algo falla. Los errores que vienen de la base ya llegan en español y con qué hacer (api.js los filtra); solo un error del propio navegador
 // o de este código (TypeError, undefined...) no debe verse tal cual.
 export const FRASE_GENERAL = 'Algo no salió bien. Intente de nuevo; si sigue igual, avise a la persona encargada.';

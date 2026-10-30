@@ -12,10 +12,14 @@ const ICONOS = {
   ajustes: [P('M9 18H55M9 32H55M9 46H55'), ['circle', { cx: 22, cy: 18, r: 5.5, class: 'rel' }], ['circle', { cx: 42, cy: 32, r: 5.5, class: 'rel' }], ['circle', { cx: 28, cy: 46, r: 5.5, class: 'rel' }]],
   caja: [P('M12 30L17 14H47L52 30'), ['rect', { x: 8, y: 30, width: 48, height: 24, rx: 4 }], ['circle', { cx: 32, cy: 42, r: 6.5 }], P('M29.5 42H34.5')],
   producto: [P('M32 7L55 19V44L32 57L9 44V19Z'), P('M9 19L32 32L55 19M32 32V57')],
+  bodega: [P('M6 26L32 9L58 26'), P('M10 23V56H54V23'), P('M20 56V34H44V56'), P('M20 41H44M20 48H44')],
   barras: [P('M9 9V55H56'), ['rect', { x: 17, y: 34, width: 8, height: 21, rx: 1.5 }], ['rect', { x: 30, y: 23, width: 8, height: 32, rx: 1.5 }], ['rect', { x: 43, y: 13, width: 8, height: 42, rx: 1.5 }]],
   emitidas: [P('M10 8H38V56H10Z'), P('M17 19H31M17 27H31M17 35H25'), P('M43 32H57M51 25L58 32L51 39')],
   libro: [P('M15 6H40L50 16V58H15Z'), P('M40 6V16H50M22 28H43M22 36H43'), P('M23 48L29 54L41 42')],
   usuario: [['circle', { cx: 32, cy: 21, r: 10 }], P('M11 57C11 44 20 36 32 36S53 44 53 57')],
+  numeracion: [P('M24 8L19 56M44 8L39 56'), P('M10 23H56M8 41H54')],
+  aviso: [P('M10 14H54V42H30L18 54V42H10Z'), P('M20 24H44M20 32H36')],
+  respaldo: [P('M12 14C12 8 52 8 52 14V50C52 56 12 56 12 50Z'), P('M12 14C12 20 52 20 52 14'), P('M12 27C12 33 52 33 52 27'), P('M12 39C12 45 52 45 52 39')],
 };
 export function icono(nombre) {
   const partes = ICONOS[nombre] || ICONOS.producto;

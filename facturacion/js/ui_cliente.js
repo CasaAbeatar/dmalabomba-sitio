@@ -56,7 +56,7 @@ const sinAvisoFlotante = (texto) => { const n = document.createTextNode(texto); 
 // Si BASE DE DATOS lo vuelve opcional (ver INFORME_FRONT_CATALOGO_RONDA4.md), basta cambiar esta constante a false.
 const CORREO_OBLIGATORIO = true;
 // Topes de la dirección = lo que Hacienda recibe en el XML del cliente (anexo v4.4: otras señas hasta 160, barrio hasta 50; fn/xml.ts corta ahí).
-// La base todavía deja guardar más (250 y 100, por datos viejos y la carga masiva), pero el formulario no deja escribir más de lo que viaja a Hacienda.
+// La base usa los mismos topes desde sql/30c (fx_cliente_guardar y la carga masiva: señas 160 y barrio 50); el formulario no deja escribir más de lo que viaja a Hacienda.
 const MAX_SENAS = 160;
 const MAX_BARRIO = 50;
 const nombresOrdenados = (obj, i) => Object.entries(obj || {}).sort((a, b) => String(i ? a[1][0] : a[1]).localeCompare(String(i ? b[1][0] : b[1]), 'es'));
@@ -159,6 +159,13 @@ export function abrirFormCliente(app, cliente, { alGuardar, alCambiarEstado, tit
     numeroInicial: esNuevo ? numeroInicial : '',
     alTerminar: () => { [correos[0]].find((x) => !x.value.trim())?.focus(); },
   });
+
+  // Tipo 05 «Extranjero no domiciliado»: Hacienda no acepta factura para ese tipo (la base frena el cobro, sql/30a y 30b). Se avisa al elegirlo, para que nadie se entere al cobrar.
+  const avisoTipo05 = aviso('ambar', 'Hacienda no acepta factura para un cliente «' + TIPOS_ID['05'] + '»: a este cliente solo se le puede emitir tiquete, sin sus datos. Si tiene cédula, DIMEX o NITE, use ese número.');
+  avisoTipo05.setAttribute('role', 'status'); avisoTipo05.classList.add('aviso-tipo05'); avisoTipo05.style.marginTop = '.7rem';
+  const revisarTipo05 = () => { avisoTipo05.hidden = ced.valores().tipo_id !== '05'; };
+  ced.el.addEventListener('change', revisarTipo05); ced.el.addEventListener('input', revisarTipo05); ced.el.addEventListener('click', () => setTimeout(revisarTipo05, 0));
+  revisarTipo05();
 
   // Si la base no acepta el guardado, el motivo va al cuadro de error del formulario y el foco al campo del que habla el mensaje
   const campoDelError = (t) => {
@@ -308,7 +315,7 @@ export function abrirFormCliente(app, cliente, { alGuardar, alCambiarEstado, tit
   const cuerpo = h('div.mt-form',
     err,
     esNuevo ? null : h('fieldset', h('legend', 'Estado del cliente'), h('div.col', estadoTexto, estadoBtn)),
-    h('fieldset', h('legend', 'Identificación'), ced.el),
+    h('fieldset', h('legend', 'Identificación'), ced.el, avisoTipo05),
     h('fieldset', h('legend', 'Correo para enviar la factura'),
       h('div.col',
         h('small.tenue', CORREO_OBLIGATORIO ? 'El correo principal es obligatorio: es adonde llega la factura y es el que se informa a Hacienda.' : 'El correo principal es adonde llega la factura y el que se informa a Hacienda.'),

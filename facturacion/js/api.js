@@ -89,6 +89,11 @@ export const redDisponible = () => redOk;
 export function sesionRestaurada() { sesionAvisada = false; marcarRed(true); }
 // La sesión no sirve cuando el servidor contesta 401 (token vencido, sesión cerrada o sin empresa: PT401, PGRST301). No se lee el texto del mensaje.
 const esErrorSesion = (r) => r.status === 401 || /^(PGRST30[123]|PT401)$/.test(String(r.error?.code || ''));
+// Cambio de PIN obligatorio: cualquier llamada puede contestar con el código PT409 (o con la pista 'cambiar_pin') cuando la base exige elegir un PIN nuevo antes de seguir.
+// Se avisa con el evento 'app:pin-obligatorio' y main.js lleva a la pantalla de cambio de PIN y regresa a donde estaba; la respuesta sigue su camino normal (error de negocio con el texto del sistema).
+// Hoy la base TODAVÍA no manda este código (fx_chk no lo tiene): queda listo para el día que se active. No se lee el texto del mensaje.
+export const esPinObligatorio = (e) => !!e && (e.codigo === 'PT409' || e.hint === 'cambiar_pin');
+const esErrorPin = (r) => String(r.error?.code || '') === 'PT409' || r.error?.hint === 'cambiar_pin';
 // Intenta renovar la sesión una sola vez a la vez. 'ok' | 'vencida' (el servidor la rechazó) | 'red' (no hubo conexión)
 function renovarSesion() {
   if (!enRenovacion) {
@@ -113,7 +118,7 @@ const VIDA_CATALOGO = 5 * 60 * 1000;
 export function invalidarCatalogo(soc) { versionCatalogo++; if (soc) cacheCatalogo.delete(soc); else cacheCatalogo.clear(); }
 const CAMBIA_CATALOGO = /^fx_(producto_guardar|cajon_guardar|precios_lote)$/;
 // Solo las consultas (no cambian datos) se repiten solas una vez si falla la red. Una escritura NUNCA se repite sola.
-const SOLO_LECTURA = /^fx_(contexto|catalogo|clientes|venta|ventas_abiertas|turno_estado|turno_sugerencia_apertura|movimientos_efectivo|turnos|salidas|comprobante|comprobantes|comprobante_nc|comprobante_saldos|comprobante_xml|listados2?|documentos|documentos_pagina|alertas|usuarios|recibidas?|respuesta_recibida|producto_historial|venta_reemplazo_info|nota_calcular|cabys_buscar|cabys_verificar)$/;
+const SOLO_LECTURA = /^fx_(contexto|catalogo|clientes|venta|ventas_abiertas|turno_estado|turno_sugerencia_apertura|movimientos_efectivo|turnos|salidas|comprobante|comprobantes|comprobante_nc|comprobante_saldos|comprobante_xml|listados2?|documentos|documentos_pagina|alertas|usuarios|recibidas?|respuesta_recibida|producto_historial|venta_reemplazo_info|nota_calcular|cabys_buscar|cabys_verificar|inv_(alertas|alertas_resumen|articulos|cabys_reglas|cabys_sugerencia|catalogos|conteos?|equivalencias|existencias|factura|factura_estado|lotes|mermas|movimientos|notas_proveedor|pendientes|valorizacion))$/;
 
 // Todos los módulos llaman a sb.rpc: aquí se les da tiempo máximo, un reintento en las consultas y mensajes claros en las fallas de red.
 const rpcOriginal = sb.rpc.bind(sb);
@@ -142,6 +147,7 @@ async function llamar(nombre, args, opciones) {
       }
       // El token ya se renovó y el servidor lo sigue rechazando (por ejemplo una sesión vieja que no está atada a una empresa): no sirve más, hay que entrar de nuevo
       if (renovado && esErrorSesion(r)) { avisarSesionVencida(); return { ...r, error: { ...r.error, message: MSG_SESION, sesion: true, tipo: 'sesion' } }; }
+      if (esErrorPin(r)) document.dispatchEvent(new CustomEvent('app:pin-obligatorio'));
       const { tipo, mensaje } = clasificarFalla(r.error, r.status, !lectura);
       // Un error de negocio vuelve tal cual, en el primer intento: ni se repite ni toca el aviso de «sin conexión». Su texto original queda en .tecnico por si hace falta en la consola.
       if (tipo === 'negocio') return { ...r, error: { ...r.error, message: mensaje, tecnico: r.error.message, tipo: 'negocio', transitorio: false } };

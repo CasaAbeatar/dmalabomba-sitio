@@ -72,6 +72,12 @@ export function fraseParaTurno(docs, est) {
   if (p.sinN) partes.push(`sí suma ${plural(p.sinN, 'documento sin cuenta de caja', 'documentos sin cuenta de caja')} (${money(p.sin / 100)})`);
   let t = `«Anular y reimprimir» muestra ${money(s.neto)} para este turno`;
   t += partes.length ? ', porque ' + partes.join(' y ') + '.' : '.';
-  if (p.otras) t += ` Otras diferencias: ${money(p.otras / 100)}, por ejemplo notas de crédito de ventas de otro turno.`;
+  if (p.otras) {
+    // Con las llaves de la base (28b) se dice cuántas notas de otros turnos tiene este turno; sin ellas queda el ejemplo de siempre.
+    const on = Math.max(0, Math.floor(Number(est.notas_otros_turnos_n || 0)) || 0), ot = Number(est.notas_otros_turnos_total || 0) || 0;
+    t += on > 0
+      ? ` Otras diferencias: ${money(p.otras / 100)}. Este turno tiene ${plural(on, 'nota hecha sobre una venta de otro turno', 'notas hechas sobre ventas de otro turno')} (${ot < 0 ? 'resta ' : ot > 0 ? 'suma ' : ''}${money(Math.abs(ot))}).`
+      : ` Otras diferencias: ${money(p.otras / 100)}, por ejemplo notas de crédito de ventas de otro turno.`;
+  }
   return t;
 }

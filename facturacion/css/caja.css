@@ -489,3 +489,8 @@
 /* Encabezado de «Turnos anteriores»: el título y, a la derecha, el botón «Descargar» (en celular baja debajo del título) */
 .hist-cab{display:flex;align-items:center;justify-content:space-between;gap:.6rem 1rem;flex-wrap:wrap}
 .hist-cab h2{margin:0}
+/* El cliente elegido no puede llevar factura (tipo 05) o trae una advertencia de la base (06): se dice junto al cliente, antes de cobrar */
+.cc-aviso-tipo{margin:.5rem 0 0;padding:.6rem .8rem;border:1px solid var(--borde-ambar);background:var(--ambar-suave);border-radius:var(--r);font-size:.92rem;line-height:1.35;color:#6b4500}
+.cc-aviso-tipo.mal{border-color:var(--borde-mal);background:var(--rojo-suave);color:var(--rojo-osc);font-weight:600}
+.cobro-tipo-id[hidden]{display:none}
+.cobro-tipo-id .cc-aviso-tipo{margin:0}

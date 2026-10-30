@@ -2,7 +2,7 @@
 // y en cada fila los botones «Reimprimir» y «Anular». La lista se pinta por tandas («Mostrar más»): la búsqueda y los filtros actúan sobre todo lo cargado. Tocar la fila abre el detalle (estado en Hacienda, «Ya lo atendí», archivos, reenvíos).
 // La anulación con nota de crédito es la de m_anular.js; la impresión es la de imprimir.js.
 import { h, money, modal, toast, descargar, hoyCR, sumaDias, fechaHora, horaCorta, debounce, num, r2, nombrePropio, nombreLocal, traducirHacienda, campoBusqueda, TIPOS_SERVICIO, MEDIOS, TIPOS_ID } from './util.js';
-import { documentosPagina, DOCUMENTOS_POR_PAGINA, anulacionDe, permiteAnular, otrasNotas, sinEfectoDeSaldos, correoActivo, reenviarCorreo, alertaAtender, copiarVentaParaRehacer, abrirCuentaNueva, mensajeAmable } from './api_documentos.js';
+import { documentosPagina, DOCUMENTOS_POR_PAGINA, anulacionDe, permiteAnular, otrasNotas, sinEfectoDeSaldos, correoActivo, reenviarCorreo, correoOpciones, reenviarCorreoA, alertaAtender, copiarVentaParaRehacer, abrirCuentaNueva, mensajeAmable } from './api_documentos.js';
 import { anularDocumento, cambiarCliente, textoCodigoNota, codigoDeNota, sustituyeSoportado, listaNotas, TEXTO_07 } from './m_anular.js';
 import { devolverParte, corregirMonto, dejarSinEfecto } from './m_nota_parcial.js';
 import { selectorCliente } from './ui_cliente.js';
@@ -931,7 +931,7 @@ export default {
         if (!xml) return toast(vacio, 'error', 6000);
         descargar(nombreArchivo(c, sufijo), xml);
       };
-      const conCorreo = !!c.cliente_snapshot?.correo;
+      const conCorreo = !!c.cliente_snapshot?.correo, conCliente = !!c.cliente_snapshot;
       const hayCorreo = correoActivo(app);
       const recuperable = c.estado === 'rechazado' && /conexi|timeout|temporal|no disponible|token|intente de nuevo/i.test(c.mensaje || '');
       const puedeReenviar = c.estado === 'error' || recuperable || ((c.estado === 'pendiente' || c.estado === 'enviado') && hechoHace > 3);
@@ -953,9 +953,10 @@ export default {
             await ctx.repintar(true); await refrescarTras();
           } })
           : accion({ texto: 'Reenviar a Hacienda', disabled: true, hint: c.estado === 'aceptado' ? 'No hace falta: Hacienda ya lo aceptó' : c.estado === 'rechazado' ? 'Un documento rechazado no se reenvía' : 'Se envía solo; si tarda, aparecerá este botón' }),
-        hayCorreo && conCorreo
-          ? accion({ texto: 'Reenviar al cliente por correo', onclick: async () => { await reenviarCorreo(c.id); toast('Se pidió enviar el correo al cliente. Si no le llega, revise que su correo esté bien escrito.'); await ctx.repintar(true); } })
-          : accion({ texto: 'Reenviar al cliente por correo', disabled: true, hint: !hayCorreo ? 'Disponible cuando se active el correo' : 'Este cliente no tiene correo' })));
+        // Se puede reenviar al correo del documento, al correo actual del cliente (si en Clientes lo corrigieron) o a otro que se escriba: lo decide la ventana «Reenviar por correo»
+        hayCorreo && conCliente && c.estado === 'aceptado'
+          ? accion({ texto: 'Reenviar al cliente por correo', hint: conCorreo ? null : 'Este documento no tiene correo: puede escribir uno', onclick: () => reenviarPorCorreo(c, ctx) })
+          : accion({ texto: 'Reenviar al cliente por correo', disabled: true, hint: !hayCorreo ? 'Disponible cuando se active el correo' : !conCliente ? 'Este documento no tiene cliente' : 'Disponible cuando Hacienda lo acepte' })));
 
       const grupos = [impr, arch, env];
       if (esVenta(c)) grupos.push(bloqueAnular(c, nc, ctx));
@@ -963,11 +964,78 @@ export default {
       return h('div.doc-acciones', grupos);
     }
 
+    // «Reenviar por correo» (fx_reenviar_correo_opciones y fx_reenviar_correo de tres datos, sql/27g): a qué correo se manda, en palabras.
+    // Si la base todavía no tiene las opciones, se reenvía como siempre al correo guardado en el documento. Los mensajes de la base (frenos de 2 minutos y 5 por día,
+    // correo mal escrito, cliente sin correo) se muestran tal cual.
+    async function reenviarPorCorreo(c, ctx) {
+      let op;
+      try { op = await correoOpciones(c.id); } catch (e) { toast(mensajeAmable(e), 'error', 6000); return; }
+      if (!op) {
+        try { await reenviarCorreo(c.id); toast('Se pidió enviar el correo al cliente. Si no le llega, revise que su correo esté bien escrito.'); await ctx.repintar(true); }
+        catch (e) { toast(mensajeAmable(e), 'error', 7000); }
+        return;
+      }
+      const delDoc = String(op.correo_comprobante || '').trim(), delCliente = String(op.correo_cliente_actual || '').trim();
+      const opciones = [
+        delDoc ? { k: 'doc', titulo: 'Al correo de este documento', correo: delDoc } : null,
+        delCliente && (op.son_distintos || !delDoc) ? { k: 'cliente', titulo: 'Al correo que tiene ahora el cliente en Clientes', correo: delCliente } : null,
+        { k: 'otro', titulo: 'A otro correo', correo: null }].filter(Boolean);
+      let elegido = opciones[0].k, enVuelo = false;
+      const campo = h('input.campo', { type: 'email', inputmode: 'email', autocomplete: 'off', maxlength: 500, placeholder: 'nombre@correo.com', 'aria-label': 'Correo al que se envía' });
+      const etqCampo = h('label.etq.doc-correo-campo', { hidden: elegido !== 'otro' }, 'Escriba el correo', h('small', 'Si son varios, sepárelos con una coma (hasta 5).'), campo);
+      const nota = h('p.tenue.doc-correo-nota');
+      const error = h('div.error-caja', { hidden: true, role: 'alert' });
+      const botones = opciones.map((o) => h('button.btn.doc-correo-op', { type: 'button', 'aria-pressed': 'false', 'data-correo-op': o.k, onclick: () => { if (enVuelo) return; elegido = o.k; error.hidden = true; pintar(); if (o.k === 'otro') campo.focus(); } },
+        h('b', o.titulo), o.correo ? h('span', o.correo) : null));
+      const volver = h('button.btn', { type: 'button', onclick: () => { if (!enVuelo) m.cerrar(); } }, 'Volver');
+      const enviar = h('button.btn.primario', { type: 'button', 'data-enviar-correo': '1', onclick: () => mandar() }, 'Enviar el correo');
+      function pintar() {
+        botones.forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.correoOp === elegido)));
+        etqCampo.hidden = elegido !== 'otro';
+        nota.textContent = elegido === 'doc' ? '' : 'El documento quedará guardado con ese correo: los próximos envíos irán ahí. El XML que recibió Hacienda no cambia.';
+        nota.hidden = !nota.textContent;
+        enviar.disabled = enVuelo; volver.disabled = enVuelo;
+        enviar.textContent = enVuelo ? 'Enviando…' : 'Enviar el correo';
+      }
+      async function mandar() {
+        if (enVuelo) return;
+        const escrito = campo.value.trim();
+        if (elegido === 'otro' && !escrito) { error.textContent = 'Escriba el correo al que se envía el documento.'; error.hidden = false; campo.focus(); return; }
+        enVuelo = true; error.hidden = true; pintar();
+        try {
+          const r = await reenviarCorreoA(c.id, elegido === 'otro' ? { correo: escrito } : elegido === 'cliente' ? { usarCliente: true } : {});
+          const destino = r?.cliente_snapshot?.correo || (elegido === 'otro' ? escrito : elegido === 'cliente' ? delCliente : delDoc);
+          enVuelo = false; m.cerrar();
+          toast(`Se pidió enviar el correo a ${destino}. Si no le llega, revise que esté bien escrito.`);
+          await ctx.repintar(true);
+        } catch (e) { enVuelo = false; error.textContent = mensajeAmable(e); error.hidden = false; pintar(); }
+      }
+      const m = modal({ titulo: 'Reenviar por correo', ancho: 520, bloqueo: () => (enVuelo ? 'Espere un momento: se está pidiendo el envío.' : ''),
+        contenido: h('div.doc-correo',
+          h('p', `${NOMBRES_DOCUMENTO[c.tipo_doc] || 'Documento'} N.° ${numeroCorto(c.consecutivo)}${c.cliente_snapshot?.nombre ? ' · ' + nombrePropio(c.cliente_snapshot.nombre) : ''}`),
+          h('div.an-etq', '¿A qué correo se envía?'),
+          h('div.doc-correo-ops', botones), etqCampo, nota, error) });
+      m.el.append(h('div.modal-pie.doc-correo-pie', volver, enviar));
+      pintar();
+      if (elegido === 'otro') campo.focus(); else (botones.find((b) => b.dataset.correoOp === elegido) || enviar).focus();
+    }
+
+    // Un documento de otro ambiente de Hacienda (por ejemplo, de pruebas cuando la empresa ya emite facturas reales): Hacienda no lo tiene en el ambiente actual,
+    // así que no se anula, no se corrige y no se hace de nuevo como su reemplazo (la base lo niega en las notas y en el reemplazo, sql/27h). Se dice en palabras y no se ofrecen esos botones.
+    // (Desde sql/27f y 28e la lista solo trae documentos del ambiente actual: a uno de otro ambiente se llega por un enlace, por ejemplo desde una nota.)
+    const nombreAmbiente = (a) => (a === 'produccion' ? 'producción (facturas reales)' : 'pruebas');
+    const deOtroAmbiente = (c) => { const v = app.soc?.ambiente; return !!v && !!c?.ambiente && c.ambiente !== v; };
+
     function bloqueAnular(c, nc, ctx) {
       const g = h('div.doc-grupo.anular', h('h3', 'Corregir o anular'));
       const repintar = async () => { await ctx.repintar(true); await refrescarTras(); };
       const doc = { ...c, cliente: c.cliente_snapshot?.nombre || '' };
       const verNota = (n) => { ctx.cerrar(); abrirDetalle(n.id); };
+      if (deOtroAmbiente(c) && c.estado !== 'rechazado') {
+        g.append(h('div.doc-espera-caja.doc-otro-ambiente', { role: 'note' }, h('p', h('b', 'No se puede anular, corregir ni hacer de nuevo desde aquí.')),
+          h('p', `Este documento se emitió en el ambiente de ${nombreAmbiente(c.ambiente)} y la empresa ahora emite en el de ${nombreAmbiente(app.soc.ambiente)}. Hacienda no lo tiene en el ambiente actual, así que no se le puede hacer una nota ni una venta que lo reemplace. Si hace falta cobrar de nuevo, haga una venta nueva normal en Facturación.`)));
+        return g;
+      }
       // Con la anulación sin efecto el documento vuelve a valer: sigue al bloque normal, donde la base dice qué se puede (admite_anulacion: no se anula completo otra vez;
       // admite_notas: con la nota de débito 01 aceptada sí se devuelve o se corrige una parte, mientras Hacienda no la acepta no). Aquí no se inventan reglas.
       if (nc) {

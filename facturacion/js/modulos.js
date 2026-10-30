@@ -39,6 +39,16 @@ function insigniaInventarios(app) {
     n('vencen_pronto') ? n('vencen_pronto') + ' vencen pronto' : '', n('bajo_minimo') ? n('bajo_minimo') + ' bajo el mínimo' : ''].filter(Boolean);
   return partes.length ? { texto: partes.slice(0, 2).join(' · '), urgente: !!r?.urgente || n('vencidos') > 0 } : null;
 }
+// Insignias de los dos módulos solo para administradores. main.js (avisos_admin.js) llena app.respaldo y app.seguridad junto con los avisos del encabezado.
+// Respaldos: «1 aviso», roja si es urgente. Usuarios: avisos de ingreso sin atender (muchos intentos fallidos de PIN), siempre rojos.
+function insigniaRespaldos(app) {
+  const r = app.respaldo, n = Math.max(0, Number(r?.problemas ?? 0) || 0);
+  return n > 0 ? { texto: n === 1 ? '1 aviso' : n + ' avisos', urgente: !!r.urgente } : null;
+}
+function insigniaUsuarios(app) {
+  const n = Math.max(0, Number(app.seguridad?.pendientes ?? 0) || 0);
+  return n > 0 ? { texto: n === 1 ? '1 aviso de ingreso' : n + ' avisos de ingreso', urgente: true } : null;
+}
 
 export const MODULOS = [
   // Inicio: los cinco módulos principales, en este orden (3 arriba y 2 más anchos abajo en pantalla ancha; una columna en celular)
@@ -54,7 +64,10 @@ export const MODULOS = [
   { id: 'emitidas', alias: ['facturas-emitidas'], titulo: 'Facturas emitidas', descripcion: 'Buscar facturas y tiquetes de cualquier fecha y ver si Hacienda los aceptó', grupo: 'admin', ruta: 'admin/facturas-emitidas', icono: 'emitidas', orden: 25, cargar: () => import('./m_facturas_emitidas.js') },
   { id: 'recepcion', titulo: 'Contable', descripcion: 'Facturas de proveedores y respuesta a Hacienda', grupo: 'admin', ruta: 'admin/contable', icono: 'libro', orden: 30, insignia: insigniaContable, cargar: () => import('./m_recepcion.js') },
   { id: 'inventarios', titulo: 'Inventarios', descripcion: 'Bodega central y locales: lo que entra, lo que sale y lo que vence', grupo: 'admin', ruta: 'admin/inventarios', icono: 'bodega', orden: 35, insignia: insigniaInventarios, cargar: () => import('./m_inventarios.js') },
-  { id: 'usuarios', titulo: 'Usuarios', descripcion: 'Usuarios, PIN y quién ingresó', grupo: 'admin', ruta: 'admin/usuarios', icono: 'usuario', orden: 40, soloAdmin: true, cargar: () => import('./m_usuarios.js') },
+  { id: 'usuarios', titulo: 'Usuarios', descripcion: 'Usuarios, PIN y quién ingresó', grupo: 'admin', ruta: 'admin/usuarios', icono: 'usuario', orden: 40, soloAdmin: true, insignia: insigniaUsuarios, cargar: () => import('./m_usuarios.js') },
+  { id: 'numeracion', titulo: 'Numeración', descripcion: 'En qué modo está el sistema, qué número sigue y qué falta para facturar de verdad', grupo: 'admin', ruta: 'admin/numeracion', icono: 'numeracion', orden: 45, soloAdmin: true, cargar: () => import('./m_numeracion.js') },
+  { id: 'avisos', titulo: 'Avisos', descripcion: 'Quién recibe los avisos de efectivo por WhatsApp y cómo van', grupo: 'admin', ruta: 'admin/avisos', icono: 'aviso', orden: 47, soloAdmin: true, cargar: () => import('./m_avisos.js') },
+  { id: 'respaldos', titulo: 'Respaldos', descripcion: 'Estado de las copias de seguridad y de la última prueba', grupo: 'admin', ruta: 'admin/respaldos', icono: 'respaldo', orden: 50, soloAdmin: true, insignia: insigniaRespaldos, cargar: () => import('./m_respaldos.js') },
 ];
 
 /* ---------- Consultas sobre el registro (las usa main.js) ---------- */

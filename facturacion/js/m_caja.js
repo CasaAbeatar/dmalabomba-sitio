@@ -6,7 +6,7 @@ import { selectorCliente } from './ui_cliente.js';
 import { estadoDireccion } from './direccion_cliente.js';
 import { apiM } from './api_mantenimiento.js';
 import { esTransitorio } from './api.js';
-import { reemplazoInfo, cobrarReemplazo, esRespuestaDeNegocio } from './api_documentos.js';
+import { reemplazoInfo, cobrarReemplazo, esRespuestaDeNegocio, tiposIdentificacion, avisoTipoId } from './api_documentos.js';
 import { TARIFAS_IVA, tarifaDeLinea, desgloseIva, tarifaHabitual } from './iva.js';
 import { infoActividad, textoActividad } from './actividades.js';
 import { ordenarMenu } from './orden_menu.js';
@@ -963,6 +963,14 @@ export default {
     /* ---------- Cliente de la cuenta y tarifa de IVA habitual ---------- */
     // El cliente se puede elegir ANTES de cobrar (aquí) o dentro de la ventana de cobro; en los dos casos queda guardado en la cuenta.
     const sinAviso = new Set(); // 'cuenta:cliente' donde la cajera pidió dejar el IVA normal: no se vuelve a insistir en esa cuenta
+    // Tipos de identificación que admite la factura (sql/30a): se leen una vez y, si el cliente elegido no puede llevar factura (05, «Extranjero no domiciliado»),
+    // se avisa ANTES de cobrar con el texto de la base, junto al botón «Quitar cliente». Si igual se cobra, fx_cobrar lo frena con el mismo texto (sql/30b), que se muestra tal cual.
+    let tiposId = null;
+    tiposIdentificacion().then((r) => { if (r) { tiposId = r; if (cur?.cliente) repintar(); } });
+    const avisoTipoCliente = (cl) => {
+      const a = cl ? avisoTipoId(tiposId, cl.tipo_id) : null;
+      return a ? h('div.cc-aviso-tipo' + (a.bloquea ? '.mal' : ''), { role: a.bloquea ? 'alert' : 'note' }, a.texto) : null;
+    };
     async function asignarCliente(cl) {
       if (!cur) return false;
       const id = cur.venta.id, st = {};
@@ -1015,6 +1023,7 @@ export default {
         h('div.cc-fila',
           h('div.cc-txt', h('strong', { title: nombrePropio(cl.nombre) }, 'Factura a nombre de ' + nombrePropio(cl.nombre)), h('small', (TIPOS_ID[cl.tipo_id] || 'Identificación') + ' ' + (cl.identificacion || ''))),
           h('div.fila', h('button.btn.chico', { type: 'button', onclick: elegirClienteCuenta }, 'Cambiar cliente'), h('button.btn.chico', { type: 'button', onclick: seguro(() => asignarCliente(null)) }, 'Quitar cliente'))),
+        avisoTipoCliente(cl),
         avisoTarifaCliente(cl, aplicarTarifaCliente));
     }
 
@@ -1137,6 +1146,7 @@ export default {
       const btnQuitarCli = h('button.btn.suave', { type: 'button', onclick: () => { cliente = null; actividadFactura = null; pintarCliente(); asignarCliente(null); } }, 'Quitar cliente');
       const actEl = h('div.cobro-act', { hidden: true });
       const tarEl = h('div.cobro-tarifa', { hidden: true });
+      const tipoIdEl = h('div.cobro-tipo-id', { hidden: true }); // el cliente elegido no puede llevar factura (o trae una advertencia de la base)
       const montoTotal = h('div.monto', money(venta.total));
       const mediosBtns = Object.entries(MEDIOS).map(([k, v]) => h('button.medio-btn', { type: 'button', dataset: { medio: k }, onclick: () => { medio = k; auto = true; sugerir(); actualizar(); inpMonto.focus(); inpMonto.select(); } }, v));
       const inpMonto = h('input.campo.monto-grande', { type: 'text', inputmode: 'decimal', autocomplete: 'off', 'aria-label': 'Monto' });
@@ -1223,6 +1233,7 @@ export default {
         resumen,
         listaPagos,
         h('div.cobro-doc', h('div', h('div', docTxt), h('div', cliTxt)), h('div.fila', btnElegir, btnQuitarCli)),
+        tipoIdEl,
         tarEl,
         actEl,
         h('div.col', h('strong', 'Forma de pago'), h('div.medios', mediosBtns)),
@@ -1255,6 +1266,8 @@ export default {
         cliTxt.textContent = cliente ? 'Cliente: ' + nombrePropio(cliente.nombre) + ' · ' + cliente.identificacion : '¿El cliente necesita factura a su nombre? Elíjalo aquí antes de cobrar.';
         btnElegir.textContent = cliente ? 'Cambiar cliente' : 'Elegir cliente (factura)';
         btnQuitarCli.hidden = !cliente;
+        const avTipo = avisoTipoCliente(cliente);
+        tipoIdEl.hidden = !avTipo; tipoIdEl.replaceChildren(...(avTipo ? [avTipo] : []));
         pintarTarifa();
         pintarActividad();
       }
@@ -1480,7 +1493,8 @@ export default {
           ventasEnCobro.delete(ventaId);
           if (!vivo || !m) return;
           actualizar();
-          if (v.estado === 'no') conErr('No se pudo cobrar: ' + textoDeError(e) + ' No se cobró nada. Revise e intente de nuevo.');
+          // Una respuesta del negocio (por ejemplo, el cliente tipo 05 en una factura, sql/30b) ya dice qué hacer: se muestra tal cual, sin agregar «Revise e intente de nuevo»
+          if (v.estado === 'no') conErr('No se pudo cobrar: ' + textoDeError(e) + ' No se cobró nada.' + (esRespuestaDeNegocio(e) ? '' : ' Revise e intente de nuevo.'));
           else { conErr('No se pudo confirmar si el cobro quedó registrado (' + textoDeError(e) + '). No lo repita todavía: cuando vuelva la conexión toque «Revisar si se cobró».'); btnRevisar.hidden = false; }
           return;
         }

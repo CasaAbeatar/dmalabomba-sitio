@@ -226,3 +226,13 @@
   .doc-pag-ir{grid-column:1/-1;justify-content:center;flex-wrap:nowrap}
   .doc-pag-ir .btn{width:auto;min-width:5rem}
 }
+/* «Reenviar por correo»: a qué correo se manda, con las opciones escritas en palabras (marcado oscuro, igual que los motivos de Anular y los filtros) */
+.doc-correo{display:flex;flex-direction:column;gap:.7rem}
+.doc-correo p{margin:0}
+.doc-correo-ops{display:flex;flex-direction:column;gap:.5rem}
+.doc-correo-op{display:flex;flex-direction:column;align-items:flex-start;justify-content:center;text-align:left;gap:.15rem;min-height:56px;white-space:normal}
+.doc-correo-op span{font-weight:400;color:var(--tinta2);overflow-wrap:anywhere}
+.doc-correo-op[aria-pressed=true]{background:var(--tinta);border-color:var(--tinta);color:#fff}
+.doc-correo-op[aria-pressed=true] span{color:#fff}
+.doc-correo-campo[hidden],.doc-correo-nota[hidden]{display:none}
+@media(max-width:480px){.doc-correo-pie .btn{flex:1 1 100%}}

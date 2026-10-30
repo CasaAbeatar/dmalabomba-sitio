@@ -1,0 +1,55 @@
+/* Avisos de efectivo por WhatsApp (Administración). Se suma a app.css, no lo reemplaza. También la carga ui_efectivo.js. */
+.av{max-width:980px;margin:0 auto;display:flex;flex-direction:column;gap:1rem}
+.av-cab{display:flex;flex-wrap:wrap;gap:.6rem 1rem;align-items:center;justify-content:space-between}
+.av-cab p{margin:0;color:var(--tinta2);flex:1 1 22rem}
+.av-cuerpo{display:flex;flex-direction:column;gap:1rem}
+.av h2{font-size:1.2rem}
+.av-nota{margin:.4rem 0 0;font-size:.9rem;color:var(--tinta2);line-height:1.4}
+.av-vacio{margin:.4rem 0;padding:1rem;text-align:center;color:var(--tinta2);border:1px dashed var(--linea2);border-radius:var(--r)}
+
+/* Estado arriba, en una frase */
+.av-estado{padding:1rem 1.1rem;border-radius:14px;border:1px solid var(--linea2);border-left-width:8px;background:#fff}
+.av-estado.ambar{border-color:var(--borde-ambar);background:var(--ambar-suave);color:#5c3d00}
+.av-estado.verde{border-color:var(--borde-ok);background:var(--verde-suave);color:#14583a}
+.av-estado.rojo{border-color:var(--borde-mal);background:var(--rojo-suave);color:var(--rojo-osc)}
+.av-estado-fila{display:flex;flex-wrap:wrap;gap:.6rem 1rem;align-items:center;justify-content:space-between}
+.av-estado h2{font-size:1.3rem;margin:0 0 .25rem}
+.av-estado p{margin:.2rem 0}
+.av-cifras{font-size:.92rem;margin-top:.5rem!important}
+
+/* Secciones */
+.av-seccion{display:flex;flex-direction:column;gap:.5rem}
+.av-seccion-cab{display:flex;flex-wrap:wrap;gap:.5rem 1rem;align-items:center;justify-content:space-between}
+.av-personas,.av-avisos{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:.7rem}
+.av-persona{display:flex;flex-wrap:wrap;gap:.7rem 1rem;align-items:flex-start;justify-content:space-between;padding:.8rem .95rem;background:var(--papel);border:1px solid var(--linea);border-radius:14px}
+.av-persona.apagada{background:#f4f1ea}
+.av-persona-datos{display:flex;flex-direction:column;gap:.3rem;flex:1 1 20rem;min-width:0}
+.av-persona-nombre{font-weight:700;font-size:1.05rem;display:flex;flex-wrap:wrap;gap:.3rem .6rem;align-items:center;overflow-wrap:anywhere}
+.av-tel{font-weight:600;font-variant-numeric:tabular-nums}
+.av-evs{display:flex;flex-wrap:wrap;gap:.3rem}
+.av-min,.av-cons{font-size:.9rem;color:var(--tinta2)}
+.av-persona-btns{display:flex;flex-wrap:wrap;gap:.5rem;align-items:center}
+.av .chip.gris{color:var(--tinta2);background:#f1ece1;white-space:normal}
+
+/* Formulario */
+.av-form{display:flex;flex-direction:column;gap:.8rem}
+.av-tel-fila{display:flex;align-items:stretch;gap:.4rem}
+.av-prefijo{display:inline-flex;align-items:center;padding:0 .8rem;border:1px solid var(--borde-control,#8f8672);border-radius:var(--r);background:#f4f1ea;font-weight:700;min-height:48px}
+.av-tel-campo{flex:1 1 auto;min-width:0}
+.av-eventos{margin:0;padding:.6rem .8rem;border:1px solid var(--linea2);border-radius:var(--r);display:flex;flex-direction:column;gap:.3rem}
+.av-eventos legend{font-weight:600;padding:0 .3rem}
+.av-check{display:flex;gap:.7rem;align-items:flex-start;min-height:48px;padding:.4rem 0;cursor:pointer}
+.av-check input{width:24px;height:24px;flex:0 0 auto;margin-top:.15rem;accent-color:var(--rojo)}
+.av-check span{display:flex;flex-direction:column;gap:.1rem}
+.av-check small{color:var(--tinta2)}
+.av-cons-fila .av-check{padding:.7rem .8rem;background:var(--ambar-suave);border:1px solid #efd08f;border-radius:var(--r)}
+
+/* Avisos de hoy */
+.av-aviso{padding:.6rem .8rem;background:var(--papel);border:1px solid var(--linea);border-radius:var(--r)}
+.av-aviso-fila{display:flex;flex-wrap:wrap;gap:.3rem .8rem;align-items:center}
+.av-hora{font-weight:700;font-variant-numeric:tabular-nums}
+.av-aviso-que{flex:1 1 12rem;min-width:0;overflow-wrap:anywhere}
+.av-aviso-quien{color:var(--tinta2);font-size:.92rem}
+.av-previa summary{cursor:pointer;font-weight:600;min-height:48px;display:flex;align-items:center}
+.av-previa p{margin:0 0 .4rem;padding:.6rem .8rem;background:#f4f1ea;border-radius:var(--r);overflow-wrap:anywhere;font-size:.95rem}
+@media(max-width:560px){.av-persona-btns .btn{flex:1 1 100%}}

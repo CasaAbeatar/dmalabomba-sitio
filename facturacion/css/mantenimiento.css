@@ -185,3 +185,21 @@
 .mt-form .campo[aria-invalid="true"]{border-color:var(--borde-mal)}
 .dir-resumen.compacto{display:block;margin-top:.25rem;padding:0;border:0;background:none;font-size:.9rem}
 .dir-resumen.compacto .dir-parte{display:inline-block;margin:0 .8rem .1rem 0}
+
+/* Usuarios: tarjeta «Seguridad del ingreso» */
+.mt-seg{margin:0 0 1rem;display:flex;flex-direction:column;gap:.5rem}
+.mt-seg.con-avisos{border-color:var(--borde-mal);border-left:8px solid var(--rojo)}
+.mt-seg-cab{display:flex;flex-wrap:wrap;gap:.4rem .8rem;align-items:center;justify-content:space-between}
+.mt-seg h2{font-size:1.2rem}
+.mt-seg .mt-nota{margin:0}
+.mt-seg-ok{margin:0;color:var(--verde);font-weight:600}
+.mt-seg-lista{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:.7rem}
+.mt-seg-aviso{padding:.8rem .95rem;background:var(--rojo-suave);border:1px solid var(--borde-mal);border-radius:var(--r)}
+.mt-seg-que{margin:0;font-weight:700;overflow-wrap:anywhere}
+.mt-seg-cuando{margin:.2rem 0 0;font-size:.9rem;color:var(--tinta2)}
+.mt-seg-guia{margin:.4rem 0 0;font-size:.95rem}
+.mt-seg-btns{display:flex;flex-wrap:wrap;gap:.5rem;margin-top:.6rem}
+.mt-seg-pie{margin:0;font-size:.85rem;color:var(--tinta2)}
+.mt-seg-antes summary{cursor:pointer;font-weight:600;min-height:48px;display:flex;align-items:center}
+.mt-seg-antes ul{list-style:none;margin:0;padding:0}
+.mt-seg-antes li{display:flex;flex-wrap:wrap;gap:.3rem .8rem;align-items:center;justify-content:space-between;padding:.5rem 0;border-top:1px solid var(--linea);font-size:.92rem}
