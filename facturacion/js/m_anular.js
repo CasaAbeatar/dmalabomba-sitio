@@ -7,6 +7,7 @@ import { h, money, modal, toast, nombrePropio, horaCorta, MEDIOS } from './util.
 import { copiarVentaParaRehacer, abrirCuentaNueva, ventaClonarConCliente, mensajeAmable, anulacionDe, saldosDe, permiteAnular, anulacionDeSaldos, sinEfectoDeSaldos, otrasNotas } from './api_documentos.js';
 import { reimprimirComprobante, numeroCorto } from './imprimir.js';
 import { selectorCliente } from './ui_cliente.js';
+import { leerTurno, efectivoDe, pintarAvisoCaja, abrirCajaAhora, textoSinCaja, avisoSinTurno, avisoSinTurnoHecha, AVISO_TURNO_DESCONOCIDO } from './caja_nota.js'; // la caja y las notas: el mismo aviso y el mismo botón que en las notas parciales
 
 if (!document.querySelector('link[data-fx-anular]')) document.head.append(h('link', { rel: 'stylesheet', href: new URL('../css/anular.css', import.meta.url).href, 'data-fx-anular': '1' }));
 
@@ -71,14 +72,15 @@ const COMO_DEVOLVER = {
 export const lineasDevolver = (pagos, { cierre = true } = {}) => pagos.map((p) => h('li', (COMO_DEVOLVER[p.medio] || ((m) => `${MEDIOS[p.medio] || p.medio} ${money(m)}: devuélvalo por el mismo medio.`))(p.monto, cierre)));
 const pagoTxt = (pagos) => pagos.map((p) => `${MEDIOS[p.medio] || p.medio} ${money(p.monto)}`).join(', ');
 
-function bloqueDinero(motivo, pagos) {
+// cierre = false cuando la nota no entra en ningún cierre de caja (no hay turno abierto) o no se pudo comprobar: entonces no se habla del cierre
+function bloqueDinero(motivo, pagos, { cierre = true } = {}) {
   const caja = h('div.an-dinero');
   const tit = h('div.an-etq', 'Qué hacer con el dinero');
   if (!motivo) { caja.append(tit, h('p', 'Escoja el motivo y aquí verá qué hacer con el dinero.')); return caja; }
-  const dev = (intro) => [h('p', intro), pagos.length ? h('ul', lineasDevolver(pagos)) : h('p', 'Devuélvalo por el mismo medio con que pagó.')];
+  const dev = (intro) => [h('p', intro), pagos.length ? h('ul', lineasDevolver(pagos, { cierre })) : h('p', 'Devuélvalo por el mismo medio con que pagó.')];
   let cuerpo;
-  if (motivo === M_CLIENTE) cuerpo = [h('p', 'No hay dinero que devolver: el cliente ya pagó.'), h('p', `Después de anular, haga la venta de nuevo con el cliente correcto y registre el mismo pago${pagos.length ? ' (' + pagoTxt(pagos) + ')' : ''}. El cierre de caja descuenta el efectivo del documento anulado y suma el de la venta nueva, así que queda igual.`)];
-  else if (motivo === M_PRECIO || motivo === M_PRODUCTOS) cuerpo = [h('p', 'Después de anular, haga la venta de nuevo con ' + (motivo === M_PRECIO ? 'el precio correcto' : 'los productos y las cantidades correctos') + '.'), h('p', `Al cobrar la venta nueva, ponga el mismo pago que el cliente ya hizo${pagos.length ? ' (' + pagoTxt(pagos) + ')' : ''}: el vuelto que muestre el cobro es la diferencia que se le devuelve. Si la venta nueva sale más cara, cobre esa diferencia.`), h('p', 'El cierre de caja ya descuenta el efectivo del documento anulado, así que no anote nada como salida de efectivo.')];
+  if (motivo === M_CLIENTE) cuerpo = [h('p', 'No hay dinero que devolver: el cliente ya pagó.'), h('p', `Después de anular, haga la venta de nuevo con el cliente correcto y registre el mismo pago${pagos.length ? ' (' + pagoTxt(pagos) + ')' : ''}.${cierre ? ' El cierre de caja descuenta el efectivo del documento anulado y suma el de la venta nueva, así que queda igual.' : ''}`)];
+  else if (motivo === M_PRECIO || motivo === M_PRODUCTOS) cuerpo = [h('p', 'Después de anular, haga la venta de nuevo con ' + (motivo === M_PRECIO ? 'el precio correcto' : 'los productos y las cantidades correctos') + '.'), h('p', `Al cobrar la venta nueva, ponga el mismo pago que el cliente ya hizo${pagos.length ? ' (' + pagoTxt(pagos) + ')' : ''}: el vuelto que muestre el cobro es la diferencia que se le devuelve. Si la venta nueva sale más cara, cobre esa diferencia.`), cierre ? h('p', 'El cierre de caja ya descuenta el efectivo del documento anulado, así que no anote nada como salida de efectivo.') : null].filter(Boolean);
   else if (motivo === M_DEVOLVIO) cuerpo = dev('Devuélvale al cliente todo lo que pagó por este documento:');
   else if (motivo === M_DOBLE) cuerpo = [...dev('Si el cliente pagó de más de verdad, devuélvale lo que pagó por este documento:'), h('p', 'Si solo se registró dos veces en el sistema y el cliente pagó una vez, no hay dinero que devolver.')];
   else cuerpo = dev('Si hay que devolver dinero, devuélvalo por el mismo medio con que pagó:');
@@ -157,7 +159,7 @@ function listaProductos(c) {
 }
 
 // Confirmación: lo que se va a anular (número, hora, cliente, total), el tipo de nota con su código y el motivo. Un solo toque cuenta: el botón se apaga al primer toque.
-function confirmarAnulacion(d, razon, soporta07) {
+function confirmarAnulacion(d, razon, soporta07, cajaTxt = null) {
   return new Promise((ok) => {
     let hecho = false;
     const fin = (v, cerrar) => { if (hecho) return; hecho = true; cerrar?.(); ok(v); };
@@ -168,7 +170,8 @@ function confirmarAnulacion(d, razon, soporta07) {
         h('div.an-ficha',
           h('div.an-ficha-fila', h('span.an-etq', 'Nota que se creará'), h('div', h('b', `Nota de crédito por ${money(d.total)}`), h('div', 'Tipo de nota: ' + textoCodigoNota('01') + '. Deja sin efecto todo el documento, no una parte.'))),
           soporta07 ? h('div.an-ficha-fila', h('span.an-etq', 'Si después hace la venta de nuevo'), h('div', 'La venta nueva llevará el ' + TEXTO_07 + '.')) : null,
-          h('div.an-ficha-fila', h('span.an-etq', 'Motivo'), h('div', razon))),
+          h('div.an-ficha-fila', h('span.an-etq', 'Motivo'), h('div', razon)),
+          cajaTxt ? h('div.an-ficha-fila', h('span.an-etq', 'Caja'), h('div', cajaTxt)) : null),
         h('p.an-sin-deshacer', 'La nota de crédito no se puede borrar.')),
       botones: [{ texto: 'No, volver', clase: 'grande', onclick: (c) => fin(false, c) }, { texto: 'Sí, anular', clase: 'peligro.grande', onclick: (c) => fin(true, c) }] });
     ignorarToqueDeFondo(mc);
@@ -192,6 +195,12 @@ export function anularDocumento(app, d, { alTerminar, alVerNC, alCambiarCliente,
   let original = null; // el comprobante completo (productos y pagos)
   let soporta07 = false;
   let enVuelo = false;
+  // La caja (28c): anular un documento pagado en efectivo devuelve ese efectivo y la base lo exige en un turno abierto. Se pregunta al abrir la ventana y otra vez al tocar «Anular».
+  // 'pendiente' (todavía no se leyó, se habla como siempre) | 'abierto' | 'cerrado' | 'desconocido' (la lectura falló: no se afirma nada del cierre de caja)
+  let turno = 'pendiente';
+  let originalFallo = false; // no se pudo leer cómo se pagó: no se sabe cuánto efectivo se devuelve
+  const zonaCaja = h('div.np-caja', { role: 'status', hidden: true });
+  const efeCaja = () => (original ? efectivoDe(pagosDe(original)) : originalFallo ? null : 0); // céntimos; null = no se sabe
   let saldosListos = false; // ya se supo (o no se pudo saber) si la base permite anular completo
   let bloqueado = false; // la base dice que este documento no se puede anular completo (fx_comprobante_saldos.admite_anulacion = false)
   const zonaBloqueo = h('div');
@@ -206,15 +215,17 @@ export function anularDocumento(app, d, { alTerminar, alVerNC, alCambiarCliente,
       h('li', 'Si hay que cobrar de nuevo, después toque «Hacer la venta de nuevo en Facturación».' + (soporta07 ? ` La venta nueva llevará el ${TEXTO_07}.` : '')),
       h('li', 'La nota de crédito no se puede borrar.'))));
   explica();
-  app.api.comprobante(d.id).then((c) => {
+  const cargaOriginal = app.api.comprobante(d.id).then((c) => {
     if (!m.el.isConnected) return;
     original = c; soporta07 = sustituyeSoportado(c);
     detalleLineas.replaceChildren(...listaProductos(c));
-    explica(); pintarDinero();
+    explica(); pintarDinero(); pintarCaja();
   }).catch(() => {
     if (!m.el.isConnected) return;
+    originalFallo = true;
     // Sin el documento no se pueden mostrar los productos ni los montos por medio de pago: se dice, para que nadie crea que no hay nada que devolver
     detalleLineas.replaceChildren(h('div.an-aviso', h('p', h('b', 'No se pudo leer lo que se vendió ni cómo se pagó. '), 'Puede seguir, pero antes de devolver dinero revise el documento: aquí no se ven los montos por medio de pago.')));
+    pintarCaja();
   });
 
   let elegido = null;
@@ -223,7 +234,13 @@ export function anularDocumento(app, d, { alTerminar, alVerNC, alCambiarCliente,
   const error = h('div.error-caja', { hidden: true, role: 'alert' });
   const zonaCliente = h('div');
   const zonaParcial = h('div'); // «¿Solo hay que devolver o corregir una parte?», cuando la base admite notas parciales
-  const pintarDinero = () => zonaDinero.replaceChildren(bloqueDinero(elegido, pagosDe(original)));
+  const pintarDinero = () => zonaDinero.replaceChildren(bloqueDinero(elegido, pagosDe(original), { cierre: turno === 'pendiente' || turno === 'abierto' }));
+  // El aviso de la caja: ámbar con «Abrir la caja ahora» si hay que abrirla antes de anular; gris si solo se informa. Devuelve true si la caja bloquea la anulación.
+  const pintarCaja = () => pintarAvisoCaja(zonaCaja, { turno, efeCent: efeCaja(), anulacion: true, abrir: () => abrirCaja() });
+  const bloqueaCaja = () => turno === 'cerrado' && efeCaja() > 0;
+  const refrescarCaja = async () => { turno = await leerTurno(app); if (!m.el.isConnected) return; pintarCaja(); pintarDinero(); };
+  // «Abrir la caja ahora»: el formulario de «Apertura y cierre de caja», sin salir de esta ventana
+  const abrirCaja = () => abrirCajaAhora(app, { sigue: () => m.el.isConnected, textoOk: 'Caja abierta. Ya puede anular el documento.', alAbrir: (t) => { turno = t; pintarCaja(); pintarDinero(); } });
   const botonesMotivo = MOTIVOS.map((t) => h('button.btn.atajo', { type: 'button', 'aria-pressed': 'false', onclick: () => {
     if (enVuelo) return;
     elegido = t;
@@ -240,6 +257,7 @@ export function anularDocumento(app, d, { alTerminar, alVerNC, alCambiarCliente,
   // Todo lo que se escoge para anular; se esconde si la base dice que este documento no se puede anular completo
   const cuerpoMotivos = h('div.an-dlg',
     zonaParcial,
+    zonaCaja,
     h('div.an-etq', '¿Por qué se anula? (Hacienda lo pide)'),
     h('div.an-motivos', botonesMotivo),
     zonaCliente,
@@ -256,7 +274,7 @@ export function anularDocumento(app, d, { alTerminar, alVerNC, alCambiarCliente,
     vuelo(true); seguir.disabled = true; error.hidden = true;
     try {
       const nc = (await anulacionDe(d.id)).nc;
-      if (nc) { dudoso = false; vuelo(false); m.cerrar(); resultado(nc, { motivo: elegido, yaExistia: false }); try { await alTerminar?.(nc); } catch { /* nada */ } return; }
+      if (nc) { dudoso = false; vuelo(false); m.cerrar(); resultado(nc, { motivo: elegido, yaExistia: false, turno }); try { await alTerminar?.(nc); } catch { /* nada */ } return; }
       if (falloMs != null && ahoraMs() - falloMs < MS_SEGURO) { error.textContent = textoTodavia(falloMs); error.hidden = false; return; } // sigue la duda: no se afirma nada
       dudoso = false; error.textContent = 'No se anuló nada. Puede intentarlo de nuevo.'; error.hidden = false; seguir.textContent = 'Anular';
     } catch { error.textContent = 'Todavía no hay conexión para comprobarlo. Espere unos segundos y toque «Revisar si quedó anulado».'; error.hidden = false; }
@@ -274,12 +292,20 @@ export function anularDocumento(app, d, { alTerminar, alVerNC, alCambiarCliente,
     error.hidden = true;
     vuelo(true); seguir.disabled = true;
     if (!saldosListos) seguir.textContent = 'Revisando si se puede anular…'; // la base puede tardar unos segundos en contestar: el botón dice qué está pasando
+    const avisoLento = setTimeout(() => { if (enVuelo && saldosListos) seguir.textContent = 'Revisando la caja…'; }, 500); // si la base tarda en decir si la caja está abierta, el botón lo cuenta
     try {
-      await cargaSaldos; // si la base ya dijo que no se puede anular completo, se avisa aquí y no se llega a la confirmación
+      // La base también dice si se puede anular completo (cargaSaldos), cómo se pagó (cargaOriginal) y si hay turno abierto (se pregunta ahora: puede haberse abierto o cerrado desde otro aparato)
+      await Promise.all([cargaSaldos, cargaOriginal, refrescarCaja()]); // si la base ya dijo que no se puede anular completo, se avisa aquí y no se llega a la confirmación
       if (!m.el.isConnected) return; // la ventana se cerró mientras se revisaba: no se abre una confirmación sobre una pantalla que la persona ya dejó
       if (bloqueado) return;
       seguir.textContent = rotuloSeguir();
-      const ok = await confirmarAnulacion(d, razon, soporta07);
+      // Caja cerrada y el documento se pagó en efectivo: la base no deja devolver ese dinero sin un turno abierto. Se dice ANTES de enviar y se ofrece abrir la caja.
+      if (bloqueaCaja()) {
+        error.textContent = textoSinCaja(efeCaja(), { anulacion: true }) + ' Toque «Abrir la caja ahora» en el aviso de la caja.'; error.hidden = false;
+        try { zonaCaja.scrollIntoView({ block: 'nearest' }); zonaCaja.querySelector('[data-abrir-caja]')?.focus({ preventScroll: true }); } catch { /* nada */ }
+        return;
+      }
+      const ok = await confirmarAnulacion(d, razon, soporta07, turno === 'cerrado' ? avisoSinTurno({ anulacion: true }) : null);
       if (!ok) { volverAlBoton = true; return; } // «No, volver»: el teclado queda otra vez en «Anular», donde estaba
       seguir.textContent = 'Anulando, espere…';
       const marca = { falloMs: null };
@@ -287,12 +313,18 @@ export function anularDocumento(app, d, { alTerminar, alVerNC, alCambiarCliente,
       try { nota = await emitirNota(app, d, razon, marca); } finally { if (marca.falloMs != null) falloMs = marca.falloMs; }
       const { nc, yaExistia } = nota;
       vuelo(false); m.cerrar();
-      resultado(nc, { motivo: elegido, yaExistia });
+      resultado(nc, { motivo: elegido, yaExistia, turno });
       try { await alTerminar?.(nc); } catch { /* la lista se actualiza sola en unos segundos */ }
     } catch (e) {
       error.textContent = e instanceof FalloNota ? e.message : mensajeAmable(e); error.hidden = false; volverAlBoton = true; // el error se lee y el teclado queda en el botón
       if (e instanceof FalloNota && e.dudoso) { dudoso = true; Promise.resolve(alTerminar?.(null)).catch(() => {}); }
+      // «Abra la caja para devolver efectivo…»: la caja se cerró mientras tanto. Se pone el aviso con su botón y el teclado va a él
+      if (e instanceof FalloNota && /^abra la caja para (devolver|cobrar)/i.test(e.message)) {
+        turno = 'cerrado'; pintarCaja(); pintarDinero(); volverAlBoton = false;
+        try { zonaCaja.scrollIntoView({ block: 'nearest' }); zonaCaja.querySelector('[data-abrir-caja]')?.focus({ preventScroll: true }); } catch { /* nada */ }
+      }
     } finally {
+      clearTimeout(avisoLento);
       vuelo(false); seguir.disabled = bloqueado; seguir.textContent = rotuloSeguir();
       if (volverAlBoton && m.el.isConnected && !seguir.disabled) { try { seguir.focus({ preventScroll: true }); } catch { /* nada */ } }
     }
@@ -308,6 +340,7 @@ export function anularDocumento(app, d, { alTerminar, alVerNC, alCambiarCliente,
       zonaBloqueo,
       cuerpoMotivos) });
   pintarDinero();
+  refrescarCaja(); // sin esperar: el aviso de la caja sale en cuanto la base contesta
   ignorarToqueDeFondo(m);
   // Los dos botones quedan fuera de la parte que se desplaza: se ven siempre, aunque la ventana sea más alta que la pantalla
   m.el.append(h('div.modal-pie.an-pie', error, volver, seguir));
@@ -354,7 +387,7 @@ export function anularDocumento(app, d, { alTerminar, alVerNC, alCambiarCliente,
   }).catch(() => {}).finally(() => { saldosListos = true; });
   return m;
 
-  function resultado(nc, { motivo, yaExistia }) {
+  function resultado(nc, { motivo, yaExistia, turno: turnoEnvio = 'pendiente' }) {
     const codigo = codigoDeNota(nc);
     const clienteMal = !yaExistia && motivo === M_CLIENTE;
     // reimprimirComprobante pregunta Tiquete o Factura carta e imprime con el formato de la nota de crédito
@@ -401,7 +434,10 @@ export function anularDocumento(app, d, { alTerminar, alVerNC, alCambiarCliente,
         textoCodigoNota(codigo) ? h('div.an-codigo', 'Tipo de nota: ' + textoCodigoNota(codigo)) : null,
         yaExistia ? h('div', 'Ya estaba anulado (quizás desde otro aparato). No se creó otra nota.') : null),
       h('p', estadoTxt),
-      yaExistia ? null : bloqueDinero(motivo, pagosDe(original)),
+      // Con la caja cerrada solo se llega aquí si la anulación no movió efectivo (la base lo exige): se dice que no entra en ningún cierre y que en Informes sale «sin turno»
+      !yaExistia && turnoEnvio === 'cerrado' ? h('div.an-aviso.np-sin-turno', h('p', avisoSinTurnoHecha({ anulacion: true }))) : null,
+      !yaExistia && turnoEnvio === 'desconocido' ? h('div.an-aviso.np-sin-turno', h('p', AVISO_TURNO_DESCONOCIDO)) : null,
+      yaExistia ? null : bloqueDinero(motivo, pagosDe(original), { cierre: turnoEnvio === 'pendiente' || turnoEnvio === 'abierto' }),
       fallo,
       soporta07 ? h('p.tenue', `Si hace la venta de nuevo, la venta nueva llevará el ${TEXTO_07}.`) : null,
       h('div.an-botones', imp, ...botones, ver, h('button.btn', { type: 'button', onclick: () => r.cerrar() }, 'Cerrar'))) });
@@ -420,6 +456,13 @@ export function cambiarCliente(app, d, { alTerminar } = {}) {
   const nombre = conArticulo(d.tipo_doc);
   const razon = esTiquete ? RAZON_FACTURA : RAZON_CORREGIR;
   let estado = d.estado || 'aceptado', cliente = null, nc = null, original = null, enVuelo = false, vivo = true, soporta07 = false, yaCorregida = false;
+  // La caja (28c): este camino también anula, y anular un documento pagado en efectivo devuelve ese efectivo: la base lo exige en un turno abierto (ver anularDocumento)
+  let turno = 'pendiente', originalFallo = false;
+  const zonaCaja = h('div.np-caja', { role: 'status', hidden: true });
+  const efeCaja = () => (original ? efectivoDe(pagosDe(original)) : originalFallo ? null : 0); // céntimos; null = no se sabe
+  const bloqueaCaja = () => !nc && estado === 'aceptado' && turno === 'cerrado' && efeCaja() > 0;
+  const refrescarCaja = async () => { turno = await leerTurno(app); if (vivo) pintar(); };
+  const abrirCaja = () => abrirCajaAhora(app, { sigue: () => vivo, textoOk: 'Caja abierta. Ya puede seguir.', alAbrir: (t) => { turno = t; pintar(); } });
   let saldos = null; // fx_comprobante_saldos: si dice que no se puede anular completo, este camino tampoco sirve (también anula)
   let notaSinEfecto = null; // la nota de débito que dejó sin efecto la anulación de este documento, si la hay
   const pagos = () => pagosDe(original);
@@ -431,6 +474,7 @@ export function cambiarCliente(app, d, { alTerminar } = {}) {
   const error = h('div.error-caja', { hidden: true, role: 'alert' });
   const porque = h('p.an-porque');
   const principal = h('button.btn.primario.grande', { type: 'button', onclick: () => seguir() }, '');
+  const zonaDinero = h('div.an-dinero');
   const volver = h('button.btn', { type: 'button', onclick: () => m.cerrar() }, 'Volver sin cambiar nada');
 
   const elegirCliente = () => selectorCliente(app, { titulo: 'Elegir el cliente de la factura', alElegir: (cl) => { cliente = cl; error.hidden = true; pintar(); } });
@@ -445,6 +489,11 @@ export function cambiarCliente(app, d, { alTerminar } = {}) {
       rechazado ? null : h('li', h('b', `Se anula ${nombre} N.° ${numeroCorto(d.consecutivo)} `), `con una nota de crédito por ${money(d.total)}. Tipo de nota: ${textoCodigoNota('01')}. Motivo: ${M_CLIENTE}.`),
       h('li', h('b', 'Se deja lista la venta de nuevo '), 'en Facturación, con los mismos productos y ese cliente. Usted solo cobra: ponga el mismo pago que el cliente ya hizo' + (pagos().length ? ` (${pagoTxt(pagos())})` : '') + '.'
         + (soporta07 ? ` La venta nueva llevará el ${TEXTO_07}.` : ''))].filter(Boolean));
+    // Sin cierre de caja que mencionar cuando no hay turno abierto o no se pudo comprobar
+    const cierre = turno === 'pendiente' || turno === 'abierto';
+    zonaDinero.replaceChildren(h('div.an-etq', 'Qué hacer con el dinero'), h('p', 'No hay que devolver dinero ni cobrar otra vez al cliente: ya pagó.' + (cierre ? ' El cierre de caja descuenta el efectivo del documento anulado y suma el de la venta nueva, así que queda igual. No anote nada como salida de efectivo.' : '')));
+    // La caja solo importa mientras falta anular: con la nota ya hecha, o si Hacienda no aceptó el documento (no hay nota), no se dice nada
+    if (!nc && estado === 'aceptado') pintarAvisoCaja(zonaCaja, { turno, efeCent: efeCaja(), anulacion: true, abrir: () => abrirCaja() }); else { zonaCaja.replaceChildren(); zonaCaja.hidden = true; }
     aviso.hidden = true;
     if (estado === 'pendiente' || estado === 'enviado') {
       aviso.hidden = false; aviso.className = 'an-aviso espera';
@@ -467,11 +516,11 @@ export function cambiarCliente(app, d, { alTerminar } = {}) {
         h('p', sinPermiso().motivo),
         ...(notas ? [h('div.an-etq', 'Notas que ya tiene este documento'), notas] : [])].filter(Boolean)); // replaceChildren escribiría «null» como texto
     }
-    const puede = !!cliente && (estado === 'aceptado' || rechazado || !!nc) && !enVuelo && !sinPermiso() && !yaCorregida;
+    const puede = !!cliente && (estado === 'aceptado' || rechazado || !!nc) && !enVuelo && !sinPermiso() && !yaCorregida && !bloqueaCaja();
     principal.disabled = !puede;
     principal.textContent = enVuelo ? 'Trabajando, espere…' : nc ? 'Dejar lista la venta nueva con este cliente' : rechazado ? 'Hacer la venta de nuevo con este cliente'
       : esTiquete ? 'Anular el tiquete y armar la factura' : 'Anular la factura y armarla con el cliente correcto';
-    porque.textContent = puede || enVuelo ? '' : yaCorregida ? 'La venta nueva ya existe. Cierre esta ventana.' : sinPermiso() ? 'No se puede seguir con este documento. Lea el aviso de arriba.' : !cliente ? 'Primero elija al cliente.' : 'Todavía no se puede seguir: espere a que Hacienda acepte el documento.';
+    porque.textContent = puede || enVuelo ? '' : yaCorregida ? 'La venta nueva ya existe. Cierre esta ventana.' : sinPermiso() ? 'No se puede seguir con este documento. Lea el aviso de arriba.' : bloqueaCaja() ? 'Primero hay que abrir la caja. Toque «Abrir la caja ahora» en el aviso de la caja.' : !cliente ? 'Primero elija al cliente.' : 'Todavía no se puede seguir: espere a que Hacienda acepte el documento.';
     volver.disabled = enVuelo;
   }
 
@@ -480,7 +529,15 @@ export function cambiarCliente(app, d, { alTerminar } = {}) {
     enVuelo = true; error.hidden = true; pintar();
     try {
       if (!nc && estado === 'aceptado') {
-        const ok = await confirmarAnulacion(d, razon, soporta07);
+        // El turno se pregunta ahora: puede haberse abierto o cerrado desde otro aparato. Con la caja cerrada y efectivo que devolver no se envía nada.
+        await Promise.all([refrescarCaja(), original ? null : app.api.comprobante(d.id).then((c) => { original = c; }, () => { originalFallo = true; })]);
+        if (!vivo) return;
+        if (bloqueaCaja()) {
+          error.textContent = textoSinCaja(efeCaja(), { anulacion: true }) + ' Toque «Abrir la caja ahora» en el aviso de la caja.'; error.hidden = false;
+          try { zonaCaja.scrollIntoView({ block: 'nearest' }); } catch { /* nada */ }
+          return;
+        }
+        const ok = await confirmarAnulacion(d, razon, soporta07, turno === 'cerrado' ? avisoSinTurno({ anulacion: true }) : null);
         if (!ok) return;
         const r = await emitirNota(app, d, razon);
         nc = r.nc;
@@ -501,6 +558,7 @@ export function cambiarCliente(app, d, { alTerminar } = {}) {
       const msg = e instanceof FalloNota ? e.message : mensajeAmable(e);
       // Si la base dice que la venta ya se corrigió con otra venta cobrada, repetir no sirve: se dice con palabras y el botón se apaga
       if (nc && !(e instanceof FalloNota) && /ya se corrigi[oó] con/i.test(msg)) { yaCorregida = true; error.textContent = 'El documento ya quedó anulado. ' + msg + ' No hace falta hacer la venta de nuevo.'; }
+      else if (!nc && e instanceof FalloNota && /^abra la caja para (devolver|cobrar)/i.test(msg)) { turno = 'cerrado'; error.textContent = msg; } // la caja se cerró mientras tanto: el aviso con su botón sale en pintar()
       else error.textContent = !nc ? msg : 'El documento ya quedó anulado. ' + (e instanceof FalloNota ? msg : 'No se pudo dejar lista la venta nueva. ' + msg + ' Toque el botón de abajo para intentarlo de nuevo.');
     } finally { enVuelo = false; if (vivo) pintar(); }
   }
@@ -512,7 +570,8 @@ export function cambiarCliente(app, d, { alTerminar } = {}) {
       h('div.an-compruebe', 'Documento que se va a cambiar:'),
       resumenDoc(d),
       pasos,
-      h('div.an-dinero', h('div.an-etq', 'Qué hacer con el dinero'), h('p', 'No hay que devolver dinero ni cobrar otra vez al cliente: ya pagó. El cierre de caja descuenta el efectivo del documento anulado y suma el de la venta nueva, así que queda igual. No anote nada como salida de efectivo.')),
+      zonaCaja,
+      zonaDinero,
       aviso) });
   const reloj = setInterval(async () => {
     if (!vivo || enVuelo || document.hidden || estado === 'aceptado' || estado === 'rechazado' || nc) return;
@@ -534,5 +593,6 @@ export function cambiarCliente(app, d, { alTerminar } = {}) {
   m.el.append(h('div.modal-pie.an-pie', error, porque, volver, principal));
   ignorarToqueDeFondo(m);
   pintar();
+  refrescarCaja(); // sin esperar: el aviso de la caja sale en cuanto la base contesta
   return m;
 }

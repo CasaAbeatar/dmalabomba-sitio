@@ -5,10 +5,10 @@
 // Los códigos 13 a 17 no se usan (están apagados). Todos los montos los calcula el servidor: la pantalla manda cantidades o montos por línea y el reparto del dinero,
 // y antes de confirmar pide el total con fx_nota_calcular. Los errores de las funciones vienen en español y se muestran con sus mismas palabras (mensajeAmable); solo los números se escriben como en el resto de la pantalla (amigableDelServidor).
 // Una nota no se puede deshacer: la pantalla lo dice con calma, avisa del correo y de que Hacienda puede tardar unos minutos.
-import { h, money, modal, toast, nombrePropio, nombreLocal, fechaCorta, num, leerNumero, MEDIOS, bloqueError, esqueleto, conBoton, confirmar as preguntar } from './util.js';
+import { h, money, modal, toast, nombrePropio, fechaCorta, num, leerNumero, MEDIOS, bloqueError, esqueleto, conBoton, confirmar as preguntar } from './util.js';
 import { saldosEstricto, notaCalcular, notaDevolucion, notaCreditoMonto, notaDebitoMonto, notaDebitoSinEfecto, mensajeAmable } from './api_documentos.js';
 import { numeroCorto, reimprimirComprobante } from './imprimir.js';
-import { crearFormularioApertura } from './ui_apertura.js';
+import { leerTurno, efectivoDe, avisoSinTurnoHecha, AVISO_TURNO_DESCONOCIDO, textoSinCaja as textoSinCajaCompartido, TEXTO_CAJA_PIE, pintarAvisoCaja, abrirCajaAhora as abrirCajaCompartida } from './caja_nota.js'; // el aviso de la caja es el mismo que el de Anular
 import { ignorarToqueDeFondo, textoCodigoNota, listaNotas, lineasDevolver } from './m_anular.js';
 
 if (!document.querySelector('link[data-fx-nota-parcial]')) document.head.append(h('link', { rel: 'stylesheet', href: new URL('../css/nota_parcial.css', import.meta.url).href, 'data-fx-nota-parcial': '1' }));
@@ -201,24 +201,9 @@ const conTope = (promesa, ms = TOPE_LECTURA) => new Promise((ok, mal) => {
 });
 
 /* ---------- El turno: se pregunta al servidor al revisar, no se confía en lo que quedó en pantalla ---------- */
-// 'abierto' | 'cerrado' | 'desconocido' (si la lectura falla no se afirma nada en ningún sentido)
-async function leerTurno(app) {
-  try {
-    const c = await conTope(app.api.contexto());
-    const soc = (c?.sociedades || []).find((x) => x.id === app.socId);
-    return soc ? (soc.turno ? 'abierto' : 'cerrado') : 'desconocido';
-  } catch { return 'desconocido'; }
-}
-// Reglas de la base (28c): una nota que mueve EFECTIVO (devuelve o cobra) exige la caja abierta, porque ese dinero tiene que quedar en un cierre de caja.
-// Una nota que no mueve efectivo (todo por tarjeta, SINPE Móvil o transferencia) se puede hacer con la caja cerrada: no entra en ningún cierre y en Informes sale como «sin turno».
-const AVISO_SIN_TURNO = 'La caja está cerrada. Esta nota no mueve efectivo, así que se puede hacer igual: no entra en ningún cierre de caja y en Informes aparece como «sin turno».';
-const AVISO_SIN_TURNO_HECHA = 'La caja estaba cerrada. Esta nota no movió efectivo, así que no entra en ningún cierre de caja y en Informes aparece como «sin turno».';
-const AVISO_TURNO_DESCONOCIDO = 'No se pudo comprobar si hay un turno abierto.';
-// Efectivo (en céntimos) de un reparto de pagos [{ medio, monto }]
-const efectivoDe = (pagos) => (Array.isArray(pagos) ? pagos : []).filter((p) => String(p.medio || '').toLowerCase().trim() === 'efectivo').reduce((a, p) => a + aCent(p.monto), 0);
-// Lo que se avisa en la revisión según el turno y el efectivo del reparto. null = nada que decir (turno abierto, o sin efectivo y sin saber).
-const avisoDeTurno = (turno) => (turno === 'cerrado' ? AVISO_SIN_TURNO : turno === 'desconocido' ? AVISO_TURNO_DESCONOCIDO : null);
-const textoSinCaja = (efeCent, credito) => `La caja está cerrada y esta nota ${credito ? 'devuelve' : 'cobra'} ${moneyC(efeCent)} en efectivo. Ese dinero tiene que quedar en el cierre de caja, por eso primero hay que abrir la caja. Si una parte se puede mover por tarjeta, SINPE Móvil o transferencia, también puede cambiar el reparto.`;
+// Las reglas de la base (28c), la lectura del turno, los textos y el botón «Abrir la caja ahora» viven en caja_nota.js: Anular usa lo mismo.
+const AVISO_SIN_TURNO_HECHA = avisoSinTurnoHecha();
+const textoSinCaja = (efeCent, credito) => textoSinCajaCompartido(efeCent, { credito });
 
 /* ---------- Una nota en camino o en duda es del DOCUMENTO, no de la ventana ---------- */
 // Cerrar la ventana (con su botón, con Atrás, o porque otra pantalla o la sesión la cierran) no borra lo que se sabe: PENDIENTES guarda, por documento, lo que se envió y lo que ya había,
@@ -881,43 +866,17 @@ function abrir(app, d, clase, { alTerminar, alVerNota } = {}) {
     mostrarError(S.error);
   }
   let principal = null, volverAEditar = null, lineaSinDeshacer = null, etiquetaConfirmar = '';
-  // El aviso de la caja en la revisión (ver AVISO_SIN_TURNO y textoSinCaja arriba). Con la caja cerrada y efectivo en el reparto, dice que hay que abrirla y ofrece el botón; sin efectivo, que se puede hacer igual.
+  // El aviso de la caja en la revisión (ver caja_nota.js). Con la caja cerrada y efectivo en el reparto, dice que hay que abrirla y ofrece el botón; sin efectivo, que se puede hacer igual.
   // El botón de confirmar no se apaga: al tocarlo se vuelve a preguntar el turno, así una caja que otra persona ya abrió no deja la pantalla trabada.
   let cajaEl = null, efeActual = 0;
-  const TEXTO_CAJA_PIE = 'Mientras la caja esté cerrada no se puede devolver ni cobrar efectivo. Abra la caja o cambie el reparto.';
   function actualizarCaja(efeCent = efeActual) {
     efeActual = efeCent;
     if (!cajaEl) return;
-    cajaEl.replaceChildren(); cajaEl.hidden = true; cajaEl.className = 'np-caja';
-    const turno = S.turno, bloquea = turno === 'cerrado' && efeCent > 0;
-    if (bloquea) {
-      cajaEl.className = 'np-caja alto'; cajaEl.hidden = false;
-      cajaEl.append(h('p', h('b', 'Primero hay que abrir la caja. '), textoSinCaja(efeCent, esCredito())),
-        h('button.btn.primario', { type: 'button', 'data-abrir-caja': '1', onclick: () => abrirCajaAhora() }, 'Abrir la caja ahora'));
-    } else if (turno === 'cerrado') { cajaEl.className = 'np-caja info'; cajaEl.hidden = false; cajaEl.append(h('p', AVISO_SIN_TURNO)); }
-    else if (turno === 'desconocido') { cajaEl.className = 'np-caja info'; cajaEl.hidden = false; cajaEl.append(h('p', AVISO_TURNO_DESCONOCIDO)); }
+    const bloquea = pintarAvisoCaja(cajaEl, { turno: S.turno, efeCent, credito: esCredito(), abrir: () => abrirCajaAhora() });
     if (!S.dudoso && !S.ajena && !S.enVuelo) { if (bloquea) ponerEstado(TEXTO_CAJA_PIE); else if (estadoPie.textContent === TEXTO_CAJA_PIE) ponerEstado(''); }
   }
-  // Abre la caja desde aquí mismo con el formulario de «Apertura y cierre de caja» (ui_apertura.js), sin perder la nota que se está revisando
-  let abriendoCaja = false;
-  async function abrirCajaAhora() {
-    if (abriendoCaja) return;
-    abriendoCaja = true;
-    try {
-      let sugerido = null;
-      try { const sg = await conTope(app.api.turnoSugerencia(app.socId, terminal())); const uc = sg?.ultimo_cierre; if (sg && sg.origen === 'contado' && uc?.cerrado_en && sg.sugerido != null) sugerido = { monto: Number(sg.sugerido), cuando: uc.cerrado_en }; } catch { /* sin sugerencia: la persona escribe el monto */ }
-      if (!S.vivo) return;
-      const form = crearFormularioApertura({ api: app.api, socId: app.socId, terminal: terminal(), local: nombreLocal(app.soc), sugerido,
-        alAbrir: async () => {
-          v.cerrar();
-          try { await app.refrescar(); } catch { /* la cabecera se pone al día sola */ }
-          S.turno = await leerTurno(app);
-          if (S.vivo && S.paso === 'revisar') { actualizarCaja(); toast(S.turno === 'abierto' ? 'Caja abierta. Ya puede confirmar la nota.' : 'No se pudo comprobar que la caja quedó abierta. Revise «Apertura y cierre de caja».', S.turno === 'abierto' ? 'ok' : 'error', 5000); }
-        } });
-      const v = modal({ titulo: 'Abrir la caja', ancho: 460, contenido: form.el });
-      form.enfocar();
-    } finally { abriendoCaja = false; }
-  }
+  // Abre la caja desde aquí mismo con el formulario de «Apertura y cierre de caja», sin perder la nota que se está revisando
+  const abrirCajaAhora = () => abrirCajaCompartida(app, { sigue: () => S.vivo && S.paso === 'revisar', alAbrir: (turno) => { S.turno = turno; actualizarCaja(); } });
   // Se perdió la respuesta y no se pudo comprobar si la nota quedó creada: el botón pasa a «Revisar si quedó hecha» y no se puede cambiar nada
   function marcarDudoso() {
     S.dudoso = true;

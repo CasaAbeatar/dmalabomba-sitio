@@ -504,7 +504,7 @@ export default {
       const turno = est.rango === 'hoy' ? turnoAbierto() : null;
       // Con documentos sin cargar no se compara: lo que falta aparecería como una diferencia con la caja que no es real
       const faltaCargar = hayMas() && !!turno && !!est.turnoEstado;
-      const p = turno && est.turnoEstado && !faltaCargar ? puenteConTurno(sumarDocumentos(docsDelTurno(est.lista, turno.abierto_en)), est.turnoEstado) : null;
+      const p = turno && est.turnoEstado && !faltaCargar ? puenteConTurno(sumarDocumentos(docsDelTurno(est.lista, turno)), est.turnoEstado) : null;
       const partes = frases.map((t) => h('p.doc-cuadre-frase', t));
       if (faltaCargar) partes.push(h('p.doc-cuadre-frase', puedeMas() ? 'Para comparar con «Apertura y cierre de caja», primero cargue los documentos que faltan.' : 'No se puede comparar con «Apertura y cierre de caja» porque faltan documentos que esta pantalla no puede cargar.'));
       else if (p && p.coincide && !p.turnoRech && !p.sin) partes.push(h('p.doc-cuadre-frase.ok', `El turno abierto coincide con el total vendido de «Apertura y cierre de caja» (${money(p.turnoNeto / 100)}).`));

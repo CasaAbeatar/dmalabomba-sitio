@@ -442,6 +442,8 @@
 .cobro-imp-txt{flex:1 1 240px;min-width:0}
 .avisos-caja:empty{display:none}
 .aviso-red{border:2px solid var(--rojo);background:var(--rojo-suave);color:var(--rojo-osc);border-radius:12px;padding:.8rem 1rem;display:flex;gap:.8rem 1.2rem;justify-content:space-between;align-items:center;flex-wrap:wrap}
+/* Pantalla ancha: el aviso ocupa menos alto para que, con otros avisos arriba, la columna de la izquierda no se salga de la pantalla */
+@media(min-width:980px){.aviso-red{padding:.5rem .9rem}}
 .aviso-red-txt{flex:1 1 260px;min-width:0}
 .aviso-red .fila{flex:0 0 auto}
 
