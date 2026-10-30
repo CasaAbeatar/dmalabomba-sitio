@@ -298,10 +298,11 @@ export async function abrirFactura(ctx, clave, { previa = null } = {}) {
     const factorEco = h('small.inv-eco');
     const cantidad = campoCantidad({ etiqueta: 'Cantidad que entra', unidad: art?.unidad || '', alCambiar: () => { cantidadTocada = true; pintarCosto(); cambio(); } });
     const ubic = selectUbicacion(cat, { etiqueta: 'Dónde se guarda', alCambiar: cambio });
-    const vence = h('input.campo', { type: 'date', min: ctx.hoy, 'aria-label': 'Fecha de vencimiento', oninput: () => pintarVence() });
+    let venceEditada = false; // solo si una persona escribe la fecha se manda; si no, la base aplica la misma regla desde la fecha de la factura
+    const vence = h('input.campo', { type: 'date', 'aria-label': 'Fecha de vencimiento', oninput: () => { venceEditada = true; pintarVence(); } });
     const venceEco = h('small.inv-eco');
     const noVence = h('input', { type: 'checkbox', onchange: () => { vence.disabled = noVence.checked; pintarVence(); } });
-    const pintarVence = () => { venceEco.className = 'inv-eco'; if (noVence.checked) venceEco.textContent = 'No vence.'; else if (!vence.value) { venceEco.textContent = 'Escriba la fecha o marque «No vence».'; venceEco.className = 'inv-eco mal'; } else if (vence.value < ctx.hoy) { venceEco.textContent = 'La fecha no puede ser anterior a hoy.'; venceEco.className = 'inv-eco mal'; } else venceEco.textContent = 'Vence el ' + diaTxt(vence.value) + '.'; };
+    const pintarVence = () => { venceEco.className = 'inv-eco'; if (noVence.checked) venceEco.textContent = 'No vence.'; else if (!vence.value) { venceEco.textContent = 'Escriba la fecha o marque «No vence».'; venceEco.className = 'inv-eco mal'; } else if (vence.value < ctx.hoy && venceEditada) { venceEco.textContent = 'La fecha no puede ser anterior a hoy.'; venceEco.className = 'inv-eco mal'; } else if (vence.value < ctx.hoy) { const cc = art && (cat.categorias || []).find((x) => x.id === art.categoria_id); venceEco.textContent = (!cc || cc.salida_automatica !== false) ? 'Por la fecha de la factura ya cumplió sus días: al recibirla entra y sale como consumo automático.' : 'Por la fecha de la factura ya venció.'; } else venceEco.textContent = 'Vence el ' + diaTxt(vence.value) + '.'; };
     const costoTxtEl = h('span.inv-costo');
     const costoInput = h('input.campo.inv-num', { type: 'text', inputmode: 'decimal', autocomplete: 'off', 'aria-label': 'Costo sin IVA por unidad del artículo' });
     const costoDet = h('details.inv-corregir', h('summary', 'Corregir el costo'), h('label.etq', 'Costo sin IVA por unidad del artículo (₡)', costoInput, h('small', 'Solo si el costo de la factura no es el correcto. Déjelo vacío para usar el de la factura.')));
@@ -332,12 +333,12 @@ export async function abrirFactura(ctx, clave, { previa = null } = {}) {
       if (!cambiar) return;
       // Valores por omisión de ese artículo: los de la sugerencia si es el mismo; si no, la regla del contrato (3.3)
       const mismo = art && sug.articulo_id === art.id;
-      const fac = mismo && sug.factor != null ? Number(sug.factor) : 1;
+      const fac = mismo && sug.factor != null ? Number(sug.factor) : sug.factor_sugerido != null ? Number(sug.factor_sugerido) : 1;
       factor.value = String(fac).replace('.', ',');
       if (!cantidadTocada) cantidad.poner(Math.round(Number(l.cantidad) * fac * 1000) / 1000);
       ubic.value = (mismo && sug.ubicacion_id) || ubicacionPorOmision(art) || '';
       const ven = mismo ? sug.vence_en : venceDe(art);
-      noVence.checked = !ven; vence.disabled = !ven; vence.value = ven || '';
+      venceEditada = false; noVence.checked = !ven; vence.disabled = !ven; vence.value = ven || '';
       pintarFactor(); pintarCosto(); pintarVence();
     }
     function ubicacionPorOmision(a) {
@@ -353,7 +354,10 @@ export async function abrirFactura(ctx, clave, { previa = null } = {}) {
       const c = (cat.categorias || []).find((x) => x.id === a.categoria_id);
       // vigencia_efectiva (de fx_inv_articulos) ya resolvió la de la categoría: null = no vence
       const vig = 'vigencia_efectiva' in a ? a.vigencia_efectiva : (a.vigencia_dias ?? c?.vigencia_dias);
-      return vig == null ? null : sumaDias(ctx.hoy, Number(vig));
+      if (vig == null) return null;
+      // La entrada cuenta desde la fecha de la factura y la vigencia son días completos contando ese día (7 = hasta el séptimo día; sale el octavo)
+      const desde = f.fecha && ymdCR(f.fecha) < ctx.hoy ? ymdCR(f.fecha) : ctx.hoy;
+      return sumaDias(desde, Math.max(Number(vig) - 1, 0));
     }
     const leerFactor = () => { const t = String(factor.value).trim().replace(',', '.'); return /^\d*(\.\d{0,6})?$/.test(t) && /\d/.test(t) ? Number(t) : NaN; };
     function pintarFactor() {
@@ -396,7 +400,7 @@ export async function abrirFactura(ctx, clave, { previa = null } = {}) {
       chk.checked = true; el.classList.add('marcada'); cambio(); guardarEstado();
     }
     function guardarEstado() {
-      memoria.set(l.linea, { art, factor: factor.value, cantidad: cantidad.leer(), tocada: cantidadTocada, ubic: ubic.value, vence: vence.value, noVence: noVence.checked, costoAbierto: costoDet.open, costo: costoInput.value, marcada: chk.checked });
+      memoria.set(l.linea, { art, factor: factor.value, cantidad: cantidad.leer(), tocada: cantidadTocada, ubic: ubic.value, vence: vence.value, editada: venceEditada, noVence: noVence.checked, costoAbierto: costoDet.open, costo: costoInput.value, marcada: chk.checked });
     }
     pintarArticulo(true);
     const previo = memoria.get(l.linea);
@@ -404,7 +408,7 @@ export async function abrirFactura(ctx, clave, { previa = null } = {}) {
       if (previo.art) { art = articulos.find((a) => a.id === previo.art.id) || previo.art; pintarArticulo(false); }
       factor.value = previo.factor; cantidadTocada = previo.tocada;
       if (Number.isFinite(previo.cantidad)) cantidad.poner(previo.cantidad);
-      ubic.value = previo.ubic; vence.value = previo.vence; noVence.checked = previo.noVence; vence.disabled = previo.noVence;
+      ubic.value = previo.ubic; vence.value = previo.vence; venceEditada = !!previo.editada; noVence.checked = previo.noVence; vence.disabled = previo.noVence;
       costoDet.open = previo.costoAbierto; costoInput.value = previo.costo;
       chk.checked = previo.marcada && !!art; el.classList.toggle('marcada', chk.checked);
       pintarFactor(); pintarCosto(); pintarVence();
@@ -421,14 +425,14 @@ export async function abrirFactura(ctx, clave, { previa = null } = {}) {
         if (!Number.isFinite(fv) || fv <= 0 || fv > 100000) return 'Línea ' + l.linea + ': revise la conversión (mayor que cero y hasta 100 000).';
         if (!cantidad.valido()) return 'Línea ' + l.linea + ': revise la cantidad que entra.';
         if (!ubic.value) return 'Línea ' + l.linea + ': escoja dónde se guarda.';
-        if (!noVence.checked) { if (!vence.value) return 'Línea ' + l.linea + ': escriba la fecha de vencimiento o marque «No vence».'; if (vence.value < ctx.hoy) return 'Línea ' + l.linea + ': la fecha de vencimiento no puede ser anterior a hoy.'; }
+        if (!noVence.checked) { if (!vence.value) return 'Línea ' + l.linea + ': escriba la fecha de vencimiento o marque «No vence».'; if (vence.value < ctx.hoy && venceEditada) return 'Línea ' + l.linea + ': la fecha de vencimiento no puede ser anterior a hoy.'; }
         if (costoDet.open && costoInput.value.trim()) { const c = leerMonto(costoInput.value); if (!Number.isFinite(c) || c < 0) return 'Línea ' + l.linea + ': el costo corregido no es un monto válido.'; }
         return '';
       },
       enfocarProblema() { el.scrollIntoView({ block: 'center' }); (art ? cantidad.input : btnArt).focus({ preventScroll: true }); },
       datos() {
         const x = { clave: f.clave, linea: l.linea, articulo_id: art.id, factor: String(leerFactor()), cantidad: cant(cantidad.leer()), ubicacion_id: ubic.value };
-        if (noVence.checked) x.sin_vencimiento = true; else x.vence_en = vence.value;
+        if (noVence.checked) x.sin_vencimiento = true; else if (venceEditada) x.vence_en = vence.value;
         if (costoDet.open && costoInput.value.trim()) x.costo_unitario = dinero(leerMonto(costoInput.value));
         return x;
       },
@@ -437,7 +441,7 @@ export async function abrirFactura(ctx, clave, { previa = null } = {}) {
   function sugerenciaTxt(s) {
     if (!s || !s.fuente) return null;
     if (s.no_inventario) return (s.fuente === 'memoria' ? 'la vez pasada esto se marcó «No es de inventario»' : s.fuente === 'servicio' ? 'parece un servicio: normalmente no es de inventario' : 'por su CABYS normalmente no es de inventario') + (s.motivo ? ' (' + s.motivo + ')' : '') + '. Si es así, toque «No es de inventario».';
-    if (s.articulo) return s.articulo + ' (' + FUENTES[s.fuente] + (s.factor != null && s.fuente === 'memoria' ? ', cada una trae ' + num(s.factor, 6) + ' ' + unidadTxt(s.unidad, s.factor) : '') + '). Revíselo antes de marcar la línea.';
+    if (s.articulo) return s.articulo + ' (' + FUENTES[s.fuente] + (s.factor != null && s.fuente === 'memoria' ? ', cada una trae ' + num(s.factor, 6) + ' ' + unidadTxt(s.unidad, s.factor) : s.factor_sugerido != null ? ', por el nombre parece que cada una trae ' + num(s.factor_sugerido, 6) + ' ' + unidadTxt(s.unidad, s.factor_sugerido) : '') + '). Revíselo antes de marcar la línea.';
     if (s.categoria) return 'por su CABYS parece de la categoría «' + s.categoria + '». ' + (ctx.esAdmin ? 'Toque «Escoger artículo» para escogerlo o crearlo.' : 'Escoja el artículo; si no existe, un administrador lo puede crear en «Catálogo».');
     return null;
   }

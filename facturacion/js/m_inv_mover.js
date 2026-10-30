@@ -134,7 +134,7 @@ export function editorItems(ctx, { fuente, modo = 'salida', inicial = [], etique
       btn.classList.toggle('falta', !o);
       c.unidad(o?.unidad || '');
       disp.textContent = o ? (f.lote ? 'Solo del lote escogido · ' : '') + (o.extra || '') : '';
-      if (modo === 'entrada' && o?.a) { const vig = o.a.no_vence ? null : o.a.vigencia_efectiva; noVence.checked = vig == null; vence.disabled = vig == null; vence.value = vig == null ? '' : sumaDias(ctx.hoy, Number(vig)); }
+      if (modo === 'entrada' && o?.a) { const vig = o.a.no_vence ? null : o.a.vigencia_efectiva; noVence.checked = vig == null; vence.disabled = vig == null; vence.value = vig == null ? '' : sumaDias(ctx.hoy, Math.max(Number(vig) - 1, 0)); }
     };
     async function escoger() {
       const o = await elegirArticulo({ titulo: 'Escoja el artículo', opciones, vacioTxt });
