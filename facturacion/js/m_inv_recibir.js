@@ -7,7 +7,7 @@ import { inv, cant, dinero } from './api_inventarios.js';
 import {
   ventana, dialogo, cargando, falla, vacio, aviso, cantTxt, costoTxt, unidadTxt, dma, diaTxt, plural, empresaChip, numFactura, proveedorTxt, tipoDocTxt,
   accionSegura, botonSeguro, rotular, repetidaTxt, campoCantidad, leerCantidad, leerMonto, selectUbicacion, nombreUbicacion, elegirArticulo, opcionDeArticulo,
-  enfocar, toastOk, norm, poner, ymdCR, proveedorPartes, GRUPOS, grupoDe, esSimple } from './m_inv_comun.js';
+  enfocar, toastOk, toastMal, norm, poner, ymdCR, proveedorPartes, GRUPOS, grupoDe, esSimple } from './m_inv_comun.js';
 
 // Estado contable (contrato 3.2) a color: verde aceptada, ámbar con aviso, rojo no entra
 const CLASE_ESTADO = { aceptada: 'ok', parcial: 'espera', plazo_vencido: 'espera', rechazada: 'mal', rechazo_en_tramite: 'mal', rechazada_por_hacienda: 'mal' };
@@ -237,7 +237,7 @@ export async function abrirFactura(ctx, clave, { previa = null, recibirSugeridas
         if (problemas.length) { sel.find((x) => x.problema())?.enfocarProblema(); throw new Error(problemas[0]); }
         return inv.recibir(sel.map((x) => ({ ...x.datos(), recordar: recordar.checked })), idem);
       },
-      alFallar: () => mostrar(),
+      alFallar: (e) => { if (silencioso) { silencioso = false; vivo = false; toastMal('No se pudo recibir la factura de ' + proveedorTxt(f.proveedor_nombre) + ': ' + ((e && e.message) || 'intente de nuevo') + ' Use «Escoger qué líneas recibir» para revisarla.'); } },
       alTerminar: async (r, { repetida }) => {
         const rec = r.recibidas || [];
         if (silencioso) { silencioso = false; vivo = false; ctx.articulos.olvidar(); toastOk((rec.length === 1 ? 'Se recibió 1 línea' : 'Se recibieron ' + rec.length + ' líneas') + ' de ' + proveedorTxt(f.proveedor_nombre) + '.' + repetidaTxt(repetida)); alRecibir?.(); return; }
@@ -287,7 +287,9 @@ export async function abrirFactura(ctx, clave, { previa = null, recibirSugeridas
         for (const x of formas) if (x.sugerida()) await x.marcarOCrear();
         contar();
         const sel = marcadas();
-        if (sel.length && sel.every((x) => !x.problema())) { const r = await accRecibir.ejecutar(); if (r == null) mostrar(); } else mostrar();
+        const mal = sel.map((x) => x.problema()).find(Boolean);
+        if (sel.length && !mal) { const r = await accRecibir.ejecutar(); if (r == null && silencioso) { silencioso = false; vivo = false; } }
+        else if (silencioso) { silencioso = false; vivo = false; toastMal('No se recibió la factura de ' + proveedorTxt(f.proveedor_nombre) + ': ' + (mal || 'ninguna línea trae sugerencia') + ' Use «Escoger qué líneas recibir» para revisarla.'); }
       })();
     }
   }
