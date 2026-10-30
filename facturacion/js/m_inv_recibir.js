@@ -7,7 +7,7 @@ import { inv, cant, dinero } from './api_inventarios.js';
 import {
   ventana, dialogo, cargando, falla, vacio, aviso, cantTxt, costoTxt, unidadTxt, dma, diaTxt, plural, empresaChip, numFactura, proveedorTxt, tipoDocTxt,
   accionSegura, botonSeguro, rotular, repetidaTxt, campoCantidad, leerCantidad, leerMonto, selectUbicacion, nombreUbicacion, elegirArticulo, opcionDeArticulo,
-  enfocar, toastOk, norm, poner, ymdCR } from './m_inv_comun.js';
+  enfocar, toastOk, norm, poner, ymdCR, proveedorPartes } from './m_inv_comun.js';
 
 // Estado contable (contrato 3.2) a color: verde aceptada, ámbar con aviso, rojo no entra
 const CLASE_ESTADO = { aceptada: 'ok', parcial: 'espera', plazo_vencido: 'espera', rechazada: 'mal', rechazo_en_tramite: 'mal', rechazada_por_hacienda: 'mal' };
@@ -94,7 +94,7 @@ async function abrirLista(ctx) {
     const decididas = (f.lineas_recibidas || 0) + (f.lineas_ignoradas || 0);
     return h('article.inv-fac' + (puede ? '' : '.rechazada'), { 'data-clave': f.clave },
       h('div.inv-fac-cab',
-        h('div.inv-fac-prov', h('strong', proveedorTxt(f.proveedor_nombre)),
+        h('div.inv-fac-prov', h('strong', proveedorTxt(f.proveedor_nombre)), razonTxt(f.proveedor_nombre),
           h('small', tipoDocTxt(f.tipo) + ' N.° ' + numFactura(f.consecutivo) + ' · emitida ' + diaTxt(f.fecha) + (f.llego ? ' · llegó ' + (ymdCR(f.llego) === ctx.hoy ? 'hoy a las ' + horaCorta(f.llego) : fechaHora(f.llego)) : ''))),
         h('div.inv-fac-emp', h('small', 'A nombre de'), empresaChip(f.sociedad_nombre, f.sociedad_codigo))),
       h('div.inv-fac-estado', chipContable(ec), h('span.inv-fac-total.cifra', 'Total con IVA ' + money(f.total) + (f.moneda && f.moneda !== 'CRC' ? ' (en ' + f.moneda + ' convertido)' : ''))),
@@ -122,6 +122,8 @@ async function abrirLista(ctx) {
   await cargar();
   enfocar(lista.closest('.modal-cuerpo') || lista);
 }
+// La razón social, en pequeño, cuando el proveedor trae nombre comercial
+const razonTxt = (n) => { const r = proveedorPartes(n).razon; return r ? h('small.inv-razon', r) : null; };
 const codigoEmp = (cat, id) => (cat.empresas || []).find((e) => e.id === id)?.codigo || null;
 
 /* ---------- «No es de inventario» (una línea, varias o toda la factura) ---------- */
@@ -168,6 +170,8 @@ export async function abrirFactura(ctx, clave, { previa = null } = {}) {
   (previa?.lineas || []).forEach((l) => recordados.set(l.linea, l.sugerencia));
   let articulos = [];
   const recordar = h('input', { type: 'checkbox', checked: true });
+  // Lo que la persona ya llenó en cada línea pendiente: se conserva cuando la ventana se vuelve a pintar (después de marcar otra línea «No es de inventario», por ejemplo)
+  const memoria = new Map();
 
   async function cargar(primera = false) {
     let d;
@@ -215,7 +219,7 @@ export async function abrirFactura(ctx, clave, { previa = null } = {}) {
 
     poner(cuerpo, 
       h('div.inv-fac-detalle-cab',
-        h('div', h('h2', proveedorTxt(f.proveedor_nombre)),
+        h('div', h('h2', proveedorTxt(f.proveedor_nombre)), razonTxt(f.proveedor_nombre),
           h('p.tenue', tipoDocTxt(f.tipo) + ' N.° ' + numFactura(f.consecutivo) + ' · emitida ' + diaTxt(f.fecha) + ' · cédula del proveedor ' + (f.proveedor_cedula || 'sin dato'))),
         h('div.inv-fac-emp', h('small', 'A nombre de'), empresaChip(f.sociedad_nombre, f.sociedad_codigo))),
       h('div.inv-fac-estado', chipContable(ec), h('span.inv-fac-total.cifra', 'Total con IVA ' + money(f.total)), f.moneda && f.moneda !== 'CRC' ? h('span.tenue', 'Factura en ' + f.moneda + ', tipo de cambio ' + num(f.tipo_cambio, 2)) : null),
@@ -317,7 +321,8 @@ export async function abrirFactura(ctx, clave, { previa = null } = {}) {
     function venceDe(a) {
       if (!a || a.no_vence) return null;
       const c = (cat.categorias || []).find((x) => x.id === a.categoria_id);
-      const vig = a.vigencia_efectiva ?? a.vigencia_dias ?? c?.vigencia_dias;
+      // vigencia_efectiva (de fx_inv_articulos) ya resolvió la de la categoría: null = no vence
+      const vig = 'vigencia_efectiva' in a ? a.vigencia_efectiva : (a.vigencia_dias ?? c?.vigencia_dias);
       return vig == null ? null : sumaDias(ctx.hoy, Number(vig));
     }
     const leerFactor = () => { const t = String(factor.value).trim().replace(',', '.'); return /^\d*(\.\d{0,6})?$/.test(t) && /\d/.test(t) ? Number(t) : NaN; };
@@ -358,9 +363,23 @@ export async function abrirFactura(ctx, clave, { previa = null } = {}) {
       if (!elegido) return;
       art = elegido.a || articulos.find((a) => a.id === elegido.id) || null;
       pintarArticulo(true);
-      chk.checked = true; el.classList.add('marcada'); cambio();
+      chk.checked = true; el.classList.add('marcada'); cambio(); guardarEstado();
+    }
+    function guardarEstado() {
+      memoria.set(l.linea, { art, factor: factor.value, cantidad: cantidad.leer(), tocada: cantidadTocada, ubic: ubic.value, vence: vence.value, noVence: noVence.checked, costoAbierto: costoDet.open, costo: costoInput.value, marcada: chk.checked });
     }
     pintarArticulo(true);
+    const previo = memoria.get(l.linea);
+    if (previo) {
+      if (previo.art) { art = articulos.find((a) => a.id === previo.art.id) || previo.art; pintarArticulo(false); }
+      factor.value = previo.factor; cantidadTocada = previo.tocada;
+      if (Number.isFinite(previo.cantidad)) cantidad.poner(previo.cantidad);
+      ubic.value = previo.ubic; vence.value = previo.vence; noVence.checked = previo.noVence; vence.disabled = previo.noVence;
+      costoDet.open = previo.costoAbierto; costoInput.value = previo.costo;
+      chk.checked = previo.marcada && !!art; el.classList.toggle('marcada', chk.checked);
+      pintarFactor(); pintarCosto(); pintarVence();
+    }
+    el.addEventListener('input', guardarEstado); el.addEventListener('change', guardarEstado); costoDet.addEventListener('toggle', guardarEstado);
     return {
       el,
       marcada: () => chk.checked,
@@ -389,7 +408,7 @@ export async function abrirFactura(ctx, clave, { previa = null } = {}) {
     if (!s || !s.fuente) return null;
     if (s.no_inventario) return (s.fuente === 'memoria' ? 'la vez pasada esto se marcó «No es de inventario»' : s.fuente === 'servicio' ? 'parece un servicio: normalmente no es de inventario' : 'por su CABYS normalmente no es de inventario') + (s.motivo ? ' (' + s.motivo + ')' : '') + '. Si es así, toque «No es de inventario».';
     if (s.articulo) return s.articulo + ' (' + FUENTES[s.fuente] + (s.factor != null && s.fuente === 'memoria' ? ', cada una trae ' + num(s.factor, 6) + ' ' + unidadTxt(s.unidad, s.factor) : '') + '). Revíselo antes de marcar la línea.';
-    if (s.categoria) return 'por su CABYS parece de la categoría «' + s.categoria + '». Escoja el artículo' + (ctx.esAdmin ? ' o créelo.' : '; si no existe, un administrador lo puede crear en «Catálogo».');
+    if (s.categoria) return 'por su CABYS parece de la categoría «' + s.categoria + '». ' + (ctx.esAdmin ? 'Toque «Escoger artículo» para escogerlo o crearlo.' : 'Escoja el artículo; si no existe, un administrador lo puede crear en «Catálogo».');
     return null;
   }
 
