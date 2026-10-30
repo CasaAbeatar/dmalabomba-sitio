@@ -60,7 +60,8 @@ export function pantallaInicio(app, { alAbrir, alCerrarCaja, alAbrirCaja }) {
       larga ? h('span.hoy-larga', 'Lleva ' + horasAbierta + ' horas abierta. ¿Hay que cerrarla?') : null),
     t ? h('button.btn', { type: 'button', onclick: alCerrarCaja }, 'Cerrar caja')
       : h('button.btn.primario', { type: 'button', onclick: alAbrirCaja }, 'Abrir caja'));
-  const rejilla = h('div.mod-rejilla.principal', modulosDe('principal', app).map((m) => tarjetaModulo(m, app, alAbrir)));
+  const mods = modulosDe('principal', app);
+  const rejilla = h('div.mod-rejilla.principal' + (mods.length === 4 ? '.cuatro' : ''), mods.map((m) => tarjetaModulo(m, app, alAbrir)));
   return h('div.inicio', h('h1.solo-lectores', 'Inicio'), franja, rejilla);
 }
 

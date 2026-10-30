@@ -117,15 +117,16 @@ export default {
     const botonesRango = h('div.doc-rango', { role: 'group', 'aria-label': 'Fechas a mostrar' },
       [['hoy', 'Hoy'], ['mes', 'Este mes'], ['anterior', 'Mes anterior'], ['otro', 'Cualquier fecha']].map(([r, t]) =>
         h('button.btn', { type: 'button', 'data-r': r, onclick: () => elegirRango(r) }, t)));
-    const inDesde = h('input.campo', { type: 'date', 'aria-label': 'Desde' });
-    const inHasta = h('input.campo', { type: 'date', 'aria-label': 'Hasta' });
+    const inDesde = h('input.campo', { type: 'date', 'aria-label': 'Desde', max: hoyCR() });
+    const inHasta = h('input.campo', { type: 'date', 'aria-label': 'Hasta', max: hoyCR() }); // no hay documentos de días que no han llegado; el botón «Hoy» pone el día de hoy sin buscarlo en el calendario
+    const hoyEn = (campo, etiqueta) => h('button.btn.fecha-hoy', { type: 'button', 'aria-label': etiqueta, onclick: () => { campo.value = hoyCR(); campo.dispatchEvent(new Event('change', { bubbles: true })); } }, 'Hoy');
     const verFechas = h('button.btn.primario', { type: 'button', onclick: () => {
       if (!inDesde.value || !inHasta.value) return toast('Escoja la fecha de inicio y la fecha final.', 'error');
       if (inDesde.value > inHasta.value) return toast('La fecha de inicio no puede ser después de la fecha final.', 'error');
       est.desde = inDesde.value; est.hasta = inHasta.value; cargar();
     } }, 'Ver estas fechas');
     const cajaFechas = h('div.doc-otras.tarjeta', { hidden: true },
-      h('div.rejilla.dos', h('label.etq', 'Desde', inDesde), h('label.etq', 'Hasta', inHasta)), verFechas);
+      h('div.rejilla.dos', h('label.etq', 'Desde', h('span.fecha-con-hoy', inDesde, hoyEn(inDesde, 'Poner hoy como fecha de inicio'))), h('label.etq', 'Hasta', h('span.fecha-con-hoy', inHasta, hoyEn(inHasta, 'Poner hoy como fecha final')))), verFechas);
     const buscador = h('input.campo#anular-buscar', { type: 'search', placeholder: 'Número, cliente, cédula, estado o monto', 'aria-label': 'Buscar documento por número, cliente, cédula, estado, monto o rango de montos, por ejemplo 5000-20000', autocomplete: 'off',
       oninput: debounce((e) => { est.q = e.target.value; est.pagina = 1; pintar(); }, 150) });
     const buscadorFila = campoBusqueda(buscador, () => { est.q = ''; est.pagina = 1; pintar(); });

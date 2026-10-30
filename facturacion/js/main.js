@@ -72,27 +72,23 @@ window.addEventListener('unhandledrejection', (ev) => {
   toast(m, 'error', 7000);
 });
 
-/* ---------- Teclado de PIN (lo usan el inicio de sesión y «Entrar de nuevo») ---------- */
-// antes() puede devolver false para no aceptar el número (por ejemplo si falta el usuario). alCompletar() se llama con 4 números o al tocar «Entrar».
-function crearPad({ antes, alCompletar, textoEntrar = 'Entrar' }) {
-  let pin = '', ocupado = false;
-  const puntos = [0, 1, 2, 3].map(() => h('i'));
-  const dots = h('div.pin-puntos', { role: 'img', 'aria-label': 'PIN: 0 de 4 números escritos' }, puntos);
-  const pintar = () => { puntos.forEach((p, i) => p.classList.toggle('lleno', i < pin.length)); dots.setAttribute('aria-label', 'PIN: ' + pin.length + ' de 4 números escritos'); };
-  const tecla = (d) => {
-    if (ocupado) return;
-    if (antes && antes() === false) return;
-    if (pin.length < 4) { pin += d; pintar(); if (pin.length === 4) setTimeout(alCompletar, 150); }
-  };
-  const borrar = () => { if (ocupado) return; pin = pin.slice(0, -1); pintar(); };
-  const boton = (t, f, c) => h('button' + (c ? '.' + c : ''), { type: 'button', onclick: f }, t);
-  const teclado = h('div.teclado', [1, 2, 3, 4, 5, 6, 7, 8, 9].map((d) => boton(d, () => tecla(String(d)))),
-    boton('Borrar', borrar, 'texto'), boton('0', () => tecla('0')), boton(textoEntrar, () => alCompletar(), 'texto'));
+/* ---------- Campo de PIN (lo usan el inicio de sesión y «Entrar de nuevo») ---------- */
+// Un solo campo que se escribe con el teclado del aparato (en el celular sale el teclado de números). Al escribir el cuarto número entra solo; también sirve Enter o el botón «Entrar».
+// antes() puede devolver false para no seguir todavía (por ejemplo si falta el usuario). alCompletar() se llama con 4 números. boton = el botón «Entrar», que se bloquea junto con el campo.
+function crearCampoPin({ antes, alCompletar, boton = null }) {
+  const campo = h('input.campo.campo-pin', { type: 'password', inputmode: 'numeric', maxlength: 4, autocomplete: 'off', autocapitalize: 'none', autocorrect: 'off', spellcheck: 'false', placeholder: '4 números', 'aria-label': 'PIN' });
+  campo.addEventListener('input', () => {
+    const v = campo.value.replace(/\D/g, '').slice(0, 4);
+    if (v !== campo.value) campo.value = v;
+    if (v.length === 4 && (!antes || antes() !== false)) setTimeout(alCompletar, 150);
+  });
+  campo.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); alCompletar(); } });
   return {
-    dots, teclado, tecla, borrar,
-    valor: () => pin,
-    limpiar: () => { pin = ''; pintar(); },
-    bloquear: (si) => { ocupado = si; teclado.querySelectorAll('button').forEach((b) => { b.disabled = si; }); },
+    campo,
+    valor: () => campo.value,
+    limpiar: () => { campo.value = ''; },
+    enfocar: () => campo.focus(),
+    bloquear: (si) => { campo.disabled = si; if (boton) boton.disabled = si; },
   };
 }
 
@@ -103,7 +99,7 @@ function textoErrorAcceso(e, { cambiarEmpresa = true } = {}) {
   if (e && e.motivo === 'sin_acceso_empresa') return 'Ese usuario no tiene acceso a esta empresa.' + (cambiarEmpresa ? ' Si trabaja en otro negocio, toque «Cambiar de empresa».' : ' Avise a la persona encargada.');
   if (e && e.estado === 401) {
     return cambiarEmpresa
-      ? 'Usuario o PIN incorrecto. Intente de nuevo.' // corto a propósito: de una sola línea el teclado completo cabe en pantallas de 800 px de alto sin deslizar
+      ? 'Usuario o PIN incorrecto. Intente de nuevo.' // corto a propósito: de una sola línea para que la pantalla de entrada quepa sin deslizar
       : 'El PIN no coincide. Escríbalo otra vez con cuidado; puede intentarlo de nuevo ahora mismo.';
   }
   return conPunto((e && e.message) || 'No se pudo entrar. Revise la conexión e intente de nuevo.');
@@ -112,7 +108,7 @@ function textoErrorAcceso(e, { cambiarEmpresa = true } = {}) {
 const esErrorEsperado = (e) => !!e && [400, 401, 403, 404, 429].includes(e.estado);
 
 /* ---------- Inicio de sesión: código de empresa, usuario y PIN ---------- */
-// Paso 1: «Código de su empresa». Paso 2: la empresa reconocida en grande, usuario y PIN. La empresa queda recordada en este aparato (solo es comodidad:
+// Paso 1: dos botones, uno por empresa (Pollos o Soda). Paso 2: la empresa reconocida en grande, usuario y PIN. La empresa queda recordada en este aparato (solo es comodidad:
 // la que manda es la de la sesión, que ata el servidor), así que al volver a entrar, y después de cerrar sesión, se pasa directo al paso 2 con «Cambiar de empresa».
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 function empresaRecordada() {
@@ -150,47 +146,46 @@ function pantallaLogin(mensaje) {
   if (emp) pantallaUsuario(emp, mensaje); else pantallaCodigo({ mensaje });
 }
 
-// Paso 1
+// Paso 1: se toca el nombre de la empresa, sin escribir nada. La lista es la de los negocios del grupo; la que manda sigue siendo la que reconoce el servicio de acceso.
+const EMPRESAS_LOGIN = [
+  { codigo: 'pollos', nombre: 'Pollos La Bomba' },
+  { codigo: 'soda', nombre: 'Soda La Bomba' },
+];
 function pantallaCodigo({ mensaje = '', error = '', aviso: avisoInicial = '', codigo = '' } = {}) {
   raiz.replaceChildren();
   document.onkeydown = null;
-  const campo = h('input.campo.grande', { type: 'text', autocomplete: 'off', autocapitalize: 'none', autocorrect: 'off', spellcheck: 'false', maxlength: 60, placeholder: 'pollos', 'aria-label': 'Código de su empresa', 'aria-describedby': 'emp-ayuda', value: codigo });
   const err = h('div.error-caja', { hidden: true, role: 'alert' });
   const aviso = h('div.emp-aviso', { hidden: true, role: 'alert' });
+  const estado = h('div.entrando', { hidden: true, role: 'status', 'aria-live': 'polite' });
   const mostrar = (m, suave = false) => { err.hidden = suave || !m; aviso.hidden = !suave || !m; (suave ? aviso : err).textContent = m || ''; };
-  const seguir = h('button.btn.primario.grande.emp-seguir', { type: 'button', onclick: () => continuar() }, 'Continuar');
   let ocupado = false;
-  async function continuar() {
+  const opciones = EMPRESAS_LOGIN.map((e) => h('button.emp-opcion', { type: 'button', 'data-codigo': e.codigo, 'data-emp': e.codigo === 'soda' ? 'soda' : 'pollos', onclick: () => elegir(e) },
+    h('img.emp-logo', { src: logoDe(e.codigo), alt: '' }), h('strong.emp-nombre', e.nombre)));
+  const bloquear = (si) => { ocupado = si; opciones.forEach((b) => { b.disabled = si; }); };
+  async function elegir(e) {
     if (ocupado) return;
-    if (!normalizarEmpresa(campo.value)) { mostrar('Escriba el código de su empresa, por ejemplo pollos.'); campo.focus(); return; }
-    mostrar('');
-    ocupado = true; seguir.disabled = true; campo.disabled = true; seguir.textContent = 'Buscando su empresa…';
+    mostrar(''); bloquear(true); estado.textContent = 'Buscando su empresa…'; estado.hidden = false;
     try {
-      const e = await consultarEmpresa(campo.value, { alReintentar: () => { seguir.textContent = 'La respuesta tardó. Intentando de nuevo…'; } });
-      const info = infoEmpresa(e);
+      const r = await consultarEmpresa(e.codigo, { alReintentar: () => { estado.textContent = 'La respuesta tardó. Intentando de nuevo…'; } });
+      const info = infoEmpresa(r);
       recordarEmpresa(info);
       pantallaUsuario(info);
-    } catch (e) {
-      if (!esErrorEsperado(e)) console.error(e);
-      // «No está habilitada» no es un error de quien escribe: se dice con calma, en ámbar
-      mostrar(textoErrorAcceso(e), e.motivo === 'empresa_no_habilitada');
-      ocupado = false; seguir.disabled = false; campo.disabled = false; seguir.textContent = 'Continuar';
-      campo.focus(); campo.select();
+    } catch (x) {
+      if (!esErrorEsperado(x)) console.error(x);
+      // «No está habilitada» no es un error de quien entra: se dice con calma, en ámbar
+      mostrar(textoErrorAcceso(x), x.motivo === 'empresa_no_habilitada');
+      estado.hidden = true; bloquear(false);
+      opciones.find((b) => b.dataset.codigo === e.codigo)?.focus();
     }
   }
-  campo.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') { ev.preventDefault(); continuar(); } });
-  campo.addEventListener('input', () => mostrar(''));
   raiz.append(h('div.pantalla-centro', h('div.login.tarjeta',
-    h('div.logos', h('img', { src: 'img/logo-soda.svg', alt: 'Soda La Bomba' }), h('img', { src: 'img/logo-pollos.svg', alt: 'Pollos La Bomba' })),
     h('h1', 'Facturación'),
-    h('p.sub', 'Primero escriba el código de su empresa'),
+    h('p.sub', 'Escoja su empresa'),
     mensaje ? h('div.error-caja', { role: 'alert' }, mensaje) : null,
-    h('label.etq.emp-etq', 'Código de su empresa', campo),
-    h('p#emp-ayuda.emp-ayuda', 'Es el código de su negocio, por ejemplo pollos'),
-    err, aviso, seguir)));
+    h('div.emp-opciones', opciones),
+    estado, err, aviso)));
   if (error) mostrar(error); else if (avisoInicial) mostrar(avisoInicial, true);
-  campo.focus();
-  if (campo.value) campo.select();
+  (opciones.find((b) => b.dataset.codigo === codigo) || opciones[0]).focus();
 }
 
 // Paso 2
@@ -206,14 +201,16 @@ function pantallaUsuario(emp, mensaje) {
   const mostrarEstado = (m) => { estado.textContent = m; estado.hidden = !m; };
   const alertar = (e) => mostrarError(textoErrorAcceso(e));
   let ocupado = false;
-  const pad = crearPad({
-    // Sin usuario no se acepta ningún número: así el PIN nunca queda lleno y «atascado»
+  const botonEntrar = h('button.btn.primario.grande.entrar-boton', { type: 'button', onclick: () => intentar() }, 'Entrar');
+  const pad = crearCampoPin({
+    // Sin usuario no se entra solo con el cuarto número: se avisa y el PIN escrito se conserva
     antes: () => { if (usuario.value.trim()) return true; mostrarError('Primero escriba su usuario.'); usuario.focus(); return false; },
     alCompletar: () => intentar(),
+    boton: botonEntrar,
   });
-  const cambiar = h('button.btn.emp-cambiar', { type: 'button', onclick: () => { if (!ocupado) pantallaCodigo({ codigo: emp.codigo }); } }, 'Cambiar de empresa'); // el código queda escrito y seleccionado: si fue un toque sin querer, basta «Continuar»
+  const cambiar = h('button.btn.emp-cambiar', { type: 'button', onclick: () => { if (!ocupado) pantallaCodigo({ codigo: emp.codigo }); } }, 'Cambiar de empresa'); // vuelve a los dos botones de empresa, con la actual ya enfocada
   const bloquear = (si) => { ocupado = si; pad.bloquear(si); usuario.disabled = si; cambiar.disabled = si; };
-  // Cuenta regresiva cuando el servidor pide esperar (demora acotada del ingreso, nunca un bloqueo). No borra lo digitado; al llegar a 0 vuelve a habilitar el teclado.
+  // Cuenta regresiva cuando el servidor pide esperar (demora acotada del ingreso, nunca un bloqueo). No borra lo digitado; al llegar a 0 vuelve a habilitar los campos.
   let relojEspera = null;
   function cuentaEspera(seg) {
     if (relojEspera) clearInterval(relojEspera);
@@ -223,14 +220,14 @@ function pantallaUsuario(emp, mensaje) {
     pintar();
     relojEspera = setInterval(() => {
       queda -= 1;
-      if (queda <= 0) { clearInterval(relojEspera); relojEspera = null; mostrarError(''); bloquear(false); if (!usuario.value) usuario.focus(); }
+      if (queda <= 0) { clearInterval(relojEspera); relojEspera = null; mostrarError(''); bloquear(false); (usuario.value ? pad.campo : usuario).focus(); }
       else pintar();
     }, 1000);
   }
   async function intentar() {
     if (ocupado) return;
     if (!usuario.value.trim()) { pad.limpiar(); mostrarError('Escriba su usuario.'); usuario.focus(); return; }
-    if (pad.valor().length < 4) { mostrarError('El PIN tiene 4 números.'); return; }
+    if (pad.valor().length < 4) { mostrarError('El PIN tiene 4 números.'); pad.enfocar(); return; }
     mostrarError('');
     bloquear(true); mostrarEstado('Entrando…');
     try {
@@ -252,17 +249,19 @@ function pantallaUsuario(emp, mensaje) {
       alertar(e);
       mostrarEstado('');
       bloquear(false);
+      pad.enfocar();
     }
   }
   usuario.addEventListener('input', () => { mostrarError(''); if (notaUsuario) notaUsuario.hidden = true; });
   usuario.addEventListener('focus', () => { if (usuario.value) usuario.select(); });
-  document.onkeydown = (e) => {
-    if (document.activeElement === usuario) { if (e.key === 'Enter') { e.preventDefault(); usuario.blur(); } return; }
-    if (e.ctrlKey || e.metaKey || e.altKey) return;
-    if (/^[0-9]$/.test(e.key)) { if (document.activeElement?.tagName === 'BUTTON') document.activeElement.blur(); pad.tecla(e.key); }
-    else if (e.key === 'Backspace') pad.borrar();
-    else if (e.key === 'Enter' && document.activeElement?.tagName !== 'BUTTON') intentar();
-  };
+  document.onkeydown = null;
+  // Enter en el usuario pasa al PIN; si el PIN ya estaba escrito, entra
+  usuario.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    if (!usuario.value.trim()) return;
+    if (pad.valor().length === 4) intentar(); else pad.enfocar();
+  });
   const ced = cedulaJuridica(emp.cedula);
   raiz.append(h('div.pantalla-centro', h('div.login.tarjeta.login-usuario',
     h('div.emp-reconocida', { role: 'status', 'data-emp': emp.codigo === 'soda' ? 'soda' : 'pollos' },
@@ -272,11 +271,12 @@ function pantallaUsuario(emp, mensaje) {
         h('strong.emp-nombre', emp.nombre || 'Su empresa'),
         ced ? h('span.emp-ced', 'Cédula jurídica ' + ced) : null),
       cambiar),
-    h('p.sub', 'Escriba su usuario y su PIN de 4 números'),
+    h('p.sub', 'Escriba su usuario y su PIN'),
     mensaje ? h('div.error-caja', { role: 'alert' }, mensaje) : null,
     h('label.etq', 'Usuario', usuario, notaUsuario),
-    pad.dots, estado, err, pad.teclado)));
-  if (!usuario.value) usuario.focus();
+    h('label.etq', 'PIN', pad.campo),
+    estado, err, botonEntrar)));
+  (usuario.value ? pad.campo : usuario).focus();
 }
 
 /* ---------- Cambio obligatorio de PIN (primer ingreso o reinicio por el administrador) ---------- */
@@ -362,7 +362,10 @@ function pintarCabecera() {
   if (!cab || !app.ctx || !app.soc) return;
   const s = app.soc, t = app.turno, emp = codigoEmpresa(s);
   cab.dataset.emp = emp;
-  cab.querySelector('.cab-emp').textContent = nombreLocal(s);
+  const empBtn = cab.querySelector('.cab-emp');
+  empBtn.textContent = nombreLocal(s);
+  empBtn.setAttribute('aria-label', nombreLocal(s) + ': ir al inicio');
+  cab.querySelector('.marca').setAttribute('aria-label', nombreLocal(s) + ': ir al inicio');
   const logo = cab.querySelector('.marca img');
   const codigoReal = String(s.codigo_acceso || s.codigo || '').toLowerCase();
   logo.src = logoDe(codigoReal);
@@ -441,7 +444,7 @@ async function actualizarAlertas(forzar = false) {
   if (!forzar && Date.now() - alUltimo < 5000) return;
   alUltimo = Date.now();
   const mi = ++alSeq, soc = app.socId;
-  actualizarInventario(mi);
+  if (app.admin) actualizarInventario(mi); // la insignia de Inventarios es de administración: la persona de caja no la ve y la base tampoco se la daría
   avisosAdmin?.actualizar(() => mi === alSeq && !!app.ctx); // solo administradores: respaldos (franja y insignia) y avisos de ingreso (insignia de Usuarios)
   try {
     const { alertas } = await import('./api_documentos.js');
@@ -541,7 +544,6 @@ function mostrarSesionVencida() {
   const fondo = h('div#sesion-vencida.modal-fondo.sesion-fondo', { role: 'alertdialog', 'aria-modal': 'true', 'aria-labelledby': 'sv-tit' }, h('div.modal.sesion-caja', { style: 'max-width:420px' }, cuerpo));
   const cerrar = () => {
     document.onkeydown = null;
-    document.removeEventListener('keydown', alTeclear);
     window.removeEventListener('keydown', alTeclaDeVentana, true);
     fondo.remove();
     previos.forEach((x, i) => { x.inert = false; if (typeof x._cerrar === 'function') x._bloqueo = bloqueosPrevios[i]; });
@@ -558,10 +560,11 @@ function mostrarSesionVencida() {
   };
   const err = h('div.error-caja', { hidden: true, role: 'alert' });
   const estado = h('div.entrando', { hidden: true, role: 'status', 'aria-live': 'polite' });
-  const pad = crearPad({ alCompletar: () => reentrar() });
+  const botonEntrar = h('button.btn.primario.grande.entrar-boton', { type: 'button', onclick: () => reentrar() }, 'Entrar');
+  const pad = crearCampoPin({ alCompletar: () => reentrar(), boton: botonEntrar });
   const mostrarError = (m) => { err.textContent = m; err.hidden = !m; };
   async function reentrar() {
-    if (pad.valor().length < 4) { mostrarError('El PIN tiene 4 números.'); return; }
+    if (pad.valor().length < 4) { mostrarError('El PIN tiene 4 números.'); pad.enfocar(); return; }
     mostrarError('');
     pad.bloquear(true); estado.textContent = 'Entrando…'; estado.hidden = false;
     try {
@@ -582,33 +585,27 @@ function mostrarSesionVencida() {
         let queda = Math.max(1, Number(e.espera) || 5);
         const pintar = () => mostrarError('Espere ' + queda + ' segundo' + (queda === 1 ? '' : 's') + ' e intente de nuevo.');
         pintar();
-        const tt = setInterval(() => { queda -= 1; if (queda <= 0) { clearInterval(tt); mostrarError(''); pad.bloquear(false); } else pintar(); }, 1000);
+        const tt = setInterval(() => { queda -= 1; if (queda <= 0) { clearInterval(tt); mostrarError(''); pad.bloquear(false); pad.enfocar(); } else pintar(); }, 1000);
         return;
       }
-      pad.limpiar(); mostrarError(textoErrorAcceso(e, { cambiarEmpresa: false })); estado.hidden = true; pad.bloquear(false);
+      pad.limpiar(); mostrarError(textoErrorAcceso(e, { cambiarEmpresa: false })); estado.hidden = true; pad.bloquear(false); pad.enfocar();
     }
   }
   function paso2() {
     cuerpo.replaceChildren(h('div.col',
       h('h2#sv-tit', 'Escriba su PIN'),
       h('p.sub.sv-quien', h('span', 'Empresa: ', h('strong', emp.nombre || 'Su empresa')), h('span', 'Usuario: ', h('strong', nombre)), h('span', 'El PIN son 4 números.')),
-      pad.dots, estado, err, pad.teclado,
+      h('label.etq', 'PIN', pad.campo), estado, err, botonEntrar,
       h('button.btn.suave', { type: 'button', onclick: () => { pad.limpiar(); mostrarError(''); paso1(); } }, 'Atrás')));
-    cuerpo.querySelector('.teclado button')?.focus(); // el botón que se tocó desaparece: el foco pasa al teclado y no se pierde en la página
+    pad.enfocar(); // el botón que se tocó desaparece: el foco pasa al campo del PIN y no se pierde en la página
   }
-  const alTeclear = (e) => {
-    if (!cuerpo.querySelector('.teclado') || e.ctrlKey || e.metaKey || e.altKey) return;
-    if (/^[0-9]$/.test(e.key)) { if (document.activeElement?.tagName === 'BUTTON') document.activeElement.blur(); pad.tecla(e.key); }
-    else if (e.key === 'Backspace') pad.borrar();
-  };
-  document.addEventListener('keydown', alTeclear);
   // Escape y Tab se atienden ANTES que la ventana de debajo (escucha en la fase de captura de window): Escape no la cierra y Tab no le mueve el foco a algo que está inerte.
   // Tab da la vuelta dentro de esta ventana.
   const alTeclaDeVentana = (e) => {
     if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); return; }
     if (e.key !== 'Tab') return;
     e.stopPropagation();
-    const botones = [...cuerpo.querySelectorAll('button:not([disabled])')].filter((b) => b.offsetParent !== null);
+    const botones = [...cuerpo.querySelectorAll('button:not([disabled]), input:not([disabled])')].filter((b) => b.offsetParent !== null);
     if (!botones.length) { e.preventDefault(); return; }
     const primero = botones[0], ultimo = botones[botones.length - 1], en = document.activeElement;
     if (!fondo.contains(en)) { e.preventDefault(); (e.shiftKey ? ultimo : primero).focus(); }
@@ -796,10 +793,10 @@ function armarApp(reciente = false) {
   inicioEl = h('button.btn.cab-inicio', { type: 'button', onclick: () => subir('inicio') }, 'Inicio');
   tituloEl = h('h1.cab-titulo');
   cab = h('header.cabecera', { 'data-vista': 'inicio' },
-    h('div.cab-franja', h('div.cab-franja-in', h('span.cab-emp'), h('span.amb'))),
+    h('div.cab-franja', h('div.cab-franja-in', h('button.cab-emp', { type: 'button', title: 'Ir al inicio', onclick: () => subir('inicio') }), h('span.amb'))), // tocar el nombre del negocio (o el logo) lleva siempre al inicio, desde cualquier pantalla: es lo más rápido para quien atiende
     h('div.cab-fila',
       volverEl, inicioEl,
-      h('div.marca', h('img', { alt: 'La Bomba' })),
+      h('button.marca', { type: 'button', title: 'Ir al inicio', onclick: () => subir('inicio') }, h('img', { alt: 'La Bomba' })),
       tituloEl,
       h('div.cab-estado', h('span.estado-turno')),
       // Atajo siempre visible: anular una factura no debe esconderse dentro de otra pantalla. Lleva a «Anular y reimprimir» con el cursor en el buscador.
