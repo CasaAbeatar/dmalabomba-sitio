@@ -383,7 +383,7 @@ export default {
         cajonesOrd.map((c) => h('option', { value: c.codigo, selected: c.codigo === cajonInicial }, c.codigo + ' · ' + c.nombre + (c.activo ? '' : ' (desactivado)'))));
       const codigo = soloDigitos(h('input.campo', { type: 'text', inputmode: 'numeric', autocomplete: 'off', readonly: esEd, value: esEd ? p.codigo : modo === 'modificador' ? siguienteModificador(grupo) : siguienteProducto(cajonInicial), 'aria-label': 'Código de 6 dígitos' }), 6);
       const decod = h('small.tenue');
-      const nombre = h('textarea.campo', { rows: 2, 'aria-label': 'Nombre' }, esEd ? p.nombre : '');
+      const nombre = h('textarea.campo', { rows: 2, maxlength: 150, 'aria-label': 'Nombre' }, esEd ? p.nombre : '');
       const avisoNombre = h('div', { hidden: true });
       // Nombres de los niveles 2 y 3 (producto y opción). Caja arma la cascada con ellos.
       const grupoProds = modo === 'modificador' ? cat.productos.filter((x) => x.codigo.startsWith(grupo)) : [];
@@ -581,7 +581,7 @@ export default {
                 esEd ? null : h('div.fila', h('button.btn', { type: 'button', onclick: () => { codigo.value = modo === 'modificador' ? siguienteModificador(grupo) : siguienteProducto(selC.value); decodificar(); } }, 'Sugerir el siguiente código libre'))),
               avisosCodigo,
               bloqueNiveles,
-              campo('Nombre o descripción (el que sale en la factura)', nombre, 'Sin límite de largo. En la factura electrónica Hacienda solo recibe los primeros 200 caracteres. Si llena los nombres de arriba, este se arma solo y usted lo puede cambiar.'),
+              campo('Nombre o descripción (el que sale en la factura)', nombre, 'Hasta 150 letras. Es el texto que sale en la factura. Si llena los nombres de arriba, este se arma solo y usted lo puede cambiar.'),
               avisoNombre)),
           h('fieldset', h('legend', 'CABYS y IVA'),
             h('div.col',

@@ -201,7 +201,7 @@
 .mt-seg-btns{display:flex;flex-wrap:wrap;gap:.5rem;margin-top:.6rem}
 .mt-seg-pie{margin:0;font-size:.85rem;color:var(--tinta2)}
 .mt-seg-origen{margin:.3rem 0 0;font-size:.95rem;overflow-wrap:anywhere}
-.mt-apa{margin:0 0 1rem;display:flex;flex-direction:column;gap:.5rem}
+.mt-apa{margin:1.2rem 0 1rem;display:flex;flex-direction:column;gap:.5rem}
 .mt-apa h2{font-size:1.2rem}
 .mt-apa .mt-nota{margin:0}
 .mt-apa-grupo h3{margin:.6rem 0 .4rem;font-size:1rem}

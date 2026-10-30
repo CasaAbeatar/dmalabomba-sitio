@@ -307,7 +307,8 @@
 /* ---------- Ajustes generales de la caja ---------- */
 /* El pie fijo con «Volver» y «Cobrar» no debe tapar el campo que se está escribiendo (referencia del pago con el teclado abierto) */
 .modal-cuerpo{scroll-padding-bottom:7rem}
-.caja .campo{scroll-margin-bottom:7rem}
+.caja .campo,.caja .efz-tarjeta,.caja .efz-tarjeta .error-caja,.caja .efz-tarjeta .btn{scroll-margin-bottom:7rem} /* la barra «Ver cuenta» del celular no tapa el final del formulario de efectivo ni sus mensajes */
+@media(max-width:979px){html{scroll-padding-bottom:7rem}}
 [hidden]{display:none!important}
 .sr-solo{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 :root{--cab-h:110px;--bus-h:92px}
@@ -356,6 +357,16 @@
 
 .exito .botones .btn.suave,.exito .botones .btn.peligro{grid-column:1/-1}
 .cobro-total .monto{font-size:2.6rem}
+/* Franja fija de la ventana de cobro: total, estado del pago y documento siempre a la vista (el cuerpo baja hasta el campo del monto) */
+.cobro-fijo{position:sticky;top:-1.2rem;z-index:3;margin:-1.2rem -1.2rem 0;padding:.6rem 1.2rem .55rem;background:var(--papel);border-bottom:1px solid var(--linea);display:flex;flex-direction:column;gap:.4rem}
+.cobro-fijo .cobro-total{padding:0;display:flex;justify-content:space-between;align-items:baseline;gap:.8rem;text-align:left}
+.cobro-fijo .cobro-total .et{font-size:.95rem}
+.cobro-fijo .cobro-total .monto{font-size:1.9rem;line-height:1.1}
+.cobro-fijo .cobro-resumen{padding:.4rem .8rem;min-height:44px}
+.cobro-fijo .cobro-resumen .grande{font-size:1.35rem}
+.cobro-doc-linea{font-size:.9rem;font-weight:600;color:var(--tinta2);overflow-wrap:anywhere;line-height:1.3}
+.modal-cuerpo:has(.cobro-fijo){scroll-padding-top:9.5rem}
+@media(max-height:560px){.cobro-fijo{position:static;margin-top:0;border-bottom:0;padding:0}.modal-cuerpo:has(.cobro-fijo){scroll-padding-top:0}}
 
 .cuentas-extras{display:flex;gap:.5rem;flex-wrap:wrap;justify-content:flex-end;margin-top:-.3rem}
 .cuentas-extras .btn{min-height:48px}

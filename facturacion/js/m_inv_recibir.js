@@ -73,10 +73,13 @@ async function abrirLista(ctx) {
     if (!facs.length) {
       poner(lista, vacio(est.q ? 'Ninguna factura por recibir coincide con «' + est.q + '».' : 'No hay facturas por recibir. Todo lo que llegó ya se recibió o se marcó «No es de inventario».'));
     } else {
-      poner(lista, 
+      // Si hay más de las que se muestran, el aviso va ARRIBA y el contador dice «100 de 119» (antes quedaba al final de la lista, tras 100 tarjetas)
+      const totalFacs = Number((d.resumen || {}).facturas) || 0;
+      const cuenta = (n) => String(n) + (d.truncado && totalFacs > facs.length ? ' de ' + totalFacs : '');
+      poner(lista,
+        d.truncado ? aviso('espera', h('p', 'Se muestran las ' + facs.length + ' más recientes' + (totalFacs > facs.length ? ' de ' + totalFacs : '') + '. Use el buscador o escoja una empresa para ver las demás.')) : null,
         deHoy.length ? h('h3.inv-grupo-tit', 'Llegaron hoy', h('span.inv-cuenta', String(deHoy.length))) : null, ...deHoy.map(tarjeta),
-        antes.length ? h('h3.inv-grupo-tit', deHoy.length ? 'De días anteriores' : 'Facturas por recibir', h('span.inv-cuenta', String(antes.length))) : null, ...antes.map(tarjeta),
-        d.truncado ? aviso('espera', h('p', 'Se muestran las 100 más recientes. Use el buscador o escoja una empresa para ver las demás.')) : null);
+        antes.length ? h('h3.inv-grupo-tit', deHoy.length ? 'De días anteriores' : 'Facturas por recibir', h('span.inv-cuenta', deHoy.length ? String(antes.length) : cuenta(antes.length))) : null, ...antes.map(tarjeta));
     }
     const r = d.resumen || {};
     poner(resumen, h('h3', 'Resumen de lo pendiente'),

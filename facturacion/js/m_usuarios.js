@@ -199,7 +199,7 @@ export default {
       aparEl.replaceChildren(...[
         h('div.mt-seg-cab', h('h2', 'Aparatos de confianza'), h('span.chip' + (r.activos ? '.ok' : '.gris'), r.activos === 1 ? '1 aparato activo' : r.activos + ' aparatos activos')),
         h('p.mt-nota', 'Un aparato de confianza es uno que el sistema reconoce porque esa persona ya entró desde él. Se olvida solo si pasan 90 días sin usarlo. Con esto los avisos de ingreso pueden decir si un intento vino de un aparato conocido.'),
-        h('p.mt-nota', 'Quitar la confianza no cierra la sesión que esa persona tenga abierta ni le impide entrar con su PIN. Para cortar el acceso, reinicie su PIN o desactívela en la lista de usuarios, más abajo.'),
+        h('p.mt-nota', 'Quitar la confianza no cierra la sesión que esa persona tenga abierta ni le impide entrar con su PIN. Para cortar el acceso, reinicie su PIN o desactívela en la lista de usuarios, más arriba.'),
         r.aparatos.length ? [...grupos.values()].map((g) => h('div.mt-apa-grupo', h('h3', nombrePropio(g.nombre || '') + (g.usuario && nombrePropio(g.nombre || '').toLowerCase() !== g.usuario ? ' (' + g.usuario + ')' : '')), h('ul.mt-apa-lista', g.lista.map(filaAparato))))
           : h('p.mt-seg-ok', verTodos ? 'No hay aparatos registrados.' : 'No hay aparatos de confianza activos.'),
         h('label.mt-apa-ver', cbTodos, h('span', 'Mostrar también los que ya no valen (quitados o vencidos)'))].flat());
@@ -308,7 +308,7 @@ export default {
       h('div.mt-cab',
         h('div', h('p', 'Las personas que pueden entrar al facturador de ', h('strong', miEmpresa), '. Nunca se elimina a nadie: se desactiva.')),
         h('div.mt-acciones', h('button.btn.primario.grande', { type: 'button', onclick: agregar }, 'Agregar usuario'))),
-      segEl, aparEl, resumen, lista,
+      segEl, resumen, lista, aparEl,
       // Lo de hoy primero (quién ingresó hoy); la explicación del PIN va al final y se abre con un botón grande
       h('details.tarjeta', { style: 'margin-top:1.2rem' },
         h('summary', 'Cómo funciona el PIN'),

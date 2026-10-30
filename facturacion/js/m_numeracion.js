@@ -7,6 +7,7 @@ import { h, esqueleto, bloqueError, textoDeError, confirmar, conBoton, toast, mo
 import { cargarHoja } from './ui_hojas.js';
 import { soloDigitos } from './ui_mant.js';
 import { numeracion, normalizarNumeracion, nombreTipo, esRespuesta, FRASE_COMPROBANTES, FRASE_RESPUESTAS } from './api_numeracion.js';
+import { correoActivo } from './api_documentos.js';
 
 const MAX_CONSECUTIVO = 9999999999;
 const TEXTO_AMBIENTE = { sandbox: 'Modo de pruebas', produccion: 'Facturas reales' };
@@ -90,6 +91,8 @@ export default {
           ? h('p.num-libre', 'El sistema no encuentra nada que lo impida.')
           : h('p.num-cerrado', D.motivos.length === 1 ? 'Todavía no se puede. Hay 1 cosa que lo impide:' : 'Todavía no se puede. Hay ' + D.motivos.length + ' cosas que lo impiden:'),
         D.motivos.length ? h('ul.num-motivos', D.motivos.map(motivoDe)) : null,
+        // No lo impide la base, pero conviene saberlo antes de abrir: con el envío de correo apagado el cliente solo recibe el comprobante impreso
+        aReales && !correoActivo(app) ? h('p.num-nota.num-correo', h('strong', 'Para tener en cuenta: '), 'el envío de facturas por correo al cliente está apagado. Mientras siga así, el cliente solo recibe el comprobante impreso, y quien pida la factura como gasto necesitaría el archivo.') : null,
         h('p.num-solo-informa', 'Esta pantalla solo informa: desde aquí no se cambia el modo del sistema.'));
     }
 
@@ -120,7 +123,7 @@ export default {
         h('div.num-bloque-cab', h('h3', amb === 'produccion' ? 'Numeración de las facturas reales' : 'Numeración del modo de pruebas'),
           actual ? h('span.chip.ok', 'En uso ahora') : h('span.chip.gris', 'Todavía no se usa')),
         amb === 'produccion' && D.actual === 'sandbox' ? h('p.num-nota', 'Estos son los números con que empezarán las facturas reales. Mientras el sistema esté en modo de pruebas no se usan.') : null,
-        filas.length ? h('ul.num-filas', filas.map((r) => filaNumero(r, amb))) : h('p.num-nota', 'La base no informó los tipos de documento de esta empresa.'));
+        filas.length ? h('ul.num-filas', filas.map((r) => filaNumero(r, amb))) : h('p.num-nota', 'No llegó la información de los tipos de documento de esta empresa.'));
     }
 
     // Ventana para escribir el último número emitido de un tipo
@@ -218,7 +221,7 @@ export default {
         h('h2', 'Confirmar el primer número de la factura real'),
         h('p', 'Antes de facturar de verdad, el sistema necesita saber con qué número empieza cada tipo de documento. Hacienda rechaza un número repetido, por eso este paso se hace con cuidado.'),
         h('div.num-aviso.info', h('strong', 'Si la empresa ya emitió facturas reales con otro sistema, no confirme aquí. '), 'Escriba el último número emitido de cada tipo en la lista de números de arriba (botón «Fijar el último número»), también el de las respuestas a proveedores.'),
-        cajas.length ? cajas.map(bloqueCaja) : h('p.num-nota', 'La base no informó las cajas de esta empresa.'),
+        cajas.length ? cajas.map(bloqueCaja) : h('p.num-nota', 'No llegó la información de las cajas de esta empresa.'),
         resp.length ? bloqueResp() : null);
     }
 
