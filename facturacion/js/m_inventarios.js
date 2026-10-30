@@ -4,7 +4,7 @@
 // Datos: api_inventarios.js (contrato CONTRATO_INVENTARIOS.md). Las acciones que escriben llevan su clave de repetición (m_inv_comun.js, accionSegura).
 import { h, money, num, hoyCR, toast, textoDeError } from './util.js';
 import { inv } from './api_inventarios.js';
-import { cargarCss, cargando, falla, plural, diaLargo, crearCacheArticulos, empresaChip, poner } from './m_inv_comun.js';
+import { cargarCss, cargando, falla, plural, diaLargo, crearCacheArticulos, empresaChip, poner, GRUPOS } from './m_inv_comun.js';
 
 // Las secciones, en el orden en que se ven. cargar() trae su archivo solo cuando se abre.
 const SECCIONES = [
@@ -131,7 +131,36 @@ export default {
         h('div.inv-valor-rejilla',
           h('div', h('h3', 'Por bodega o local'), porUbic.length ? barras(porUbic, 'ubicacion') : h('p.tenue', 'Todavía no hay existencias.')),
           h('div', h('h3', 'Por empresa de origen'), h('p.tenue.inv-chico', 'La empresa a cuyo nombre vino la factura de esa mercadería.'),
-            porEmp.length ? barras(porEmp, 'sociedad_nombre', (f) => empresaChip(f.sociedad_nombre, (ctx.cat?.empresas || []).find((e) => e.id === f.sociedad_id)?.codigo)) : h('p.tenue', 'Todavía no hay existencias.'))));
+            porEmp.length ? barras(porEmp, 'sociedad_nombre', (f) => empresaChip(f.sociedad_nombre, (ctx.cat?.empresas || []).find((e) => e.id === f.sociedad_id)?.codigo)) : h('p.tenue', 'Todavía no hay existencias.')),
+          h('div', h('h3', 'Por rubro contable'), (v?.por_categoria || []).length ? barras((v.por_categoria || []).slice().sort((a, b) => Number(b.valor) - Number(a.valor)), 'categoria') : h('p.tenue', 'Todavía no hay existencias.')),
+          h('div', h('h3', 'Por bolsa de venta'), h('p.tenue.inv-chico', 'Solo agrupa los rubros para descontar por ventas.'),
+            (v?.por_grupo || []).length ? barras((v.por_grupo || []).map((g) => ({ valor: g.valor, nombre: GRUPOS[g.grupo] || 'Sin bolsa' })), 'nombre') : h('p.tenue', 'Todavía no hay existencias.'))),
+        porCabys(v));
+    }
+
+    // Vista para la contadora: los mismos artículos agrupados por los niveles del CABYS (2, 3 o 5 dígitos). No se edita: el rubro de arriba manda.
+    const NIVELES = [{ n: 2, t: 'División' }, { n: 3, t: 'Grupo' }, { n: 5, t: 'Clase' }];
+    function porCabys(v) {
+      const arts = (v?.por_articulo || []);
+      const caja = h('div.inv-cabys-caja');
+      let nivel = 2;
+      const pintarNivel = () => {
+        const m = new Map();
+        arts.forEach((a) => {
+          const c = String(a.cabys || '').replace(/\D/g, '');
+          const k = c.length >= nivel ? c.slice(0, nivel) : 'sin';
+          const g = m.get(k) || { k, valor: 0, arts: [] };
+          g.valor += Number(a.valor) || 0; g.arts.push(a); m.set(k, g);
+        });
+        const filas = [...m.values()].sort((a, b) => (a.k === 'sin') - (b.k === 'sin') || a.k.localeCompare(b.k));
+        poner(caja, filas.length ? h('div.inv-cabys-lista', filas.map((g) => h('details.inv-cabys-fila',
+          h('summary', h('strong', g.k === 'sin' ? 'Sin CABYS' : g.k), h('span.tenue', ' ' + plural(g.arts.length, 'artículo', 'artículos')), h('strong.cifra', money(g.valor))),
+          h('ul.inv-datos-lista.compacta', g.arts.map((a) => h('li', h('span', a.articulo + (a.cabys ? ' · ' + a.cabys : '') + (a.cabys_descripcion ? ' · ' + a.cabys_descripcion : '')), h('strong.cifra', money(a.valor)))))))) : h('p.tenue', 'Todavía no hay existencias.'));
+      };
+      const botones = h('div.inv-seg-grupo', { role: 'group', 'aria-label': 'Nivel del CABYS' }, NIVELES.map((x) => h('button.btn.inv-seg', { type: 'button', 'aria-pressed': String(x.n === nivel),
+        onclick: (e) => { nivel = x.n; botones.querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed', String(b === e.currentTarget))); pintarNivel(); } }, x.t + ' (' + x.n + ' dígitos)')));
+      pintarNivel();
+      return h('div.inv-cabys', h('h3', 'Por CABYS'), h('p.tenue.inv-chico', 'Los mismos artículos agrupados por los niveles del CABYS, para cuadrar con el IVA. Si un proveedor puso mal el código, el rubro de arriba es el que vale.'), botones, caja);
     }
 
     // Después de cualquier cambio (recibir, sacar, contar) lo de hoy se vuelve a pedir, sin mover el foco

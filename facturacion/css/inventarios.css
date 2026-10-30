@@ -408,3 +408,9 @@ body:has(.inv-fondo) .cabecera:has(.cab-usuario.abierto){z-index:120}
 .inv-simple:not(.inv-ver-ubic) .inv-c-ubic{display:none}
 .inv-simple:not([data-grupo="unitario"]) .inv-c-conv{display:none}
 .inv-resumen-simple{margin:.1rem 0 .4rem}
+/* Valor por CABYS (contadora) */
+.inv-cabys{margin-top:1rem;display:flex;flex-direction:column;gap:.5rem}
+.inv-seg-grupo{display:flex;flex-wrap:wrap;gap:.4rem}
+.inv-cabys-fila{border-top:1px solid var(--linea2);padding:.4rem 0}
+.inv-cabys-fila summary{display:flex;align-items:baseline;gap:.5rem;cursor:pointer;min-height:44px;align-items:center}
+.inv-cabys-fila summary .cifra{margin-left:auto}
