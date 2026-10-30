@@ -427,3 +427,8 @@ body:has(.inv-fondo) .cabecera:has(.cab-usuario.abierto){z-index:120}
 .inv-detalles .inv-campo-art{margin-bottom:.7rem}
 @media (max-width:640px){.inv-rubro-fila{grid-template-columns:minmax(0,1fr)}}
 .inv-linea.en-colones .inv-c-conv,.inv-linea.en-colones .inv-costo-fila{display:none}
+
+/* Modo simple: sin cajón «Detalles» en cada línea. Comida preparada y suministros no muestran nada extra; el unitario muestra sus campos directamente. */
+.inv-simple:not([data-grupo="unitario"]) .inv-detalles{display:none}
+.inv-simple[data-grupo="unitario"] .inv-detalles{border-top:0;padding-top:0}
+.inv-simple[data-grupo="unitario"] .inv-detalles>summary{display:none}
