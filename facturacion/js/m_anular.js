@@ -7,7 +7,7 @@ import { h, money, modal, toast, nombrePropio, horaCorta, MEDIOS } from './util.
 import { copiarVentaParaRehacer, abrirCuentaNueva, ventaClonarConCliente, mensajeAmable, anulacionDe, saldosDe, permiteAnular, anulacionDeSaldos, sinEfectoDeSaldos, otrasNotas } from './api_documentos.js';
 import { reimprimirComprobante, numeroCorto } from './imprimir.js';
 import { selectorCliente } from './ui_cliente.js';
-import { leerTurno, efectivoDe, pintarAvisoCaja, abrirCajaAhora, textoSinCaja, avisoSinTurno, avisoSinTurnoHecha, AVISO_TURNO_DESCONOCIDO } from './caja_nota.js'; // la caja y las notas: el mismo aviso y el mismo botón que en las notas parciales
+import { leerTurno, efectivoDe, pintarAvisoCaja, abrirCajaAhora, TEXTO_CAJA_PIE_ANULAR, avisoSinTurno, avisoSinTurnoHecha, AVISO_TURNO_DESCONOCIDO } from './caja_nota.js'; // la caja y las notas: el mismo aviso y el mismo botón que en las notas parciales
 
 if (!document.querySelector('link[data-fx-anular]')) document.head.append(h('link', { rel: 'stylesheet', href: new URL('../css/anular.css', import.meta.url).href, 'data-fx-anular': '1' }));
 
@@ -301,7 +301,7 @@ export function anularDocumento(app, d, { alTerminar, alVerNC, alCambiarCliente,
       seguir.textContent = rotuloSeguir();
       // Caja cerrada y el documento se pagó en efectivo: la base no deja devolver ese dinero sin un turno abierto. Se dice ANTES de enviar y se ofrece abrir la caja.
       if (bloqueaCaja()) {
-        error.textContent = textoSinCaja(efeCaja(), { anulacion: true }) + ' Toque «Abrir la caja ahora» en el aviso de la caja.'; error.hidden = false;
+        error.textContent = TEXTO_CAJA_PIE_ANULAR; error.hidden = false; // el detalle (cuánto efectivo y el botón) está en el aviso de la caja, que se pone a la vista
         try { zonaCaja.scrollIntoView({ block: 'nearest' }); zonaCaja.querySelector('[data-abrir-caja]')?.focus({ preventScroll: true }); } catch { /* nada */ }
         return;
       }
@@ -533,7 +533,7 @@ export function cambiarCliente(app, d, { alTerminar } = {}) {
         await Promise.all([refrescarCaja(), original ? null : app.api.comprobante(d.id).then((c) => { original = c; }, () => { originalFallo = true; })]);
         if (!vivo) return;
         if (bloqueaCaja()) {
-          error.textContent = textoSinCaja(efeCaja(), { anulacion: true }) + ' Toque «Abrir la caja ahora» en el aviso de la caja.'; error.hidden = false;
+          error.textContent = TEXTO_CAJA_PIE_ANULAR; error.hidden = false; // el detalle (cuánto efectivo y el botón) está en el aviso de la caja, que se pone a la vista
           try { zonaCaja.scrollIntoView({ block: 'nearest' }); } catch { /* nada */ }
           return;
         }

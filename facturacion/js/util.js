@@ -219,7 +219,7 @@ export function modal({ titulo, contenido, botones = [], ancho = 520, alCerrar, 
     const lista = [...caja.querySelectorAll(FOCOS)].filter((x) => x.offsetParent !== null);
     if (!lista.length) return;
     const primero = lista[0], ultimo = lista[lista.length - 1];
-    if (!caja.contains(document.activeElement)) { e.preventDefault(); primero.focus(); }
+    if (!caja.contains(document.activeElement) || document.activeElement === caja) { e.preventDefault(); (e.shiftKey ? ultimo : primero).focus(); } // el foco inicial puede estar en la propia ventana: de ahí, Tab va al primer control y Mayús+Tab al último
     else if (e.shiftKey && document.activeElement === primero) { e.preventDefault(); ultimo.focus(); }
     else if (!e.shiftKey && document.activeElement === ultimo) { e.preventDefault(); primero.focus(); }
   };
@@ -253,12 +253,20 @@ export function modal({ titulo, contenido, botones = [], ancho = 520, alCerrar, 
     else empujarEntrada();
   }
   // Foco inicial: un campo solo si ya se ve completo al abrir (si está más abajo, enfocarlo corre la ventana
-  // y en el celular abre el teclado encima del contenido); si no, el botón principal o «Cerrar».
-  const f = caja.querySelector('input:not([type=hidden]),select,textarea');
+  // y en el celular abre el teclado encima del contenido); si no, el primer botón del pie (suele ser el seguro: «No», «Volver»); y si no hay pie, la propia ventana
+  // (la lectura de pantalla anuncia su título y el primer Tab llega a su primer control). Nunca «Cerrar ✕»: un Enter de más no debe cerrar lo que se acaba de abrir.
+  // Quien arma la ventana suele poner el pie justo después de crearla: por eso se vuelve a mirar un instante después, solo si el foco sigue en la ventana misma
+  // (si quien la armó ya movió el foco a otro lado, se respeta).
+  caja.tabIndex = -1;
   const cuerpo = caja.querySelector('.modal-cuerpo') || caja;
   const vis = (el) => { const r = el.getBoundingClientRect(), c = cuerpo.getBoundingClientRect(); return r.height > 0 && r.top >= c.top - 1 && r.bottom <= c.bottom + 1; };
-  if (f && vis(f)) f.focus({ preventScroll: true });
-  else caja.querySelector('.modal-pie .primario, .modal-pie button, .cerrar')?.focus({ preventScroll: true });
+  const enfocarInicial = () => {
+    const f = caja.querySelector('input:not([type=hidden]),select,textarea');
+    if (f && vis(f)) f.focus({ preventScroll: true });
+    else (caja.querySelector('.modal-pie .primario:not([disabled]), .modal-pie button:not([disabled])') || caja).focus({ preventScroll: true });
+  };
+  enfocarInicial();
+  queueMicrotask(() => { if (!cerrado && pilaModales[pilaModales.length - 1] === fondo && document.activeElement === caja) enfocarInicial(); });
   return { cerrar, el: caja };
 }
 

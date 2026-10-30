@@ -6,7 +6,7 @@ import { documentosPagina, DOCUMENTOS_POR_PAGINA, anulacionDe, permiteAnular, ot
 import { anularDocumento, cambiarCliente, textoCodigoNota, codigoDeNota, sustituyeSoportado, listaNotas, TEXTO_07 } from './m_anular.js';
 import { devolverParte, corregirMonto, dejarSinEfecto } from './m_nota_parcial.js';
 import { selectorCliente } from './ui_cliente.js';
-import { sumarDocumentos, frasesDeLista, puenteConTurno, docsDelTurno } from './cuadre_turno.js';
+import { sumarDocumentos, frasesDeLista, puenteConTurno, docsDelTurno, fueraDelTurno, fraseFueraDelTurno } from './cuadre_turno.js';
 import { imprimirComprobante, reimprimirComprobante, formatoDireccion, formatoCedula, formatoTelefono, numeroCorto, NOMBRES_DOCUMENTO } from './imprimir.js';
 import { crearDescarga, nombrePeriodo } from './descargas.js';
 import { textoRango } from './periodo.js';
@@ -506,6 +506,8 @@ export default {
       const faltaCargar = hayMas() && !!turno && !!est.turnoEstado;
       const p = turno && est.turnoEstado && !faltaCargar ? puenteConTurno(sumarDocumentos(docsDelTurno(est.lista, turno)), est.turnoEstado) : null;
       const partes = frases.map((t) => h('p.doc-cuadre-frase', t));
+      // «Total de este turno» (arriba) suma todo lo emitido desde la hora de apertura; el cierre de caja solo lo hecho EN este turno (turno_id). Si la lista trae otros documentos, se dice cuántos y cuánto.
+      const fuera = p && turnoDeAyer() ? fraseFueraDelTurno(fueraDelTurno(est.lista, turno)) : null;
       if (faltaCargar) partes.push(h('p.doc-cuadre-frase', puedeMas() ? 'Para comparar con «Apertura y cierre de caja», primero cargue los documentos que faltan.' : 'No se puede comparar con «Apertura y cierre de caja» porque faltan documentos que esta pantalla no puede cargar.'));
       else if (p && p.coincide && !p.turnoRech && !p.sin) partes.push(h('p.doc-cuadre-frase.ok', `El turno abierto coincide con el total vendido de «Apertura y cierre de caja» (${money(p.turnoNeto / 100)}).`));
       else if (p) {
@@ -519,6 +521,7 @@ export default {
             p.otras ? fila('Otras diferencias, por ejemplo notas de crédito de ventas de otro turno', p.otras) : null,
             fila('Total de este turno en esta lista', p.lista, '.total'))));
       }
+      if (fuera) partes.push(h('p.doc-cuadre-frase', fuera));
       zonaCuadre.replaceChildren(...(partes.length ? [h('div.doc-cuadre-caja', partes)] : []));
     }
 
