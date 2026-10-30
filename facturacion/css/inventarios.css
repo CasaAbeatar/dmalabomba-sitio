@@ -321,7 +321,7 @@ body:has(.inv-fondo) .cabecera:has(.cab-usuario.abierto){z-index:120}
 /* Gráfico (los mismos trazos que Informes, propios de este módulo para no cargar otra hoja) */
 .inv .gr-caja{width:100%}
 .inv svg.gr{display:block;width:100%;height:auto;max-width:100%;overflow:visible}
-.inv .gr text{font-family:Figtree,system-ui,sans-serif;font-size:11px;fill:var(--tinta2)}
+.inv .gr text{font-family:"Helvetica Neue",Helvetica,Arial,"Liberation Sans",sans-serif;font-size:11px;fill:var(--tinta2)}
 .inv .gr .tick{font-size:10.5px}
 .inv .gr .val{fill:var(--tinta);font-size:11px;font-weight:600}
 .inv .gr .eje-tit{fill:var(--tinta);font-size:11.5px;font-weight:600}

@@ -3,7 +3,7 @@
 [hidden]{display:none!important}
 .solo-lectores{position:absolute;width:1px;height:1px;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0;padding:0}
 html{-webkit-text-size-adjust:100%}
-body{margin:0;background:var(--fondo);color:var(--tinta);font:16px/1.45 Figtree,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;-webkit-tap-highlight-color:transparent}
+body{margin:0;background:var(--fondo);color:var(--tinta);font:16px/1.45 "Helvetica Neue",Helvetica,Arial,"Liberation Sans",sans-serif;-webkit-tap-highlight-color:transparent}
 h1,h2,h3{margin:0;font-weight:600;letter-spacing:-.01em}
 h1{font-size:1.6rem}h2{font-size:1.2rem}h3{font-size:1rem}
 small,.tenue{color:var(--tinta2)}
@@ -309,3 +309,5 @@ table.hist th{min-width:0}
 /* Dato discreto de una sola línea (por ejemplo «Líneas con precio distinto del catálogo: 3» en el resumen del turno): línea fina arriba, sin color de alarma */
 .precios-cambiados{margin:.2rem 0 0;padding-top:.6rem;border-top:1px solid var(--linea);color:var(--tinta2);font-size:.95rem}
 .contador-notas{align-self:flex-end;font-weight:400;color:var(--tinta2);font-variant-numeric:tabular-nums}
+
+button,input,select,textarea{font-family:inherit}
