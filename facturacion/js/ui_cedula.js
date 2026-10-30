@@ -312,7 +312,7 @@ export function crearCampoIdentificacion(opts = {}) {
   function pintarDup() {
     if (!dup) { dupEl.replaceChildren(); return; }
     const ac = opts.accionDuplicado;
-    dupEl.replaceChildren(caja('rojo', '!', 'Este cliente ya existe', nombrePropio(dup.nombre) + '. No se pueden guardar dos clientes con el mismo número.',
+    dupEl.replaceChildren(caja('ambar', '!', 'Ya hay un cliente con este número', nombrePropio(dup.nombre) + '. Se puede guardar otro con el mismo número (por ejemplo, otra sucursal), siempre que lleve un nombre distinto.',
       ac ? h('button.btn' + (ac.primario ? '.primario' : ''), { type: 'button', onclick: () => ac.fn(dup) }, ac.texto) : null));
   }
 
@@ -495,7 +495,6 @@ export function crearCampoIdentificacion(opts = {}) {
     if (e) return { mensaje: e.titulo + '. ' + e.detalle, campo: ident };
     if (!/^0[1-6]$/.test(t || '')) return { mensaje: 'No se pudo saber el tipo de identificación. Revise el número.', campo: ident };
     if (llevaLetras(t) && ident.value.length > MAX_ID_LETRAS) return { mensaje: 'La identificación es demasiado larga: tiene ' + ident.value.length + ' letras y números y el máximo es ' + MAX_ID_LETRAS + '.', campo: ident };
-    if (dup && opts.accionDuplicado) return { mensaje: 'Ese cliente ya existe. Use el que ya está guardado.', campo: ident };
     if (fase === 'formato') return { mensaje: r?.mensaje || 'El número no tiene un largo válido.', campo: ident };
     if (fase === 'no_encontrada' && /^0[1-4]$/.test(t)) {
       if (!sinConfirmar) return { mensaje: 'Hacienda no encontró este número. Corríjalo, o toque «Guardar de todos modos» y escriba el motivo.', campo: sinEl.hidden ? ident : btnSin };
