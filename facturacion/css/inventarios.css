@@ -432,3 +432,30 @@ body:has(.inv-fondo) .cabecera:has(.cab-usuario.abierto){z-index:120}
 .inv-simple:not([data-grupo="unitario"]) .inv-detalles{display:none}
 .inv-simple[data-grupo="unitario"] .inv-detalles{border-top:0;padding-top:0}
 .inv-simple[data-grupo="unitario"] .inv-detalles>summary{display:none}
+
+/* Recibir líneas, modo simple: tabla compacta, una fila por línea (sin tarjeta por línea). Lo de comida preparada y suministros entra por valor: sin cantidad. */
+.inv-lineas:has(.inv-simple){gap:0;border:1px solid var(--linea2);border-radius:10px;background:#fff;overflow:hidden}
+.inv-linea.inv-simple{display:grid;grid-template-columns:7rem minmax(0,2.2fr) minmax(0,1.4fr) 9rem auto;gap:.2rem .8rem;align-items:center;padding:.5rem .7rem;border:0;border-bottom:1px solid var(--linea2);border-radius:0;box-shadow:none;background:#fff}
+.inv-linea.inv-simple:last-child{border-bottom:0}
+.inv-linea.inv-simple.marcada{background:var(--rojo-suave);box-shadow:none}
+.inv-simple .inv-linea-cab{display:contents}
+.inv-simple .inv-recibir-chk{grid-row:1;grid-column:1;min-height:44px;padding:.2rem .6rem;gap:.4rem}
+.inv-simple .inv-linea-desc{grid-row:1;grid-column:2;flex:none;gap:0}
+.inv-simple .inv-linea-desc small{font-size:.78rem;line-height:1.25}
+.inv-simple .inv-rubro-fila{grid-row:1;grid-column:3;grid-template-columns:minmax(0,1fr);gap:.1rem}
+.inv-simple .inv-rubro-fila .campo{min-height:40px}
+.inv-simple .inv-bolsa-dice{min-height:0;font-size:.78rem}
+.inv-simple .inv-fila-cant{grid-row:1;grid-column:4;max-width:none}
+.inv-simple .inv-linea-pie{grid-row:1;grid-column:5;border:0;padding:0}
+.inv-simple .inv-sug,.inv-simple .inv-resumen-simple,.inv-simple .inv-eco.mal,.inv-simple .inv-detalles{grid-column:2/-1}
+.inv-simple .inv-sug{padding:.2rem .5rem;font-size:.8rem}
+.inv-simple .inv-resumen-simple{margin:0}
+.inv-simple.por-valor .inv-fila-cant,.inv-simple.en-colones .inv-fila-cant{display:none}
+.inv-simple.por-valor .inv-rubro-fila,.inv-simple.en-colones .inv-rubro-fila{grid-column:3/5}
+@media(max-width:760px){
+  .inv-linea.inv-simple{grid-template-columns:minmax(0,1fr);gap:.4rem;padding:.7rem}
+  .inv-simple .inv-recibir-chk,.inv-simple .inv-linea-desc,.inv-simple .inv-rubro-fila,.inv-simple .inv-fila-cant,.inv-simple .inv-linea-pie,.inv-simple.por-valor .inv-rubro-fila{grid-row:auto;grid-column:1}
+  .inv-simple .inv-sug,.inv-simple .inv-resumen-simple,.inv-simple .inv-eco.mal,.inv-simple .inv-detalles{grid-column:1}
+  .inv-simple .inv-recibir-chk{justify-self:start}
+}
+@media(max-width:760px){.inv-linea.inv-simple .inv-recibir-chk{width:fit-content;justify-self:start}}
