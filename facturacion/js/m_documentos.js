@@ -470,9 +470,7 @@ export default {
       const rotulo = hayMas() ? `Total de los ${num(cargados())} documentos ${est.orden === 'antiguos' ? 'más antiguos' : 'más recientes'}`
         : est.rango === 'hoy' ? (turnoDeAyer() ? 'Total de este turno' : 'Total de hoy') : (est.rango === 'mes' || est.rango === 'anterior') ? 'Total del mes' : una ? 'Total del día' : 'Total de las fechas elegidas';
       zonaResumen.replaceChildren(h('div.doc-resumen',
-        h('div.doc-neto', h('span.doc-etq', rotulo), h('b.doc-gran', money(s.neto))),
-        h('span.doc-det-res', `${num(s.nVentas)} ${s.nVentas === 1 ? 'venta' : 'ventas'}`, s.nAnul ? `, ${num(s.nAnul)} ${s.nAnul === 1 ? 'anulación' : 'anulaciones'}` : '',
-          s.nDev ? `, ${num(s.nDev)} ${s.nDev === 1 ? 'devolución o corrección' : 'devoluciones o correcciones'}` : '', s.nND ? `, ${num(s.nND)} ${s.nND === 1 ? 'nota de débito' : 'notas de débito'}` : '', ` · de los cuales ${money(s.iva / 100)} son IVA`)));
+        h('div.doc-neto', h('span.doc-etq', rotulo), h('b.doc-gran', money(s.neto)))));
       pintarCuadre(s);
       // El servidor entrega los documentos por tandas de 1 000, los más nuevos primero: si faltan los más antiguos, el total de arriba no es el de todo el rango, y hay que decirlo
       if (hayMas()) zonaCuadre.prepend(avisoFaltan());
@@ -514,7 +512,7 @@ export default {
       // «Total de este turno» (arriba) suma todo lo emitido desde la hora de apertura; el cierre de caja solo lo hecho EN este turno (turno_id). Si la lista trae otros documentos, se dice cuántos y cuánto.
       const fuera = p && turnoDeAyer() ? fraseFueraDelTurno(fueraDelTurno(est.lista, turno)) : null;
       if (faltaCargar) partes.push(h('p.doc-cuadre-frase', puedeMas() ? 'Para comparar con «Apertura y cierre de caja», primero cargue los documentos que faltan.' : 'No se puede comparar con «Apertura y cierre de caja» porque faltan documentos que esta pantalla no puede cargar.'));
-      else if (p && p.coincide && !p.turnoRech && !p.sin) partes.push(h('p.doc-cuadre-frase.ok', `El turno abierto coincide con el total vendido de «Apertura y cierre de caja» (${money(p.turnoNeto / 100)}).`));
+      else if (p && p.coincide && !p.turnoRech && !p.sin) { /* coincide: no hace falta decirlo */ }
       else if (p) {
         const fila = (txt, monto, clase = '') => h('div.doc-cuadre-fila' + clase, h('span', txt), h('b', money(monto / 100)));
         partes.push(h('details.doc-cuadre',

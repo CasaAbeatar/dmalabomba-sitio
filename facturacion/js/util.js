@@ -339,7 +339,11 @@ function pieza(core, primera) {
   const base = /(c|s)ion$/.test(low) && low.length > 5 ? low.replace(/(c|s)ion$/, '$1ión') : low;
   return base.charAt(0).toUpperCase() + base.slice(1);
 }
-export function nombrePropio(s) {
+// Las siglas de la sociedad se muestran siempre igual, con puntos: S.A. y S.R.L. (a veces vienen como SA, S.A, SRL o S.R.L)
+const SIGLAS_SOC = { 'SA': 'S.A.', 'S.A': 'S.A.', 'S.A.': 'S.A.', 'SRL': 'S.R.L.', 'S.R.L': 'S.R.L.', 'S.R.L.': 'S.R.L.' };
+const conSiglas = (t) => t.split(' ').map((p) => SIGLAS_SOC[p.toUpperCase().replace(/,$/, '')] ? SIGLAS_SOC[p.toUpperCase().replace(/,$/, '')] + (/,$/.test(p) ? ',' : '') : p).join(' ');
+export function nombrePropio(s) { return conSiglas(nombrePropioBase(s)); }
+function nombrePropioBase(s) {
   const t = String(s ?? '').trim().replace(/\s+/g, ' ');
   if (!t) return '';
   const letras = t.replace(new RegExp('[^' + LETRAS + ']', 'g'), '');

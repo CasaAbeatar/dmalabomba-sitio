@@ -150,11 +150,18 @@
 
 /* Una línea = UNA fila de unos 64 px: nombre, cantidad (menos, número, más), total y el botón «Opciones».
    Lo demás (precio de cada uno, nota, detalle e IVA, cambiar producto, quitar) se abre con «Opciones». */
-.linea{display:grid;grid-template-columns:minmax(0,1fr) auto auto auto;grid-template-areas:"nombre cant total mas";align-items:center;column-gap:.4rem;row-gap:.1rem;padding:.45rem 0;border-bottom:1px solid var(--linea)}
+.linea{display:grid;grid-template-columns:4.4rem minmax(5.5rem,1fr) auto auto;grid-template-areas:"nombre nombre nombre nombre" "cant precio total mas";align-items:center;column-gap:.4rem;row-gap:.1rem;padding:.45rem 0;border-bottom:1px solid var(--linea)}
 .linea:last-child{border-bottom:0}
 .linea.editada,.linea.personalizada{box-shadow:inset 3px 0 0 var(--ambar);padding-left:.6rem;margin-left:-.6rem}
 .linea-nombre{grid-area:nombre;font-weight:600;font-size:.95rem;line-height:1.15;overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
 .linea .cant{grid-area:cant}
+.linea .precio-c{grid-area:precio}
+.linea .cant,.linea .precio-c{display:flex;flex-direction:column;gap:.1rem}
+.mini-et{font-size:.72rem;font-weight:600;color:var(--tinta2)}
+.linea .cant-inp,.linea .precio-inp,.linea .det-inp{width:100%;min-height:48px;font-size:1rem}
+.linea .det-inp{font-weight:600;padding:.4rem .6rem}
+.linea .precio-inp{text-align:right;font-weight:600;font-variant-numeric:tabular-nums}
+.linea .cant-inp{text-align:center;font-weight:600}
 .linea-total{grid-area:total;min-width:5.3rem;text-align:right;font-weight:700;font-size:.98rem;font-variant-numeric:tabular-nums;white-space:nowrap}
 .linea .mas-btn{grid-area:mas;min-width:5rem;padding:.3rem .5rem;font-size:.9rem}
 .linea-sub{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:.1rem .7rem;font-size:.82rem;color:var(--tinta2);padding-bottom:.1rem}
@@ -166,7 +173,7 @@
 .cant .mm:last-child{border-radius:0 var(--r) var(--r) 0}
 .cant .mm:hover:not([disabled]){border-color:var(--tinta)}
 .cant .mm[disabled]{color:#8a8478;background:#f4f1ea;cursor:not-allowed}
-.cant .cant-inp{width:44px;border-radius:0;text-align:center;font-weight:600;padding:.4rem .1rem;border-left:0;border-right:0;min-height:48px}
+.cant .cant-inp{border-radius:var(--r)}
 .linea.editada .precio-inp{border-color:var(--borde-ambar,#a87400);background:var(--ambar-suave)}
 /* Dentro de «Opciones» */
 .linea-pie{grid-column:1/-1;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:.6rem;margin:.2rem 0 .3rem;padding:.7rem;border:1px solid var(--linea2);border-radius:12px;background:#faf6ec}
@@ -412,9 +419,9 @@
 }
 /* Celular: la línea pasa a dos filas (nombre y total arriba; cantidad y «Opciones» abajo) y lo de «Opciones» queda en una columna */
 @media(max-width:639px){
-  .linea{grid-template-columns:minmax(0,1fr) auto;grid-template-areas:"nombre total" "cant mas";row-gap:.3rem;padding:.45rem 0}
+  .linea{grid-template-columns:4.2rem minmax(4.5rem,1fr) auto auto;grid-template-areas:"nombre nombre nombre nombre" "cant precio total mas";row-gap:.3rem;padding:.45rem 0;column-gap:.35rem}
   .linea-nombre{display:block;-webkit-line-clamp:unset;overflow:visible;font-size:1rem}
-  .linea .mas-btn{justify-self:end;min-width:7.5rem}
+  .linea .mas-btn{justify-self:end;min-width:5.6rem}
   .linea-total{font-size:1.02rem}
   .linea-pie{grid-template-columns:minmax(0,1fr)}
   .pie-botones .btn{flex:1 1 100%}
@@ -511,3 +518,8 @@
 .act-aviso.mal{border-color:var(--borde-mal);background:var(--rojo-suave);color:var(--rojo-osc)}
 .cc-cedula-pendiente .cc-ced-fila{display:flex;gap:.5rem;margin-top:.5rem;flex-wrap:wrap}
 .cc-cedula-pendiente input{flex:1 1 11rem;min-height:44px;padding:.4rem .7rem;border:1px solid var(--linea2);border-radius:var(--r);font-size:1rem;background:#fff;color:var(--tinta)}
+.linea .precio-inp.pendiente{border:2px solid var(--borde-ambar,#a87400);background:var(--ambar-suave)}
+.esquema{display:grid;grid-template-columns:repeat(auto-fill,minmax(9.5rem,1fr));gap:.6rem;margin:.6rem 0 1rem;width:100%}
+.esq-cuenta{display:flex;flex-direction:column;gap:.15rem;text-align:left;padding:.7rem;min-height:5.5rem;border:2px solid var(--borde,#c9c9c9);border-radius:.7rem;background:var(--fondo-2,#fff);font:inherit;cursor:pointer}
+.esq-cuenta b{font-size:1.05rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.esq-cuenta.prefact{border-color:var(--borde-ambar,#a87400)}

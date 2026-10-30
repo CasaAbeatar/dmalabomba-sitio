@@ -66,7 +66,9 @@ export function pantallaInicio(app, { alAbrir, alCerrarCaja, alAbrirCaja }) {
 }
 
 /* ---------- Administración: los módulos del grupo «admin» ---------- */
-export function pantallaAdmin(app, { alAbrir }) {
+export function pantallaAdmin(app, { alAbrir, cambiarPin }) {
   return h('div.inicio.admin', h('h1.solo-lectores', 'Administración'),
-    h('div.mod-rejilla.admin', modulosDe('admin', app).map((m) => tarjetaModulo(m, app, alAbrir))));
+    h('div.mod-rejilla.admin', modulosDe('admin', app).map((m) => tarjetaModulo(m, app, alAbrir))),
+    // El cambio de PIN es de administración: no aparece en la pantalla de facturación
+    cambiarPin && app.admin ? h('div.admin-pie', h('button.btn', { type: 'button', onclick: cambiarPin }, 'Cambiar mi PIN')) : null);
 }

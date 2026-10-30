@@ -32,7 +32,7 @@ const leerCant = (s) => Number(String(s ?? '').trim().replace(',', '.'));
 const r3 = (n) => Math.round((n + Number.EPSILON) * 1000) / 1000;
 const plano = (n) => String(Number(n)); // para campos de texto: sin separador de miles
 // Lo que se muestra en lugar del precio: el genérico pide detalle y precio al agregarlo
-const textoPrecio = (p) => (p.descripcion_libre ? 'Detalle y precio' : p.precio_abierto ? 'Precio abierto' : money(p.precio_final));
+const textoPrecio = (p) => (p.descripcion_libre ? 'Precio en la cuenta' : p.precio_abierto ? 'Precio abierto' : money(p.precio_final));
 const fino = () => window.matchMedia?.('(pointer:fine)').matches ?? true;
 // Lleva un campo a la parte que sí se ve de su ventana cuando se abre el teclado del celular (el pie con los botones lo tapaba).
 // Se repite un instante después porque el teclado tarda en abrirse, y otra vez si la ventana visible cambia de tamaño.
@@ -87,7 +87,8 @@ function describirCobro(estado, mensaje) {
   const d = describirEstado(estado, mensaje);
   const items = traducirHacienda(mensaje).items;
   if (d.estado === 'aceptado') {
-    const avisos = items.filter((i) => i.codigo);
+    // El aviso -37 (provincia, cantón o distrito de la empresa) no le sirve a quien cobra: se corrige una vez en los datos de la empresa
+    const avisos = items.filter((i) => i.codigo && i.codigo !== '-37');
     if (!avisos.length) return d;
     return { ...d, chip: 'Aceptado por Hacienda con aviso', clase: 'espera',
       texto: 'Cobro registrado. Hacienda aceptó el comprobante, pero dejó un aviso: ' + avisos.map((i) => i.texto).join(' ') + ' No hace falta repetir el cobro.' };
@@ -525,7 +526,7 @@ export default {
     const sonido = (b) => { b.classList.add('tocado'); setTimeout(() => b.classList.remove('tocado'), 180); };
     // Precio corto para el mosaico: sin «,00» cuando es un monto entero, para que quepa en una línea
     const precioCorto = (n) => (Number.isInteger(Number(n)) ? money0(n) : money(n));
-    const textoPrecioCorto = (p) => (p.descripcion_libre ? 'Detalle y precio' : p.precio_abierto ? 'Precio abierto' : precioCorto(p.precio_final));
+    const textoPrecioCorto = (p) => (p.descripcion_libre ? 'Precio en la cuenta' : p.precio_abierto ? 'Precio abierto' : precioCorto(p.precio_final));
     // Mosaico de un artículo que se cobra con un toque. numero = su lugar en la lista que se ve; nivel 2 = producto (ámbar), nivel 3 = opción (verde azulado).
     // El número va pegado al nombre y el pie lleva el código a la izquierda y el precio a la derecha: no queda espacio en blanco dentro del mosaico.
     function tarjetaArticulo(p, nombre, alAgregar, numero, nivel = 2, registro = tarjetas) {
@@ -759,10 +760,12 @@ export default {
       const v = await api.ventaCrear(socId, 'buffet', null, null, app.terminal);
       cur = ventaVacia(v); guardarActiva();
     }
+    const PRECIO_PENDIENTE = 1; // marcador: la línea libre todavía no tiene precio (no se puede cobrar así)
+    const sinPrecioLinea = (l) => !!prodPorId.get(l.producto_id)?.descripcion_libre && cents(l.precio_final) === cents(PRECIO_PENDIENTE);
     async function agregarProducto(p) {
-      if (p.descripcion_libre) { dialogoLinea({ producto: p }); return; }
       let precio = null;
-      if (p.precio_abierto) {
+      if (p.descripcion_libre) precio = PRECIO_PENDIENTE; // entra directo con el detalle normal; el precio se escribe en la línea
+      if (p.precio_abierto && !p.descripcion_libre) {
         const v = await pedir({ titulo: p.nombre, etiqueta: 'Precio final con IVA incluido (₡)', tipo: 'number', boton: 'Agregar a la cuenta', nota: 'Escriba el monto y toque «Agregar a la cuenta» (o Enter).' });
         if (v == null) return;
         precio = leerNumero(v);
@@ -771,8 +774,9 @@ export default {
       return accion(async () => {
         if (!cur) await crearCuentaBuffet();
         const antes = cur.lineas.length;
-        cur = await api.lineaAgregar(cur.venta.id, p.id, 1, precio, null);
+        cur = await api.lineaAgregar(cur.venta.id, p.id, 1, precio, null, p.descripcion_libre ? { descripcion: p.nombre } : {});
         repintar(cur.lineas.length > antes);
+        if (p.descripcion_libre) setTimeout(() => document.querySelector('.precio-inp.pendiente')?.focus(), 80);
       });
     }
     /* ---------- Línea libre: detalle, cantidad, precio con IVA y tarifa de IVA ---------- */
@@ -908,7 +912,16 @@ export default {
       const editada = !!prod && !prod.precio_abierto && cents(l.precio_final) !== cents(prod.precio_final);
       const cantidad = Number(l.cantidad);
       const qty = h('input.campo.cant-inp', { type: 'text', inputmode: 'decimal', value: plano(cantidad), 'aria-label': 'Cantidad de ' + l.descripcion, autocomplete: 'off' });
-      const precio = h('input.campo.precio-inp', { type: 'text', inputmode: 'decimal', value: plano(l.precio_final), 'aria-label': 'Precio final con IVA de cada ' + l.descripcion, autocomplete: 'off' });
+      const pendiente = sinPrecioLinea(l);
+      const precio = h('input.campo.precio-inp' + (pendiente ? '.pendiente' : ''), { type: 'text', inputmode: 'decimal', value: pendiente ? '' : plano(l.precio_final), placeholder: pendiente ? 'Escriba el precio' : '', 'aria-label': 'Precio final con IVA de cada ' + l.descripcion, autocomplete: 'off' });
+      // El detalle, la cantidad y el precio se cambian ahí mismo, en la línea: un toque y se escribe (sin ventana de opciones)
+      const detalle = h('input.campo.det-inp', { type: 'text', maxlength: 200, value: l.descripcion, 'aria-label': 'Detalle de ' + l.descripcion + ' (sale en la factura)', autocomplete: 'off' });
+      detalle.addEventListener('change', () => {
+        const t = detalle.value.trim();
+        if (t.length < 2) { toast('El detalle no puede quedar vacío.', 'error'); detalle.value = l.descripcion; return; }
+        if (t !== l.descripcion) editar({ descripcion: t });
+      });
+      detalle.addEventListener('focus', () => detalle.select());
       const nota = h('input.campo.nota-inp', { type: 'text', maxlength: 120, value: l.nota || '', placeholder: 'Ej. sin cebolla', 'aria-label': 'Nota de ' + l.descripcion, autocomplete: 'off' });
       const editar = (cambio, aviso) => accion(async () => { cur = await api.lineaEditar(l.id, cambio); repintar(); if (aviso) toast(aviso); });
       qty.addEventListener('change', () => {
@@ -919,10 +932,10 @@ export default {
       precio.addEventListener('change', () => {
         const v = leerNumero(precio.value);
         if (!(v > 0) || !Number.isFinite(v)) { toast('Escriba un precio mayor que cero (con IVA incluido).', 'error'); precio.value = plano(l.precio_final); return; }
-        if (cents(v) !== cents(l.precio_final)) editar({ precio: v });
+        if (cents(v) !== cents(l.precio_final) || pendiente) editar({ precio: v });
       });
       nota.addEventListener('change', () => { if (nota.value.trim() !== (l.nota || '')) editar({ nota: nota.value.trim() }); });
-      [qty, precio, nota].forEach((i) => {
+      [qty, precio, nota, detalle].forEach((i) => {
         i.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); i.blur(); } });
         i.addEventListener('focus', () => llevarALaVista(i));
       });
@@ -944,16 +957,13 @@ export default {
           asideCuenta?.querySelector('[data-linea="' + id + '"]')?.scrollIntoView({ block: 'nearest' });
         } }, abierta ? 'Cerrar' : 'Opciones');
       return h('div.linea' + (editada ? '.editada' : '') + (detalleCambiado || tarifaCambiada ? '.personalizada' : '') + (abierta ? '.abierta' : ''), { 'data-linea': l.id },
-        h('div.linea-nombre', l.descripcion),
-        h('div.cant',
-          h('button.mm', { type: 'button', disabled: cantidad - 1 <= 0, 'aria-label': 'Quitar una unidad de ' + l.descripcion, onclick: () => editar({ cantidad: r3(cantidad - 1) }) }, '−'),
-          qty,
-          h('button.mm', { type: 'button', 'aria-label': 'Agregar una unidad de ' + l.descripcion, onclick: () => editar({ cantidad: r3(cantidad + 1) }) }, '+')),
+        h('div.linea-nombre', detalle),
+        h('label.cant', h('span.mini-et', 'Cantidad'), qty),
+        h('label.precio-c', h('span.mini-et', 'Precio c/u'), precio),
         h('div.linea-total', money(l.total_linea)),
         mas,
         marcas.length ? h('div.linea-sub', marcas) : null,
         abierta ? h('div.linea-pie',
-          h('label.etq.pie-precio', 'Precio de cada uno con IVA (₡)', precio),
           h('label.etq.pie-nota', 'Nota para esta línea', nota),
           h('div.pie-botones',
             h('button.btn', { type: 'button', onclick: () => dialogoLinea({ linea: l }) }, 'Editar detalle e IVA'),
@@ -1032,14 +1042,19 @@ export default {
       if (!asideCuenta) return;
       const scroll = asideCuenta.querySelector('.cuenta-lineas')?.scrollTop || 0;
       if (!cur) {
+        const abrirC = (c) => { accion(async () => { cur = await api.venta(c.id); guardarActiva(); repintar(); }); cambiarVista('cuenta'); };
+        const tarjetas = abiertas.map((c) => h('button.esq-cuenta' + (c.estado === 'prefacturada' ? '.prefact' : ''), { type: 'button', onclick: () => abrirC(c) },
+          h('b', c.referencia || ((TIPOS_SERVICIO[c.tipo_servicio] || c.tipo_servicio) + ' ' + numCuenta(c.numero))),
+          h('small', (TIPOS_SERVICIO[c.tipo_servicio] || '') + (c.estado === 'prefacturada' ? ' · prefactura' : '')),
+          h('span', c.lineas + (Number(c.lineas) === 1 ? ' producto · ' : ' productos · ') + money(c.total))));
         asideCuenta.replaceChildren(h('div.vacio-cuenta',
-          h('h2', 'No hay cuenta abierta'),
-          h('p', 'Toque un producto o búsquelo arriba para empezar una cuenta de Buffet. Si es para esperar, para llevar o express, use «Nueva cuenta».'),
+          h('h2', abiertas.length ? 'Cuentas abiertas' : 'No hay cuentas abiertas'),
+          abiertas.length ? h('div.esquema', tarjetas) : h('p', 'Toque «Nueva cuenta», escriba el nombre y cree la cuenta. Después toque los productos.'),
           h('button.btn.primario.grande', { type: 'button', onclick: seguro(nuevaCuenta) }, 'Nueva cuenta')));
         return;
       }
       const v = cur.venta;
-      const puede = cur.lineas.length > 0 && Number(v.total) > 0;
+      const puede = cur.lineas.length > 0 && Number(v.total) > 0 && !cur.lineas.some(sinPrecioLinea);
       const detalle = [v.referencia, v.telefono].filter(Boolean).join(' · ');
       // Clientes en espera, para llevar y express pueden pedir ver su cuenta antes de pagar: la prefactura NO es un comprobante
       const prefBtn = (v.tipo_servicio === 'espera' || v.tipo_servicio === 'llevar' || v.tipo_servicio === 'express')
@@ -1071,7 +1086,7 @@ export default {
       if (!barraMovil) return;
       const total = cur ? money(cur.venta.total) : '';
       const n = cur ? cur.lineas.length : 0;
-      const puede = !!cur && n > 0 && Number(cur.venta.total) > 0;
+      const puede = !!cur && n > 0 && Number(cur.venta.total) > 0 && !cur.lineas.some(sinPrecioLinea);
       barraMovil.classList.toggle('sin-cobro', !puede);
       const cobrar = puede ? h('button.btn.primario.bm-cobrar', { type: 'button', 'aria-label': 'Cobrar ' + total, onmousedown: sinQuitarFoco, onclick: seguro(abrirCobro) }, 'Cobrar', h('span.bm-total', ' ' + total)) : null;
       if (vista === 'productos') {
@@ -1105,6 +1120,7 @@ export default {
     let cobroAbierto = false; // hay una ventana «Cobrar» abierta (o abriéndose): un Enter repetido no abre otra encima
     async function abrirCobro() {
       if (cobroAbierto) return;
+      if (cur?.lineas.some(sinPrecioLinea)) { toast('Falta escribir el precio de «' + cur.lineas.find(sinPrecioLinea).descripcion + '».', 'error'); document.querySelector('.precio-inp.pendiente')?.focus(); return; }
       cobroAbierto = true;
       let creada = false;
       try { await abrirCobroVentana(() => { creada = true; }); }
@@ -1250,8 +1266,7 @@ export default {
         actEl,
         h('div.col', h('strong', 'Forma de pago'), h('div.medios', mediosBtns)),
         h('label.etq', lblMonto, inpMonto),
-        rapidos, refEtq, btnOtro, errEl, btnRevisar,
-        resImp,
+        refEtq, btnOtro, errEl, btnRevisar,
         h('div.cobro-pie', razonCobro, btnVolver, btnCobrar));
 
       const sinErr = () => { errEl.hidden = true; };
@@ -1357,7 +1372,6 @@ export default {
       function actualizar() {
         mediosBtns.forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.medio === medio)));
         lblMonto.textContent = medio === 'efectivo' ? 'Efectivo que entrega el cliente (₡)' : 'Monto a cobrar con ' + MEDIOS[medio] + ' (₡)';
-        rapidos.hidden = medio !== 'efectivo';
         refEtq.hidden = medio === 'efectivo';
         refTxt.textContent = medio === 'tarjeta' ? 'Número de autorización o voucher (opcional)'
           : medio === 'sinpe' ? 'Número de comprobante del SINPE Móvil (recomendado: ayuda a cuadrar la caja)'
