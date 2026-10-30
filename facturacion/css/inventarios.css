@@ -523,3 +523,9 @@ body:has(.inv-fondo) .cabecera:has(.cab-usuario.abierto){z-index:120}
   .inv-simple .inv-fila-cant{grid-row:auto}
 }
 @media(max-width:560px){.inv-simple .inv-rubro-fila{grid-template-columns:minmax(0,1fr)}}
+
+/* Lista de facturas por recibir: cada línea con su rubro › categoría sugeridos */
+.inv-fac-lineas li{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,2fr) auto;gap:.2rem .8rem;align-items:baseline}
+.inv-fl-sug{font-size:.85rem;font-weight:600;color:var(--tinta)}
+.inv-fl-sug.sin{font-weight:400;color:var(--tinta2)}
+@media(max-width:640px){.inv-fac-lineas li{grid-template-columns:minmax(0,1fr) auto}.inv-fl-sug{grid-column:1/-1;grid-row:2}}

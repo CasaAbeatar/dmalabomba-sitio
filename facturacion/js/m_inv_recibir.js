@@ -115,6 +115,9 @@ async function abrirLista(ctx) {
         ...(r.por_empresa || []).map((e) => h('li', empresaChip(e.sociedad_nombre, codigoEmp(cat, e.sociedad_id)), h('strong.cifra', plural(e.facturas, 'factura', 'facturas') + ' · ' + plural(e.lineas, 'línea', 'líneas'))))),
       h('p.tenue.inv-chico', 'Se toman en cuenta las facturas emitidas desde el ' + dma(d.desde) + '.'));
   }
+  // Lo que se sugiere para cada línea (rubro y categoría) y si el botón «Recibir todas» la puede recibir
+  const sugRecibe = (l) => { const sg = l.sugerencia || {}; return l.estado ? l.estado === 'pendiente' && !!sg.categoria_id && !sg.no_inventario : !!sg.categoria_id && !sg.no_inventario && sg.fuente !== 'servicio'; };
+  const sugTexto = (l) => { const sg = l.sugerencia || {}; if (sg.no_inventario) return 'Sugerido: no es de inventario'; const c = (cat.categorias || []).find((x) => x.id === sg.categoria_id); return c ? c.nombre + ' › ' + (GRUPOS[c.grupo] || '') : 'Sin sugerencia: se decide al abrir'; };
   function tarjeta(f) {
     const ec = f.estado_contable || {};
     const puede = f.puede_recibir !== false;
@@ -129,10 +132,11 @@ async function abrirLista(ctx) {
       !puede ? aviso('mal', h('p', h('strong', (ec.texto || 'Rechazada, no entra') + '. '), 'Esta factura no se puede recibir al inventario. Si la mercadería no se quedó, márquela «No es de inventario» para que salga de esta lista.'))
         : (f.aviso || ec.aviso) ? aviso('espera', h('p', f.aviso || ec.aviso)) : null,
       h('p.inv-fac-cuenta', h('strong', plural(f.lineas_pendientes, 'línea por recibir', 'líneas por recibir')), ' de ' + num(f.lineas_total, 0) + (decididas ? ' (' + [f.lineas_recibidas ? plural(f.lineas_recibidas, 'recibida', 'recibidas') : '', f.lineas_ignoradas ? plural(f.lineas_ignoradas, 'no es de inventario', 'no son de inventario') : ''].filter(Boolean).join(', ') + ')' : '')),
-      h('ul.inv-fac-lineas', (f.lineas || []).slice(0, 4).map((l) => h('li', h('span', l.descripcion), h('span.tenue.cifra', num(l.cantidad, 3) + ' ' + (l.unidad || ''))))),
-      (f.lineas || []).length > 4 ? h('p.tenue.inv-chico', 'y ' + plural(f.lineas.length - 4, 'línea más', 'líneas más')) : null,
+      h('ul.inv-fac-lineas', (f.lineas || []).slice(0, 8).map((l) => h('li', h('span.inv-fl-desc', l.descripcion), h('span.inv-fl-sug' + (sugRecibe(l) ? '' : '.sin'), sugTexto(l)), h('span.tenue.cifra', num(l.cantidad, 3) + ' ' + (l.unidad || ''))))),
+      (f.lineas || []).length > 8 ? h('p.tenue.inv-chico', 'y ' + plural(f.lineas.length - 8, 'línea más', 'líneas más')) : null,
       h('div.inv-fac-btns',
-        h('button.btn' + (puede ? '.primario' : ''), { type: 'button', onclick: () => abrirFactura(ctx, f.clave, { previa: f }) }, puede ? 'Recibir líneas' : 'Ver la factura'),
+        puede && (f.lineas || []).some(sugRecibe) ? h('button.btn.primario', { type: 'button', onclick: () => abrirFactura(ctx, f.clave, { previa: f, recibirSugeridas: true }) }, (f.lineas || []).every(sugRecibe) ? 'Recibir todas las líneas' : 'Recibir las líneas con sugerencia') : null,
+        h('button.btn', { type: 'button', onclick: () => abrirFactura(ctx, f.clave, { previa: f }) }, puede ? 'Escoger qué líneas recibir' : 'Ver la factura'),
         ignorarToda));
   }
   // La factura entera quedó «No es de inventario»: sale de la lista y deja un aviso con «Deshacer»
@@ -188,7 +192,8 @@ export function pedirIgnorar(ctx, f, lineas, alTerminar) {
 /* =====================================================================================================================
    Ventana de una factura: recibir sus líneas
    ===================================================================================================================== */
-export async function abrirFactura(ctx, clave, { previa = null } = {}) {
+export async function abrirFactura(ctx, clave, { previa = null, recibirSugeridas = false } = {}) {
+  let autoRecibir = recibirSugeridas;
   const cat = ctx.cat;
   let vivo = true;
   const cuerpo = h('div.inv-factura', cargando('Cargando la factura…'));
@@ -271,6 +276,16 @@ export async function abrirFactura(ctx, clave, { previa = null } = {}) {
         h('ul.inv-datos-lista', d.notas_proveedor.map((n) => h('li', h('span', tipoDocTxt(n.tipo) + ' N.° ' + numFactura(n.consecutivo) + ' del ' + dma(n.fecha)), h('strong', ({ por_revisar: 'Por revisar', devuelta: 'Mercadería devuelta', ignorada: 'No afecta el inventario' })[n.estado] || n.estado || '')))),
         h('button.btn', { type: 'button', onclick: () => ctx.abrir('notas') }, 'Abrir Notas de proveedor')) : null);
     contar();
+    // «Recibir todas las líneas» desde la lista: se marcan las que traen rubro sugerido y, si todo está en orden, se reciben; si algo falla se queda la ventana abierta para revisarlo
+    if (autoRecibir && puede) {
+      autoRecibir = false;
+      (async () => {
+        for (const x of formas) if (x.sugerida()) await x.marcarOCrear();
+        contar();
+        const sel = marcadas();
+        if (sel.length && sel.every((x) => !x.problema())) accRecibir.ejecutar();
+      })();
+    }
   }
 
   /* ---------- Una línea pendiente: lo que se va a recibir ---------- */
@@ -284,7 +299,7 @@ export async function abrirFactura(ctx, clave, { previa = null } = {}) {
     if (!puede) {
       const el = h('article.inv-linea.bloqueada', { 'data-linea': l.linea }, h('div.inv-linea-cab', descLinea(l)),
         h('div.inv-linea-pie', h('button.btn', { type: 'button', onclick: () => pedirIgnorar(ctx, f, [l.linea], () => cargar()) }, 'No es de inventario')));
-      return { el, marcada: () => false, marcarSiTiene() {}, marcarOCrear: async () => {}, alCambiar() {}, problema: () => '', enfocarProblema() {}, datos: () => null };
+      return { el, sugerida: () => false, marcada: () => false, marcarSiTiene() {}, marcarOCrear: async () => {}, alCambiar() {}, problema: () => '', enfocarProblema() {}, datos: () => null };
     }
     const sug = l.sugerencia || recordados.get(l.linea) || {};
     const avisarCambio = [];
@@ -489,6 +504,7 @@ export async function abrirFactura(ctx, clave, { previa = null } = {}) {
     el.addEventListener('input', guardarEstado); el.addEventListener('change', guardarEstado); costoDet.addEventListener('toggle', guardarEstado);
     return {
       el,
+      sugerida: () => !!rubro.value && !sug.no_inventario && sug.fuente !== 'servicio' && !!(sug.categoria_id || art),
       marcada: () => chk.checked,
       marcarSiTiene: () => { if (art) { chk.checked = true; el.classList.add('marcada'); } },
       marcarOCrear: async () => { if (art || rubro.value) { if (await asegurarArticulo()) { chk.checked = true; el.classList.add('marcada'); pintarBotones(); } } },
