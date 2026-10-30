@@ -37,10 +37,18 @@ export function costoTxt(n) {
 }
 const fmtDia = new Intl.DateTimeFormat('es-CR', { timeZone: 'UTC', weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric' });
 const fmtDiaLargo = new Intl.DateTimeFormat('es-CR', { timeZone: 'UTC', weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+const fmtYmdCR = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Costa_Rica' });
+// El día (AAAA-MM-DD) en Costa Rica de una fecha que puede venir como '2026-10-29' o como instante ('2026-10-30T01:48:05+00:00', que en Costa Rica todavía es el 29)
+export function ymdCR(x) {
+  const s = String(x ?? '');
+  if (!s) return '';
+  if (s.length <= 10) return s.slice(0, 10);
+  try { return fmtYmdCR.format(new Date(s)); } catch { return s.slice(0, 10); }
+}
 // '2026-10-29' -> «jue., 29/10/2026»
-export const diaTxt = (ymd) => (ymd ? fmtDia.format(new Date(String(ymd).slice(0, 10) + 'T12:00:00Z')) : '');
-export const diaLargo = (ymd) => { if (!ymd) return ''; const t = fmtDiaLargo.format(new Date(String(ymd).slice(0, 10) + 'T12:00:00Z')); return t.charAt(0).toUpperCase() + t.slice(1); };
-export const dma = (ymd) => (ymd ? String(ymd).slice(0, 10).split('-').reverse().join('/') : '');
+export const diaTxt = (x) => { const d = ymdCR(x); return d ? fmtDia.format(new Date(d + 'T12:00:00Z')) : ''; };
+export const diaLargo = (x) => { const d = ymdCR(x); if (!d) return ''; const t = fmtDiaLargo.format(new Date(d + 'T12:00:00Z')); return t.charAt(0).toUpperCase() + t.slice(1); };
+export const dma = (x) => { const d = ymdCR(x); return d ? d.split('-').reverse().join('/') : ''; };
 // Días para vencer en palabras. Un lote vence al TERMINAR el día de vence_en: «Vence hoy» todavía se puede usar hoy.
 export function venceTxt(dias, venceEn) {
   if (venceEn == null && dias == null) return 'No vence';
@@ -130,6 +138,8 @@ export function ventana({ titulo, volver = 'Inventarios', contenido, alCerrar, c
 export function dialogo({ titulo, contenido, ancho = 620, alCerrar, botones = [] }) {
   const m = modal({ titulo, contenido: h('div.inv', contenido), ancho, alCerrar, bloqueo: bloqueoEscritura, botones });
   m.el.classList.add('inv-dialogo');
+  // En celular o tableta no se abre el teclado sin que se pida: el foco va a «Cerrar» y la persona toca el campo cuando quiera escribir
+  if (window.matchMedia?.('(pointer:coarse)').matches && /^(INPUT|TEXTAREA)$/.test(document.activeElement?.tagName || '') && m.el.contains(document.activeElement)) m.el.querySelector('.modal-tit .cerrar')?.focus({ preventScroll: true });
   return m;
 }
 // Pregunta con dos botones; devuelve true o false
@@ -169,7 +179,8 @@ export const aviso = (tipo, ...hijos) => h('div.inv-aviso.' + tipo, { role: tipo
 // La clave se crea al primer toque y se REUTILIZA en cada reintento hasta que la acción termina bien: si la red se cayó y la base sí lo guardó,
 // el reintento devuelve lo guardado («idem_repetida») y no duplica nada. Después de terminar bien, la próxima vez es otra intención y lleva otra clave.
 // Un error del negocio (lo que dijo la base, tal cual) libera la clave en la base; se conserva igual porque sirve para el siguiente intento.
-export function accionSegura({ boton, zona, hacer, alTerminar, ocupado = 'Guardando…' }) {
+// alFallar(e) (opcional): después de un error del negocio, por ejemplo para volver a pedir lo disponible.
+export function accionSegura({ boton, zona, hacer, alTerminar, alFallar, ocupado = 'Guardando…' }) {
   let clave = null, enCurso = false;
   const textoBoton = () => boton?.dataset.texto || boton?.textContent;
   if (boton && !boton.dataset.texto) boton.dataset.texto = boton.textContent;
@@ -197,6 +208,7 @@ export function accionSegura({ boton, zona, hacer, alTerminar, ocupado = 'Guarda
         reintentar.focus({ preventScroll: true });
       } else {
         decir(aviso('mal', h('p', textoDeError(e))));
+        try { alFallar?.(e); } catch { /* nada */ }
       }
       return null;
     }

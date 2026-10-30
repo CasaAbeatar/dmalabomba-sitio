@@ -122,8 +122,14 @@ const nombreComercial = (s) => {
   if (!s || s !== s.toUpperCase()) return s;
   return s.toLowerCase().split(/\s+/).map((w, i) => (i > 0 && SIN_MAYUS.has(w)) ? w : w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
 };
+// Identificación como la muestra el PDF del correo (fmtCedula de fn/pdf.ts) y como va en el XML (idReceptor de fn/xml.ts), para que tiquete, carta, detalle de Documentos y PDF digan lo mismo:
+//  * 05 (extranjero no domiciliado) y 06 (no contribuyente): letras y números, en mayúsculas y sin separadores («AB123456», no «123456»);
+//  * 02 (o sin tipo) con letras, como la cédula jurídica alfanumérica del anexo: en mayúsculas y sin espacios, puntos ni guiones (y con el formato de abajo si tiene 10), como normalizarId de fn/xml.ts;
+//  * lo demás, igual que siempre: física 1-2345-6789, jurídica 3-101-123456, DIMEX y NITE solo números.
 function fmtCedula(ced, tipo) {
-  const d = soloDig(ced);
+  if (tipo === '05' || tipo === '06') return String(ced ?? '').normalize('NFC').replace(/[^A-Za-z0-9]/g, '').toUpperCase() || String(ced ?? '');
+  const compacto = String(ced ?? '').replace(/[\s.-]/g, '').toUpperCase();
+  const d = (tipo === '02' || !tipo) && /^[0-9A-Z]+$/.test(compacto) && /[A-Z]/.test(compacto) ? compacto : soloDig(ced);
   if (tipo === '02' && d.length === 10) return `${d[0]}-${d.slice(1, 4)}-${d.slice(4)}`;
   if ((tipo === '01' || !tipo) && d.length === 9) return `${d[0]}-${d.slice(1, 5)}-${d.slice(5)}`;
   return d || String(ced ?? '');

@@ -32,6 +32,13 @@ function insigniaContable(app) {
   const partes = [n > 0 ? n + ' por responder' : '', v > 0 ? v + (v === 1 ? ' vence pronto' : ' vencen pronto') : '', venc > 0 ? venc + (venc === 1 ? ' vencida' : ' vencidas') : ''].filter(Boolean);
   return { texto: partes.join(' · '), urgente: v > 0 || venc > 0 };
 }
+// Insignia de Inventarios, con la cifra de fx_inv_alertas_resumen (main.js la pide junto con los avisos, sin cargar el módulo): «2 vencidos · 14 por recibir». Roja si hay vencidos.
+function insigniaInventarios(app) {
+  const r = app.inventario, n = (k) => Math.max(0, Number(r?.[k] ?? 0) || 0);
+  const partes = [n('vencidos') ? n('vencidos') + (n('vencidos') === 1 ? ' vencido' : ' vencidos') : '', n('por_recibir') ? n('por_recibir') + ' por recibir' : '',
+    n('vencen_pronto') ? n('vencen_pronto') + ' vencen pronto' : '', n('bajo_minimo') ? n('bajo_minimo') + ' bajo el mínimo' : ''].filter(Boolean);
+  return partes.length ? { texto: partes.slice(0, 2).join(' · '), urgente: !!r?.urgente || n('vencidos') > 0 } : null;
+}
 
 export const MODULOS = [
   // Inicio: los cinco módulos principales, en este orden (3 arriba y 2 más anchos abajo en pantalla ancha; una columna en celular)
@@ -46,6 +53,7 @@ export const MODULOS = [
   { id: 'listados', titulo: 'Informes', descripcion: 'Ventas por hora y por día, por tarifa de IVA y por medio de pago', grupo: 'admin', ruta: 'admin/informes', icono: 'barras', orden: 20, cargar: () => import('./m_listados.js') },
   { id: 'emitidas', alias: ['facturas-emitidas'], titulo: 'Facturas emitidas', descripcion: 'Buscar facturas y tiquetes de cualquier fecha y ver si Hacienda los aceptó', grupo: 'admin', ruta: 'admin/facturas-emitidas', icono: 'emitidas', orden: 25, cargar: () => import('./m_facturas_emitidas.js') },
   { id: 'recepcion', titulo: 'Contable', descripcion: 'Facturas de proveedores y respuesta a Hacienda', grupo: 'admin', ruta: 'admin/contable', icono: 'libro', orden: 30, insignia: insigniaContable, cargar: () => import('./m_recepcion.js') },
+  { id: 'inventarios', titulo: 'Inventarios', descripcion: 'Bodega central y locales: lo que entra, lo que sale y lo que vence', grupo: 'admin', ruta: 'admin/inventarios', icono: 'bodega', orden: 35, insignia: insigniaInventarios, cargar: () => import('./m_inventarios.js') },
   { id: 'usuarios', titulo: 'Usuarios', descripcion: 'Usuarios, PIN y quién ingresó', grupo: 'admin', ruta: 'admin/usuarios', icono: 'usuario', orden: 40, soloAdmin: true, cargar: () => import('./m_usuarios.js') },
 ];
 

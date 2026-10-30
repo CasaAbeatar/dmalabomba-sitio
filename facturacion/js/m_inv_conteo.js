@@ -2,7 +2,7 @@
 // Lo que no se contó NO se toca. Para que el conteo sea confiable, se cuenta sin ver lo que dice el sistema (conteo ciego); solo un administrador puede mostrarlo.
 import { h, money, num, fechaHora, debounce } from './util.js';
 import { inv, cant } from './api_inventarios.js';
-import { ventana, dialogo, cargando, falla, vacio, aviso, cantTxt, plural, selectUbicacion, nombreUbicacion, campoCantidad, accionSegura, botonSeguro, repetidaTxt, enfocar, toastOk, elegirArticulo, opcionDeArticulo, preguntar, norm, poner } from './m_inv_comun.js';
+import { ventana, dialogo, cargando, falla, vacio, aviso, cantTxt, unidadTxt, plural, selectUbicacion, nombreUbicacion, campoCantidad, accionSegura, botonSeguro, repetidaTxt, enfocar, toastOk, elegirArticulo, opcionDeArticulo, preguntar, norm, poner } from './m_inv_comun.js';
 
 const ESTADO = { abierto: ['Abierto', 'espera'], confirmado: ['Confirmado', 'ok'], cancelado: ['Cancelado', ''] };
 const chipEstado = (e) => { const [t, c] = ESTADO[e] || [e, '']; return h('span.chip' + (c ? '.' + c : ''), t); };
@@ -99,7 +99,7 @@ export async function abrirConteo(ctx, id, inicial = null) {
       anotados.set(l.articulo_id, { campo, guardado: campo.input.value.trim(), nombre: l.articulo });
       const dif = l.diferencia != null ? Number(l.diferencia) : null;
       return h('div.inv-conteo-linea' + (l.contado != null ? '.contada' : ''), { 'data-art': l.articulo_id, 'data-nombre': norm(l.articulo) },
-        h('div.inv-conteo-art', h('strong', l.articulo), h('small', [l.categoria, 'se cuenta en ' + (l.unidad || 'unidades')].filter(Boolean).join(' · ')),
+        h('div.inv-conteo-art', h('strong', l.articulo), h('small', [l.categoria, 'se cuenta en ' + unidadTxt(l.unidad || 'unidad', 2)].filter(Boolean).join(' · ')),
           l.contado != null ? h('small.inv-anotado', 'Anotado: ' + cantTxt(l.contado, l.unidad) + (l.contado_por_nombre ? ' por ' + l.contado_por_nombre : '') + (l.contado_en ? ', ' + fechaHora(l.contado_en) : '')) : h('small.inv-falta', 'Sin contar')),
         campo.el,
         mostrar ? h('div.inv-conteo-sis',
