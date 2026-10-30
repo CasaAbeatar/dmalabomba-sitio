@@ -304,6 +304,7 @@ export const opcionDeArticulo = (a) => ({ id: a.id, nombre: a.nombre, unidad: a.
 // Una frase del resultado de una salida o traslado: «Pollo entero: 2,5 kg (₡5 375,00)»
 export const lineaItem = (it, unidad) => `${it.articulo}: ${cantTxt(it.cantidad, unidad || it.unidad)} (${money(it.valor)} sin IVA)`;
 export const toastOk = (t) => toast(t, 'ok', 4500);
+export const toastMal = (t) => toast(t, 'error', 8000);
 
 /* ---------- Bolsas del inventario simple ---------- */
 export const GRUPOS = { comida_preparada: 'Comida preparada', unitario: 'Unitarios', suministro: 'Suministros' };
