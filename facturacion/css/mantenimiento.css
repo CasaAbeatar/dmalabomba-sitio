@@ -168,3 +168,12 @@
 /* Un aviso de error dentro de una ventana larga se queda a la vista aunque la persona baje al campo con el problema */
 .mt-form>.error-caja{position:sticky;top:0;z-index:4;margin:0;box-shadow:0 6px 14px rgba(29,26,23,.14)}
 .modal-cuerpo:has(.mt-form){scroll-padding-top:6rem;scroll-padding-bottom:2rem}
+
+/* Dirección guardada de un cliente: cada dato con su rótulo; lo que falta dice «Sin dato» (solo en pantalla: en la base queda vacío y en la factura no sale) */
+.dir-guardada{display:flex;flex-direction:column;gap:.35rem}
+.dir-resumen{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:.3rem .9rem;padding:.6rem .8rem;border:1px solid var(--linea);border-radius:var(--r);background:#fff}
+.dir-parte{overflow-wrap:anywhere;line-height:1.35}
+.dir-et{color:var(--tinta2);font-weight:600}
+.dir-parte.falta .dir-val{color:#6b6558;font-style:italic}
+.dir-resumen.compacto{display:block;margin-top:.25rem;padding:0;border:0;background:none;font-size:.9rem}
+.dir-resumen.compacto .dir-parte{display:inline-block;margin:0 .8rem .1rem 0}

@@ -429,6 +429,10 @@
 .exito-pagos .ex-fila.recibido{border-top:1px dashed var(--linea2);margin-top:.15rem;padding-top:.5rem}
 .cobro-reemplazo{border:1px solid var(--linea);border-radius:12px;padding:.7rem 1rem;background:var(--ambar-suave);display:flex;flex-direction:column;gap:.25rem}
 .cobro-reemplazo .rep-nc.mal{color:var(--rojo-osc);font-weight:600}
+.cobro-bloqueo{display:flex;flex-direction:column;align-items:flex-start;gap:.5rem;margin:0}
+.cobro-bloqueo[hidden]{display:none}
+.cobro-bloqueo p{margin:0;font-weight:500}
+.cobro-bloqueo .btn{max-width:100%}
 .cobro-imp{border:1px solid var(--linea);border-radius:12px;padding:.7rem 1rem;background:#fffdf9;display:flex;gap:.8rem;justify-content:space-between;align-items:center;flex-wrap:wrap}
 .cobro-imp-txt{flex:1 1 240px;min-width:0}
 .avisos-caja:empty{display:none}

@@ -16,7 +16,8 @@
 //     llena Hacienda y correo principal). Lo demás (otros correos, teléfono, dirección, tarifa de IVA habitual, notas) queda detrás del botón
 //     «Agregar más datos del cliente» y es opcional. Al EDITAR se ve todo.
 //     Reglas (v4.4 de Hacienda y fx_cliente_guardar): el correo principal es obligatorio mientras el servidor lo exija (CORREO_OBLIGATORIO);
-//     la dirección es opcional pero «todo o nada»: si se escribe una parte, van provincia, cantón, distrito y otras señas (5 a 160 letras).
+//     la dirección es opcional y puede estar INCOMPLETA: un solo dato (provincia, cantón, distrito, barrio u otras señas) ya vale. Lo que falta se ve
+//     en pantalla como «Sin dato», no se guarda (queda vacío en la base) y no sale en la factura (js/direccion_cliente.js).
 //     Ver js/ui_cedula.js para las reglas de la cédula.
 //     También se elige la «Tarifa de IVA habitual de este cliente» (llave tarifa_habitual_codigo de fx_cliente_guardar): solo avisa en la
 //     Caja y ofrece aplicarla; nunca se aplica sola.
@@ -27,13 +28,23 @@ import { UBICACIONES } from './data_ubicaciones.js';
 import { cargarCss, campo, aviso, conBotonM, mensajeSeguro } from './ui_mant.js';
 import { crearCampoIdentificacion, leerCorreos } from './ui_cedula.js';
 import { TARIFAS_CLIENTE, tarifaHabitual, clienteTraeTarifa } from './iva.js';
+import { SIN_DATO, partesParaPantalla, estadoDireccion } from './direccion_cliente.js';
 
 export { leerCorreos };
+
+// La dirección guardada de un cliente, con cada dato y su rótulo. Lo que falta dice «Sin dato» (solo en pantalla: en la base queda vacío y en los documentos no sale).
+// compacto = una sola línea corrida, para las tarjetas de la lista de Clientes.
+export function resumenDireccion(c, { compacto = false } = {}) {
+  const partes = partesParaPantalla(c);
+  return h('div.dir-resumen' + (compacto ? '.compacto' : ''), { 'aria-label': 'Dirección guardada del cliente' },
+    ...partes.map((p) => h('div.dir-parte' + (p.falta ? '.falta' : ''), h('span.dir-et', p.etiqueta + ': '), h('span.dir-val', p.valor))));
+}
 
 // Hoy fx_cliente_guardar pide el correo principal en todo cliente activo con cédula (Hacienda lo trata como condicional: «cuando el cliente lo requiera»).
 // Si BASE DE DATOS lo vuelve opcional (ver INFORME_FRONT_CATALOGO_RONDA4.md), basta cambiar esta constante a false.
 const CORREO_OBLIGATORIO = true;
-const MAX_SENAS = 160; // el anexo v4.4 de Hacienda acepta de 5 a 160 caracteres en las otras señas del receptor
+const MAX_SENAS = 250; // lo que acepta la base y el XSD de Hacienda para las otras señas (el XML del receptor lleva las primeras 160 letras, como pide el anexo)
+const MAX_BARRIO = 100;
 const pad2 = (x) => String(x ?? '').replace(/\D/g, '').padStart(2, '0').slice(-2);
 const nombresOrdenados = (obj, i) => Object.entries(obj || {}).sort((a, b) => String(i ? a[1][0] : a[1]).localeCompare(String(i ? b[1][0] : b[1]), 'es'));
 
@@ -61,22 +72,28 @@ export function abrirFormCliente(app, cliente, { alGuardar, alCambiarEstado, tit
   const telefono = h('input.campo', { type: 'tel', autocomplete: 'off', value: c.telefono || '', 'aria-label': 'Teléfono' });
   const notas = h('textarea.campo', { rows: 2, 'aria-label': 'Notas' }, c.notas || '');
   const senas = h('textarea.campo', { rows: 2, maxlength: MAX_SENAS, 'aria-label': 'Otras señas' }, c.otras_senas || '');
+  const barrio = h('input.campo', { type: 'text', autocomplete: 'off', maxlength: MAX_BARRIO, value: c.barrio || '', 'aria-label': 'Barrio' });
   const prov = h('select.campo', { 'aria-label': 'Provincia' });
   const cant = h('select.campo', { 'aria-label': 'Cantón' });
   const dist = h('select.campo', { 'aria-label': 'Distrito' });
+  const ayudaUbic = h('small.tenue.dir-ayuda', { role: 'status' }); // dice por qué una lista solo trae «Sin dato»: falta elegir la de arriba (el texto largo no cabe dentro de la lista)
 
-  // Provincia > cantón > distrito (códigos oficiales)
-  prov.append(h('option', { value: '' }, 'Elija la provincia'), ...nombresOrdenados(Object.fromEntries(Object.entries(UBICACIONES).map(([k, v]) => [k, v[0]]))).map(([k, n]) => h('option', { value: k }, n)));
+  // Provincia > cantón > distrito (códigos oficiales). Cada lista empieza con «Sin dato»: elegirlo deja ese dato vacío (no se guarda ni sale en la factura).
+  // Si el cliente trae un código que no está en el catálogo (por ejemplo de una carga masiva), se conserva a la vista en vez de borrarlo sin avisar.
+  prov.append(h('option', { value: '' }, SIN_DATO), ...nombresOrdenados(Object.fromEntries(Object.entries(UBICACIONES).map(([k, v]) => [k, v[0]]))).map(([k, n]) => h('option', { value: k }, n)));
   const llenarCantones = (sel, selDist) => {
     const cs = UBICACIONES[prov.value]?.[1] || {};
-    cant.replaceChildren(h('option', { value: '' }, prov.value ? 'Elija el cantón' : 'Primero elija la provincia'), ...nombresOrdenados(cs, 1).map(([k, v]) => h('option', { value: k }, v[0])));
-    cant.value = sel && cs[sel] ? sel : '';
+    const raro = prov.value && sel && !cs[sel] ? [h('option', { value: sel }, 'Código ' + sel + ' (no está en la lista)')] : [];
+    cant.replaceChildren(h('option', { value: '' }, SIN_DATO), ...nombresOrdenados(cs, 1).map(([k, v]) => h('option', { value: k }, v[0])), ...raro);
+    cant.value = sel && (cs[sel] || raro.length) ? sel : '';
     llenarDistritos(selDist);
   };
   const llenarDistritos = (sel) => {
     const ds = UBICACIONES[prov.value]?.[1]?.[cant.value]?.[1] || {};
-    dist.replaceChildren(h('option', { value: '' }, cant.value ? 'Elija el distrito' : 'Primero elija el cantón'), ...nombresOrdenados(ds).map(([k, n]) => h('option', { value: k }, n)));
-    dist.value = sel && ds[sel] ? sel : '';
+    const raro = cant.value && sel && !ds[sel] ? [h('option', { value: sel }, 'Código ' + sel + ' (no está en la lista)')] : [];
+    dist.replaceChildren(h('option', { value: '' }, SIN_DATO), ...nombresOrdenados(ds).map(([k, n]) => h('option', { value: k }, n)), ...raro);
+    dist.value = sel && (ds[sel] || raro.length) ? sel : '';
+    ayudaUbic.textContent = !prov.value ? 'Para elegir el cantón, primero elija la provincia.' : !cant.value ? 'Para elegir el distrito, primero elija el cantón.' : '';
   };
   prov.value = UBICACIONES[String(c.provincia || '')] ? String(c.provincia) : '';
   llenarCantones(c.canton ? pad2(c.canton) : '', c.distrito ? pad2(c.distrito) : '');
@@ -123,20 +140,16 @@ export function abrirFormCliente(app, cliente, { alGuardar, alCambiarEstado, tit
       }
       const tel = telefono.value.replace(/\D/g, '');
       if (tel && (tel.length < 8 || tel.length > 20)) return mostrarError('El teléfono debe tener entre 8 y 20 números.', telefono);
-      // Dirección opcional pero «todo o nada»: si se escribe alguna parte, deben ir provincia, cantón, distrito y otras señas (Hacienda pide de 5 a 160 letras)
-      const sn = senas.value.trim();
-      if (prov.value || cant.value || dist.value || sn) {
-        if (!prov.value) return mostrarError('Si agrega la dirección, debe estar completa. Falta elegir la provincia (o borre lo que escribió de la dirección).', prov);
-        if (!cant.value) return mostrarError('Si agrega la dirección, debe estar completa. Falta elegir el cantón.', cant);
-        if (!dist.value) return mostrarError('Si agrega la dirección, debe estar completa. Falta elegir el distrito.', dist);
-        if (sn.length < 5) return mostrarError('Si agrega la dirección, debe estar completa. Faltan las otras señas (por ejemplo: 200 metros norte de la iglesia). Escriba al menos 5 letras.', senas);
-        if (sn.length > MAX_SENAS) return mostrarError('Las otras señas son demasiado largas: Hacienda acepta hasta ' + MAX_SENAS + ' letras. Acórtelas.', senas);
-      }
+      // La dirección es opcional y puede ir incompleta: con un solo dato basta. Solo se cuida que quepa (las listas ya no dejan elegir un cantón sin provincia ni un distrito sin cantón).
+      const sn = senas.value.trim(), bar = barrio.value.trim();
+      if (bar.length > MAX_BARRIO) return mostrarError('El barrio es demasiado largo: escriba hasta ' + MAX_BARRIO + ' letras.', barrio);
+      if (sn.length > MAX_SENAS) return mostrarError('Las otras señas son demasiado largas: escriba hasta ' + MAX_SENAS + ' letras.', senas);
       const val = ced.valores();
+      // La dirección se manda siempre completa tal como está en el formulario (lo que está en blanco se manda en blanco y la base lo deja vacío); nunca se manda «Sin dato».
       const datos = {
         id: c.id || undefined, solo_nuevo: esNuevo, sociedad_id: soc.id, tipo_id: val.tipo_id, identificacion: val.identificacion,
         nombre: val.nombre, nombre_comercial: comercial.value.trim(), correo: listaCorreos.join(', '), telefono: tel,
-        provincia: prov.value, canton: cant.value, distrito: dist.value, barrio: c.barrio || '', otras_senas: sn,
+        provincia: prov.value, canton: cant.value, distrito: dist.value, barrio: bar, otras_senas: sn,
         actividad_codigo: val.actividad_codigo, notas: notas.value.trim(), activo, sin_verificar_motivo: val.sin_verificar_motivo,
       };
       // Contrato: la llave se manda siempre que la base la sepa leer (también en blanco, para poder quitarla); a un cliente que no la trae no se le toca
@@ -158,7 +171,7 @@ export function abrirFormCliente(app, cliente, { alGuardar, alCambiarEstado, tit
     estadoBtn.textContent = activo ? 'Desactivar cliente' : 'Activar cliente';
     estadoBtn.className = 'btn' + (activo ? '' : ' primario');
   };
-  estadoBtn.addEventListener('click', () => conBoton(estadoBtn, async () => {
+  estadoBtn.addEventListener('click', () => conBotonM(estadoBtn, async () => {
     const nuevo = !activo;
     const r = await clienteActivar(c.id, nuevo);
     activo = r.activo !== false;
@@ -191,7 +204,7 @@ export function abrirFormCliente(app, cliente, { alGuardar, alCambiarEstado, tit
       tarAyuda));
 
   // Datos que Hacienda no pide para facturar. En un cliente nuevo quedan detrás del botón «Agregar más datos del cliente»; al editar se ven siempre.
-  const faltaDir = !esNuevo && ['01', '02', '03', '04'].includes(String(c.tipo_id)) && !(c.provincia && c.canton && c.distrito && String(c.otras_senas || '').trim().length >= 5);
+  const estadoDir = esNuevo ? null : estadoDireccion(c); // 'sin' | 'parcial' | 'completa' (null en un cliente nuevo)
   const masBloque = h('div.mt-form', { hidden: esNuevo, id: 'mt-mas-datos' },
     h('fieldset', h('legend', 'Otros correos (opcionales)'),
       h('div.col',
@@ -203,9 +216,12 @@ export function abrirFormCliente(app, cliente, { alGuardar, alCambiarEstado, tit
         campo('Teléfono (opcional)', telefono))),
     h('fieldset', h('legend', 'Dirección (opcional)'),
       h('div.col',
-        h('small.tenue', 'Hacienda no pide la dirección para facturar. Si la agrega, debe estar completa: provincia, cantón, distrito y otras señas. Provincia, cantón y distrito se eligen de las listas oficiales para evitar errores.'),
-        faltaDir ? aviso('info', 'Este cliente no tiene la dirección completa. No hace falta para facturarle; agréguela solo si el cliente la quiere en su factura.') : null,
-        h('div.rejilla', campo('Provincia', prov), campo('Cantón', cant), campo('Distrito', dist)),
+        h('small.tenue', 'Hacienda no pide la dirección para facturar. Escriba solo lo que sepa: con un dato ya basta. Lo que deje en «' + SIN_DATO + '» no se guarda y no sale en la factura. Provincia, cantón y distrito se eligen de las listas oficiales para evitar errores.'),
+        estadoDir === 'sin' ? aviso('info', 'Este cliente no tiene dirección guardada. No hace falta para facturarle; agréguela solo si el cliente la quiere en su factura.') : null,
+        estadoDir === 'parcial' ? aviso('info', 'La dirección de este cliente está incompleta, y está bien: no hace falta para facturarle. En la factura saldrá solo lo que sí tiene.') : null,
+        estadoDir && estadoDir !== 'sin' ? h('div.dir-guardada', h('b', 'Dirección guardada'), resumenDireccion(c)) : null,
+        h('div.rejilla', campo('Provincia', prov), campo('Cantón', cant), campo('Distrito', dist)), ayudaUbic,
+        campo('Barrio (opcional)', barrio),
         campo('Otras señas', senas, 'Por ejemplo: 200 metros norte de la iglesia, portón negro. Máximo ' + MAX_SENAS + ' letras.'))),
     bloqueTarifa,
     h('fieldset', h('legend', 'Notas internas'),

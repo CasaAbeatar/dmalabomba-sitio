@@ -31,6 +31,7 @@
 
 import { api } from './api.js';
 import { tarifaDeLinea } from './iva.js';
+import { textoDireccion as direccionCliente } from './direccion_cliente.js';
 import { h, esc, money, num, r2, modal, toast, conBoton, textoDeError, fechaCorta, horaCorta, nombrePropio, TIPOS_ID, TIPOS_SERVICIO, MEDIOS } from './util.js';
 
 /* ------------------------------------------------------------------ constantes */
@@ -223,7 +224,8 @@ function pagoEfectivo(p) {
 }
 
 // Utilidades de formato que también usa la pantalla de documentos
-export { direccion as formatoDireccion, fmtCedula as formatoCedula, fmtTel as formatoTelefono, numCorto as numeroCorto, NOMBRE_DOC as NOMBRES_DOCUMENTO };
+// formatoDireccion es la del CLIENTE (partes que existen, de lo más específico a lo más general como la de la empresa: señas, barrio, distrito, cantón, provincia; sin «Sin dato»); la del emisor (direccion) solo se usa al armar los datos de la empresa
+export { direccionCliente as formatoDireccion, fmtCedula as formatoCedula, fmtTel as formatoTelefono, numCorto as numeroCorto, NOMBRE_DOC as NOMBRES_DOCUMENTO };
 
 /* ------------------------------------------------------------------ modelo del documento (lo que se dibuja) */
 
@@ -237,7 +239,7 @@ function datosSoc(s = {}) {
 function datosCliente(c) {
   if (!c || !(c.nombre || c.identificacion)) return null;
   // Solo para mostrar: "CORPORACION DMA..." se imprime como nombre propio. El XML que va a Hacienda conserva el original.
-  return { nombre: nombrePropio(c.nombre), comercial: nombrePropio(c.nombre_comercial), tipoId: TIPOS_ID[c.tipo_id] || '', ident: fmtCedula(c.identificacion, c.tipo_id), correo: c.correo || '', tel: fmtTel(c.telefono), dir: direccion(c) };
+  return { nombre: nombrePropio(c.nombre), comercial: nombrePropio(c.nombre_comercial), tipoId: TIPOS_ID[c.tipo_id] || '', ident: fmtCedula(c.identificacion, c.tipo_id), correo: c.correo || '', tel: fmtTel(c.telefono), dir: direccionCliente(c) };
 }
 
 export function modeloComprobante(c) {
@@ -358,6 +360,7 @@ function nodoTiquete(m, { papel, logo, copia }) {
     raiz.append(h('div.etq-chica', 'Cliente'), h('div.cli', m.cliente.nombre));
     if (m.cliente.ident) raiz.append(h('div.dato.izq', (m.cliente.tipoId ? m.cliente.tipoId + ' ' : 'Identificación ') + m.cliente.ident));
     if (m.cliente.correo) raiz.append(h('div.dato.izq', m.cliente.correo));
+    if (m.cliente.dir) raiz.append(h('div.dato.izq', m.cliente.dir)); // solo las partes de la dirección que existen; sin dirección no sale ni la línea
   }
   raiz.append(linea('doble'));
   raiz.append(h('div.fila-tq.enc', h('span', 'Cant. x Precio con IVA'), h('span.v', 'Total')));

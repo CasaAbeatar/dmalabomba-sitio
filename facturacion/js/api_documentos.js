@@ -1,6 +1,7 @@
 // Datos propios de la ventana «Anular y reimprimir» y del aviso del encabezado (no se edita api.js).
 // Funciones SQL usadas (ver /home/claude/facturador/sql/05_documentos.sql):
 //   fx_documentos(p_soc, p_desde, p_hasta)  -> comprobantes del rango en orden cronológico, con el vínculo factura <-> nota de crédito
+//   fx_documentos_pagina(p_soc, p_desde, p_hasta, p_limite, p_desplazamiento) -> { documentos, total, hay_mas, siguiente_desplazamiento }: lo mismo por tandas de hasta 1 000, el más nuevo primero (fx_23b)
 //   fx_comprobante_nc(p_id)                 -> nota de crédito vigente (no rechazada) de un comprobante, o null
 //   fx_alertas(p_soc)                       -> { rechazados, pendientes, pendientes_demorados, recepcion_por_responder, recepcion_vencen_pronto, ultimos[] } (contrato 3 y 2B)
 //   fx_alerta_atender(p_comprobante, p_nota) -> marca un documento rechazado como atendido: sale del aviso rojo, NO de Anular y reimprimir ni de Informes (contrato 2B)
@@ -13,6 +14,13 @@
 import { api, rpc, ErrorApi } from './api.js';
 import { hoyCR, sumaDias, numeroDoc, traducirHacienda } from './util.js';
 
+// ¿La función de la base no existe todavía? api.js cambia el texto de todo error técnico por una frase general, así que el texto ya no sirve para saberlo:
+// se mira el código y el estado que conserva ErrorApi (PostgREST contesta 404 con PGRST202 cuando no encuentra la función; 42883 es «undefined_function» de Postgres).
+export const faltaFuncion = (e) => !!e && (e.codigo === 'PGRST202' || e.codigo === '42883' || e.estado === 404);
+// ¿Es una respuesta de negocio escrita por una función nuestra (código P0001 o PT4xx), con un texto ya en español pensado para mostrarse tal cual?
+// (No es la esErrorDeNegocio de api.js: aquella mira la clase de la falla y también cuenta como «negocio» una función que no existe; esta solo deja pasar lo que escribió una función nuestra.)
+export const esRespuestaDeNegocio = (e) => !!e && /^(P0001|PT[1-4]\d\d)$/.test(String(e.codigo || ''));
+
 // Lista del rango. Cada fila trae además nc_id, nc_consecutivo, nc_estado (solo si fue anulada por completo: una devolución parcial deja nc_id en null) y ref_consecutivo, ref_tipo (si es una nota).
 // Llaves nuevas por fila (CONTRATO_NC_SQL.md, 8.2), que valen null o 0 en un documento normal: codigo_referencia, codigo_nombre, nombre_simple (el rótulo en palabras simples), reemplaza_a,
 // reemplaza_consecutivo, tarifas (texto como «IVA 13%, IVA 2%» o «Exento»), parciales_n y parciales_total (devoluciones y correcciones), debitos_n y debitos_total (notas de débito por monto).
@@ -21,8 +29,8 @@ export async function documentos(soc, desde, hasta) {
     return (await rpc('fx_documentos', { p_soc: soc, p_desde: desde, p_hasta: hasta })) || [];
   } catch (e) {
     // Si la función nueva no existiera todavía, se usa la lista básica y se calcula el vínculo con lo que haya en el rango.
-    if (!/fx_documentos|does not exist|schema cache/i.test(e.message)) throw e;
-    const filas = ((await api.comprobantes(soc, desde, hasta, '')) || []).slice().reverse();
+    if (!faltaFuncion(e)) throw e;
+    const filas =((await api.comprobantes(soc, desde, hasta, '')) || []).slice().reverse();
     const porId = new Map(filas.map((f) => [f.id, f]));
     for (const f of filas) {
       if (f.tipo_doc === '03' && f.estado !== 'rechazado' && f.comprobante_ref && porId.has(f.comprobante_ref)) {
@@ -37,18 +45,20 @@ export async function documentos(soc, desde, hasta) {
 
 // Lista del rango por páginas, la más nueva primero (fx_documentos_pagina, migración fx_23b). Devuelve { documentos, total, hay_mas, siguiente }:
 //   total = cuántos documentos tiene el rango, hay_mas = si faltan más antiguos que los entregados, siguiente = desplazamiento de la página siguiente (o null).
-// Cada fila trae las mismas llaves que documentos(). Si la base todavía no tiene la función, se usa documentos() (que entrega a lo sumo 1 000, los más antiguos) y se avisa con hay_mas.
+// Cada fila trae las mismas llaves que documentos(). Si la base todavía no tiene la función (404 / PGRST202 / 42883), se usa documentos(), que entrega a lo sumo 1 000 y son los MÁS ANTIGUOS:
+// entonces el resultado trae respaldo: true, orden: 'antiguos' y sinPaginas: true (no se pueden pedir más), y la pantalla lo dice con palabras.
 export const DOCUMENTOS_POR_PAGINA = 1000; // el máximo que entrega la base por llamada
 export async function documentosPagina(soc, desde, hasta, desplazamiento = 0, limite = DOCUMENTOS_POR_PAGINA) {
   try {
     const r = await rpc('fx_documentos_pagina', { p_soc: soc, p_desde: desde, p_hasta: hasta, p_limite: limite, p_desplazamiento: desplazamiento });
-    if (Array.isArray(r)) return { documentos: r, total: r.length, hay_mas: r.length >= limite, siguiente: null }; // una versión sin paginar entregó el arreglo de siempre
+    if (Array.isArray(r)) return { documentos: r, total: r.length, hay_mas: r.length >= limite, siguiente: null, sinPaginas: true, orden: 'recientes' }; // una versión sin paginar entregó el arreglo de siempre
     const docs = Array.isArray(r?.documentos) ? r.documentos : [];
-    return { documentos: docs, total: Number(r?.total) || docs.length, hay_mas: !!r?.hay_mas, siguiente: r?.siguiente_desplazamiento ?? null };
+    return { documentos: docs, total: Number(r?.total) || docs.length, hay_mas: !!r?.hay_mas, siguiente: r?.siguiente_desplazamiento ?? null, sinPaginas: false, orden: 'recientes' };
   } catch (e) {
-    if (!/fx_documentos_pagina|does not exist|schema cache/i.test(e.message)) throw e;
+    if (!faltaFuncion(e)) throw e;
+    if (desplazamiento > 0) return { documentos: [], total: 0, hay_mas: false, siguiente: null, sinPaginas: true, respaldo: true, orden: 'antiguos' }; // el respaldo no sabe entregar más
     const docs = await documentos(soc, desde, hasta);
-    return { documentos: docs, total: docs.length, hay_mas: docs.length >= limite, siguiente: null };
+    return { documentos: docs, total: docs.length, hay_mas: docs.length >= limite, siguiente: null, sinPaginas: true, respaldo: true, orden: 'antiguos' };
   }
 }
 
@@ -134,12 +144,17 @@ export const sinEfectoDeSaldos = (s) => (s && Array.isArray(s.notas) ? s.notas.f
 /* ---------- Reemplazo: «Anular y hacer de nuevo» ---------- */
 // Pregunta si la cuenta abierta es la copia de un comprobante anulado. { ok: true, reemplaza: false } o
 // { ok: true, reemplaza: true, original_id, consecutivo, estado_nota_credito } (pendiente, enviado, aceptado o error). { ok: false } si no se pudo saber (la función no existe o no hubo conexión).
+// Un error de negocio de la base (P0001 / PT4xx) NO se traga: se lanza tal cual con su texto en español. Es el caso de fx_23e: la anulación del original se dejó sin efecto con una nota de débito,
+// así que ese comprobante vuelve a valer y la cuenta no puede cobrarse como su reemplazo. Caja muestra ese texto y ofrece «Anular esta cuenta».
 export async function reemplazoInfo(ventaId) {
   try {
     const r = await rpc('fx_venta_reemplazo_info', { p_venta: ventaId });
     if (!r || typeof r !== 'object') return { ok: false };
     return r.reemplaza === true && r.original_id ? { ok: true, reemplaza: true, original_id: r.original_id, consecutivo: r.consecutivo || '', estado_nota_credito: r.estado_nota_credito || '' } : { ok: true, reemplaza: false };
-  } catch { return { ok: false }; }
+  } catch (e) {
+    if (esRespuestaDeNegocio(e)) throw e; // la base dijo que no, con palabras: se muestra
+    return { ok: false }; // sin red, sin tiempo o sin la función: «no se sabe», y el cobro normal sigue (la base lo vuelve a revisar al cobrar)
+  }
 }
 // Cobra la copia como reemplazo del original: igual que fx_cobrar, y guarda en la misma operación la referencia 07 y el motivo «Reemplaza el comprobante N». Devuelve el comprobante nuevo.
 export const cobrarReemplazo = (ventaId, originalId, pagos, clienteId = null, terminal = 1, actividad = null) =>
@@ -182,7 +197,7 @@ export async function alertas(soc) {
         desde: typeof a.desde === 'string' ? a.desde.slice(0, 10) : sumaDias(hoyCR(), -DIAS_VENTANA), fuente: 'fx_alertas',
       };
     } catch (e) {
-      if (!SIN_FUNCION.test(e.message || '')) throw e;
+      if (!faltaFuncion(e) && !SIN_FUNCION.test(e.message || '')) throw e;
       noHayAlertasHasta = Date.now() + 5 * 60 * 1000;
     }
   }
@@ -205,14 +220,12 @@ async function alertasDeReserva(soc) {
 }
 
 /* ---------- Funciones nuevas de la ronda 2B (si la base todavía no las tiene, se avisa con palabras claras) ---------- */
-const NO_EXISTE = /fx_alerta_atender|fx_venta_clonar|does not exist|schema cache|could not find the function/i;
-
 // Marca un documento rechazado como atendido. La nota es opcional. Devuelve lo que responda la base ({ok, ...}).
 export async function alertaAtender(comprobanteId, nota = '') {
   try {
     return await rpc('fx_alerta_atender', { p_comprobante: comprobanteId, p_nota: String(nota || '').trim().slice(0, 300) || null });
   } catch (e) {
-    if (NO_EXISTE.test(e.message || '')) throw new ErrorApi('Esta opción todavía no está activada. El aviso rojo seguirá hasta que se active.');
+    if (faltaFuncion(e)) throw new ErrorApi('Esta opción todavía no está activada. El aviso rojo seguirá hasta que se active.');
     throw e;
   }
 }
@@ -222,7 +235,7 @@ export async function ventaClonar(ventaId) {
   try {
     return await rpc('fx_venta_clonar', { p_venta: ventaId });
   } catch (e) {
-    if (NO_EXISTE.test(e.message || '')) return null;
+    if (faltaFuncion(e)) return null;
     throw e;
   }
 }
@@ -233,23 +246,46 @@ export async function ventaClonarConCliente(ventaId, clienteId = null) {
   try {
     return await rpc('fx_venta_clonar_con_cliente', { p_venta: ventaId, p_cliente: clienteId || null });
   } catch (e) {
-    if (!NO_EXISTE.test(e.message || '')) throw e;
+    if (!faltaFuncion(e)) throw e;
     const r = await ventaClonar(ventaId);
     return r && clienteId ? { ...r, sinCliente: true } : r;
   }
 }
 
-// Lo que hace el botón «Hacer la venta de nuevo en Facturación»: copia las líneas a una cuenta nueva, la deja anotada para que Facturación la abra
-// (sessionStorage 'fx.caja.abrir' = id de la cuenta nueva) y va a Facturación (app.ir('caja')). Si no se pudo copiar, igual va y avisa con palabras claras.
-// clienteId (opcional): el cliente que debe quedar en la cuenta nueva.
-export async function hacerVentaDeNuevo(app, ventaId, toast, clienteId = null) {
-  let nueva = null;
-  try { nueva = ventaId ? await ventaClonarConCliente(ventaId, clienteId) : null; }
-  catch (e) { toast?.('No se pudo copiar la venta. ' + mensajeAmable(e) + ' En Facturación tendrá que armarla otra vez.', 'error', 8000); }
+// Copia las líneas de una venta anulada o rechazada a una cuenta nueva (lo que hace «Hacer la venta de nuevo»). NUNCA navega: devuelve el resultado y la pantalla decide.
+//   { ok: true, id, sinCliente }                        la cuenta nueva ya existe (id). sinCliente = se copió sin el cliente elegido, hay que elegirlo en Facturación.
+//   { ok: false, motivo: 'ya_corregida', mensaje }      la base dice que esa venta ya se corrigió con otra venta: no hay nada que rehacer (el texto es el de la base, tal cual).
+//   { ok: false, motivo: 'sin_funcion', mensaje }       la base todavía no tiene la copia automática: solo en ese caso hay que armar la venta a mano en Facturación.
+//   { ok: false, motivo: 'red' | 'tiempo' | 'error', mensaje }  la copia falló: se dice lo que pasó y se puede intentar de nuevo (la base no duplica: si la cuenta ya se había creado, devuelve esa misma).
+const YA_CORREGIDA = /ya se corrigi[oó] con/i;
+export async function copiarVentaParaRehacer(ventaId, clienteId = null) {
+  if (!ventaId) return { ok: false, motivo: 'error', mensaje: 'No se encontró la venta de este documento, así que no se pudo copiar. Ábrala desde Facturación.' };
+  let nueva;
+  try { nueva = await ventaClonarConCliente(ventaId, clienteId); }
+  catch (e) {
+    const m = String(e?.message || '');
+    if (esRespuestaDeNegocio(e) && YA_CORREGIDA.test(m)) return { ok: false, motivo: 'ya_corregida', mensaje: m };
+    if (e?.tipo === 'red') return { ok: false, motivo: 'red', mensaje: 'No hay conexión con internet. Revise la conexión e intente de nuevo; si la copia ya se había hecho, no se duplica.' };
+    if (e?.tipo === 'tiempo' || e?.tipo === 'ocupado') return { ok: false, motivo: 'tiempo', mensaje: 'La respuesta tardó demasiado. Intente de nuevo; si la copia ya se había hecho, no se duplica.' };
+    return { ok: false, motivo: 'error', mensaje: mensajeAmable(e) };
+  }
+  if (!nueva) return { ok: false, motivo: 'sin_funcion', mensaje: 'La copia automática de la venta todavía no está activada. En Facturación tendrá que armar la venta otra vez.' };
   const id = nueva?.venta?.id || nueva?.id || null;
-  if (id) { try { sessionStorage.setItem('fx.caja.abrir', String(id)); } catch { /* sin almacenamiento: Caja abre la cuenta sola si puede */ } }
-  else if (!nueva) toast?.('La copia automática de la venta todavía no está activada. En Facturación tendrá que armarla otra vez.', 'error', 8000);
-  if (nueva?.sinCliente) toast?.('La venta se copió, pero el cliente hay que elegirlo en Facturación.', 'error', 8000);
+  if (!id) return { ok: false, motivo: 'error', mensaje: 'La copia no devolvió la cuenta nueva. Intente de nuevo; si la copia ya se había hecho, no se duplica.' };
+  return { ok: true, id, sinCliente: nueva.sinCliente === true };
+}
+
+// Deja anotada la cuenta nueva para que Facturación la abra (sessionStorage 'fx.caja.abrir' = id) y va a Facturación (app.ir('caja')).
+export function abrirCuentaNueva(app, id, toast, sinCliente = false) {
+  if (id) { try { sessionStorage.setItem('fx.caja.abrir', String(id)); } catch { /* sin almacenamiento: Facturación abre la cuenta sola si puede */ } }
+  if (sinCliente) toast?.('La venta se copió, pero el cliente hay que elegirlo en Facturación.', 'error', 8000);
   app.ir('caja');
-  return id;
+  return id || null;
+}
+
+// Versión de una sola llamada, para quien no necesita mostrar un reintento: copia y, solo si la copia salió bien, va a Facturación. Si falló NO navega: avisa con lo que dijo la base y devuelve null.
+export async function hacerVentaDeNuevo(app, ventaId, toast, clienteId = null) {
+  const r = await copiarVentaParaRehacer(ventaId, clienteId);
+  if (!r.ok) { toast?.((r.motivo === 'ya_corregida' ? '' : 'No se pudo copiar la venta. ') + r.mensaje, 'error', 8000); return null; }
+  return abrirCuentaNueva(app, r.id, toast, r.sinCliente);
 }
