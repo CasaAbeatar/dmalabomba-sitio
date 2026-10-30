@@ -208,9 +208,16 @@ async function leerTurno(app) {
     return soc ? (soc.turno ? 'abierto' : 'cerrado') : 'desconocido';
   } catch { return 'desconocido'; }
 }
-const AVISO_SIN_TURNO = 'No hay un turno abierto, así que el cierre de caja de hoy no incluirá esta nota.';
+// Reglas de la base (28c): una nota que mueve EFECTIVO (devuelve o cobra) exige la caja abierta, porque ese dinero tiene que quedar en un cierre de caja.
+// Una nota que no mueve efectivo (todo por tarjeta, SINPE Móvil o transferencia) se puede hacer con la caja cerrada: no entra en ningún cierre y en Informes sale como «sin turno».
+const AVISO_SIN_TURNO = 'La caja está cerrada. Esta nota no mueve efectivo, así que se puede hacer igual: no entra en ningún cierre de caja y en Informes aparece como «sin turno».';
+const AVISO_SIN_TURNO_HECHA = 'La caja estaba cerrada. Esta nota no movió efectivo, así que no entra en ningún cierre de caja y en Informes aparece como «sin turno».';
 const AVISO_TURNO_DESCONOCIDO = 'No se pudo comprobar si hay un turno abierto.';
+// Efectivo (en céntimos) de un reparto de pagos [{ medio, monto }]
+const efectivoDe = (pagos) => (Array.isArray(pagos) ? pagos : []).filter((p) => String(p.medio || '').toLowerCase().trim() === 'efectivo').reduce((a, p) => a + aCent(p.monto), 0);
+// Lo que se avisa en la revisión según el turno y el efectivo del reparto. null = nada que decir (turno abierto, o sin efectivo y sin saber).
 const avisoDeTurno = (turno) => (turno === 'cerrado' ? AVISO_SIN_TURNO : turno === 'desconocido' ? AVISO_TURNO_DESCONOCIDO : null);
+const textoSinCaja = (efeCent, credito) => `La caja está cerrada y esta nota ${credito ? 'devuelve' : 'cobra'} ${moneyC(efeCent)} en efectivo. Ese dinero tiene que quedar en el cierre de caja, por eso primero hay que abrir la caja. Si una parte se puede mover por tarjeta, SINPE Móvil o transferencia, también puede cambiar el reparto.`;
 
 /* ---------- Una nota en camino o en duda es del DOCUMENTO, no de la ventana ---------- */
 // Cerrar la ventana (con su botón, con Atrás, o porque otra pantalla o la sesión la cierran) no borra lo que se sabe: PENDIENTES guarda, por documento, lo que se envió y lo que ya había,
@@ -288,7 +295,9 @@ function cobrarTxt(pagos, { cierre = true } = {}) {
 // turno: 'abierto' | 'cerrado' | 'desconocido' (leído al revisar). Solo con el turno abierto se habla del cierre de caja; sin turno o sin saberlo queda el aviso, sin frases que lo contradigan.
 function mostrarResultado({ clase, credito, orig: o, nota, pagos, totalCalc, turno, alVerNota }) {
   const pagosNum = pagos.map((p) => ({ medio: p.medio, monto: Number(p.monto) }));
-  const abierto = turno === 'abierto', aviso = avisoDeTurno(turno);
+  const abierto = turno === 'abierto';
+  // Con la caja cerrada solo se llega aquí si la nota no movió efectivo (la base lo exige): se dice que no entra en ningún cierre y que en Informes sale «sin turno»
+  const aviso = turno === 'cerrado' ? (efectivoDe(pagos) > 0 ? null : AVISO_SIN_TURNO_HECHA) : turno === 'desconocido' ? AVISO_TURNO_DESCONOCIDO : null;
   const titulo = { devolucion: 'Devolución registrada', monto: 'Corrección registrada', sinefecto: 'La anulación quedó sin efecto' }[clase];
   const cod = String(nota?.codigo_referencia || codigoDe(clase));
   const estadoTxt = !nota ? 'No se pudo leer la nota. Revísela en la lista.'
