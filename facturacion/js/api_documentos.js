@@ -166,6 +166,17 @@ export const cobrarReemplazo = (ventaId, originalId, pagos, clienteId = null, te
 export const correoActivo = (app) => app?.ctx?.correo_activo === true;
 // El reenvío vive en la base: fx_reenviar_correo(p_id) deja la orden y la base llama a facturador-envio con accion 'correo'. No existe una función «facturador-correo».
 export const reenviarCorreo = (id) => rpc('fx_reenviar_correo', { p_id: id });
+// Opciones del reenvío (sql/27g, solo lee): { comprobante_id, tiene_cliente, correo_comprobante, correo_cliente_actual, son_distintos, aceptado }.
+// Devuelve null si la base todavía no tiene la función (entonces se reenvía como antes, al correo guardado en el comprobante); otro error se lanza.
+export async function correoOpciones(id) {
+  try { const r = await rpc('fx_reenviar_correo_opciones', { p_id: id }); return r && typeof r === 'object' && !Array.isArray(r) ? r : null; }
+  catch (e) { if (faltaFuncion(e)) return null; throw e; }
+}
+// Reenvía a un correo escrito (correo) o al correo actual del cliente en Clientes (usarCliente); sin ninguno de los dos, al guardado en el comprobante (la función de un parámetro, como siempre).
+// Si el correo cambia, la base lo guarda en el comprobante (así lo usan el próximo envío, el PDF y las notas) y lo anota en la bitácora. Devuelve el comprobante (fx_comprobante).
+export const reenviarCorreoA = (id, { correo = null, usarCliente = false } = {}) => (String(correo || '').trim() || usarCliente
+  ? rpc('fx_reenviar_correo', { p_id: id, p_correo: String(correo || '').trim() || null, p_usar_cliente: !!usarCliente })
+  : reenviarCorreo(id));
 
 // Frase para mostrar cuando algo falla. Los errores que vienen de la base ya llegan en español y con qué hacer (api.js los filtra); solo un error del propio navegador
 // o de este código (TypeError, undefined...) no debe verse tal cual.

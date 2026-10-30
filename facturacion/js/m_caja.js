@@ -1569,7 +1569,7 @@ export default {
     }
 
     /* ---------- Arranque ---------- */
-    // «Hacer la venta de nuevo en Caja» (Anular factura) deja en sessionStorage['fx.caja.abrir'] el id de la cuenta nueva que se creó con
+    // «Hacer la venta de nuevo en Caja» (Anular y reimprimir) deja en sessionStorage['fx.caja.abrir'] el id de la cuenta nueva que se creó con
     // las mismas líneas. Se lee UNA sola vez (y se borra al leerla), se deja como cuenta activa y, si no se pudo abrir, se avisa con palabras.
     const CLAVE_ABRIR = 'fx.caja.abrir';
     let pedida = null; // id pedido, mientras no se abra la caja o no se haya podido leer
@@ -1597,7 +1597,7 @@ export default {
       } catch (e) {
         const crudo = String(e?.message || '');
         const claro = /uuid|invalid input/i.test(crudo) ? 'El número de la cuenta no es válido.' : (crudo || 'No se sabe el motivo.');
-        avisoApertura = { ok: false, texto: (/[.!?]$/.test(claro) ? claro : claro + '.') + ' Busque la cuenta nueva entre las cuentas abiertas, o repita la corrección desde «Anular factura».' };
+        avisoApertura = { ok: false, texto: (/[.!?]$/.test(claro) ? claro : claro + '.') + ' Busque la cuenta nueva entre las cuentas abiertas, o repita la corrección desde «Anular y reimprimir».' };
         await elegirInicial();
       }
     }

@@ -60,6 +60,18 @@ export function amigableDelServidor(msg) {
 const mensajeDe = (e, defecto) => amigableDelServidor(mensajeAmable(e, defecto));
 
 /* ---------- Validaciones (puras, sin pantalla). Las mismas reglas del servidor; el servidor sigue siendo quien manda ---------- */
+// Cuánto se devuelve (en céntimos) cuando la cantidad pedida (en milésimas) no es todo lo que queda de la línea. Es la cuenta de fact.nota_armar (sql 28c), con enteros grandes para no perder exactitud:
+//   línea SIN corrección de monto  -> cantidad × precio final, redondeado hacia arriba desde la mitad:  (q × precio + 500) / 1000
+//   línea CON corrección de monto (la base manda prorrateo = true) -> en proporción a lo que queda de la línea:  (2 × q × saldo + cantidad que queda) / (2 × cantidad que queda), al céntimo, mitad hacia arriba
+// l: { saldoMil, saldoCent, pfCent, prorrateo }
+export function centDevuelto(mil, l) {
+  const q = BigInt(Math.round(mil));
+  if (l.prorrateo === true && l.saldoMil > 0) {
+    const sq = BigInt(Math.round(l.saldoMil));
+    return Number((2n * q * BigInt(Math.round(l.saldoCent)) + sq) / (2n * sq));
+  }
+  return Number((q * BigInt(Math.round(l.pfCent)) + 500n) / 1000n);
+}
 // lineas: [{ linea, nombre, saldoMil, saldoCent, pfCent }]; texto: Map(linea -> lo escrito).
 // Devuelve { items: [{ linea, mil, cent }], errores: Map(linea -> frase), total (centavos) }.
 export function validarDevolucion(lineas, texto) {
@@ -71,8 +83,8 @@ export function validarDevolucion(lineas, texto) {
     if (r.error) { errores.set(l.linea, r.error); continue; }
     if (r.mil <= 0) { errores.set(l.linea, 'Escriba una cantidad mayor que cero, o deje la casilla vacía si no devuelve este producto.'); continue; }
     if (r.mil > l.saldoMil) { errores.set(l.linea, `De este producto solo se pueden devolver ${num(l.saldoMil / 1000)}.`); continue; }
-    // Si se devuelve todo lo que queda, se acredita el saldo exacto; si no, cantidad por precio, redondeado hacia arriba desde la mitad (igual que el servidor)
-    const cent = r.mil === l.saldoMil ? l.saldoCent : Math.floor((r.mil * l.pfCent + 500) / 1000);
+    // Si se devuelve todo lo que queda, se acredita el saldo exacto; si no, igual que el servidor (centDevuelto): cantidad por precio, o a prorrata si la línea tuvo una corrección de monto
+    const cent = r.mil === l.saldoMil ? l.saldoCent : centDevuelto(r.mil, l);
     if (cent <= 0) { errores.set(l.linea, 'Esa cantidad es tan pequeña que no llega a un colón. Escriba una cantidad mayor.'); continue; }
     items.push({ linea: l.linea, mil: r.mil, cent }); total += cent;
   }
@@ -101,13 +113,18 @@ export function validarMontos(lineas, texto, dir, { totalCent = 0, debitadoCent 
 
 /* ---------- Cuánto le queda a cada medio de pago por devolver ---------- */
 // El dinero se devuelve por el mismo medio con que se pagó: a cada medio le queda lo que el cliente pagó menos lo que ya se le devolvió en notas de crédito vivas.
-// fx_comprobante_saldos trae lo pagado (pagos_originales) pero no lo ya devuelto por medio; se saca de los pagos de esas notas. Solo se consulta cuando el documento ya tiene notas de crédito vivas.
+// «Lo que pagó» sale de pagos_con_debitos (28c): lo pagado en la venta MÁS lo cobrado en notas de débito por monto, porque eso también se puede devolver. Con una versión vieja de la función, de pagos_originales.
+// fx_comprobante_saldos no trae lo ya devuelto por medio; se saca de los pagos de esas notas. Solo se consulta cuando el documento ya tiene notas de crédito vivas.
+// Una anulación que después se dejó sin efecto (hay una nota de débito 01 viva) ya no cuenta como dinero devuelto, igual que en fact.nota_pagos_restantes.
 // Si alguna no se puede leer, se usa lo pagado como tope y el servidor lo revisa al guardar (aproximado = true).
 export async function capacidadPagos(app, saldos) {
   const mapa = new Map(); let aproximado = false;
   const sumar = (m, medio, c) => m.set(medio, (m.get(medio) || 0) + c);
-  for (const p of saldos.pagos_originales || []) sumar(mapa, String(p.medio || '').toLowerCase().trim(), aCent(p.monto));
-  const notas = (saldos.notas || []).filter((n) => n.tipo_doc === '03' && n.viva !== false && n.estado !== 'rechazado');
+  const pagado = Array.isArray(saldos.pagos_con_debitos) ? saldos.pagos_con_debitos : (saldos.pagos_originales || []);
+  for (const p of pagado) sumar(mapa, String(p.medio || '').toLowerCase().trim(), aCent(p.monto));
+  const vivas = (saldos.notas || []).filter((n) => n.viva !== false && n.estado !== 'rechazado');
+  const anulacionSinEfecto = vivas.some((n) => n.tipo_doc === '02' && String(n.codigo_referencia) === '01');
+  const notas = vivas.filter((n) => n.tipo_doc === '03' && !(anulacionSinEfecto && ['01', '13'].includes(String(n.codigo_referencia || '01'))));
   const leidas = await Promise.all(notas.map((n) => conTope(app.api.comprobante(n.id)).then((c) => c, () => null)));
   for (const c of leidas) {
     if (!c || !Array.isArray(c.pagos_snapshot)) { aproximado = true; continue; }
@@ -369,7 +386,9 @@ const EN_DOC = { '01': 'en la factura', '02': 'en la nota de débito', '03': 'en
 const MAX_RAZON = 180;   // el motivo que se manda a Hacienda: de 3 a 180 letras
 const lineasSaldo = (s) => (Array.isArray(s?.lineas) ? s.lineas : []).map((l) => ({
   linea: Number(l.linea), nombre: String(l.descripcion || 'Producto'), cantMil: aMil(l.cantidad), pfCent: aCent(l.precio_final), totCent: aCent(l.total_linea),
-  devMil: aMil(l.devuelto_cantidad), acredCent: aCent(l.acreditado_monto), saldoMil: aMil(l.saldo_cantidad), saldoCent: aCent(l.saldo_monto) }));
+  devMil: aMil(l.devuelto_cantidad), acredCent: aCent(l.acreditado_monto), saldoMil: aMil(l.saldo_cantidad), saldoCent: aCent(l.saldo_monto),
+  // 28c: el saldo ya incluye lo cobrado de más en notas de débito (debitado_monto); prorrateo = la línea tuvo una corrección de monto y una devolución parcial se calcula a prorrata
+  debitCent: aCent(l.debitado_monto), prorrateo: l.prorrateo === true }));
 
 const resumenDoc = (d) => h('div.an-resumen',
   h('div', h('b', `${NOMBRE_TIPO[d.tipo_doc] || 'Documento'} N.° ${numeroCorto(d.consecutivo)}`), d.fecha_emision ? h('span.tenue', ' · ' + fechaCorta(d.fecha_emision)) : null),
@@ -586,6 +605,7 @@ function abrir(app, d, clase, { alTerminar, alVerNota } = {}) {
         h('div.np-l-nombre', l.nombre),
         h('div.np-l-datos', h('span', 'Compró ', h('b', num(l.cantMil / 1000))), l.devMil > 0 ? h('span', 'Ya devuelto ', h('b', num(l.devMil / 1000))) : null,
           h('span', agotada ? h('b', l.saldoMil <= 0 ? 'Ya se devolvió todo' : 'Ya se devolvió todo el dinero de este producto') : ['Se puede devolver ', h('b', num(l.saldoMil / 1000))]), h('span', h('b', money(l.pfCent / 100)), ' cada uno')),
+        agotada || !l.prorrateo ? null : h('p.tenue.np-l-prorrata', `A este producto ya se le hizo una corrección de monto. Lo que queda por devolver es ${moneyC(l.saldoCent)} y una devolución parcial se calcula en proporción a esa cifra.`),
         agotada ? null : h('div.np-l-entrada', h('label', h('span', 'Cantidad a devolver'), input), todo),
         error, sub);
     });
