@@ -75,7 +75,7 @@
 .doc-filtros .btn.alerta[aria-pressed=true]{background:var(--rojo);color:#fff}
 
 /* Lista: cada fila tiene la zona que se toca (detalle) y los botones Reimprimir / Anular */
-.doc-lista{display:flex;flex-direction:column;gap:.5rem;--doc-cols:4.2rem minmax(0,1.5fr) minmax(0,1.4fr) 7.5rem 9.5rem;--doc-acc:17rem}
+.doc-lista{display:flex;flex-direction:column;gap:.5rem;--doc-cols:4.2rem minmax(0,1.5fr) minmax(0,1.4fr) 7.5rem 9.5rem;--doc-acc:26rem}
 .doc-dia{display:flex;flex-wrap:wrap;justify-content:space-between;gap:.2rem 1rem;align-items:baseline;margin-top:.8rem;padding:.2rem .2rem .4rem;border-bottom:1px solid var(--linea2)}
 .doc-dia span{color:var(--tinta2);font-size:.92rem}
 /* El día del documento más viejo cargado, cuando faltan documentos: su total no es el del día completo */
@@ -115,17 +115,16 @@
 .chip.anulado{color:#4a443d;border-color:var(--borde-control,#8f8672);background:#efe9dd}
 /* Pantallas anchas (computadora y tableta horizontal): una sola fila con los cinco datos y los dos botones lado a lado */
 @media(max-width:1180px){
-  .doc-lista{--doc-cols:3.6rem minmax(0,1.5fr) minmax(0,1.3fr) 6.6rem 8.4rem;--doc-acc:14.5rem}
+  .doc-lista{--doc-cols:3.6rem minmax(0,1.5fr) minmax(0,1.3fr) 6.6rem 8.4rem;--doc-acc:22rem}
   .doc-ver{padding-inline:.8rem;gap:.3rem .6rem}
   .doc-cabeza-cols{gap:.3rem .6rem;padding:0 calc(.8rem + 1px)}
 }
-/* Tableta vertical: sigue siendo UNA fila: la tarjeta de dos renglones y los dos botones apilados a su derecha */
+/* Tableta vertical: la tarjeta arriba y los botones debajo, todos en una sola línea */
 @media(max-width:999px){
   .doc-cabeza{display:none}
-  .doc-lista{--doc-acc:8.6rem}
-  .doc-fbot{flex-direction:column}
+  .doc-fila{grid-template-columns:1fr;gap:.35rem}
+  .doc-fbot{flex-direction:row}
   .doc-fbot .btn{flex:1 1 0;min-height:48px}
-  .doc-fbot.una .btn{flex:0 0 auto;width:100%}
   .doc-ver{grid-template-columns:3.4rem minmax(0,1fr) auto;grid-template-areas:"hora doc total" "cli cli est";gap:.35rem .6rem}
   .doc-ver .c-hora{grid-area:hora;font-size:.9rem;color:var(--tinta2)}.doc-ver .c-doc{grid-area:doc}.doc-ver .c-total{grid-area:total}
   .doc-ver .c-doc .nw{white-space:normal;overflow-wrap:anywhere}  /* un número largo no se pega al total */
@@ -136,9 +135,8 @@
 }
 /* Celular: no hay ancho para la tarjeta y los botones lado a lado; los botones pasan DEBAJO de la tarjeta (los dos del mismo ancho) */
 @media(max-width:599px){
-  .doc-fila{grid-template-columns:1fr;gap:.35rem}
-  .doc-fbot{flex-direction:row;display:grid;grid-template-columns:1fr 1fr}
-  .doc-fbot.una .btn{width:auto;grid-column:1/-1}
+  .doc-fbot{gap:.35rem}
+  .doc-fbot .btn{font-size:.9rem;padding-inline:.25rem;line-height:1.15}
 }
 
 /* Detalle */
