@@ -103,8 +103,9 @@ button.marca{appearance:none;background:none;border:0;padding:0;color:inherit;cu
 .marca img{height:36px;width:auto;display:block}
 .cab-titulo{margin:0;font-size:1.5rem;font-weight:700;letter-spacing:-.01em;line-height:1.1;white-space:nowrap;min-width:0;overflow:hidden;text-overflow:ellipsis}
 .cab-volver,.cab-inicio{white-space:nowrap}
-.cab-estado{display:flex;align-items:center;gap:.4rem;min-width:0;padding-left:.2rem}
-.estado-turno{font-size:.88rem;padding:.3rem .7rem;border-radius:99px;border:1px solid var(--borde-control,#8f8672);background:#fff;white-space:nowrap}
+.cab-estado{display:flex;align-items:center;gap:.4rem;min-width:0;padding-left:.2rem;overflow:hidden}
+/* En tableta vertical el espacio de la franja es poco: el texto se corta con «…» en lugar de pasar por debajo del botón «Anular y reimprimir» */
+.estado-turno{font-size:.88rem;padding:.3rem .7rem;border-radius:99px;border:1px solid var(--borde-control,#8f8672);background:#fff;white-space:nowrap;min-width:0;overflow:hidden;text-overflow:ellipsis}
 .estado-turno.abierto{border-color:var(--borde-ok);background:var(--verde-suave);color:var(--verde)}
 .estado-turno.cerrado{border-color:var(--borde-ambar);background:var(--ambar-suave);color:#7a4f00}
 .btn.cab-anular{min-height:48px;border-color:var(--rojo);color:var(--rojo);font-weight:700;background:#fff;white-space:nowrap}
