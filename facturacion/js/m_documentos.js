@@ -698,13 +698,21 @@ export default {
       const nDev = Number(d.parciales_n) || 0, nDeb = Number(d.debitos_n) || 0;
       const notasTxt = (n) => (n > 1 ? ` (${n} notas)` : '');
       const reimprimir = h('button.btn.doc-bot', { type: 'button', 'aria-label': 'Reimprimir ' + quien, onclick: () => reimprimirComprobante(d.id) }, 'Reimprimir');
-      let segundo = null;
-      if (esVenta(d)) {
-        if (anulado) segundo = null;
-        else if (d.estado === 'aceptado' && (nDev > 0 || nDeb > 0)) segundo = h('button.btn.peligro.doc-bot', { type: 'button', disabled: true, 'aria-label': `Anular ${quien}. No disponible: ya tiene ${nDeb > 0 ? 'una nota de débito' : 'una devolución o una corrección'}` }, 'Anular'); // la base tampoco deja anular completo un documento con notas (admite_anulacion = false); en el detalle se ve por qué y qué sí se puede hacer
-        else if (d.estado === 'aceptado') segundo = h('button.btn.peligro.doc-bot', { type: 'button', 'aria-label': 'Anular ' + quien, onclick: () => abrirAnular(d, { alTerminar: () => refrescarTras(), alVerNC: (n) => abrirDetalle(n.id) }) }, 'Anular');
-        else if (d.estado === 'rechazado' || d.estado === 'error') segundo = h('button.btn.doc-bot', { type: 'button', 'aria-label': (d.atendida ? 'Ver detalle de ' : 'Ver y atender ') + quien, onclick: () => abrirDetalle(d.id) }, d.atendida ? 'Ver detalle' : 'Ver y atender'); // el nombre accesible empieza con el mismo texto que se ve
+      // Orden fijo de la fila: Anular, Reimprimir, Reenviar al correo. Después, solo si hace falta: Ver y atender / Ver detalle (Hacienda no lo aceptó). Siempre en una sola línea.
+      const anularBtn = (motivo, onclick) => h('button.btn.peligro.doc-bot', onclick ? { type: 'button', 'aria-label': 'Anular ' + quien, onclick } : { type: 'button', disabled: true, 'aria-label': `Anular ${quien}. No disponible: ${motivo}` }, 'Anular');
+      let primero = null, extra = null;
+      if (esVenta(d) && !anulado) {
+        if (d.estado === 'aceptado' && (nDev > 0 || nDeb > 0)) primero = anularBtn(`ya tiene ${nDeb > 0 ? 'una nota de débito' : 'una devolución o una corrección'}`); // la base tampoco deja anular completo un documento con notas (admite_anulacion = false); en el detalle se ve por qué y qué sí se puede hacer
+        else if (d.estado === 'aceptado') primero = anularBtn('', () => abrirAnular(d, { alTerminar: () => refrescarTras(), alVerNC: (n) => abrirDetalle(n.id) }));
+        else if (d.estado === 'rechazado' || d.estado === 'error') {
+          primero = anularBtn('Hacienda no lo aceptó');
+          extra = h('button.btn.doc-bot', { type: 'button', 'aria-label': (d.atendida ? 'Ver detalle de ' : 'Ver y atender ') + quien, onclick: () => abrirDetalle(d.id) }, d.atendida ? 'Ver detalle' : 'Ver y atender'); // el nombre accesible empieza con el mismo texto que se ve
+        } else primero = anularBtn('Hacienda todavía no lo ha aceptado');
       }
+      const puedeCorreo = correoActivo(app) && !!d.cliente && d.estado === 'aceptado';
+      const reenviar = h('button.btn.doc-bot', puedeCorreo
+        ? { type: 'button', 'aria-label': 'Reenviar al correo ' + quien, onclick: () => reenviarPorCorreo(d, { repintar: async () => refrescarTras() }) }
+        : { type: 'button', disabled: true, 'aria-label': 'Reenviar al correo ' + quien + '. No disponible: ' + (!correoActivo(app) ? 'el correo todavía no está activo' : !d.cliente ? 'no tiene cliente' : 'Hacienda todavía no lo acepta') }, 'Reenviar al correo');
       // Todavía no hay nada que anular (Hacienda no ha aceptado el documento): se dice a la vista, no solo al pasar el mouse
       const espera = esVenta(d) && !anulado && (d.estado === 'pendiente' || d.estado === 'enviado')
         ? h('div.doc-espera', { role: 'note' }, h('b', 'Esperando a Hacienda. '), 'Todavía no se puede anular: podrá hacerlo cuando Hacienda lo acepte. Toque la fila para ver qué significa y qué hacer.')
@@ -724,7 +732,7 @@ export default {
           h('span.c-total.der', (nc ? '−' : '') + money(d.total)),
           h('span.c-est', h('span.chip.' + (CLASE_ESTADO[d.estado] || ''), ETQ_ESTADO[d.estado] || d.estado), anulado ? h('span.chip.anulado', 'Anulado') : null, d.atendida && d.estado === 'rechazado' ? h('span.chip.anulado', 'Atendido') : null,
             nDev ? h('span.chip.nota', 'Con devolución') : null, nDeb ? h('span.chip.nota', 'Con nota de débito') : null)),
-        h('div.doc-fbot' + (segundo ? '' : '.una'), reimprimir, segundo),
+        h('div.doc-fbot', primero, reimprimir, reenviar, extra),
         espera);
     }
 
