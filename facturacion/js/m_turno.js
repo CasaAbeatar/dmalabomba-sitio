@@ -437,7 +437,7 @@ export default {
       const idTurno = turnoVisto;
       documentos(socId, ymdDe(t.abierto_en), hoyCR()).then((lista) => {
         if (!vivo || final || idTurno !== turnoVisto) return;
-        const frase = fraseParaTurno(docsDelTurno(lista, t.abierto_en), est);
+        const frase = fraseParaTurno(docsDelTurno(lista, t), est);
         if (frase) { notaDocs.textContent = frase; notaDocs.hidden = false; }
       }).catch(() => { /* sin esta explicación el resto sigue igual */ });
 

@@ -11,10 +11,24 @@ const centimos = (n) => Math.round((Number(n) || 0) * 100);
 const esVenta = (d) => d.tipo_doc === '01' || d.tipo_doc === '04';
 const plural = (n, uno, varios) => n + ' ' + (n === 1 ? uno : varios);
 
-// Documentos de un turno: los emitidos desde que se abrió la caja, lo más reciente primero
-export function docsDelTurno(lista, abiertoEn) {
+// Documentos de un turno, lo más reciente primero. turno = { id, abierto_en } (el turno abierto de la sociedad).
+// Desde 28e cada fila de la lista trae `turno_id`: el turno en que se EMITIÓ el documento (una nota cuenta en el turno en que se hace, no en el de la venta que corrige).
+// Es la misma regla con que «Apertura y cierre de caja» (fx_turno_estado) arma sus cifras, así que el puente coincide aunque haya notas de ventas de otro turno.
+//   - Con la llave turno_id: entra el documento cuyo turno_id es el de este turno. Una nota sin turno (hecha con la caja cerrada, sin efectivo) no entra en ningún turno.
+//     Una factura o un tiquete que no salió de una cuenta de caja no tiene turno: ese sigue entrando por la hora (desde que se abrió la caja), como siempre, y se dice aparte («sí suma…»).
+//   - Sin la llave (una base que todavía no la manda) o sin el id del turno: se filtra por la hora, como antes. También se acepta solo el texto de la hora de apertura.
+export function docsDelTurno(lista, turno) {
+  const filas = lista || [];
+  const id = turno && typeof turno === 'object' ? turno.id : null;
+  const abiertoEn = turno && typeof turno === 'object' ? turno.abierto_en : turno;
   const desde = new Date(abiertoEn).getTime();
-  return (lista || []).filter((d) => new Date(d.fecha_emision).getTime() >= desde).sort((a, b) => new Date(b.fecha_emision) - new Date(a.fecha_emision));
+  const desdeApertura = (d) => new Date(d.fecha_emision).getTime() >= desde;
+  const conLlave = !!id && filas.some((d) => d && 'turno_id' in d);
+  return filas.filter((d) => {
+    if (!conLlave) return desdeApertura(d);
+    if (d.turno_id) return d.turno_id === id;
+    return esVenta(d) && !d.venta_id && desdeApertura(d);
+  }).sort((a, b) => new Date(b.fecha_emision) - new Date(a.fecha_emision));
 }
 
 // Lo que suma una lista de documentos (montos en céntimos para que no haya errores de redondeo). Un documento rechazado no existe para Hacienda: no suma.
