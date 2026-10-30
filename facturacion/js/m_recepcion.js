@@ -618,7 +618,8 @@ export default {
       const mon = f.moneda || 'CRC';
       const n = String(g.estado_mensaje || ''), base = n === '1' ? 'Aceptar' : n === '2' ? 'Aceptar parcialmente' : n === '3' ? 'Rechazar' : 'Respuesta';
       if (n === '3' || !g.condicion_impuesto) return base;
-      return `${base}, ${(TEXTO_CONDICION[g.condicion_impuesto] || '').toLowerCase()}, IVA ${montoTexto(+g.monto_acreditar || 0, mon)}`;
+      const t = TEXTO_CONDICION[g.condicion_impuesto] || '';
+      return `${base}, ${t.charAt(0).toLowerCase() + t.slice(1)}, IVA ${montoTexto(+g.monto_acreditar || 0, mon)}`;
     }
     function resumenGuardada(g, f) {
       const mon = f.moneda || 'CRC', n = String(g.estado_mensaje || '');
@@ -741,17 +742,17 @@ export default {
       return {
         nombre: `IVA del mes ${mesTxt}`, ...base, titulo: `IVA de ${mesTxt}`,
         hojas: [
-          { nombre: 'Resumen', titulo: `IVA de ${mesTxt}: resumen`, subtitulo: ne.texto || '', ...base,
+          { hoja: 'Resumen', titulo: `IVA de ${mesTxt}: resumen`, subtitulo: ne.texto || '', ...base,
             columnas: [{ clave: 'que', titulo: 'Concepto', tipo: 'texto' }, { clave: 'monto', titulo: 'Monto (₡)', tipo: 'moneda' }],
             filas: [{ que: 'IVA cobrado en ventas (débito fiscal)', monto: +db.iva || 0 }, { que: 'IVA de compras que se acredita (crédito fiscal)', monto: +cr.iva_acreditable || 0 }, { que: 'IVA de las facturas de compra (sin importar si se acredita)', monto: +cr.iva_comprobantes || 0 }, { que: 'IVA que va al gasto (no se acredita)', monto: +cr.gasto_sin_credito || 0 }, { que: 'Impuestos de compras que no son IVA', monto: +cr.otros_impuestos || 0 }, { que: +ne.a_favor > 0 ? 'Saldo a favor' : 'Diferencia a pagar', monto: +ne.a_favor > 0 ? +ne.a_favor : +(ne.a_pagar ?? ne.diferencia ?? 0) }],
             notas: [...(d.decisiones_contador || []).map(String), d.redondeo ? String(d.redondeo) : ''].filter(Boolean) },
-          { nombre: 'Ventas por tarifa', titulo: 'IVA cobrado en ventas, por tarifa', ...base,
+          { hoja: 'Ventas por tarifa', titulo: 'IVA cobrado en ventas, por tarifa', ...base,
             columnas: [{ clave: 'tar', titulo: 'Tarifa', tipo: 'texto' }, { clave: 'base', titulo: 'Base (₡)', tipo: 'moneda' }, { clave: 'iva', titulo: 'IVA (₡)', tipo: 'moneda' }, { clave: 'n', titulo: 'Comprobantes', tipo: 'numero', dec: 0 }],
             filas: (db.por_tarifa || []).map((x) => ({ tar: x.descripcion || `${num(x.tarifa, 2)} %`, base: +x.base || 0, iva: +x.iva || 0, n: +x.n_docs || 0 })), totales: { base: +db.base_gravada || 'suma', iva: +db.iva || 0, n: +db.n_docs || 'suma' } },
-          { nombre: 'Compras por tarifa', titulo: 'IVA de compras a proveedores, por tarifa', ...base,
+          { hoja: 'Compras por tarifa', titulo: 'IVA de compras a proveedores, por tarifa', ...base,
             columnas: [{ clave: 'tar', titulo: 'Tarifa', tipo: 'texto' }, { clave: 'base', titulo: 'Base (₡)', tipo: 'moneda' }, { clave: 'ivac', titulo: 'IVA de las facturas (₡)', tipo: 'moneda' }, { clave: 'acr', titulo: 'IVA que se acredita (₡)', tipo: 'moneda' }, { clave: 'n', titulo: 'Facturas', tipo: 'numero', dec: 0 }],
             filas: (cr.por_tarifa || []).map((x) => ({ tar: x.descripcion || `${num(x.tarifa, 2)} %`, base: +x.base || 0, ivac: +x.iva_comprobantes || 0, acr: +x.iva_acreditable || 0, n: +x.n_docs || 0 })), totales: { ivac: +cr.iva_comprobantes || 0, acr: +cr.iva_acreditable || 0, n: +cr.n_docs || 'suma' } },
-          { nombre: 'Detalle', titulo: 'Cada comprobante del mes', subtitulo: 'Ventas, compras y lo que no entra, del más antiguo al más reciente', ...base,
+          { hoja: 'Detalle', titulo: 'Cada comprobante del mes', subtitulo: 'Ventas, compras y lo que no entra, del más antiguo al más reciente', ...base,
             columnas: COLS_DETALLE, filas: fs.map(filaDetalle), notas: det.truncado ? ['El detalle trae los primeros 20 000 comprobantes.'] : [] },
         ],
       };
