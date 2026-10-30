@@ -480,3 +480,25 @@ body:has(.inv-fondo) .cabecera:has(.cab-usuario.abierto){z-index:120}
 .inv-simple:not([data-bolsa="unitario"]) .inv-fila-cant{display:none}
 .inv-simple .inv-fila-cant{grid-row:3}
 @media(max-width:760px){.inv-simple .inv-fila-cant{grid-row:auto}}
+
+/* Una sola lista para toda la factura: una fila por línea, todo a la vista sin bajar */
+.inv-linea.inv-simple{grid-template-columns:minmax(0,2.4fr) auto minmax(0,1.6fr) auto;gap:.2rem .7rem;padding:.45rem .7rem}
+.inv-simple .inv-linea-desc{grid-row:1;grid-column:1}
+.inv-simple .inv-linea-desc small:nth-of-type(2){display:none}
+.inv-simple .inv-bolsas{grid-row:1;grid-column:2;flex-wrap:nowrap}
+.inv-simple .inv-rubro-fila,.inv-simple.por-valor .inv-rubro-fila,.inv-simple.en-colones .inv-rubro-fila{grid-row:1;grid-column:3}
+.inv-simple .inv-rubro-fila .etq>span{display:none}
+.inv-simple .inv-rubro-fila .campo{min-height:44px}
+.inv-simple .inv-bolsa-dice{display:none}
+.inv-simple .inv-linea-pie{grid-row:1;grid-column:4}
+.inv-simple .inv-sug:not(.no-inv){display:none}
+.inv-simple .inv-fila-cant{grid-row:2;grid-column:1/-1}
+.inv-simple .inv-resumen-simple{grid-column:1/-1}
+@media(max-width:900px){
+  .inv-linea.inv-simple{grid-template-columns:minmax(0,1fr) auto}
+  .inv-simple .inv-linea-desc{grid-column:1/-1}
+  .inv-simple .inv-bolsas,.inv-simple .inv-rubro-fila,.inv-simple.por-valor .inv-rubro-fila,.inv-simple .inv-linea-pie,.inv-simple .inv-fila-cant{grid-row:auto}
+  .inv-simple .inv-bolsas{grid-column:1/-1;flex-wrap:wrap}
+  .inv-simple .inv-rubro-fila,.inv-simple.por-valor .inv-rubro-fila{grid-column:1/-1}
+  .inv-simple .inv-linea-pie{grid-column:1/-1}
+}
