@@ -6,6 +6,8 @@ import { h, toast, modal, conBoton, esqueleto, bloqueError, nombreLocal, cerrarV
 import { buscar, padreDe } from './modulos.js';
 import { pantallaInicio, pantallaAdmin, pintarInsignias } from './ui_inicio.js';
 import { crearAvisosAdmin } from './avisos_admin.js';
+import { iniciarBuscadoresBorrar } from './buscador_borrar.js';
+iniciarBuscadoresBorrar();
 
 const raiz = document.getElementById('app');
 const pausa = (ms) => new Promise((r) => setTimeout(r, ms));
