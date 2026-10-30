@@ -99,6 +99,8 @@ body:has(.inv-fondo) .cabecera:has(.cab-usuario.abierto){z-index:120}
 
 /* ---------- Filtros y botones de escoger ---------- */
 .inv-filtros{display:grid;grid-template-columns:auto minmax(0,1fr);gap:.7rem 1rem;align-items:end}
+.inv-otra-nota:not(:empty){margin:.2rem 0 .6rem}
+.inv-otra-nota p{display:flex;flex-wrap:wrap;gap:.4rem .8rem;align-items:center;margin:0}
 .inv-filtros.cuatro{grid-template-columns:repeat(3,minmax(0,1fr))}
 .inv-segmento{display:flex;flex-wrap:wrap;gap:.5rem}
 .btn.inv-seg{flex:0 1 auto}
