@@ -121,7 +121,7 @@ async function verCategorias(ctx) {
         c.vigencia_dias != null ? (c.salida_automatica ? 'al vencer sale sola' : 'al vencer solo avisa') : '', plural(c.articulos || 0, 'artículo', 'artículos')].filter(Boolean).join(' · '))),
     h('span.inv-exis-ver', 'Cambiar'))) : [vacio('Todavía no hay categorías.')]));
   const nuevo = h('button.btn.primario', { type: 'button', onclick: () => formCategoria(ctx, null, pintar) }, 'Agregar categoría');
-  const v = ventana({ titulo: 'Categorías', volver: 'Catálogo', contenido: [h('div.inv-ventana-cab', h('p', 'La vigencia es cuántos días dura la mercadería desde que entra. «Sale sola» saca del inventario lo vencido cada mañana a las 5:30.'), nuevo), lista] });
+  const v = ventana({ titulo: 'Categorías', volver: 'Catálogo', contenido: [h('div.inv-ventana-cab', h('p', 'La vigencia son los días completos que se puede usar, contando el día en que entra: con 7, lo que entra un lunes se usa hasta el domingo y el lunes siguiente sale solo. «Sale sola» lo saca del inventario cada mañana a las 5:30, como consumo.'), nuevo), lista] });
   pintar(); enfocar(v.cuerpo);
 }
 function formCategoria(ctx, c, alGuardar) {
@@ -130,14 +130,14 @@ function formCategoria(ctx, c, alGuardar) {
   const entrada = h('select.campo', { 'aria-label': 'Adónde entra' }, h('option', { value: 'bodega', selected: x.entrada !== 'local' }, 'A la bodega central'), h('option', { value: 'local', selected: x.entrada === 'local' }, 'Directo al local de la empresa de la factura'));
   const fija = h('select.campo', { 'aria-label': 'Ubicación fija (opcional)' }, h('option', { value: '' }, 'Ninguna: según lo de arriba'), (ctx.cat.ubicaciones || []).filter((u) => u.activo !== false).map((u) => h('option', { value: u.id, selected: u.id === x.entrada_ubicacion_id }, u.nombre)));
   const vig = texto(x.vigencia_dias ?? '', { inputmode: 'numeric', maxlength: 5, 'aria-label': 'Días que dura' });
-  const sale = casilla(x.salida_automatica ?? true, 'Al vencer, sale sola del inventario (si no, solo avisa)');
+  const sale = casilla(x.salida_automatica ?? true, 'Al cumplir sus días, sale sola del inventario (si no, solo avisa)');
   const unidad = selUnidad(ctx, x.unidad || 'unidad');
   const orden = texto(x.orden ?? '', { inputmode: 'numeric', maxlength: 4, 'aria-label': 'Orden' });
   const activo = casilla(x.activo !== false, 'Activa');
   const obs = h('textarea.campo', { rows: 2, maxlength: 300, 'aria-label': 'Observación' }, x.observacion || '');
   formAdmin({ titulo: c ? 'Categoría: ' + c.nombre : 'Categoría nueva',
     partes: [h('label.etq', 'Nombre', nombre), h('label.etq', 'Adónde entra al recibir', entrada), h('label.etq', 'Ubicación fija (opcional)', fija),
-      h('div.inv-form-fila', h('label.etq', 'Días que dura', vig, h('small', 'Vacío = no vence. 0 = vence el mismo día que entra.')), h('label.etq', 'Unidad para artículos nuevos', unidad)),
+      h('div.inv-form-fila', h('label.etq', 'Días que dura', vig, h('small', 'Vacío = no vence. 1 = solo el día en que entra. 7 = una semana completa contando ese día.')), h('label.etq', 'Unidad para artículos nuevos', unidad)),
       sale.el, h('div.inv-form-fila', h('label.etq', 'Orden en las listas (opcional)', orden), c ? activo.el : h('span')), h('label.etq', 'Observación (opcional)', obs)],
     hacer: (idem) => {
       const p = { nombre: nombreValido(nombre.value), entrada: entrada.value, entrada_ubicacion_id: fija.value || null, vigencia_dias: enteroONulo(vig.value, 'Días que dura', 0, 36500), salida_automatica: sale.i.checked, unidad: unidad.value, observacion: obs.value.trim() || null };
