@@ -592,3 +592,4 @@
 .pie-cobro .btn-cobrar-aside[disabled]{background:var(--tinta);border-color:var(--tinta);opacity:.35}
 .acciones-cuenta .btn.peligro{background:none;border:0;min-height:36px;color:var(--tinta2);text-decoration:underline;font-weight:500;font-size:.9rem}
 .acciones-cuenta .btn.peligro:hover{color:var(--rojo)}
+.pie-cobro .btn-cobrar-aside[disabled]{opacity:1;cursor:default}

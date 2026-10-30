@@ -52,7 +52,7 @@ const cssTexto = (t) => String(t ?? '').replace(/[^\p{L}\p{N} .,;:()%/·-]/gu, '
 
 // Todas las reglas empiezan con .fxp para poder usarlas dentro del iframe o, en iPhone y iPad, en la página misma
 const CSS_PDF = `
-.fxp{font-family:Figtree,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:#1d1a17;font-size:10px;line-height:1.35;background:#fff;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+.fxp{font-family:"Helvetica Neue",Helvetica,Arial,"Liberation Sans",sans-serif;color:#1d1a17;font-size:10px;line-height:1.35;background:#fff;-webkit-print-color-adjust:exact;print-color-adjust:exact}
 .fxp *{box-sizing:border-box}
 .fxp .cab{padding-bottom:6px;margin-bottom:8px;border-bottom:2px solid #b81622}
 .fxp .emp{font-size:11px;font-weight:700;color:#b81622;letter-spacing:.02em}
@@ -161,8 +161,8 @@ export async function prepararPdf(res, { nombre = '', alAvanzar } = {}) {
   const orient = (res.tablas[0]?.columnas.filter((c) => c.enPdf).length || 0) >= 7 ? 'landscape' : 'portrait';
   const pie = cssTexto([res.base.titulo || res.tablas[0]?.titulo, res.base.empresa].filter(Boolean).join(' · '));
   const cssPagina = `@page{size:letter ${orient};margin:12mm 11mm 15mm;`
-    + `@bottom-left{content:"${pie}";font:8px Figtree,system-ui,sans-serif;color:#6b645b}`
-    + '@bottom-right{content:"Página " counter(page) " de " counter(pages);font:8px Figtree,system-ui,sans-serif;color:#6b645b}}';
+    + `@bottom-left{content:"${pie}";font:8px "Helvetica Neue",Helvetica,Arial,sans-serif;color:#6b645b}`
+    + '@bottom-right{content:"Página " counter(page) " de " counter(pages);font:8px "Helvetica Neue",Helvetica,Arial,sans-serif;color:#6b645b}}';
   let D, ventana, raiz, limpiar, marco = null, tituloPrevio = null;
   if (modo === 'iframe') {
     marco = h('iframe', { title: 'Informe para imprimir', 'aria-hidden': 'true', tabindex: '-1', style: 'position:fixed;left:-10000px;top:0;width:1100px;height:800px;border:0;opacity:0;pointer-events:none' });
