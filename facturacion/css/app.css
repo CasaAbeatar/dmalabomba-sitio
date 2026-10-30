@@ -216,6 +216,11 @@ main#vista{max-width:1400px;margin:0 auto;padding:1rem}
 /* Buscadores: sin la «x» pequeña del navegador; el borrado se hace con el botón escrito «Borrar búsqueda» */
 input[type=search]::-webkit-search-cancel-button,input[type=search]::-webkit-search-decoration,input[type=search]::-webkit-search-results-button,input[type=search]::-webkit-search-results-decoration{-webkit-appearance:none;appearance:none;display:none}
 input[type=search]{-webkit-appearance:none;appearance:none}
+.bx-envuelve{position:relative;display:block;flex:1 1 auto;min-width:0;width:100%}
+.bx-envuelve>input[type=search]{padding-right:6.2rem}
+.bx-borrar{position:absolute;right:.45rem;top:50%;transform:translateY(-50%);min-height:44px;padding:0 .8rem;border:1px solid var(--borde-control,#8f8672);border-radius:999px;background:#fff;color:var(--tinta,#1d1a17);font:inherit;font-size:.95rem;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:.35rem}
+.bx-borrar[hidden]{display:none}
+.bx-borrar:hover,.bx-borrar:focus-visible{border-color:var(--rojo);color:var(--rojo);outline:none}
 .buscar-fila{display:flex;gap:.5rem;align-items:center}
 .buscar-fila>.campo{flex:1 1 auto;min-width:0}
 .buscar-fila>.btn{flex:0 0 auto}
