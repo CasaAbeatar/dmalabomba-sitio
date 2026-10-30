@@ -426,3 +426,4 @@ body:has(.inv-fondo) .cabecera:has(.cab-usuario.abierto){z-index:120}
 .inv-detalles[open]>summary{margin-bottom:.6rem}
 .inv-detalles .inv-campo-art{margin-bottom:.7rem}
 @media (max-width:640px){.inv-rubro-fila{grid-template-columns:minmax(0,1fr)}}
+.inv-linea.en-colones .inv-c-conv,.inv-linea.en-colones .inv-costo-fila{display:none}

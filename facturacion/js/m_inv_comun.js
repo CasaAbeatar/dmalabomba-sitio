@@ -24,7 +24,7 @@ export const poner = (el, ...hijos) => el.replaceChildren(...hijos.flat(Infinity
 /* ---------- Formato ---------- */
 export const norm = (s) => String(s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
 export const plural = (n, uno, varios) => `${num(n, 0)} ${Math.abs(Number(n)) === 1 ? uno : varios}`;
-const UNIDADES = { kg: ['kg', 'kg'], g: ['g', 'g'], ml: ['ml', 'ml'], litro: ['litro', 'litros'], unidad: ['unidad', 'unidades'], caja: ['caja', 'cajas'], bolsa: ['bolsa', 'bolsas'], paquete: ['paquete', 'paquetes'], lata: ['lata', 'latas'], botella: ['botella', 'botellas'] };
+const UNIDADES = { kg: ['kg', 'kg'], g: ['g', 'g'], ml: ['ml', 'ml'], litro: ['litro', 'litros'], unidad: ['unidad', 'unidades'], caja: ['caja', 'cajas'], bolsa: ['bolsa', 'bolsas'], paquete: ['paquete', 'paquetes'], lata: ['lata', 'latas'], colon: ['colón', 'colones'], botella: ['botella', 'botellas'] };
 // «1 unidad», «3 unidades», «12,5 kg». Una unidad que no está en la lista corta sale con su código.
 export function unidadTxt(codigo, n = 2) { const u = UNIDADES[codigo]; return u ? (Math.abs(Number(n)) === 1 ? u[0] : u[1]) : String(codigo || ''); }
 export const cantTxt = (n, unidad) => `${num(n, 3)} ${unidadTxt(unidad, n)}`.trim();
