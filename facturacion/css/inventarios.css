@@ -221,7 +221,7 @@ body:has(.inv-fondo) .cabecera:has(.cab-usuario.abierto){z-index:120}
 
 /* Escoger un artículo */
 .inv-opciones{display:flex;flex-direction:column;border:1px solid var(--linea);border-radius:14px;overflow:hidden;background:#fff;max-height:min(52vh,520px);overflow-y:auto}
-.inv-opcion{display:grid;grid-template-columns:minmax(0,1fr) auto;grid-template-areas:'nom ele' 'det ele' 'ext ele';align-items:center;column-gap:.8rem;row-gap:.1rem;min-height:58px;padding:.6rem .9rem;border:0;border-bottom:1px solid var(--linea);background:transparent;text-align:left;cursor:pointer;font:inherit;color:inherit}
+.inv-opcion{flex:0 0 auto;display:grid;grid-template-columns:minmax(0,1fr) auto;grid-template-areas:'nom ele' 'det ele' 'ext ele';align-items:center;column-gap:.8rem;row-gap:.1rem;min-height:58px;padding:.6rem .9rem;border:0;border-bottom:1px solid var(--linea);background:transparent;text-align:left;cursor:pointer;font:inherit;color:inherit}
 .inv-opcion:last-child{border-bottom:0}
 .inv-opcion:hover,.inv-opcion:focus-visible{background:#fcf9f3}
 .inv-opcion.sugerida{background:var(--verde-suave)}
@@ -397,3 +397,4 @@ body:has(.inv-fondo) .cabecera:has(.cab-usuario.abierto){z-index:120}
   .inv-valor-total strong{font-size:1.6rem}
 }
 @media(max-width:700px){.inv-acciones-grandes .btn{flex:1 1 100%}}
+.inv-conteo-linea .inv-unidad,.inv-item .inv-unidad{min-width:5.2rem}

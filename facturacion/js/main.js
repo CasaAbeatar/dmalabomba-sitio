@@ -39,6 +39,7 @@ export const app = {
   get empresa() { const s = this.soc; return s ? { id: s.id, codigo: String(s.codigo_acceso || s.codigo || '').toLowerCase(), nombre: nombreLocal(s), cedula: s.cedula || null } : null; },
   moduloActual: null, // el módulo (o pantalla) que se ve: una entrada de modulos.js o INICIO
   recepcion: null, // { pendientes_en_plazo, vencen_pronto, vencidas } de las facturas recibidas; alimenta las insignias de Contable y Administración
+  inventario: null, // { vencidos, vencen_pronto, bajo_minimo, por_recibir, notas_por_revisar, urgente } de fx_inv_alertas_resumen; alimenta la insignia de Inventarios
   pedido: null, // lo que una pantalla le pide a la otra al abrirla (por ejemplo { filtro: 'problemas' }); el módulo lo lee al empezar
   // Avisos del encabezado. datos = { rechazados, pendientes, recepcion_por_responder, ultimos, desde }. refrescar() vuelve a preguntar de inmediato.
   alertas: { datos: null, refrescar: () => actualizarAlertas(true), fijarRecepcion: (c) => { if (c) { recepcionCache = { pendientes_en_plazo: Number(c.pendientes_en_plazo ?? 0), vencen_pronto: Number(c.vencen_pronto ?? 0), vencidas: vencidasDe(c) }; recepcionHora = Date.now(); } fijarRecepcion(recepcionCache && c ? recepcionCache : c); } },
@@ -435,6 +436,7 @@ async function actualizarAlertas(forzar = false) {
   if (!forzar && Date.now() - alUltimo < 5000) return;
   alUltimo = Date.now();
   const mi = ++alSeq, soc = app.socId;
+  actualizarInventario(mi);
   try {
     const { alertas } = await import('./api_documentos.js');
     const a = await alertas(soc);
@@ -453,6 +455,16 @@ async function actualizarAlertas(forzar = false) {
     }
     if (mi === alSeq && soc === app.socId) fijarRecepcion(recepcionCache);
   } catch (e) { if (!esTransitorio(e) && !esSesionVencida(e)) console.warn('Avisos del encabezado no disponibles:', e?.message || e); }
+}
+// Insignia de Inventarios (fx_inv_alertas_resumen, una consulta liviana): se pide junto con los avisos, sin cargar el módulo. La bodega es del grupo: no depende de la empresa.
+async function actualizarInventario(mi) {
+  try {
+    const { alertasResumen } = await import('./api_inventarios.js');
+    const r = await alertasResumen();
+    if (mi !== alSeq || !app.ctx) return;
+    app.inventario = r || null;
+    if (cab && vista && (app.moduloActual === INICIO || app.moduloActual?.pantalla === 'admin')) pintarInsignias(vista, app);
+  } catch { /* sin conexión o sin la función: la insignia se queda como estaba */ }
 }
 function programarAlertas() {
   clearInterval(alTimer);
@@ -808,7 +820,7 @@ async function cerrarSesion() {
     document.querySelectorAll('#toasts .toast').forEach((t) => t.remove());
     await salir().catch(() => {});
     olvidarPinDeEntrada();
-    app.ctx = null; app.socId = null; app.moduloActual = null; app.pedido = null; app.alertas.datos = null; app.recepcion = null;
+    app.ctx = null; app.socId = null; app.moduloActual = null; app.pedido = null; app.alertas.datos = null; app.recepcion = null; app.inventario = null;
     recepcionCache = null; recepcionHora = 0; veniaDe = null;
     cab = vista = alertaEl = redEl = menuEl = tituloEl = volverEl = inicioEl = null;
     document.body.classList.remove('fx-caja');

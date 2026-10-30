@@ -7,7 +7,7 @@ import { inv, cant, dinero } from './api_inventarios.js';
 import {
   ventana, dialogo, cargando, falla, vacio, aviso, cantTxt, costoTxt, unidadTxt, dma, diaTxt, plural, empresaChip, numFactura, proveedorTxt, tipoDocTxt,
   accionSegura, botonSeguro, rotular, repetidaTxt, campoCantidad, leerCantidad, leerMonto, selectUbicacion, nombreUbicacion, elegirArticulo, opcionDeArticulo,
-  enfocar, toastOk, norm, poner } from './m_inv_comun.js';
+  enfocar, toastOk, norm, poner, ymdCR } from './m_inv_comun.js';
 
 // Estado contable (contrato 3.2) a color: verde aceptada, ámbar con aviso, rojo no entra
 const CLASE_ESTADO = { aceptada: 'ok', parcial: 'espera', plazo_vencido: 'espera', rechazada: 'mal', rechazo_en_tramite: 'mal', rechazada_por_hacienda: 'mal' };
@@ -122,8 +122,6 @@ async function abrirLista(ctx) {
   await cargar();
   enfocar(lista.closest('.modal-cuerpo') || lista);
 }
-const fmtYmd = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Costa_Rica' });
-const ymdCR = (iso) => { try { return iso && String(iso).length > 10 ? fmtYmd.format(new Date(iso)) : String(iso || '').slice(0, 10); } catch { return ''; } };
 const codigoEmp = (cat, id) => (cat.empresas || []).find((e) => e.id === id)?.codigo || null;
 
 /* ---------- «No es de inventario» (una línea, varias o toda la factura) ---------- */

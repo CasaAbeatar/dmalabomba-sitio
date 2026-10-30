@@ -149,10 +149,11 @@ export function editorItems(ctx, { fuente, modo = 'salida', inicial = [], etique
     el,
     // Trae las opciones (lo que hay en la ubicación escogida). Si falla, lo dice aquí mismo con «Intentar de nuevo».
     async cargar(primera = false) {
-      poner(estado, cargando('Buscando lo que hay…'));
+      estado.hidden = false; poner(estado, cargando('Buscando lo que hay…'));
       try { opciones = await fuente(); }
       catch (e) { poner(estado, falla(e, () => this.cargar(primera), 'No se pudo saber qué hay aquí')); if (primera && !filas.length) nuevaFila(); return; }
       poner(estado, opciones.length ? '' : aviso('espera', h('p', vacioTxt)));
+      estado.hidden = !!opciones.length;
       filas.forEach((f) => { if (f.art) { const o = opciones.find((x) => x.id === f.art.id); f.poner(o || null); } });
       if (primera) { if (inicial.length) inicial.forEach((p) => nuevaFila(p)); else nuevaFila(); }
     },
@@ -205,14 +206,14 @@ function leerMotivo(campo, obligatorio) {
   return m || null;
 }
 // Formulario de una sola intención: el botón principal hace la llamada; al terminar se muestra el resultado y se ofrece «Hacer otro»
-function formulario({ titulo, ancho = 760, partes, boton, ocupado, hacer, resultado, otro }) {
+function formulario({ titulo, ancho = 760, partes, boton, ocupado, hacer, resultado, otro, alFallar }) {
   const zona = h('div');
   const caja = h('div.inv-form', partes, zona);
   const fin = h('div.inv-form-fin', { hidden: true });
   const ok = h('button.btn.primario.grande', { type: 'button' }, boton);
   const d = dialogo({ titulo, ancho, contenido: [caja, fin], botones: [{ texto: 'Cerrar', onclick: (c) => c() }] });
   d.el.querySelector('.modal-pie').append(ok);
-  const acc = accionSegura({ boton: ok, zona, ocupado, hacer,
+  const acc = accionSegura({ boton: ok, zona, ocupado, hacer, alFallar,
     alTerminar: (r, info) => {
       caja.hidden = true; ok.hidden = true; fin.hidden = false;
       poner(fin, resultado(r, info), h('div.inv-form-otra', h('button.btn', { type: 'button', onclick: () => { d.cerrar(); otro?.(); } }, 'Hacer otro'), h('button.btn.primario', { type: 'button', onclick: () => d.cerrar() }, 'Listo, cerrar')));
@@ -245,7 +246,7 @@ export async function formTraslado(ctx, pre = {}) {
     resultado: (r, { repetida }) => aviso('ok', h('p', h('strong', 'Listo: se trasladó de ' + nombreUbicacion(cat, r.origen_id) + ' a ' + nombreUbicacion(cat, r.destino_id) + '.'), ' Valor al costo, sin IVA: ' + money(r.valor_total) + '.' + repetidaTxt(repetida)),
       h('ul.inv-res-lista', (r.items || []).map((it) => h('li', it.articulo + ': ' + cantTxt(it.cantidad, items.unidadDe(it.articulo_id)) + ' (' + money(it.valor) + ')' +
         ((it.piezas || []).some((p) => p.vence_en) ? ' · vence ' + [...new Set(it.piezas.map((p) => p.vence_en ? dma(p.vence_en) : 'no vence'))].join(', ') : ''))))),
-    otro: () => formTraslado(ctx, { origen }) });
+    otro: () => formTraslado(ctx, { origen }), alFallar: (e) => { if (e?.codigo === 'P0001') items.cargar(); } });
   await items.cargar(true);
 }
 
@@ -284,7 +285,7 @@ export async function formSalida(ctx, pre = {}) {
     },
     resultado: (r, { repetida }) => aviso('ok', h('p', h('strong', 'Listo: se registró la ' + NOMBRE_SALIDA[r.tipo || tipo] + ' en ' + nombreUbicacion(cat, r.ubicacion_id) + '.'), ' Valor al costo, sin IVA: ' + money(r.valor_total) + '.' + repetidaTxt(repetida)),
       h('ul.inv-res-lista', (r.items || []).map((it) => h('li', it.articulo + ': ' + cantTxt(it.cantidad, items.unidadDe(it.articulo_id)) + ' (' + money(it.valor) + ')' + ((it.piezas || []).length > 1 ? ', de ' + plural(it.piezas.length, 'lote', 'lotes') : ''))))),
-    otro: () => formSalida(ctx, { tipo, ubicacion: ubic }) });
+    otro: () => formSalida(ctx, { tipo, ubicacion: ubic }), alFallar: (e) => { if (e?.codigo === 'P0001') items.cargar(); } });
   ok = f.ok;
   pintarTipo();
   await items.cargar(true);
@@ -307,7 +308,7 @@ export async function formPorcionar(ctx, pre = {}) {
     const c = campoCantidad({ etiqueta: 'Cuánto resulta' });
     const prop = h('input.campo.inv-num', { type: 'text', inputmode: 'decimal', autocomplete: 'off', 'aria-label': 'Parte del costo' });
     const vence = h('input.campo', { type: 'date', min: ctx.hoy, 'aria-label': 'Vence (opcional)' });
-    const quitar = unico ? null : h('button.btn.suave.inv-item-quitar', { type: 'button', onclick: () => { r.el.remove(); filasR.splice(filasR.indexOf(r), 1); if (!filasR.length) nuevaR(); } }, 'Quitar');
+    const quitar = h('button.btn.suave.inv-item-quitar', { type: 'button', onclick: () => { r.el.remove(); filasR.splice(filasR.indexOf(r), 1); if (!filasR.length) nuevaR(); } }, 'Quitar');
     r.el = h('div.inv-item', h('div.etq', h('span', 'Artículo que resulta'), btn), c.el,
       h('details.inv-corregir', h('summary', 'Más opciones'), h('label.etq', 'Parte del costo (opcional)', prop, h('small', 'Sin escribir nada, el costo se reparte según la cantidad.')), h('label.etq', 'Vence (opcional)', vence, h('small', 'Si lo deja vacío: el vencimiento más cercano de lo que se usó.'))),
       quitar);

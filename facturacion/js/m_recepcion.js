@@ -30,6 +30,8 @@ export function montoTexto(n, moneda = 'CRC') {
   return (Number(n) < 0 ? '-' : '') + (moneda === 'CRC' || !moneda ? '₡' : moneda + ' ') + e.replace(/\B(?=(\d{3})+(?!\d))/g, ' ') + ',' + d;
 }
 const largo = (t) => Array.from(String(t || '')).length;
+// replaceChildren no ignora null ni false (los pondría como texto «null»): esto sí, como h()
+const poner = (el, ...xs) => el.replaceChildren(...xs.flat(Infinity).filter((x) => x != null && x !== false && x !== ''));
 // Condición del IVA (nota 18 del anexo v4.4), en palabras para quien responde
 const CONDICIONES = [
   { c: '01', t: 'Todo el IVA se usa como crédito fiscal', d: 'Lo normal en compras para el negocio: mercadería, insumos y servicios. El IVA que pagó se resta del IVA que se le paga a Hacienda en la declaración del mes.' },
@@ -96,7 +98,7 @@ export default {
 
     /* ---------- revisar el correo ---------- */
     async function buscarCorreo() {
-      estadoCorreo.hidden = false; estadoCorreo.className = 'rec-correo-estado'; estadoCorreo.replaceChildren('Revisando los correos de contabilidad (los últimos 3 días). Puede tardar hasta un minuto, no cierre esta pantalla…');
+      estadoCorreo.hidden = false; estadoCorreo.className = 'rec-correo-estado'; poner(estadoCorreo, 'Revisando los correos de contabilidad (los últimos 3 días). Puede tardar hasta un minuto, no cierre esta pantalla…');
       btnCorreo.textContent = 'Revisando el correo…';
       try {
         const r = await revisarCorreo();
@@ -105,7 +107,7 @@ export default {
         const errs = bz.flatMap((b) => b.errores || []);
         const sinXml = sum('n_sin_xml'), ejemplos = bz.flatMap((b) => b.sin_xml || []).slice(0, 3);
         estadoCorreo.className = 'rec-correo-estado ' + (errs.length || sinXml ? 'aviso' : 'ok');
-        estadoCorreo.replaceChildren(
+        poner(estadoCorreo, 
           h('p', `Se revisaron ${plural(sum('correos'), 'correo', 'correos')} de ${plural(bz.length, 'buzón', 'buzones')}; ${plural(sum('comprobantes'), 'comprobante leído', 'comprobantes leídos')} y ${plural(sum('mensajes_hacienda'), 'respuesta de Hacienda', 'respuestas de Hacienda')}.`),
           sinXml ? h('p', h('strong', sinXml === 1 ? '1 correo traía una factura sin XML' : `${num(sinXml, 0)} correos traían una factura sin XML`), ' (por ejemplo, solo el PDF). Sin el XML no se puede responder a Hacienda ni usar el IVA: pídale el XML al proveedor.') : null,
           ejemplos.length ? h('ul.rec-ejemplos', ejemplos.map((t) => h('li', String(t)))) : null,
@@ -114,7 +116,7 @@ export default {
       } catch (e) {
         const sinPuente = /failed to fetch|networkerror|load failed/i.test(String(e.message || e));
         estadoCorreo.className = 'rec-correo-estado ' + (sinPuente ? 'aviso' : 'error');
-        estadoCorreo.replaceChildren(sinPuente
+        poner(estadoCorreo, sinPuente
           ? 'La revisión manual del correo todavía no se puede hacer desde esta pantalla. No pasa nada: el sistema revisa solo los correos de contabilidad varias veces al día y las facturas nuevas aparecen aquí. Lo que ya estaba guardado se sigue viendo.'
           : 'No se pudo revisar el correo ahora. Las facturas que ya estaban guardadas se siguen viendo. Intente de nuevo en unos minutos.');
       } finally { btnCorreo.textContent = 'Buscar facturas nuevas en el correo'; }
@@ -134,7 +136,7 @@ export default {
       if (!nFact && !nCorreo) { avisosCaja.hidden = true; avisosCaja.replaceChildren(); return; }
       const partes = [nFact ? (nFact === 1 ? 'De 1 factura llegó la respuesta de Hacienda pero no el XML' : `De ${num(nFact, 0)} facturas llegó la respuesta de Hacienda pero no el XML`) : '', nCorreo ? (nCorreo === 1 ? '1 correo traía adjuntos sin XML' : `${num(nCorreo, 0)} correos traían adjuntos sin XML`) : ''].filter(Boolean);
       avisosCaja.hidden = false;
-      avisosCaja.replaceChildren(
+      poner(avisosCaja, 
         h('div.rec-aviso-tit', h('strong', 'Facturas sin XML'), h('span', partes.join('. ') + '. Sin el XML no se pueden responder a Hacienda ni usar para el crédito del IVA: pídaselo al proveedor.')),
         items.length ? h('ul.rec-sinxml', items.map((x) => {
           const btn = h('button.btn.chico', { type: 'button', onclick: tocable(() => conBoton(btn, async () => {
@@ -162,7 +164,7 @@ export default {
       [buscarCaja, rotulo, resumen, lista].forEach((x) => { x.hidden = !lst; }); ivaCaja.hidden = true;
       periodoCaja.hidden = est.vista === 'pendientes' || (est.vista === 'vencidas' && est.vencTodo);
       pintarTabs(); pintarVencFiltro();
-      lista.replaceChildren(h('p.cargando', 'Cargando facturas…')); resumen.replaceChildren();
+      poner(lista, h('p.cargando', 'Cargando facturas…')); resumen.replaceChildren();
       rotulo.textContent = est.vista === 'pendientes'
         ? 'Facturas que llegaron y todavía no tienen respuesta, con los días hábiles que les quedan. El plazo es de 8 días hábiles y se cuenta desde el inicio del mes siguiente a la fecha de la factura. Las más urgentes van primero.'
         : est.vista === 'vencidas'
@@ -176,7 +178,7 @@ export default {
         marcarPestana(d.conteo);
       } catch (e) {
         if (mia !== ficha) return;
-        lista.replaceChildren(h('div.vacio', h('p', 'No se pudieron traer las facturas.'), h('p.tenue', mensajeAmable(e, 'Revise la conexión e intente de nuevo.')), h('button.btn', { type: 'button', 'data-reintentar': '1', onclick: () => cargar() }, 'Intentar de nuevo')));
+        poner(lista, h('div.vacio', h('p', 'No se pudieron traer las facturas.'), h('p.tenue', mensajeAmable(e, 'Revise la conexión e intente de nuevo.')), h('button.btn', { type: 'button', 'data-reintentar': '1', onclick: () => cargar() }, 'Intentar de nuevo')));
       }
     }
 
@@ -185,7 +187,7 @@ export default {
 
     function pintarKpis() {
       const c = est.conteo || {}; const venc = (c.vencidas_recientes || 0) + (c.vencidas_antiguas || 0);
-      kpis.replaceChildren(
+      poner(kpis, 
         kpi('Llegaron hoy', num(c.llegaron_hoy || 0, 0), 'Facturas y notas que entraron hoy a los correos de contabilidad.'),
         kpi('Pendientes de responder', num(c.pendientes_en_plazo || 0, 0), 'Dentro del plazo de 8 días hábiles. Mientras no se acepten, su IVA no se acredita.', c.pendientes_en_plazo ? 'alerta' : ''),
         kpi('Vencen en 2 días hábiles o menos', num(c.vencen_pronto || 0, 0), c.vencen_hoy ? `${plural(c.vencen_hoy, 'vence', 'vencen')} hoy.` : 'Conviene responderlas primero.', c.vencen_pronto ? 'pronto' : ''),
@@ -205,13 +207,13 @@ export default {
       const c = est.conteo || {};
       const venc = (c.vencidas_recientes || 0) + (c.vencidas_antiguas || 0);
       const b = (id, t, n) => h('button.btn.rec-vista', { type: 'button', 'aria-pressed': String(est.vista === id), onclick: tocable(() => irA(id)) }, t, n != null ? h('span.rec-n', num(n, 0)) : null);
-      tabs.replaceChildren(b('pendientes', 'Pendientes de responder', c.pendientes_en_plazo ?? null), b('todas', 'Todas las facturas', null), b('vencidas', 'Plazo vencido', venc || null), b('iva', 'IVA del mes', null));
+      poner(tabs, b('pendientes', 'Pendientes de responder', c.pendientes_en_plazo ?? null), b('todas', 'Todas las facturas', null), b('vencidas', 'Plazo vencido', venc || null), b('iva', 'IVA del mes', null));
     }
     function pintarVencFiltro() {
       vencFiltro.hidden = est.vista !== 'vencidas';
       if (vencFiltro.hidden) return;
       const b = (todo, t) => h('button.btn.chico', { type: 'button', 'aria-pressed': String(est.vencTodo === todo), onclick: () => { if (est.vencTodo === todo) return; est.vencTodo = todo; if (!todo && est.per.vencidas && est.per.vencidas !== periodo.id() && est.per.vencidas !== 'otro') periodo.elegir(est.per.vencidas); else cargar(); } }, t);
-      vencFiltro.replaceChildren(b(true, 'Todas las vencidas'), b(false, 'Solo las que llegaron en un periodo'));
+      poner(vencFiltro, b(true, 'Todas las vencidas'), b(false, 'Solo las que llegaron en un periodo'));
     }
 
     /* ---------- lista ---------- */
@@ -221,7 +223,7 @@ export default {
       resumen.replaceChildren();
       if (!filas.length) {
         const msg = est.q ? 'Ninguna factura coincide con la búsqueda.' : est.vista === 'pendientes' ? 'No hay facturas pendientes de responder. Todo está al día.' : est.vista === 'vencidas' ? (est.vencTodo ? 'No hay facturas con el plazo vencido.' : 'No hay facturas con el plazo vencido que hayan llegado en este periodo.') : 'No llegaron facturas de proveedores en este periodo.';
-        lista.replaceChildren(h('div.vacio', h('p', msg), est.vista === 'todas' && periodo.id() === 'hoy' ? h('div.fila', { style: 'justify-content:center' }, h('button.btn.primario', { type: 'button', onclick: () => periodo.elegir('mes') }, 'Ver este mes')) : null));
+        poner(lista, h('div.vacio', h('p', msg), est.vista === 'todas' && periodo.id() === 'hoy' ? h('div.fila', { style: 'justify-content:center' }, h('button.btn.primario', { type: 'button', onclick: () => periodo.elegir('mes') }, 'Ver este mes')) : null));
         pieOtras(d); return;
       }
       resumen.append(h('div.rec-resumen-fila',
@@ -230,7 +232,7 @@ export default {
         h('span', 'IVA pagado a proveedores: ', h('strong.cifra', money(r.iva))),
         h('span', 'Compras sin IVA: ', h('strong.cifra', money(r.neto))),
         crearDescarga(() => opcionesLista(), { texto: 'Descargar', etiqueta: 'Descargar la lista de facturas de proveedores que se ve ahora' })));
-      lista.replaceChildren(
+      poner(lista, 
         h('div.rec-enc', h('span', 'Llegó'), h('span', 'Proveedor y comprobante'), h('span.der', 'Total con IVA'), h('span.der', 'IVA'), h('span', 'Respuesta a Hacienda')),
         ...filas.map(fila));
       if (d.truncado) lista.append(h('p.lis-aviso', 'Se muestran las 500 más recientes. Use el buscador o un periodo más corto para ver las demás.'));
@@ -252,12 +254,12 @@ export default {
       try {
         const r = await otraCedula(soc.id, desde, hasta);
         const fs = [...(r.filas || [])].sort((a, b) => new Date(a.llego) - new Date(b.llego));
-        cuerpo.replaceChildren(h('p.tenue', `Llegaron ${textoRango(desde, hasta)} a los correos de ${nomLocal}. No son compras de esta empresa: no se responden desde aquí.`),
+        poner(cuerpo, h('p.tenue', `Llegaron ${textoRango(desde, hasta)} a los correos de ${nomLocal}. No son compras de esta empresa: no se responden desde aquí.`),
           fs.length ? h('ul.rec-otra-lista', fs.map((f) => h('li', h('div', h('strong', f.motivo === 'otra_empresa_del_grupo' ? 'Comprobante de la otra empresa del grupo' : nomProv(f.emisor_nombre)),
             h('small', [nombreTipo(f.tipo), f.consecutivo ? 'consecutivo ' + f.consecutivo.slice(-10) : '', 'llegó ' + fechaHora(f.llego), f.receptor_cedula ? 'a nombre de la cédula ' + f.receptor_cedula : 'sin cédula de receptor'].filter(Boolean).join(' · ')),
             f.motivo_texto ? h('small', f.motivo_texto) : null),
             f.total != null ? h('span.cifra', money(f.total)) : null))) : h('p.vacio', 'No hay comprobantes a nombre de otra cédula en este periodo.'));
-      } catch (e) { cuerpo.replaceChildren(h('div.error-caja', 'No se pudo traer la lista. ' + mensajeAmable(e, 'Intente de nuevo en un momento.'))); }
+      } catch (e) { poner(cuerpo, h('div.error-caja', 'No se pudo traer la lista. ' + mensajeAmable(e, 'Intente de nuevo en un momento.'))); }
     }
     function fila(f) {
       const e = estadoFila(f); const nota = esNC(f.tipo);
@@ -330,7 +332,7 @@ export default {
         const [a, b] = await Promise.allSettled([recibida(clave), respuestaGuardada(clave)]);
         if (a.status === 'rejected') throw a.reason;
         d = a.value; guardada = b.status === 'fulfilled' ? b.value : null;
-      } catch (e) { cuerpo.replaceChildren(h('div.error-caja', 'No se pudo abrir la factura. ' + mensajeAmable(e, 'Revise la conexión e intente de nuevo.'))); return; }
+      } catch (e) { poner(cuerpo, h('div.error-caja', 'No se pudo abrir la factura. ' + mensajeAmable(e, 'Revise la conexión e intente de nuevo.'))); return; }
       const f = d.factura, nota = esNC(f.tipo), sg = nota ? '−' : '';
       const e = estadoFila({ ...d, ...f, requiere: d.requiere, dias_restantes: d.dias_restantes });
       const dato = (t, v) => h('div.rec-dato', h('small', t), h('div', v));
@@ -341,7 +343,7 @@ export default {
       const respuesta = h('div.rec-resp');
       pintarRespuesta(respuesta, d, guardada, clave, cuerpo, e);
       const desg = Array.isArray(d.desglose) ? d.desglose : [];
-      cuerpo.replaceChildren(
+      poner(cuerpo, 
         ...(aviso ? [h('div.' + (aviso.mal ? 'error-caja' : 'rec-ok'), aviso.texto || aviso)] : []),
         h('div.rec-detalle-cab', h('div', h('h2', nomProv(f.emisor_nombre)), h('p.tenue', `${nombreTipo(f.tipo)} · consecutivo ${f.consecutivo || 'sin dato'} · cédula del proveedor ${f.emisor_cedula || 'sin dato'}`)),
           h('div.fila', chipTipo(f.tipo), h('span.chip' + (e.clase ? '.' + e.clase : ''), e.texto),
@@ -358,7 +360,7 @@ export default {
           h('tbody', lineas.map((l) => h('tr', h('td', l.linea > 999 ? '' : l.linea), h('td', l.detalle || '', l.cabys ? h('small.tenue', ' CABYS ' + l.cabys) : null), h('td.der', { 'data-et': 'Cantidad' }, num(l.cantidad, 3)), h('td.der', { 'data-et': 'Precio' }, money(l.precio_unitario)), h('td.der', { 'data-et': 'Sin IVA' }, money(l.subtotal)), h('td.der', { 'data-et': 'IVA' }, money(l.impuesto)), h('td.der', { 'data-et': 'Total' }, money(l.total_linea)))))))
           : h('p.tenue', 'Esta factura no trae líneas guardadas.'),
         d.lineas_aviso ? h('p.lis-aviso', d.lineas_aviso) : null,
-        desg.length ? h('details.rec-desglose', h('summary', 'Impuestos de la factura, por tarifa'),
+        desg.length ? h('details.rec-desglose.rec-tecnico', h('summary', 'Ver los impuestos de la factura, por tarifa'),
           h('ul', desg.filter((x) => x.fuente === 'resumen' || !desg.some((y) => y.fuente === 'resumen')).map((x) => h('li', `${x.codigo_impuesto === '01' ? 'IVA' : 'Impuesto ' + (x.codigo_impuesto || 'sin código')}${x.tarifa != null ? ' ' + num(x.tarifa, 2) + ' %' : ''}: `, h('strong.cifra', montoTexto(x.neto ?? x.monto, f.moneda)), x.base != null ? ` sobre ${montoTexto(x.base, f.moneda)}` : '')))) : null,
         h('div.rec-totales',
           h('div', h('span', 'Compra sin IVA'), h('strong.cifra', sg + money(f.neto))),
@@ -366,7 +368,7 @@ export default {
           h('div.total', h('span', nota ? 'Total de la nota de crédito (resta de lo que se debe)' : esND(f.tipo) ? 'Total de la nota de débito (se suma a lo que se debe)' : 'Total de la factura con IVA'), h('strong.cifra', sg + money(f.total))),
           moneda ? h('small.tenue', `Montos convertidos a colones. En ${f.moneda} el total es ${num(f.total_orig, 2)}.`) : null),
         respuesta,
-        h('details.rec-tecnico', h('summary', 'Datos técnicos'), h('p.tenue', 'Clave numérica: ', h('code', f.clave)), (d.mensajes || []).map((x) => h('p.tenue', `${x.tipo} · estado ${x.estado || 'sin dato'} · ${x.recibido ? fechaHora(x.recibido) : ''}${x.detalle && x.detalle !== '.' ? ' · ' + x.detalle : ''}`))));
+        h('details.rec-tecnico', h('summary', 'Ver datos técnicos (clave y mensajes)'), h('p.tenue', 'Clave numérica: ', h('code', f.clave)), (d.mensajes || []).map((x) => h('p.tenue', `${x.tipo} · estado ${x.estado || 'sin dato'} · ${x.recibido ? fechaHora(x.recibido) : ''}${x.detalle && x.detalle !== '.' ? ' · ' + x.detalle : ''}`))));
     }
 
     // Lo que se descarga de una factura abierta: sus líneas, con los totales que se ven abajo
@@ -533,7 +535,7 @@ export default {
           }));
           const bNo = h('button.btn', { type: 'button', onclick: () => m.cerrar() }, 'Cancelar');
           function mal(t) { aviso.textContent = t; aviso.hidden = false; aviso.scrollIntoView({ block: 'nearest' }); }
-          cuerpoV.replaceChildren(...partes, aviso, pie(bNo, bRev));
+          poner(cuerpoV, ...partes, aviso, pie(bNo, bRev));
         }
         function pintarConfirmacion(r, motivo, extra) {
           paso = 'revisar';
@@ -552,7 +554,8 @@ export default {
           else if (p && ['pendiente', 'error'].includes(p.estado)) notas.push(`Hay un intento anterior sin confirmar («${p.descripcion}»). Antes de enviar, el sistema le pregunta a Hacienda si llegó; si llegó, no se envía esta.`);
           else if (p && p.estado === 'rechazado') notas.push('Hacienda rechazó la respuesta anterior: esta sale como una respuesta nueva.');
           const bloques = [
-            h('p.rec-conf-intro', 'Revise con calma. Esto es exactamente lo que recibirá Hacienda:'),
+            h('p.rec-conf-intro', r.se_puede_enviar ? 'Revise con calma. Esto es exactamente lo que recibirá Hacienda:' : 'Esto es lo que recibiría Hacienda:'),
+            notas.length ? h('ul.rec-conf-notas', notas.map((t) => h('li', t))) : null,
             h('div.rec-conf',
               filaC('Respuesta', nombreMensaje),
               c.mensaje === 2 ? filaC('Parte que acepta', `${montoTexto(c.monto_aceptado, cm)} de ${montoTexto(c.total, cm)}`) : null,
@@ -563,10 +566,9 @@ export default {
               filaC('IVA de la factura', montoTexto(c.impuesto, cm)),
               h('div.rec-conf-det', h('span', 'Texto que recibe Hacienda'), h('q', c.detalle || ''))),
             c.mensaje === 3 ? h('p.tenue', 'Con un rechazo no se acredita IVA ni se registra gasto con esta factura. El proveedor tiene que anularla con una nota de crédito.') : null,
-            c.mensaje === 2 ? h('p.tenue', 'El IVA y el gasto se registran por la factura completa; cuando llegue la nota de crédito del proveedor y la acepte, su IVA se resta. Así queda el monto real de la compra.') : null,
-            notas.length ? h('ul.rec-conf-notas', notas.map((t) => h('li', t))) : null];
+            c.mensaje === 2 ? h('p.tenue', 'El IVA y el gasto se registran por la factura completa; cuando llegue la nota de crédito del proveedor y la acepte, su IVA se resta. Así queda el monto real de la compra.') : null];
           if (!r.se_puede_enviar) {
-            cuerpoV.replaceChildren(...bloques, h('div.lis-aviso.rec-bloqueo', h('strong', 'Todavía no se puede enviar. '), r.bloqueo || ''), pie(h('button.btn', { type: 'button', onclick: () => pintarDatos() }, 'Volver a cambiar'), h('button.btn.primario', { type: 'button', onclick: () => m.cerrar() }, 'Entendido, cerrar')));
+            poner(cuerpoV, h('div.lis-aviso.rec-bloqueo', h('strong', 'Todavía no se puede enviar. '), r.bloqueo || ''), ...bloques, pie(h('button.btn', { type: 'button', onclick: () => pintarDatos() }, 'Volver a cambiar'), h('button.btn.primario', { type: 'button', onclick: () => m.cerrar() }, 'Entendido, cerrar')));
             return;
           }
           const bSi = h('button.btn.' + (c.mensaje === 3 ? 'peligro' : 'primario'), { type: 'button' }, c.mensaje === 3 ? 'Sí, enviar el rechazo a Hacienda' : 'Sí, enviar a Hacienda');
@@ -574,14 +576,15 @@ export default {
           // Un segundo toque del mismo dedo (doble toque sobre «Revisar antes de enviar») no cuenta como «Sí, enviar»: el botón espera un momento antes de aceptar toques
           const listoEn = Date.now() + 800;
           bSi.addEventListener('click', () => { if (enviando || paso !== 'revisar' || Date.now() < listoEn) return; enviar(c, motivo, extra, bSi, bNo); });
-          cuerpoV.replaceChildren(...bloques, pie(bNo, bSi));
+          poner(cuerpoV, ...bloques, pie(bNo, bSi));
           bSi.focus({ preventScroll: true });
         }
         async function enviar(c, motivo, extra, bSi, bNo) {
           enviando = true; paso = 'enviando';
           bSi.disabled = true; bNo.disabled = true; bSi.textContent = 'Enviando a Hacienda…';
           const espera = h('p.rec-enviando', { 'aria-live': 'polite' }, 'Enviando la respuesta a Hacienda. Puede tardar unos segundos; no cierre esta ventana.');
-          cuerpoV.append(espera);
+          cuerpoV.insertBefore(espera, cuerpoV.querySelector('.rec-pie'));
+          espera.scrollIntoView({ block: 'nearest' });
           let r = null, fallo = null;
           try { r = await responder(clave, tipo, motivo, { ...extra, esperado: c.mensaje === 3 ? undefined : { acreditar: c.acreditar, gasto: c.gasto } }); } catch (ex) { fallo = ex; }
           enviando = false;
@@ -590,7 +593,7 @@ export default {
           if (cerrada) return;
           paso = 'resultado';
           const bCerrar = h('button.btn.primario', { type: 'button', onclick: () => m.cerrar() }, 'Cerrar');
-          cuerpoV.replaceChildren(h('div.' + (res.mal ? 'error-caja' : 'rec-ok'), res.texto), res.extra ? h('p.tenue', res.extra) : null, pie(res.reintentar ? h('button.btn', { type: 'button', onclick: () => pintarDatos() }, 'Volver a la respuesta') : null, bCerrar));
+          poner(cuerpoV, h('div.' + (res.mal ? 'error-caja' : 'rec-ok'), res.texto), res.extra ? h('p.tenue', res.extra) : null, pie(res.reintentar ? h('button.btn', { type: 'button', onclick: () => pintarDatos() }, 'Volver a la respuesta') : null, bCerrar));
           bCerrar.focus({ preventScroll: true });
           // la factura de abajo se vuelve a pintar con lo que quedó (los botones de respuesta desaparecen si ya se respondió)
           pintarDetalle(cuerpo, clave, res.mal ? null : { texto: res.texto });
@@ -638,16 +641,16 @@ export default {
       [buscarCaja, rotulo, resumen, lista, periodoCaja, vencFiltro].forEach((x) => { x.hidden = true; });
       ivaCaja.hidden = false; pintarTabs();
       const mesCaja = selectorMes();
-      ivaCaja.replaceChildren(mesCaja, h('p.cargando', 'Calculando el IVA del mes…'));
+      poner(ivaCaja, mesCaja, h('p.cargando', 'Calculando el IVA del mes…'));
       try {
         const d = await ivaMes(soc.id, est.mes + '-01');
         if (mia !== ficha || !vivo) return;
         est.iva = d;
-        ivaCaja.replaceChildren(mesCaja, ...pintarIva(d));
+        poner(ivaCaja, mesCaja, ...pintarIva(d));
       } catch (e) {
         if (mia !== ficha) return;
         const noHay = /fx_iva_mes|function|does not exist|no existe|schema cache/i.test(String(e?.message || ''));
-        ivaCaja.replaceChildren(mesCaja, h('div.vacio', h('p', noHay ? 'El cálculo del IVA del mes todavía no está activado en el sistema.' : 'No se pudo calcular el IVA del mes.'), h('p.tenue', noHay ? 'Las facturas y sus respuestas se siguen viendo en las otras pestañas.' : mensajeAmable(e, 'Revise la conexión e intente de nuevo.')), h('button.btn', { type: 'button', onclick: () => cargar() }, 'Intentar de nuevo')));
+        poner(ivaCaja, mesCaja, h('div.vacio', h('p', noHay ? 'El cálculo del IVA del mes todavía no está activado en el sistema.' : 'No se pudo calcular el IVA del mes.'), h('p.tenue', noHay ? 'Las facturas y sus respuestas se siguen viendo en las otras pestañas.' : mensajeAmable(e, 'Revise la conexión e intente de nuevo.')), h('button.btn', { type: 'button', onclick: () => cargar() }, 'Intentar de nuevo')));
       }
     }
     function selectorMes() {
@@ -669,7 +672,7 @@ export default {
         pruebas || d.ventas_de_prueba ? h('p.lis-aviso', 'El sistema está en modo de pruebas: las ventas de este mes son de prueba y no van en la declaración real.') : null,
         h('div.rejilla.rec-iva-kpis',
           kpi('IVA cobrado en ventas', money(db.iva || 0), `Débito fiscal: ${plural(+db.n_docs || 0, 'comprobante', 'comprobantes')} de ${mesTxt}.`),
-          kpi('IVA de compras que se acredita', money(cr.iva_acreditable || 0), `Crédito fiscal: ${plural(+cr.n_docs || 0, 'factura aceptada', 'facturas aceptadas')}.`),
+          kpi('IVA de compras que se acredita', money(cr.iva_acreditable || 0), `Crédito fiscal: ${plural(+cr.n_docs || 0, 'comprobante de compra', 'comprobantes de compra')} que entran en el crédito.`),
           kpi(+ne.a_favor > 0 ? 'Saldo a favor' : 'Diferencia a pagar', money(+ne.a_favor > 0 ? ne.a_favor : (ne.a_pagar ?? ne.diferencia ?? 0)), ne.texto || 'Débito menos crédito.', +ne.a_pagar > 0 ? 'alerta' : '')),
         sinConf.n_docs ? h('div.lis-aviso.rec-sin-conf', h('span', sinConf.texto || `${plural(+sinConf.n_docs, 'factura', 'facturas')} sin aceptar: su IVA (${money(sinConf.iva_acreditable || 0)}) todavía no se acredita.`), h('button.btn.chico', { type: 'button', onclick: tocable(() => irA('pendientes')) }, 'Ver las pendientes')) : null,
         h('div.fila.sep.rec-iva-desc', h('h3', 'IVA cobrado en ventas, por tarifa'), crearDescarga(() => opcionesIva(d), { texto: 'Descargar el IVA del mes', etiqueta: 'Descargar el IVA del mes con el detalle de cada comprobante' })),
@@ -680,12 +683,12 @@ export default {
         (cr.por_tarifa || []).length ? tablaT([{ t: 'Tarifa' }, { t: 'Base', der: 1 }, { t: 'IVA de las facturas', der: 1 }, { t: 'IVA que se acredita', der: 1 }, { t: 'Facturas', der: 1 }, { t: '' }],
           (cr.por_tarifa || []).map((x) => h('tr', h('td', x.descripcion || `${num(x.tarifa, 2)} %`), h('td.der', { 'data-et': 'Base' }, money(x.base)), h('td.der', { 'data-et': 'IVA facturas' }, money(x.iva_comprobantes)), h('td.der', { 'data-et': 'Se acredita' }, money(x.iva_acreditable)), h('td.der', { 'data-et': 'Facturas' }, num(x.n_docs || 0, 0)), h('td', x.ref ? verBtn(x.ref.lado, x.ref.grupo, `Compras: ${x.descripcion || num(x.tarifa, 2) + ' %'}`) : null))))
           : h('p.tenue', 'No hay compras aceptadas con IVA en este mes.'),
-        (cr.por_condicion || []).length ? h('ul.rec-iva-cond', (cr.por_condicion || []).map((x) => h('li', h('span', x.texto || TEXTO_CONDICION[x.condicion] || x.condicion), h('strong.cifra', money(x.iva_acreditable))))) : null,
+        (cr.por_condicion || []).length ? h('ul.rec-iva-cond', (cr.por_condicion || []).map((x) => h('li', h('span', x.texto || TEXTO_CONDICION[x.condicion] || (x.condicion === 'sin_respuesta' ? 'Sin respuesta todavía' : x.condicion)), h('strong.cifra', money(x.iva_acreditable))))) : null,
         (+cr.gasto_sin_credito > 0 || +cr.otros_impuestos > 0) ? h('p.tenue', [+cr.gasto_sin_credito > 0 ? `IVA que va al gasto (no se acredita): ${money(cr.gasto_sin_credito)}.` : '', +cr.otros_impuestos > 0 ? `Impuestos que no son IVA: ${money(cr.otros_impuestos)}.` : ''].filter(Boolean).join(' ')) : null,
         excluidos('Ventas que no entran en el débito', db.excluidos),
         excluidos('Compras que no entran en el crédito', cr.excluidos),
-        (d.decisiones_contador || []).length ? h('details.rec-tecnico', h('summary', 'Para revisar con la contadora'), h('ul', d.decisiones_contador.map((t) => h('li', String(t))))) : null,
-        (d.reglas || []).length ? h('details.rec-tecnico', h('summary', 'Cómo se calcula'), h('ul', d.reglas.map((x) => h('li', String(x.regla || ''), x.fuente ? h('small.tenue', ' (' + x.fuente + ')') : null))), d.redondeo ? h('p.tenue', String(d.redondeo)) : null) : null,
+        (d.decisiones_contador || []).length ? h('details.rec-tecnico', h('summary', 'Ver lo que conviene revisar con la contadora'), h('ul', d.decisiones_contador.map((t) => h('li', String(t))))) : null,
+        (d.reglas || []).length ? h('details.rec-tecnico', h('summary', 'Ver cómo se calcula'), h('ul', d.reglas.map((x) => h('li', String(x.regla || ''), x.fuente ? h('small.tenue', ' (' + x.fuente + ')') : null))), d.redondeo ? h('p.tenue', String(d.redondeo)) : null) : null,
       ].filter(Boolean);
       function excluidos(titulo, l) {
         if (!Array.isArray(l) || !l.length) return null;
@@ -702,19 +705,19 @@ export default {
         const fs = [...(r.filas || [])].sort((a, b) => String(a.fecha_emision).localeCompare(String(b.fecha_emision)));
         const credito = String(lado).includes('credito');
         const t = r.totales || {};
-        cuerpo.replaceChildren(
+        poner(cuerpo, 
           h('div.fila.sep', h('p.tenue', `${plural(r.n ?? fs.length, 'comprobante', 'comprobantes')} de ${nombreMes(est.mes)}, del más antiguo al más reciente.${credito ? ' Toque una factura para abrirla.' : ''}`),
             crearDescarga(() => opcionesDetalleIva(fs, titulo, lado, t), { texto: 'Descargar', etiqueta: 'Descargar estos comprobantes' })),
           h('div.rec-iva-tot', h('span', 'Base: ', h('strong.cifra', money(t.base || 0))), h('span', 'IVA: ', h('strong.cifra', money(t.iva || 0))), credito ? h('span', 'Se acredita: ', h('strong.cifra', money(t.iva_acreditable || 0))) : null),
           fs.length ? h('div.rec-iva-lista', fs.map((x) => {
             const cont = [h('span.rec-fecha', h('strong', diaSemanaCR(x.fecha_emision)), h('small', horaCorta(x.fecha_emision))),
               h('span.rec-prov', h('strong', nomProv(x.contraparte_nombre || 'Sin nombre')), h('small', `${nombreTipo(x.tipo)}${x.consecutivo ? ' · ' + String(x.consecutivo).slice(-10) : ''}${x.contraparte_cedula ? ' · cédula ' + x.contraparte_cedula : ''}${x.respuesta ? ' · ' + x.respuesta : ''}`), chipTipo(x.tipo)),
-              h('span.rec-monto.der', h('small.rec-et', 'IVA'), money((+x.signo || 1) * (+x.iva || 0))),
-              credito ? h('span.rec-monto.der', h('small.rec-et', 'Se acredita'), money((+x.signo || 1) * (+x.iva_acreditable || 0))) : h('span')];
+              h('span.rec-monto.der', h('small.rec-et', 'IVA'), money(+x.iva || 0)), // los montos del detalle ya vienen con signo (las notas de crédito en negativo)
+              credito ? h('span.rec-monto.der', h('small.rec-et', 'Se acredita'), money(+x.iva_acreditable || 0)) : h('span')];
             return credito && x.clave ? h('button.rec-fila.rec-fila-iva', { type: 'button', onclick: tocable(() => abrirDetalle(x.clave)) }, ...cont) : h('div.rec-fila.rec-fila-iva', ...cont);
           })) : h('p.vacio', 'No hay comprobantes en este grupo.'),
           r.truncado ? h('p.lis-aviso', 'La lista es muy larga y se cortó. La descarga del IVA del mes trae todos.') : null);
-      } catch (e) { cuerpo.replaceChildren(h('div.error-caja', 'No se pudo traer el detalle. ' + mensajeAmable(e, 'Intente de nuevo en un momento.'))); }
+      } catch (e) { poner(cuerpo, h('div.error-caja', 'No se pudo traer el detalle. ' + mensajeAmable(e, 'Intente de nuevo en un momento.'))); }
     }
     const COLS_DETALLE = [
       { clave: 'fecha', titulo: 'Fecha de emisión', tipo: 'fechahora' }, { clave: 'lado', titulo: 'Lado', tipo: 'texto' }, { clave: 'nombre', titulo: 'Cliente o proveedor', tipo: 'texto' },
@@ -723,7 +726,8 @@ export default {
       { clave: 'acr', titulo: 'IVA que se acredita (₡)', tipo: 'moneda' }, { clave: 'cond', titulo: 'Condición del IVA', tipo: 'texto', enPdf: false }, { clave: 'resp', titulo: 'Respuesta', tipo: 'texto', enPdf: false },
       { clave: 'motivo', titulo: 'Por qué no entra', tipo: 'texto', enPdf: false }, { clave: 'clave', titulo: 'Clave numérica (50 dígitos)', tipo: 'texto', enPdf: false }];
     const LADOS = { debito: 'Venta (débito)', credito: 'Compra (crédito)', excluido_debito: 'Venta que no entra', excluido_credito: 'Compra que no entra' };
-    const filaDetalle = (x) => { const s = +x.signo || 1; return { fecha: x.fecha_emision, lado: LADOS[x.lado] || x.lado || '', nombre: x.contraparte_nombre || '', ced: x.contraparte_cedula || '', tipo: nombreTipo(x.tipo), cons: x.consecutivo || '', tarifa: x.tarifa ?? '', base: s * (+x.base || 0), iva: s * (+x.iva || 0), acr: x.iva_acreditable == null ? '' : s * (+x.iva_acreditable || 0), cond: x.condicion_impuesto ? (TEXTO_CONDICION[x.condicion_impuesto] || x.condicion_impuesto) : '', resp: x.respuesta || '', motivo: x.motivo || '', clave: x.clave || '' }; };
+    // fx_iva_mes_detalle ya trae base, IVA e IVA acreditable con signo (las notas de crédito en negativo): no se vuelve a multiplicar por «signo»
+    const filaDetalle = (x) => { return { fecha: x.fecha_emision, lado: LADOS[x.lado] || x.lado || '', nombre: x.contraparte_nombre || '', ced: x.contraparte_cedula || '', tipo: nombreTipo(x.tipo), cons: x.consecutivo || '', tarifa: x.tarifa ?? '', base: +x.base || 0, iva: +x.iva || 0, acr: x.iva_acreditable == null ? '' : +x.iva_acreditable || 0, cond: x.condicion_impuesto ? (TEXTO_CONDICION[x.condicion_impuesto] || x.condicion_impuesto) : '', resp: x.respuesta || '', motivo: x.motivo_texto || x.motivo || '', clave: x.clave || '' }; };
     function opcionesDetalleIva(fs, titulo, lado, t) {
       return {
         nombre: `IVA ${nombreMes(est.mes)} ${paraArchivo(titulo, 40)}`.replace(/\s+/g, ' ').trim(), empresa: nomLocal, cedula: soc?.cedula || '',

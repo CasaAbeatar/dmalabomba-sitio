@@ -76,7 +76,11 @@
 .rec-ayuda{margin:.8rem 0 0;padding-left:1.1rem;color:var(--tinta2);font-size:.9rem}
 .rec-ok{padding:.7rem .9rem;border:1px solid #a8d5bd;background:var(--verde-suave);border-radius:var(--r);color:#14583a;font-weight:600;margin:.4rem 0}
 .rec-tecnico{margin-top:1rem;font-size:.88rem}
-.rec-tecnico summary{cursor:pointer;min-height:48px;display:flex;align-items:center;font-weight:600}
+.rec-tecnico summary{cursor:pointer;min-height:48px;display:flex;align-items:center;gap:.5rem;font-weight:600;list-style:none}
+.rec-tecnico summary::-webkit-details-marker{display:none}
+.rec-tecnico summary::before{content:'';flex:0 0 auto;width:.5rem;height:.5rem;border-right:2px solid currentColor;border-bottom:2px solid currentColor;transform:rotate(-45deg);margin:0 .25rem 0 .1rem;transition:transform .15s}
+.rec-tecnico[open]>summary::before{transform:rotate(45deg)}
+.rec-tecnico summary:hover{color:var(--rojo)}
 .rec-tecnico code{overflow-wrap:anywhere;font-size:.8rem}
 
 /* Tipo de comprobante: la nota de crédito resta, la de débito suma */
@@ -103,6 +107,7 @@
 .rec-dlg{display:flex;flex-direction:column;gap:.85rem}
 .rec-dlg>p{margin:0}
 .rec-pie{position:sticky;bottom:-1.2rem;display:flex;flex-wrap:wrap;justify-content:flex-end;gap:.6rem;margin:.2rem -1.2rem -1.2rem;padding:.85rem 1.2rem;border-top:1px solid var(--linea);background:var(--papel);border-radius:0 0 16px 16px}
+.rec-pie .btn{-webkit-user-select:none;user-select:none}
 .rec-cond{border:0;margin:0;padding:0;min-width:0}
 .rec-cond legend{font-weight:600;font-size:.95rem;margin-bottom:.45rem;padding:0}
 .rec-opciones{display:flex;flex-direction:column;gap:.45rem}
@@ -188,6 +193,7 @@ div.rec-fila{cursor:default}
   .rec-sinxml li,.rec-excl li,.rec-otra-lista li{flex-direction:column;align-items:stretch}
   .rec-mes-otro,.rec-mes-otro .etq{width:100%}
   .rec-mes-otro .btn{width:100%}
+  .rec-iva .tabla-caja{border:0;background:transparent;overflow:visible}
   .rec-iva-tabla thead{display:none}
   .rec-iva-tabla,.rec-iva-tabla tbody,.rec-iva-tabla tr,.rec-iva-tabla td{display:block;width:auto}
   .rec-iva-tabla tr{display:grid;grid-template-columns:1fr 1fr;gap:.15rem .9rem;padding:.65rem .8rem;margin-bottom:.5rem;border:1px solid var(--linea);border-radius:var(--r);background:#fff}
