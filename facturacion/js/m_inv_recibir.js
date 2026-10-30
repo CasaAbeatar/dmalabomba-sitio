@@ -241,7 +241,7 @@ export async function abrirFactura(ctx, clave, { previa = null } = {}) {
         await cargar();
       } });
     btnRecibir.addEventListener('click', () => accRecibir.ejecutar());
-    const marcarTodas = h('button.btn', { type: 'button', onclick: () => { formas.forEach((x) => x.marcarSiTiene()); contar(); } }, 'Marcar todas las que ya tienen artículo');
+    const marcarTodas = h('button.btn', { type: 'button', onclick: async () => { for (const x of formas) await x.marcarOCrear(); contar(); } }, 'Marcar todas las que ya tienen rubro o artículo');
     const ignorarToda = h('button.btn', { type: 'button', onclick: () => pedirIgnorar(ctx, f, null, () => cargar()) }, 'Toda la factura no es de inventario');
     const contableAqui = f.sociedad_id && f.sociedad_id === ctx.app.socId;
 
@@ -259,7 +259,7 @@ export async function abrirFactura(ctx, clave, { previa = null } = {}) {
         ? h('button.btn', { type: 'button', onclick: () => ctx.app.ir('recepcion', { clave: f.clave, buscar: numFactura(f.consecutivo) }) }, 'Ir a Contable (factura N.° ' + numFactura(f.consecutivo) + ')')
         : h('p.tenue.inv-chico', 'Esta factura es de ' + (f.sociedad_nombre || 'la otra empresa') + ': en Contable se responde desde una sesión de esa empresa.')),
       pend.length ? h('section.inv-grupo', h('h3', 'Líneas por recibir', h('span.inv-cuenta', String(pend.length))),
-        puede ? h('p.tenue.inv-chico', 'Revise cada línea, escoja el artículo y marque «Recibir esta línea». La sugerencia no se guarda sola. Los costos son sin IVA.') : null,
+        puede ? h('p.tenue.inv-chico', 'Escoja el rubro de cada línea y marque «Recibir esta línea»: el artículo se crea solo con el nombre de la factura y de él salen la bolsa, dónde se guarda y cuánto dura. «Detalles» solo se abre si hay algo que corregir. Los costos son sin IVA.') : null,
         h('div.inv-lineas-acciones', puede ? marcarTodas : null, ignorarToda),
         h('div.inv-lineas', formas.map((x) => x.el)),
         puede ? h('div.inv-barra-recibir',
@@ -284,7 +284,7 @@ export async function abrirFactura(ctx, clave, { previa = null } = {}) {
     if (!puede) {
       const el = h('article.inv-linea.bloqueada', { 'data-linea': l.linea }, h('div.inv-linea-cab', descLinea(l)),
         h('div.inv-linea-pie', h('button.btn', { type: 'button', onclick: () => pedirIgnorar(ctx, f, [l.linea], () => cargar()) }, 'No es de inventario')));
-      return { el, marcada: () => false, marcarSiTiene() {}, alCambiar() {}, problema: () => '', enfocarProblema() {}, datos: () => null };
+      return { el, marcada: () => false, marcarSiTiene() {}, marcarOCrear: async () => {}, alCambiar() {}, problema: () => '', enfocarProblema() {}, datos: () => null };
     }
     const sug = l.sugerencia || recordados.get(l.linea) || {};
     const avisarCambio = [];
@@ -294,6 +294,18 @@ export async function abrirFactura(ctx, clave, { previa = null } = {}) {
     const chk = h('input', { type: 'checkbox', 'aria-label': 'Recibir la línea ' + l.linea });
     const nombreArt = h('strong.inv-art-nombre');
     const btnArt = h('button.btn', { type: 'button', onclick: () => escogerArticulo() }, 'Escoger artículo');
+    // Rubro (de él salen la bolsa, dónde se guarda y cuánto dura) y nombre del artículo que se crea solo al marcar la línea
+    const rubro = h('select.campo', { 'aria-label': 'Rubro de la línea ' + l.linea }, h('option', { value: '' }, 'Escoja el rubro…'),
+      ...(cat.categorias || []).filter((c) => c.activo !== false).map((c) => h('option', { value: c.id }, c.nombre)));
+    rubro.value = (art && art.categoria_id) || sug.categoria_id || '';
+    const nombreNuevo = h('input.campo', { type: 'text', maxlength: 120, autocomplete: 'off', 'aria-label': 'Nombre del artículo de la línea ' + l.linea, value: (sug.articulo || l.descripcion || '').slice(0, 120) });
+    // Lo que la persona decide es el rubro, y de él sale la bolsa (comida preparada, unitario o suministro). El nombre interno del artículo se toma de la factura y solo se cambia en «Detalles».
+    const bolsaEl = h('span.inv-bolsa-dice');
+    const pintarBolsa = () => { const c = (cat.categorias || []).find((x) => x.id === rubro.value); bolsaEl.textContent = c ? 'Va a la bolsa: ' + (GRUPOS[c.grupo] || 'sin bolsa') : ''; };
+    rubro.addEventListener('change', () => { errorRubro.textContent = ''; pintarBolsa(); });
+    const filaRubro = h('div.inv-rubro-fila', h('label.etq', h('span', 'Rubro'), rubro), bolsaEl);
+    const filaNombre = h('label.etq.inv-c-nombre', h('span', 'Nombre interno del artículo (sale de la factura; cámbielo solo si hace falta)'), nombreNuevo);
+    const errorRubro = h('small.inv-eco.mal');
     const factor = h('input.campo.inv-num', { type: 'text', inputmode: 'decimal', autocomplete: 'off', 'aria-label': 'Cuántas unidades del artículo trae cada unidad de la factura' });
     const factorEco = h('small.inv-eco');
     const cantidad = campoCantidad({ etiqueta: 'Cantidad que entra', unidad: art?.unidad || '', alCambiar: () => { cantidadTocada = true; pintarCosto(); cambio(); } });
@@ -309,12 +321,12 @@ export async function abrirFactura(ctx, clave, { previa = null } = {}) {
     const zona = h('div');
     const ignorarBtn = h('button.btn' + (sug.no_inventario ? '.ambar' : ''), { type: 'button', onclick: () => pedirIgnorar(ctx, f, [l.linea], () => cargar()) }, 'No es de inventario');
     const campos = h('div.inv-linea-campos',
-      h('div.inv-campo-art', h('span.etq', 'Artículo del inventario'), h('div.inv-art-fila', nombreArt, btnArt)),
       h('label.etq.inv-c-conv', h('span', 'Conversión'), h('span.inv-con-unidad', h('span.inv-pre', 'Cada «' + (l.unidad || 'unidad') + '» de la factura trae'), factor, h('span.inv-unidad.inv-u-art')), factorEco),
-      cantidad.el,
       h('label.etq.inv-c-ubic', 'Dónde se guarda', ubic),
       h('div.etq.inv-c-vence', h('span', 'Vence'), vence, venceEco, h('label.inv-casilla.chica', noVence, h('span', 'No vence'))),
       h('div.inv-costo-fila', h('span.inv-costo-et', 'Costo sin IVA:'), costoTxtEl, costoDet));
+    const artFila = h('div.inv-campo-art', h('span.etq', 'Artículo del inventario'), h('div.inv-art-fila', nombreArt, btnArt));
+    const detalles = h('details.inv-detalles', h('summary', 'Detalles: conversión, dónde se guarda, vencimiento y costo'), artFila, filaNombre, campos);
     const sugTxt = sugerenciaTxt(sug);
     const simple = esSimple(cat);
     const resumen = h('p.tenue.inv-chico.inv-resumen-simple');
@@ -324,13 +336,16 @@ export async function abrirFactura(ctx, clave, { previa = null } = {}) {
         descLinea(l)),
       sugTxt ? h('p.inv-sug' + (sug.no_inventario ? '.no-inv' : ''), h('span.inv-sug-et', 'Sugerencia: '), sugTxt) : null,
       simple ? resumen : null,
-      campos,
+      filaRubro, errorRubro,
+      h('div.inv-fila-cant', cantidad.el),
+      detalles,
       h('div.inv-linea-pie', ignorarBtn, zona));
 
     function pintarArticulo(cambiar) {
       nombreArt.textContent = art ? art.nombre + ' (se cuenta en ' + unidadTxt(art.unidad, 2) + ')' : 'Sin escoger';
       nombreArt.classList.toggle('falta', !art);
-      btnArt.textContent = art ? 'Cambiar artículo' : 'Escoger artículo';
+      btnArt.textContent = art ? 'Cambiar artículo' : 'Escoger uno que ya existe';
+      filaRubro.hidden = !!art; filaNombre.hidden = !!art; errorRubro.textContent = ''; if (art && art.categoria_id) rubro.value = art.categoria_id;
       el.querySelector('.inv-u-art').textContent = art ? unidadTxt(art.unidad, 2) + ' del artículo' : 'del artículo';
       cantidad.unidad(art?.unidad || '');
       el.dataset.grupo = grupoDe(cat, art) || '';
@@ -390,9 +405,26 @@ export async function abrirFactura(ctx, clave, { previa = null } = {}) {
     }
     factor.addEventListener('input', () => { cantidadTocada = false; const fv = leerFactor(); if (Number.isFinite(fv) && fv > 0) cantidad.poner(Math.round(Number(l.cantidad) * fv * 1000) / 1000); pintarFactor(); pintarCosto(); cambio(); });
     chk.addEventListener('change', async () => {
-      if (chk.checked && !art) { chk.checked = false; await escogerArticulo(); if (art) chk.checked = true; }
+      if (chk.checked && !art) { chk.checked = false; if (await asegurarArticulo()) chk.checked = true; }
       el.classList.toggle('marcada', chk.checked); cambio();
     });
+    // Sin artículo todavía: se crea con el nombre y el rubro de esta línea (o se usa el que ya tenga ese nombre) y se llenan solos la bolsa, dónde se guarda y el vencimiento
+    async function asegurarArticulo() {
+      if (art) return true;
+      if (!rubro.value) { errorRubro.textContent = 'Escoja el rubro de la línea ' + l.linea + ' para poder recibirla.'; rubro.focus(); return false; }
+      const nombre = nombreNuevo.value.trim();
+      if (nombre.length < 2) { errorRubro.textContent = 'Escriba el nombre del artículo (al menos 2 letras).'; nombreNuevo.focus(); return false; }
+      errorRubro.textContent = ''; rubro.disabled = nombreNuevo.disabled = true;
+      try {
+        const nuevo = await inv.articuloRapido(nombre, rubro.value, l.cabys || '', unidadSugerida(l.unidad));
+        ctx.articulos.olvidar();
+        articulos = await ctx.articulos.lista(true);
+        art = articulos.find((a) => a.id === nuevo.id) || nuevo;
+        pintarArticulo(true); el.classList.add('marcada'); guardarEstado();
+        return true;
+      } catch (e) { errorRubro.textContent = (e && e.message) || 'No se pudo crear el artículo. Intente de nuevo.'; return false; }
+      finally { rubro.disabled = nombreNuevo.disabled = false; }
+    }
     async function escogerArticulo() {
       const opciones = articulos.filter((a) => a.activo !== false).map(opcionDeArticulo);
       const elegido = await elegirArticulo({
@@ -414,7 +446,7 @@ export async function abrirFactura(ctx, clave, { previa = null } = {}) {
     function guardarEstado() {
       memoria.set(l.linea, { art, factor: factor.value, cantidad: cantidad.leer(), tocada: cantidadTocada, ubic: ubic.value, vence: vence.value, editada: venceEditada, noVence: noVence.checked, costoAbierto: costoDet.open, costo: costoInput.value, marcada: chk.checked });
     }
-    pintarArticulo(true);
+    pintarArticulo(true); pintarBolsa();
     const previo = memoria.get(l.linea);
     if (previo) {
       if (previo.art) { art = articulos.find((a) => a.id === previo.art.id) || previo.art; pintarArticulo(false); }
@@ -430,6 +462,7 @@ export async function abrirFactura(ctx, clave, { previa = null } = {}) {
       el,
       marcada: () => chk.checked,
       marcarSiTiene: () => { if (art) { chk.checked = true; el.classList.add('marcada'); } },
+      marcarOCrear: async () => { if (art || rubro.value) { if (await asegurarArticulo()) { chk.checked = true; el.classList.add('marcada'); } } },
       alCambiar: (fn) => avisarCambio.push(fn),
       problema() {
         if (!art) return 'Línea ' + l.linea + ': escoja el artículo.';
@@ -441,7 +474,7 @@ export async function abrirFactura(ctx, clave, { previa = null } = {}) {
         if (costoDet.open && costoInput.value.trim()) { const c = leerMonto(costoInput.value); if (!Number.isFinite(c) || c < 0) return 'Línea ' + l.linea + ': el costo corregido no es un monto válido.'; }
         return '';
       },
-      enfocarProblema() { el.scrollIntoView({ block: 'center' }); (art ? cantidad.input : btnArt).focus({ preventScroll: true }); },
+      enfocarProblema() { el.scrollIntoView({ block: 'center' }); if (!art || (cantidad.input && !cantidad.valido())) { if (!art) detalles.open = false; } (art ? cantidad.input : rubro).focus({ preventScroll: true }); },
       datos() {
         const x = { clave: f.clave, linea: l.linea, articulo_id: art.id, factor: String(leerFactor()), cantidad: cant(cantidad.leer()), ubicacion_id: ubic.value };
         if (noVence.checked) x.sin_vencimiento = true; else if (venceEditada) x.vence_en = vence.value;
