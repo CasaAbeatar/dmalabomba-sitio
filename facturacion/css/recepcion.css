@@ -6,6 +6,9 @@
 .rec-correo-estado.ok{border-color:#a8d5bd;background:var(--verde-suave);color:#14583a}
 .rec-correo-estado.aviso{border-color:#efd08f;background:var(--ambar-suave);color:#6b4600}
 .rec-correo-estado.error{border-color:#e9b3b7;background:var(--rojo-suave);color:var(--rojo-osc)}
+.rec-correo-estado p{margin:0}
+.rec-correo-estado p+p{margin-top:.35rem}
+.rec-ejemplos{margin:.35rem 0 0;padding-left:1.1rem;font-size:.9rem}
 .rec-kpis{grid-template-columns:repeat(5,minmax(0,1fr));margin-bottom:.9rem}
 .rec-kpis .kpi{display:flex;flex-direction:column;gap:.25rem;padding:.8rem .9rem}
 .kpi-t{font-size:.78rem;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:var(--tinta2)}
@@ -44,7 +47,12 @@
 .rec-estado{display:flex;flex-direction:column;gap:.2rem;align-items:flex-start}
 .rec-estado .chip{white-space:normal}
 .rec-ver{justify-self:end;font-size:.85rem;font-weight:600;color:var(--rojo);border:1px solid var(--borde-control,#8f8672);border-radius:var(--r);padding:.35rem .6rem;background:#fff;text-align:center}
-.rec-otras{padding:.7rem 1rem;margin:0;border-top:1px solid var(--linea)}
+.rec-otras{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:.5rem 1rem;padding:.7rem 1rem;margin:0;border-top:1px solid var(--linea)}
+.rec-otras p{margin:0;flex:1 1 320px}
+.rec-otra-lista{list-style:none;margin:.6rem 0 0;padding:0;border:1px solid var(--linea);border-radius:var(--r)}
+.rec-otra-lista li{display:flex;justify-content:space-between;gap:1rem;padding:.65rem .8rem;border-bottom:1px solid var(--linea)}
+.rec-otra-lista li:last-child{border-bottom:0}
+.rec-otra-lista small{display:block}
 .rec-lista>.lis-aviso{margin:.6rem 1rem}
 
 /* Detalle */
@@ -71,6 +79,80 @@
 .rec-tecnico summary{cursor:pointer;min-height:48px;display:flex;align-items:center;font-weight:600}
 .rec-tecnico code{overflow-wrap:anywhere;font-size:.8rem}
 
+/* Tipo de comprobante: la nota de crédito resta, la de débito suma */
+.chip.rec-tipo{margin-top:.25rem;font-size:.74rem;width:max-content}
+.chip.rec-tipo.nc{color:#14583a;border-color:var(--borde-ok);background:var(--verde-suave)}
+.chip.rec-tipo.nd{color:#6b4600;border-color:var(--borde-ambar);background:var(--ambar-suave)}
+.rec-prov{display:flex;flex-direction:column;min-width:0}
+.rec-aviso-fila{color:#6b4600!important;font-weight:600!important}
+.rec-avisos-det{margin:0 0 .9rem;padding:.6rem .9rem .6rem 1.9rem;border:1px solid #efd08f;background:var(--ambar-suave);border-radius:var(--r);color:#6b4600;font-size:.92rem}
+
+/* Avisos de hoy: facturas y correos sin XML */
+.rec-avisos{margin:0 0 .9rem;padding:.8rem .9rem;border:1px solid #efd08f;border-radius:14px;background:var(--ambar-suave);color:#4d3300}
+.rec-aviso-tit{display:flex;flex-direction:column;gap:.15rem}
+.rec-sinxml{list-style:none;margin:.6rem 0 0;padding:0;display:flex;flex-direction:column;gap:.4rem}
+.rec-sinxml li{display:flex;justify-content:space-between;align-items:center;gap:.8rem;padding:.55rem .7rem;border:1px solid #efd08f;border-radius:var(--r);background:#fff}
+.rec-sinxml li>div{min-width:0}
+.rec-sinxml strong,.rec-sinxml small{display:block;overflow-wrap:anywhere}
+
+/* Filtro de la pestaña Plazo vencido */
+.rec-venc-filtro{display:flex;flex-wrap:wrap;gap:.5rem;margin:-.2rem 0 .8rem}
+.rec-venc-filtro .btn[aria-pressed=true]{background:var(--rojo);border-color:var(--rojo);color:#fff}
+
+/* Ventana de respuesta a Hacienda */
+.rec-dlg{display:flex;flex-direction:column;gap:.85rem}
+.rec-dlg>p{margin:0}
+.rec-pie{position:sticky;bottom:-1.2rem;display:flex;flex-wrap:wrap;justify-content:flex-end;gap:.6rem;margin:.2rem -1.2rem -1.2rem;padding:.85rem 1.2rem;border-top:1px solid var(--linea);background:var(--papel);border-radius:0 0 16px 16px}
+.rec-cond{border:0;margin:0;padding:0;min-width:0}
+.rec-cond legend{font-weight:600;font-size:.95rem;margin-bottom:.45rem;padding:0}
+.rec-opciones{display:flex;flex-direction:column;gap:.45rem}
+.rec-opcion{display:flex;gap:.7rem;align-items:flex-start;min-height:56px;padding:.65rem .8rem;border:1px solid var(--linea2);border-radius:var(--r);background:#fff;cursor:pointer}
+.rec-opcion input{margin-top:.1rem}
+.rec-opcion strong{display:block;font-weight:600}
+.rec-opcion small{display:block;line-height:1.35;margin-top:.15rem}
+.rec-opcion:has(input:checked){border-color:var(--rojo);box-shadow:0 0 0 1px var(--rojo) inset;background:#fffaf9}
+.rec-pct-caja{margin-top:.6rem;padding:.7rem .8rem;border:1px dashed var(--linea2);border-radius:var(--r)}
+.rec-pct{max-width:200px}
+.rec-conf-intro{font-weight:600}
+.rec-conf{display:flex;flex-direction:column;border:1px solid var(--linea2);border-radius:var(--r);background:#fff}
+.rec-conf-fila{display:flex;justify-content:space-between;align-items:baseline;gap:1rem;padding:.6rem .85rem;border-bottom:1px solid var(--linea)}
+.rec-conf-fila span{color:var(--tinta2)}
+.rec-conf-fila strong{text-align:right;font-weight:600}
+.rec-conf-fila.grande strong{font-size:1.25rem;font-weight:700}
+.rec-conf-fila.aviso{background:var(--ambar-suave)}
+.rec-conf-det{display:flex;flex-direction:column;gap:.2rem;padding:.6rem .85rem}
+.rec-conf-det span{color:var(--tinta2);font-size:.85rem}
+.rec-conf-det q{font-weight:600;overflow-wrap:anywhere}
+.rec-conf-notas{margin:0;padding-left:1.15rem;font-size:.92rem;color:var(--tinta2)}
+.rec-conf-notas li+li{margin-top:.25rem}
+.rec-guardada{margin:.4rem 0 .6rem}
+.rec-bloqueo{margin:0}
+.rec-enviando{margin:0;padding:.7rem .9rem;border:1px solid var(--linea2);border-radius:var(--r);background:#fcfaf5;font-weight:600}
+.rec-en-camino{margin:.6rem 0 0;font-weight:600;color:#6b4600}
+.lis-aviso.mal{border-color:#e9b3b7;background:var(--rojo-suave);color:var(--rojo-osc)}
+.rec-desglose{margin:.4rem 0}
+.rec-desglose ul{margin:.2rem 0 0;padding-left:1.1rem}
+
+/* IVA del mes */
+.rec-mes{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:.8rem;margin-bottom:.8rem}
+.rec-mes .per-botones{flex:1 1 300px}
+.rec-mes-otro{display:flex;align-items:flex-end;gap:.5rem;flex-wrap:wrap}
+.rec-mes-otro .etq{min-width:180px}
+.rec-iva-kpis{grid-template-columns:repeat(3,minmax(0,1fr));margin:.4rem 0 .9rem}
+.rec-iva h3{margin:1.1rem 0 .5rem}
+.rec-iva-desc{margin-top:.6rem}
+.rec-iva-desc h3{margin:0}
+.rec-iva-tabla td .btn{white-space:nowrap}
+.rec-sin-conf{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:.5rem 1rem}
+.rec-iva-cond{list-style:none;margin:.6rem 0 0;padding:0;max-width:560px}
+.rec-iva-cond li{display:flex;justify-content:space-between;gap:1rem;padding:.4rem 0;border-bottom:1px solid var(--linea)}
+.rec-excl ul{list-style:none;margin:0;padding:0}
+.rec-excl li{display:flex;justify-content:space-between;align-items:center;gap:1rem;padding:.5rem 0;border-bottom:1px solid var(--linea)}
+.rec-iva-tot{display:flex;flex-wrap:wrap;gap:.4rem 1.4rem;margin:.4rem 0 .7rem;padding:.6rem .8rem;border:1px solid var(--linea);border-radius:var(--r);background:#fff}
+.rec-iva-lista{display:flex;flex-direction:column;border:1px solid var(--linea);border-radius:14px;overflow:hidden}
+.rec-fila.rec-fila-iva{grid-template-columns:110px minmax(0,2.4fr) 130px 130px}
+div.rec-fila{cursor:default}
+
 /* Aviso numérico en la pestaña */
 
 @media(max-width:1100px){.rec-kpis{grid-template-columns:repeat(3,minmax(0,1fr))}}
@@ -84,6 +166,8 @@
   .rec-et{display:inline!important;margin-right:.35rem}
   .rec-estado{grid-column:1 / -1;order:5}
   .rec-acciones{grid-template-columns:1fr}
+  .rec-iva-kpis{grid-template-columns:1fr}
+  .rec-fila.rec-fila-iva{grid-template-columns:1fr 1fr}
 }
 @media(max-width:640px){
   .rec-kpis{grid-template-columns:repeat(2,minmax(0,1fr));gap:.6rem}
@@ -97,6 +181,22 @@
   .rec-modal .modal-cuerpo{padding:.8rem .9rem;min-width:0}
   .rec-modal .modal-tit{padding:.8rem .9rem}
   .rec-datos{grid-template-columns:1fr 1fr}
+  .rec-pie{margin:.2rem -.9rem -.8rem;padding:.75rem .9rem;bottom:-.8rem}
+  .rec-pie .btn{flex:1 1 100%}
+  .rec-conf-fila{flex-direction:column;gap:.1rem}
+  .rec-conf-fila strong{text-align:left}
+  .rec-sinxml li,.rec-excl li,.rec-otra-lista li{flex-direction:column;align-items:stretch}
+  .rec-mes-otro,.rec-mes-otro .etq{width:100%}
+  .rec-mes-otro .btn{width:100%}
+  .rec-iva-tabla thead{display:none}
+  .rec-iva-tabla,.rec-iva-tabla tbody,.rec-iva-tabla tr,.rec-iva-tabla td{display:block;width:auto}
+  .rec-iva-tabla tr{display:grid;grid-template-columns:1fr 1fr;gap:.15rem .9rem;padding:.65rem .8rem;margin-bottom:.5rem;border:1px solid var(--linea);border-radius:var(--r);background:#fff}
+  .rec-iva-tabla td{border:0;padding:0;text-align:left}
+  .rec-iva-tabla td:first-child{grid-column:1 / -1;font-weight:700}
+  .rec-iva-tabla td[data-et]{display:flex;justify-content:space-between;gap:.5rem;font-size:.92rem}
+  .rec-iva-tabla td[data-et]::before{content:attr(data-et);color:var(--tinta2);font-size:.8rem;white-space:nowrap}
+  .rec-iva-tabla td:last-child{grid-column:1 / -1}
+  .rec-iva-tabla td:last-child .btn{width:100%}
   .rec-modal .tabla-caja{border:0;background:transparent;overflow:visible}
   .rec-modal .tabla thead{display:none}
   .rec-modal .tabla,.rec-modal .tabla tbody,.rec-modal .tabla tr,.rec-modal .tabla td{display:block;width:auto}

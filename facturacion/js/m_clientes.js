@@ -35,9 +35,11 @@ export default {
         c.correo ? h('span.mt-sub', 'Correo: ' + c.correo) : h('span.mt-sub', h('span.chip', 'Sin correo')),
         c.telefono ? h('span.mt-sub', 'Teléfono: ' + c.telefono) : null,
         // Dirección: sin ningún dato -> aviso suave; con algunos datos -> «Dirección incompleta» y cada dato con su rótulo («Sin dato» donde falta). Nada de esto impide facturar.
-        c.falta_direccion === true ? h('span.mt-sub', h('span.chip.suave', 'Sin dirección'), ' No hace falta para facturar; se puede agregar al abrir el cliente.')
-          : (c.direccion_incompleta === true || (!('direccion_incompleta' in c) && estadoDireccion(c) === 'parcial')) ? h('span.mt-sub', h('span.chip.suave', 'Dirección incompleta'), ' No hace falta para facturar.', resumenDireccion(c, { compacto: true }))
-          : null),
+        // La marca sale de estadoDireccion (la misma función del formulario), no de las llaves falta_direccion / direccion_incompleta de la base,
+        // que no miran el largo de las señas ni el catálogo: así la lista y el formulario dicen siempre lo mismo.
+        ((est) => est === 'sin' ? h('span.mt-sub', h('span.chip.suave', 'Sin dirección'), ' No hace falta para facturar; se puede agregar al abrir el cliente.')
+          : est === 'parcial' ? h('span.mt-sub', h('span.chip.suave', 'Dirección incompleta'), ' No hace falta para facturar.', resumenDireccion(c, { compacto: true }))
+          : null)(estadoDireccion(c))),
       h('div.mt-btns', h('button.btn', { type: 'button', onclick: () => abrir(c) }, 'Ver o editar'),
         (() => { const b = h('button.btn' + (c.activo === false ? '.primario' : ''), { type: 'button', onclick: () => conBotonM(b, async () => { if (c.activo !== false && !(await confirmar('¿Desactivar a «' + nombrePropio(c.nombre) + '»? Ya no aparecerá al buscar cliente para facturar. Sus facturas anteriores no cambian y se puede activar de nuevo.', { si: 'Sí, desactivar', no: 'No, volver', peligro: true }))) return; await clienteActivar(c.id, c.activo === false); toast(c.activo === false ? 'Cliente activado. Ya aparece al buscar cliente.' : 'Cliente desactivado. Ya no aparece al buscar cliente.'); await cargar(); }) }, c.activo === false ? 'Activar' : 'Desactivar'); return b; })()));
 

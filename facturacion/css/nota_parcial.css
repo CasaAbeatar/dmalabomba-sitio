@@ -75,6 +75,17 @@
 .np-pie .np-sin-deshacer[hidden]{display:none}
 .np-sin-turno{font-weight:600}
 
+/* «Revise primero»: hay una nota de este documento que quedó sin saberse */
+.np-previo .np-previo-estado{font-weight:600}
+
+/* Avisos que se quedan hasta que la persona los cierre: lo que pasó con una nota cuando ya no hay ventana donde decirlo (por ejemplo, después de que venció la sesión) */
+#np-avisos{position:fixed;top:.75rem;left:50%;transform:translateX(-50%);z-index:230;display:flex;flex-direction:column;gap:.5rem;width:min(94vw,540px);max-height:calc(100vh - 1.5rem);overflow:auto;pointer-events:none}
+.np-aviso-pend{pointer-events:auto;border:1px solid #efd08f;border-left:4px solid var(--borde-ambar);background:var(--ambar-suave);border-radius:12px;padding:.8rem 1rem;display:flex;flex-direction:column;gap:.6rem;box-shadow:0 10px 30px rgba(29,26,23,.22)}
+.np-aviso-pend p{margin:0;font-weight:600;overflow-wrap:anywhere}
+.np-aviso-botones{display:flex;flex-wrap:wrap;gap:.5rem}
+.np-aviso-botones .btn{flex:1 1 10rem;min-height:52px}
+@media print{#np-avisos{display:none!important}}
+
 @media(max-width:760px){
   .np-opciones{grid-template-columns:1fr}
   .np-l-entrada .btn{flex:1 1 100%}

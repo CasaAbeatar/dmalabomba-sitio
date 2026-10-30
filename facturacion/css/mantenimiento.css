@@ -175,5 +175,13 @@
 .dir-parte{overflow-wrap:anywhere;line-height:1.35}
 .dir-et{color:var(--tinta2);font-weight:600}
 .dir-parte.falta .dir-val{color:#6b6558;font-style:italic}
+/* Un código guardado que no está en la lista oficial: se ve igual que en la lista desplegable y en ámbar, porque no sale en la factura */
+.dir-parte.fuera .dir-val{color:#6b4500}
+/* Si lo elegido en una lista de la dirección es largo («Código 99 (no está en la lista)», «Aguacaliente o San Francisco»), las tres van a lo ancho para que se lea entero */
+.rejilla.dir-ubic.a-lo-ancho{grid-template-columns:1fr}
+/* Barrio u otras señas: contador siempre visible y, si pasan del tope (contado en caracteres, el que acepta Hacienda), el aviso en rojo en su lugar */
+.mt-form .etq small.dir-cuenta{color:var(--tinta2);font-variant-numeric:tabular-nums}
+.mt-form .etq small.dir-tope{color:var(--rojo-osc);font-weight:600}
+.mt-form .campo[aria-invalid="true"]{border-color:var(--borde-mal)}
 .dir-resumen.compacto{display:block;margin-top:.25rem;padding:0;border:0;background:none;font-size:.9rem}
 .dir-resumen.compacto .dir-parte{display:inline-block;margin:0 .8rem .1rem 0}

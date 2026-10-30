@@ -433,6 +433,11 @@
 .cobro-bloqueo[hidden]{display:none}
 .cobro-bloqueo p{margin:0;font-weight:500}
 .cobro-bloqueo .btn{max-width:100%}
+/* Cobro bloqueado: el botón se ve apagado pero recibe el toque (lleva la vista al aviso) y al lado dice por qué */
+.btn.bloqueado{opacity:.5;cursor:not-allowed}
+.cobro-razon{flex:1 0 100%;margin:0;font-weight:600;color:var(--rojo-osc);font-size:.95rem}
+.cobro-razon[hidden]{display:none}
+.cobro-pie.con-razon{flex-wrap:wrap}
 .cobro-imp{border:1px solid var(--linea);border-radius:12px;padding:.7rem 1rem;background:#fffdf9;display:flex;gap:.8rem;justify-content:space-between;align-items:center;flex-wrap:wrap}
 .cobro-imp-txt{flex:1 1 240px;min-width:0}
 .avisos-caja:empty{display:none}

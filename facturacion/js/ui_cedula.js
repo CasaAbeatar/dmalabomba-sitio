@@ -13,8 +13,12 @@
 //   await ced.validar() -> null si todo está bien, o { mensaje, campo } con el primer problema
 //   ced.valores()     -> { tipo_id, identificacion, nombre, actividad_codigo, sin_verificar_motivo, verificado }
 //
-// Reglas: el número es siempre texto de solo dígitos (se quitan guiones y espacios al pegar; nunca se pierden ceros ni se corta el primer número);
-// el tipo se detecta por el largo; se consulta a Hacienda mientras se escribe (espera 0,5 s sin teclear y cancela la consulta vieja).
+// Reglas: el número es siempre texto (se quitan guiones y espacios al pegar; nunca se pierden ceros ni se corta el primer número).
+//  * Cédula física, jurídica, DIMEX y NITE (01 a 04) llevan solo números, con su largo; el tipo se detecta por la cantidad de números.
+//  * Extranjero no domiciliado y no contribuyente (05 y 06: pasaportes y otros documentos) llevan letras y números, hasta 20, con las letras en
+//    mayúsculas: lo mismo que guarda la base (fx_cliente_guardar) y lo que va en el XML. Se eligen con «Elegir el tipo» / «Cambiar tipo».
+//  * Si se escriben letras sin haber elegido un tipo que las lleve, NO se borran: se avisa en palabras y se ofrece elegir el tipo.
+// Se consulta a Hacienda mientras se escribe (solo 01 a 04; espera 0,5 s sin teclear y cancela la consulta vieja).
 // De Hacienda solo se usan el nombre, el tipo y las actividades económicas (que se muestran en palabras, no como código crudo).
 import { h, TIPOS_ID, fechaCorta, nombrePropio } from './util.js';
 import { apiM } from './api_mantenimiento.js';
@@ -58,6 +62,17 @@ export function tipoDetectado(d) {
   return '';
 }
 const LARGOS = { '01': [9, 9], '02': [10, 10], '03': [11, 12], '04': [10, 10] };
+// Tipos cuyo documento puede llevar letras (pasaportes y otros): 05 extranjero no domiciliado y 06 no contribuyente
+export const llevaLetras = (t) => t === '05' || t === '06';
+export const MAX_ID_LETRAS = 20;
+// El número como se guarda: en 05 y 06 letras y números (sin espacios, guiones ni signos; letras en mayúsculas, como hace la base), hasta 20.
+// En los demás tipos solo números; pero si la persona escribió letras se conservan (en mayúsculas) para avisarle en vez de borrarlas sin decir nada.
+export function limpiarNumeroId(s, tipo) {
+  const t = String(s ?? '').normalize('NFC');
+  if (llevaLetras(tipo) || /[A-Za-z]/.test(t)) return t.replace(/[^0-9A-Za-z]/g, '').toUpperCase().slice(0, MAX_ID_LETRAS);
+  return t.replace(/\D/g, '').slice(0, MAX_ID_LETRAS);
+}
+const tieneLetras = (d) => /[A-Z]/.test(d);
 const MOTIVOS_RAPIDOS = ['Persona recién inscrita', 'Cliente de otro país', 'Hacienda no lo muestra en la consulta'];
 const MOTIVOS = {
   falto_3: 'Al número le faltaba el 3 del principio.',
@@ -85,10 +100,12 @@ export function crearCampoIdentificacion(opts = {}) {
   let acts = Array.isArray(c?.actividades) ? c.actividades.filter((a) => a && RE_ACTIVIDAD.test(String(a.codigo))) : [];
   let auto = { nombre: '', act: '' }; // lo último que se llenó solo desde Hacienda
   let dup = null;
-  let ultimo = String(c?.identificacion || opts.numeroInicial || '').replace(/\D/g, '').slice(0, 20);
+  // Un cliente 05 o 06 guardado con letras (pasaporte AB123456) se carga tal cual; los demás, solo con sus números
+  let ultimo = limpiarNumeroId(c?.identificacion || opts.numeroInicial || '', tipoManual);
 
   /* ---------- Controles ---------- */
-  const ident = h('input.campo.ced-num', { type: 'text', inputmode: 'numeric', autocomplete: 'off', autocorrect: 'off', spellcheck: 'false', enterkeyhint: 'next', value: ultimo, 'aria-label': 'Número de identificación', 'aria-describedby': 'ced-ayuda-' + uid });
+  // Teclado de números en el celular para las cédulas; con un tipo que lleva letras (o si ya trae letras) el teclado normal, en mayúsculas
+  const ident = h('input.campo.ced-num', { type: 'text', inputmode: 'numeric', autocomplete: 'off', autocorrect: 'off', autocapitalize: 'characters', spellcheck: 'false', enterkeyhint: 'next', value: ultimo, 'aria-label': 'Número de identificación', 'aria-describedby': 'ced-ayuda-' + uid });
   const ayuda = h('small.ced-ayuda', { id: 'ced-ayuda-' + uid });
   const tipoTxt = h('span.ced-tipo-txt');
   const tipoSel = h('select.campo', { hidden: true, 'aria-label': 'Tipo de identificación' }, Object.entries(TIPOS_ID).map(([k, v]) => h('option', { value: k }, v)));
@@ -124,12 +141,15 @@ export function crearCampoIdentificacion(opts = {}) {
   /* ---------- Reglas ---------- */
   function tipoActual() {
     if (r?.ok && /^0[1-4]$/.test(r.tipo || '')) return r.tipo;
-    return tipoManual || tipoDetectado(ident.value);
+    return tipoManual || (tieneLetras(ident.value) ? '' : tipoDetectado(ident.value)); // con letras el largo no dice el tipo
   }
   // Problemas que se ven sin consultar a Hacienda. grave=false significa "todavía está escribiendo".
   function errorLocal() {
     const d = ident.value, n = d.length, t = tipoActual();
-    if (!n || t === '05' || t === '06') return null;
+    if (!n || llevaLetras(t)) return null;
+    if (tieneLetras(d)) return { grave: true, titulo: t ? TIPOS_ID[t] + ' lleva solo números' : 'Este número lleva letras',
+      detalle: 'Una cédula física, una jurídica, un DIMEX y un NITE llevan solo números. Si es un pasaporte u otro documento con letras, toque «Cambiar tipo» y elija «'
+        + TIPOS_ID['05'] + '» o «' + TIPOS_ID['06'] + '». Si fue un error al escribir, borre la letra.' };
     if (n > 12) return { grave: true, titulo: 'Lleva ' + n + ' números y son demasiados', detalle: 'Una cédula tiene como máximo 12 números. Revise si repitió algún número.' };
     if (n < 9) return { grave: tocado, titulo: 'Lleva ' + n + (n === 1 ? ' número' : ' números') + (tocado ? ' y faltan' : ''), detalle: (tocado ? 'Faltan números. ' : 'Siga escribiendo. ') + 'Una cédula física tiene 9 números, una jurídica 10 y un DIMEX 11 o 12.' };
     const l = LARGOS[t];
@@ -232,7 +252,7 @@ export function crearCampoIdentificacion(opts = {}) {
     const d = ident.value, t = tipoActual();
     clearTimeout(tim); tim = null;
     if (!d) fase = 'vacio';
-    else if (t === '05' || t === '06') fase = 'otro';
+    else if (llevaLetras(t)) fase = 'otro';
     else if (errorLocal()) fase = 'local';
     else { fase = 'consultando'; tim = setTimeout(() => { tim = null; consultar(false); }, 500); }
     pintar();
@@ -240,14 +260,15 @@ export function crearCampoIdentificacion(opts = {}) {
   }
   function alEscribir() {
     const crudo = ident.value;
-    const d = crudo.replace(/\D/g, '').slice(0, 20); // pegar "3-102-765594" deja 3102765594; el cero del inicio se conserva
+    // pegar "3-102-765594" deja 3102765594 (el cero del inicio se conserva); en 05 y 06 «ab 123-456» queda AB123456
+    const d = limpiarNumeroId(crudo, tipoManual);
     if (d !== crudo) ident.value = d;
     if (d === ultimo) return;
     ultimo = d;
     cancelar();
     soltar();
     sinConfirmar = false;
-    if (tipoManual && tipoManual !== '05' && tipoManual !== '06') tipoManual = null;
+    if (tipoManual && !llevaLetras(tipoManual)) tipoManual = null;
     reevaluar();
     opts.alCambiar?.(d);
   }
@@ -257,11 +278,17 @@ export function crearCampoIdentificacion(opts = {}) {
 
   btnTipo.addEventListener('click', () => { abrirTipo = !abrirTipo; pintar(); if (abrirTipo) tipoSel.focus(); });
   tipoSel.addEventListener('change', () => {
-    const v = tipoSel.value, det = tipoDetectado(ident.value);
+    const v = tipoSel.value, det = tieneLetras(ident.value) ? '' : tipoDetectado(ident.value);
     tipoManual = v === det ? null : v;
     abrirTipo = false;
     cancelar(); sinConfirmar = false; r = null;
+    // Lo escrito no se pierde al cambiar de tipo: en 05 y 06 se dejan letras y números; en los demás, si había letras, se avisa (no se borran)
+    const d = limpiarNumeroId(ident.value, tipoManual);
+    if (d !== ident.value) ident.value = d;
+    ultimo = d;
     reevaluar();
+    // con un tipo que lleva letras se sigue escribiendo en el número, ya con el teclado de letras del celular
+    if (llevaLetras(tipoManual)) ident.focus();
   });
 
   /* ---------- Duplicados ---------- */
@@ -324,9 +351,13 @@ export function crearCampoIdentificacion(opts = {}) {
     ident.classList.toggle('bien', fase === 'encontrada');
 
     // Ayuda bajo el número
-    ayuda.textContent = !n ? 'Escriba solo los números, sin guiones ni espacios. Si pega la cédula con guiones, el sistema los quita.'
-      : (t === '05' || t === '06') ? 'Escriba el número del documento, solo números.'
+    const conLetras = llevaLetras(t);
+    ayuda.textContent = conLetras ? 'Escriba el número del documento como aparece en él: letras y números, hasta ' + MAX_ID_LETRAS + '. Los espacios y guiones se quitan solos.'
+      : !n ? 'Escriba solo los números, sin guiones ni espacios. Si pega la cédula con guiones, el sistema los quita.'
       : 'Cédula física: 9 números. Jurídica: 10 números y empieza con 3. DIMEX: 11 o 12 números.';
+    // Teclado del celular: de números para las cédulas; normal (con letras) para pasaportes y otros documentos, o si ya se escribieron letras
+    const teclado = conLetras || tieneLetras(d) ? 'text' : 'numeric';
+    if (ident.getAttribute('inputmode') !== teclado) ident.setAttribute('inputmode', teclado);
 
     ayuda.hidden = n > 0; // al escribir, la caja de estado ya dice lo que falta
     nombre.placeholder = ['no_encontrada', 'servicio', 'sesion', 'otro', 'formato'].includes(fase) ? 'Escriba el nombre o la razón social' : 'Se llena solo cuando Hacienda confirma el número';
@@ -337,13 +368,16 @@ export function crearCampoIdentificacion(opts = {}) {
       if (r?.ok && TIPOS_ID[r.tipo]) tipoTxt.append('Tipo: ', h('strong', TIPOS_ID[r.tipo]), h('span.via', ' (según Hacienda)'));
       else if (tipoManual) tipoTxt.append('Tipo: ', h('strong', TIPOS_ID[tipoManual]), h('span.via', ' (lo eligió usted)'));
       else if (t) tipoTxt.append('Tipo: ', h('strong', TIPOS_ID[t]), h('span.via', ' (por la cantidad de números)'));
+      else if (tieneLetras(d)) tipoTxt.append('Tipo: falta elegirlo, porque el número lleva letras.');
       else tipoTxt.append('Todavía no se puede saber el tipo: faltan o sobran números.');
       if (!nuevo && c.tipo_id && TIPOS_ID[c.tipo_id] && t && c.tipo_id !== t && /^0[1-4]$/.test(c.tipo_id) && /^0[1-4]$/.test(t)) {
         tipoTxt.append(h('span.via', ' · Estaba guardado como ' + TIPOS_ID[c.tipo_id] + '. Al guardar se corrige.'));
       }
-    }
-    btnTipo.hidden = !n || !!r?.ok;
-    tipoFila.hidden = !n; // sin número escrito no hay nada que decir del tipo
+    } else if (tipoManual) tipoTxt.append('Tipo: ', h('strong', TIPOS_ID[tipoManual]), h('span.via', ' (lo eligió usted)'));
+    else tipoTxt.append('¿Pasaporte u otro documento con letras? Elija primero el tipo.');
+    btnTipo.hidden = !!r?.ok;
+    btnTipo.textContent = n || tipoManual ? 'Cambiar tipo' : 'Elegir el tipo';
+    tipoFila.hidden = false; // también sin número: así un pasaporte se puede elegir antes de escribir (en el celular, para tener el teclado con letras)
     btnTipo.setAttribute('aria-expanded', String(abrirTipo));
     tipoSel.hidden = !(abrirTipo && !r?.ok);
     tipoSel.value = t || '01';
@@ -370,7 +404,7 @@ export function crearCampoIdentificacion(opts = {}) {
     else if (fase === 'servicio') nodo = caja('gris', '-', 'Hacienda no responde en este momento',
       'Puede seguir: el cliente se guarda marcado como «sin verificar» y se confirma después. Revise bien el número, porque Hacienda rechaza las facturas con un número que no existe.' + (r?.mensaje ? ' ' + r.mensaje : ''), btnVolver());
     else if (fase === 'sesion') nodo = caja('rojo', '✕', 'Su sesión venció', 'Entre de nuevo con su usuario y PIN para poder consultar a Hacienda.');
-    else if (fase === 'otro') nodo = caja('gris', '-', 'Este tipo de documento no se consulta en Hacienda', 'Escriba el nombre completo a mano.');
+    else if (fase === 'otro') nodo = caja('gris', '-', 'Este tipo de documento no se consulta en Hacienda', 'El número puede llevar letras y números (hasta ' + MAX_ID_LETRAS + '). Escriba el nombre completo a mano.');
     estado._k = claveEstado;
     estado.replaceChildren(...(nodo ? [nodo] : []));
     }
@@ -460,7 +494,7 @@ export function crearCampoIdentificacion(opts = {}) {
     const e = errorLocal();
     if (e) return { mensaje: e.titulo + '. ' + e.detalle, campo: ident };
     if (!/^0[1-6]$/.test(t || '')) return { mensaje: 'No se pudo saber el tipo de identificación. Revise el número.', campo: ident };
-    if ((t === '05' || t === '06') && ident.value.length > 20) return { mensaje: 'La identificación es demasiado larga (máximo 20 números).', campo: ident };
+    if (llevaLetras(t) && ident.value.length > MAX_ID_LETRAS) return { mensaje: 'La identificación es demasiado larga: tiene ' + ident.value.length + ' letras y números y el máximo es ' + MAX_ID_LETRAS + '.', campo: ident };
     if (dup && opts.accionDuplicado) return { mensaje: 'Ese cliente ya existe. Use el que ya está guardado.', campo: ident };
     if (fase === 'formato') return { mensaje: r?.mensaje || 'El número no tiene un largo válido.', campo: ident };
     if (fase === 'no_encontrada' && /^0[1-4]$/.test(t)) {

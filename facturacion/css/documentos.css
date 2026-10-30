@@ -14,9 +14,10 @@
   .doc-rango{grid-template-columns:repeat(4,minmax(0,1fr));gap:.35rem}
   .doc-rango .btn{min-height:56px;padding-inline:.2rem;font-size:.92rem;line-height:1.15}
   .doc-ayuda{display:none}
-  .doc-fecha-fila{flex-wrap:nowrap;align-items:center}
-  .doc-fecha{font-size:.95rem}
-  .doc-fecha-fila .btn{flex:0 0 auto}
+  /* El botón «Actualizar todo lo que se ve» es largo: va en su propia línea, debajo de la fecha, a todo el ancho */
+  .doc-fecha-fila{flex-wrap:wrap;align-items:center}
+  .doc-fecha{font-size:.95rem;flex:1 1 100%}
+  .doc-fecha-fila .btn{flex:1 1 100%}
 }
 
 /* Resumen: una línea */
@@ -46,6 +47,12 @@
 .doc-faltan .doc-cuadre-frase{color:var(--tinta)}
 .doc-faltan .btn{align-self:flex-start}
 .doc-faltan .error-caja{margin:0}
+/* «Actualizar» falló: el error sale arriba con su botón; hay documentos nuevos que el reloj no pudo sumar: aviso ámbar */
+.doc-aviso-actualizar{margin:0 0 .5rem;display:flex;flex-direction:column;align-items:flex-start;gap:.4rem}
+.doc-aviso-actualizar p{margin:0}
+.doc-aviso-nuevos{margin:0 0 .5rem}
+.doc-faltan .doc-cuadre-frase.tenue{color:var(--tinta2)}
+@media (max-width:700px){.doc-aviso-actualizar .btn{align-self:stretch;width:100%}}
 @media(max-width:560px){
   .doc-faltan .btn{align-self:stretch;width:100%}
   .doc-cuadre summary{max-width:none}
@@ -67,6 +74,9 @@
 .doc-lista{display:flex;flex-direction:column;gap:.5rem;--doc-cols:4.2rem minmax(0,1.5fr) minmax(0,1.4fr) 7.5rem 9.5rem;--doc-acc:17rem}
 .doc-dia{display:flex;flex-wrap:wrap;justify-content:space-between;gap:.2rem 1rem;align-items:baseline;margin-top:.8rem;padding:.2rem .2rem .4rem;border-bottom:1px solid var(--linea2)}
 .doc-dia span{color:var(--tinta2);font-size:.92rem}
+/* El día del documento más viejo cargado, cuando faltan documentos: su total no es el del día completo */
+.doc-dia.incompleto{border-bottom-color:#efd08f}
+.doc-dia.incompleto span{color:var(--tinta);flex:1 1 100%}
 .doc-cabeza{display:flex;gap:.5rem;padding:0;font-size:.75rem;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--tinta2)}
 .doc-cabeza-cols{flex:1 1 auto;min-width:0;display:grid;grid-template-columns:var(--doc-cols);gap:.3rem .8rem;padding:0 calc(1rem + 1px)}
 .doc-cabeza-acc{flex:0 0 var(--doc-acc)}

@@ -21,31 +21,44 @@
 //     Ver js/ui_cedula.js para las reglas de la cédula.
 //     También se elige la «Tarifa de IVA habitual de este cliente» (llave tarifa_habitual_codigo de fx_cliente_guardar): solo avisa en la
 //     Caja y ofrece aplicarla; nunca se aplica sola.
-import { h, modal, debounce, TIPOS_ID, toast, nombrePropio } from './util.js';
+//     Si la base no acepta el guardado, el motivo sale en el cuadro rojo de arriba del formulario (no en un aviso que se va solo) y el foco pasa al
+//     campo del problema; lo escrito se queda. Con cambios sin guardar, cerrar la ventana (Cancelar, «Cerrar ✕», Escape, tocar fuera o Atrás)
+//     pregunta antes «¿Salir sin guardar?». (Cuando el sistema cierra todas las ventanas por su cuenta, al cambiar de pantalla o al cerrar la sesión,
+//     no se puede preguntar: util.js cierra sin consultar.)
+import { h, modal, debounce, TIPOS_ID, toast, nombrePropio, confirmar } from './util.js';
 import { api } from './api.js';
 import { clientesTodos, clienteActivar } from './api_clientes.js';
 import { UBICACIONES } from './data_ubicaciones.js';
 import { cargarCss, campo, aviso, conBotonM, mensajeSeguro } from './ui_mant.js';
 import { crearCampoIdentificacion, leerCorreos } from './ui_cedula.js';
 import { TARIFAS_CLIENTE, tarifaHabitual, clienteTraeTarifa } from './iva.js';
-import { SIN_DATO, partesParaPantalla, estadoDireccion } from './direccion_cliente.js';
+import { SIN_DATO, partesParaPantalla, estadoDireccion, codigoUbicacion, fueraDeLista } from './direccion_cliente.js';
 
 export { leerCorreos };
 
 // La dirección guardada de un cliente, con cada dato y su rótulo. Lo que falta dice «Sin dato» (solo en pantalla: en la base queda vacío y en los documentos no sale).
+// Un código que no está en el catálogo dice «Código 99 (no está en la lista)», igual que la lista desplegable.
 // compacto = una sola línea corrida, para las tarjetas de la lista de Clientes.
 export function resumenDireccion(c, { compacto = false } = {}) {
   const partes = partesParaPantalla(c);
   return h('div.dir-resumen' + (compacto ? '.compacto' : ''), { 'aria-label': 'Dirección guardada del cliente' },
-    ...partes.map((p) => h('div.dir-parte' + (p.falta ? '.falta' : ''), h('span.dir-et', p.etiqueta + ': '), h('span.dir-val', p.valor))));
+    ...partes.map((p) => h('div.dir-parte' + (p.falta ? '.falta' : '') + (p.fuera ? '.fuera' : ''), h('span.dir-et', p.etiqueta + ': '), h('span.dir-val', p.valor))));
 }
+
+// Largo como lo cuenta la base (caracteres): un emoji cuenta 1, no 2 como en .length
+const largo = (t) => [...String(t ?? '')].length;
+const sinTildes = (s) => String(s ?? '').normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();
+// util.js muestra en un aviso flotante el texto que devuelve «bloqueo»; cuando la pregunta ya sale en su propia ventana ese aviso sobra:
+// se le pasa un texto y se quita antes de que la pantalla se vuelva a pintar.
+const sinAvisoFlotante = (texto) => { const n = document.createTextNode(texto); queueMicrotask(() => n.parentNode?.closest?.('.toast')?.remove()); return n; };
 
 // Hoy fx_cliente_guardar pide el correo principal en todo cliente activo con cédula (Hacienda lo trata como condicional: «cuando el cliente lo requiera»).
 // Si BASE DE DATOS lo vuelve opcional (ver INFORME_FRONT_CATALOGO_RONDA4.md), basta cambiar esta constante a false.
 const CORREO_OBLIGATORIO = true;
-const MAX_SENAS = 250; // lo que acepta la base y el XSD de Hacienda para las otras señas (el XML del receptor lleva las primeras 160 letras, como pide el anexo)
-const MAX_BARRIO = 100;
-const pad2 = (x) => String(x ?? '').replace(/\D/g, '').padStart(2, '0').slice(-2);
+// Topes de la dirección = lo que Hacienda recibe en el XML del cliente (anexo v4.4: otras señas hasta 160, barrio hasta 50; fn/xml.ts corta ahí).
+// La base todavía deja guardar más (250 y 100, por datos viejos y la carga masiva), pero el formulario no deja escribir más de lo que viaja a Hacienda.
+const MAX_SENAS = 160;
+const MAX_BARRIO = 50;
 const nombresOrdenados = (obj, i) => Object.entries(obj || {}).sort((a, b) => String(i ? a[1][0] : a[1]).localeCompare(String(i ? b[1][0] : b[1]), 'es'));
 
 export function abrirFormCliente(app, cliente, { alGuardar, alCambiarEstado, titulo, numeroInicial } = {}) {
@@ -71,34 +84,62 @@ export function abrirFormCliente(app, cliente, { alGuardar, alCambiarEstado, tit
   const avisoCorreo = h('small.tenue');
   const telefono = h('input.campo', { type: 'tel', autocomplete: 'off', value: c.telefono || '', 'aria-label': 'Teléfono' });
   const notas = h('textarea.campo', { rows: 2, 'aria-label': 'Notas' }, c.notas || '');
-  const senas = h('textarea.campo', { rows: 2, maxlength: MAX_SENAS, 'aria-label': 'Otras señas' }, c.otras_senas || '');
-  const barrio = h('input.campo', { type: 'text', autocomplete: 'off', maxlength: MAX_BARRIO, value: c.barrio || '', 'aria-label': 'Barrio' });
+  // Barrio y señas sin maxlength: el navegador cuenta un emoji como 2 y lo cortaría a la mitad. El tope se cuenta en caracteres, como la base, y se avisa en palabras.
+  const senas = h('textarea.campo', { rows: 2, 'aria-label': 'Otras señas' }, c.otras_senas || '');
+  const barrio = h('input.campo', { type: 'text', autocomplete: 'off', value: c.barrio || '', 'aria-label': 'Barrio' });
+  // Debajo de cada campo, un contador siempre visible («Lleva 23 de 160 letras.»); si se pasa, en su lugar sale el aviso en rojo
+  // («Las otras señas tienen 170 letras y Hacienda acepta hasta 160. Borre 10.»), que es el mismo texto que sale al tocar Guardar.
+  const cuentaSenas = h('small.dir-cuenta'), cuentaBarrio = h('small.dir-cuenta');
+  const topeSenas = h('small.dir-tope', { role: 'status', hidden: true });
+  const topeBarrio = h('small.dir-tope', { role: 'status', hidden: true });
+  const textoTope = (sujeto, n, max) => sujeto + ' ' + n + ' letras y Hacienda acepta hasta ' + max + '. Borre ' + (n - max) + '.';
+  const vigilarTope = (el, cuenta, aviso, max, sujeto) => {
+    const pintar = () => {
+      const n = largo(el.value.trim()), pasa = n > max;
+      cuenta.hidden = pasa; cuenta.textContent = 'Lleva ' + n + ' de ' + max + ' letras.';
+      aviso.hidden = !pasa; aviso.textContent = pasa ? textoTope(sujeto, n, max) : '';
+      el.setAttribute('aria-invalid', String(pasa));
+    };
+    el.addEventListener('input', pintar); pintar();
+  };
+  vigilarTope(senas, cuentaSenas, topeSenas, MAX_SENAS, 'Las otras señas tienen');
+  vigilarTope(barrio, cuentaBarrio, topeBarrio, MAX_BARRIO, 'El barrio tiene');
   const prov = h('select.campo', { 'aria-label': 'Provincia' });
   const cant = h('select.campo', { 'aria-label': 'Cantón' });
   const dist = h('select.campo', { 'aria-label': 'Distrito' });
   const ayudaUbic = h('small.tenue.dir-ayuda', { role: 'status' }); // dice por qué una lista solo trae «Sin dato»: falta elegir la de arriba (el texto largo no cabe dentro de la lista)
+  // Las tres listas van lado a lado. Si lo elegido en alguna es largo, pasan a ocupar el ancho completo para que se lea entero: en tres columnas
+  // (computadora) caben hasta 24 caracteres; más largos son «Código 99 (no está en la lista)» y dos nombres oficiales («San Francisco de Dos Ríos»,
+  // «Aguacaliente o San Francisco»). Medido con la letra de la página; en el celular ya van una debajo de otra.
+  const CABE_EN_COLUMNA = 24;
+  const rejillaUbic = h('div.rejilla.dir-ubic', campo('Provincia', prov), campo('Cantón', cant), campo('Distrito', dist));
+  const ajustarRejilla = () => rejillaUbic.classList.toggle('a-lo-ancho', [prov, cant, dist].some((x) => [...(x.selectedOptions[0]?.textContent || '')].length > CABE_EN_COLUMNA));
 
   // Provincia > cantón > distrito (códigos oficiales). Cada lista empieza con «Sin dato»: elegirlo deja ese dato vacío (no se guarda ni sale en la factura).
-  // Si el cliente trae un código que no está en el catálogo (por ejemplo de una carga masiva), se conserva a la vista en vez de borrarlo sin avisar.
-  prov.append(h('option', { value: '' }, SIN_DATO), ...nombresOrdenados(Object.fromEntries(Object.entries(UBICACIONES).map(([k, v]) => [k, v[0]]))).map(([k, n]) => h('option', { value: k }, n)));
+  // Si el cliente trae un código que no está en el catálogo (por ejemplo de una carga masiva), se conserva a la vista en vez de borrarlo sin avisar,
+  // con el mismo texto que el resumen «Dirección guardada» (fueraDeLista). Al cambiar la provincia o el cantón, lo de abajo vuelve a «Sin dato».
+  const opcionFuera = (cod) => h('option', { value: cod }, fueraDeLista(cod));
+  const pIni = codigoUbicacion(c.provincia, 1);
+  prov.append(h('option', { value: '' }, SIN_DATO), ...nombresOrdenados(Object.fromEntries(Object.entries(UBICACIONES).map(([k, v]) => [k, v[0]]))).map(([k, n]) => h('option', { value: k }, n)),
+    ...(pIni && !UBICACIONES[pIni] ? [opcionFuera(pIni)] : []));
   const llenarCantones = (sel, selDist) => {
     const cs = UBICACIONES[prov.value]?.[1] || {};
-    const raro = prov.value && sel && !cs[sel] ? [h('option', { value: sel }, 'Código ' + sel + ' (no está en la lista)')] : [];
-    cant.replaceChildren(h('option', { value: '' }, SIN_DATO), ...nombresOrdenados(cs, 1).map(([k, v]) => h('option', { value: k }, v[0])), ...raro);
-    cant.value = sel && (cs[sel] || raro.length) ? sel : '';
+    cant.replaceChildren(h('option', { value: '' }, SIN_DATO), ...nombresOrdenados(cs, 1).map(([k, v]) => h('option', { value: k }, v[0])), ...(sel && !cs[sel] ? [opcionFuera(sel)] : []));
+    cant.value = sel || '';
     llenarDistritos(selDist);
   };
   const llenarDistritos = (sel) => {
     const ds = UBICACIONES[prov.value]?.[1]?.[cant.value]?.[1] || {};
-    const raro = cant.value && sel && !ds[sel] ? [h('option', { value: sel }, 'Código ' + sel + ' (no está en la lista)')] : [];
-    dist.replaceChildren(h('option', { value: '' }, SIN_DATO), ...nombresOrdenados(ds).map(([k, n]) => h('option', { value: k }, n)), ...raro);
-    dist.value = sel && (ds[sel] || raro.length) ? sel : '';
+    dist.replaceChildren(h('option', { value: '' }, SIN_DATO), ...nombresOrdenados(ds).map(([k, n]) => h('option', { value: k }, n)), ...(sel && !ds[sel] ? [opcionFuera(sel)] : []));
+    dist.value = sel || '';
     ayudaUbic.textContent = !prov.value ? 'Para elegir el cantón, primero elija la provincia.' : !cant.value ? 'Para elegir el distrito, primero elija el cantón.' : '';
+    ajustarRejilla();
   };
-  prov.value = UBICACIONES[String(c.provincia || '')] ? String(c.provincia) : '';
-  llenarCantones(c.canton ? pad2(c.canton) : '', c.distrito ? pad2(c.distrito) : '');
+  prov.value = pIni;
+  llenarCantones(codigoUbicacion(c.canton, 2), codigoUbicacion(c.distrito, 2));
   prov.addEventListener('change', () => llenarCantones());
   cant.addEventListener('change', () => llenarDistritos());
+  dist.addEventListener('change', ajustarRejilla);
 
   const refrescarCorreo = () => {
     const n = correos.filter((x) => x.value.trim()).length;
@@ -119,10 +160,33 @@ export function abrirFormCliente(app, cliente, { alGuardar, alCambiarEstado, tit
     alTerminar: () => { [correos[0]].find((x) => !x.value.trim())?.focus(); },
   });
 
+  // Si la base no acepta el guardado, el motivo va al cuadro de error del formulario y el foco al campo del que habla el mensaje
+  const campoDelError = (t) => {
+    const s = sinTildes(t);
+    if (/senas/.test(s)) return senas;
+    if (/barrio/.test(s)) return barrio;
+    if (/primero la provincia/.test(s)) return prov;
+    if (/primero el canton/.test(s)) return cant;
+    if (/distrito/.test(s)) return dist;
+    if (/canton/.test(s)) return cant;
+    if (/provincia/.test(s)) return prov;
+    if (/correo/.test(s)) { const q = /["«]([^"»]+)["»]/.exec(t)?.[1]; return correos.find((x) => q && x.value.includes(q)) || correos[0]; }
+    if (/telefono/.test(s)) return telefono;
+    if (/tarifa/.test(s)) return botonesTarifa.find((b) => !b.disabled) || null;
+    if (/actividad/.test(s)) return ced.actividad || null;
+    if (/identificacion|cedula|dimex|nite/.test(s)) return ced.ident || null;
+    if (/nombre/.test(s)) return ced.nombre || null;
+    return null;
+  };
+  let guardando = false;
   async function guardar(cerrar) {
     mostrarError('');
     const btn = m.el.querySelector('.modal-pie .primario');
     if (!btn || btn.dataset.ocupado) return; // un segundo toque mientras se guarda no hace nada
+    guardando = true;
+    try { await guardarYa(btn, cerrar); } finally { guardando = false; }
+  }
+  async function guardarYa(btn, cerrar) {
     await conBotonM(btn, async () => {
       const v = await ced.validar();
       if (v) return mostrarError(v.mensaje, v.campo);
@@ -140,10 +204,12 @@ export function abrirFormCliente(app, cliente, { alGuardar, alCambiarEstado, tit
       }
       const tel = telefono.value.replace(/\D/g, '');
       if (tel && (tel.length < 8 || tel.length > 20)) return mostrarError('El teléfono debe tener entre 8 y 20 números.', telefono);
-      // La dirección es opcional y puede ir incompleta: con un solo dato basta. Solo se cuida que quepa (las listas ya no dejan elegir un cantón sin provincia ni un distrito sin cantón).
+      // La dirección es opcional y puede ir incompleta: con un solo dato basta. Solo se cuida que quepa, contando caracteres como la base (las listas no dejan elegir
+      // un cantón sin provincia ni un distrito sin cantón; un código viejo que no está en el catálogo se conserva y, si la base no lo acepta, su mensaje sale arriba).
       const sn = senas.value.trim(), bar = barrio.value.trim();
-      if (bar.length > MAX_BARRIO) return mostrarError('El barrio es demasiado largo: escriba hasta ' + MAX_BARRIO + ' letras.', barrio);
-      if (sn.length > MAX_SENAS) return mostrarError('Las otras señas son demasiado largas: escriba hasta ' + MAX_SENAS + ' letras.', senas);
+      if (largo(bar) > MAX_BARRIO) return mostrarError('El barrio es demasiado largo. ' + textoTope('Tiene', largo(bar), MAX_BARRIO), barrio);
+      if (largo(sn) > MAX_SENAS) return mostrarError('Las otras señas son demasiado largas. ' + textoTope('Tienen', largo(sn), MAX_SENAS), senas);
+      // (un cliente viejo o de la carga masiva con más letras de las que acepta Hacienda ve el aviso al abrirlo y se le pide acortarlas antes de guardar)
       const val = ced.valores();
       // La dirección se manda siempre completa tal como está en el formulario (lo que está en blanco se manda en blanco y la base lo deja vacío); nunca se manda «Sin dato».
       const datos = {
@@ -154,7 +220,8 @@ export function abrirFormCliente(app, cliente, { alGuardar, alCambiarEstado, tit
       };
       // Contrato: la llave se manda siempre que la base la sepa leer (también en blanco, para poder quitarla); a un cliente que no la trae no se le toca
       if (traeLlave !== false) datos.tarifa_habitual_codigo = tarifaSel || null;
-      const r = await api.clienteGuardar(datos);
+      let r;
+      try { r = await api.clienteGuardar(datos); } catch (e) { const t = mensajeSeguro(e); return mostrarError(t, campoDelError(t)); } // la ventana sigue abierta con lo escrito
       const tarifaNoGuardada = !!tarifaSel && !!r && (!('tarifa_habitual_codigo' in r) || String(r.tarifa_habitual_codigo ?? '') !== tarifaSel);
       toast((esNuevo ? 'Cliente agregado.' : 'Cliente guardado.') + (r?.verificado ? '' : ' Quedó marcado como sin verificar en Hacienda.')
         + (tarifaNoGuardada ? ' La tarifa de IVA habitual todavía no se pudo guardar en este sistema; se cambia producto por producto al cobrar.' : ''), tarifaNoGuardada ? 'error' : 'ok', tarifaNoGuardada ? 9000 : 3500);
@@ -204,7 +271,8 @@ export function abrirFormCliente(app, cliente, { alGuardar, alCambiarEstado, tit
       tarAyuda));
 
   // Datos que Hacienda no pide para facturar. En un cliente nuevo quedan detrás del botón «Agregar más datos del cliente»; al editar se ven siempre.
-  const estadoDir = esNuevo ? null : estadoDireccion(c); // 'sin' | 'parcial' | 'completa' (null en un cliente nuevo)
+  const estadoDir = esNuevo ? null : estadoDireccion(c); // 'sin' | 'parcial' | 'completa' (null en un cliente nuevo); la lista de Clientes usa la misma función
+  const conTope = (etq, ...extra) => { etq.append(...extra); return etq; };
   const masBloque = h('div.mt-form', { hidden: esNuevo, id: 'mt-mas-datos' },
     h('fieldset', h('legend', 'Otros correos (opcionales)'),
       h('div.col',
@@ -220,9 +288,9 @@ export function abrirFormCliente(app, cliente, { alGuardar, alCambiarEstado, tit
         estadoDir === 'sin' ? aviso('info', 'Este cliente no tiene dirección guardada. No hace falta para facturarle; agréguela solo si el cliente la quiere en su factura.') : null,
         estadoDir === 'parcial' ? aviso('info', 'La dirección de este cliente está incompleta, y está bien: no hace falta para facturarle. En la factura saldrá solo lo que sí tiene.') : null,
         estadoDir && estadoDir !== 'sin' ? h('div.dir-guardada', h('b', 'Dirección guardada'), resumenDireccion(c)) : null,
-        h('div.rejilla', campo('Provincia', prov), campo('Cantón', cant), campo('Distrito', dist)), ayudaUbic,
-        campo('Barrio (opcional)', barrio),
-        campo('Otras señas', senas, 'Por ejemplo: 200 metros norte de la iglesia, portón negro. Máximo ' + MAX_SENAS + ' letras.'))),
+        rejillaUbic, ayudaUbic,
+        conTope(campo('Barrio (opcional)', barrio), cuentaBarrio, topeBarrio),
+        conTope(campo('Otras señas', senas, 'Por ejemplo: 200 metros norte de la iglesia, portón negro.'), cuentaSenas, topeSenas))),
     bloqueTarifa,
     h('fieldset', h('legend', 'Notas internas'),
       campo('Notas (solo las ve usted, no salen en la factura)', notas)));
@@ -252,9 +320,33 @@ export function abrirFormCliente(app, cliente, { alGuardar, alCambiarEstado, tit
     !esNuevo && c.creado_en ? h('small.tenue', 'Cliente agregado el ' + new Intl.DateTimeFormat('es-CR', { timeZone: 'America/Costa_Rica', dateStyle: 'long' }).format(new Date(c.creado_en)) + '.') : null);
 
   cuerpo.addEventListener('input', () => { if (!err.hidden) mostrarError(''); }); // el aviso de un intento anterior se quita en cuanto la persona corrige algo
+
+  // Cambios sin guardar: la persona tocó algún campo (o una tarifa) y lo que hay en el formulario ya no es lo que había al abrirlo.
+  // (Lo que el sistema llena solo, como la actividad que trae Hacienda, no cuenta mientras la persona no haya tocado nada.)
+  const huella = () => JSON.stringify([...cuerpo.querySelectorAll('input, select, textarea')].map((x) => (x.type === 'checkbox' || x.type === 'radio' ? x.checked : x.value)).concat(tarifaSel));
+  const huella0 = huella();
+  let tocado = false, preguntando = false;
+  const marcar = () => { tocado = true; };
+  cuerpo.addEventListener('input', marcar); cuerpo.addEventListener('change', marcar);
+  botonesTarifa.forEach((b) => b.addEventListener('click', marcar));
+  const hayCambios = () => tocado && huella() !== huella0;
+  async function preguntarSalir() {
+    if (preguntando) return;
+    preguntando = true;
+    const salir = await confirmar('¿Salir sin guardar? Lo que escribió se perderá.', { si: 'Salir sin guardar', no: 'Seguir editando', peligro: true });
+    preguntando = false;
+    if (salir) m.cerrar();
+  }
+  // Cancelar, «Cerrar ✕», Escape, tocar fuera y Atrás pasan por aquí (opción «bloqueo» de modal en util.js)
+  const bloqueo = () => {
+    if (guardando) return 'Espere un momento: se está guardando el cliente.';
+    if (!hayCambios()) return '';
+    preguntarSalir();
+    return sinAvisoFlotante('Tiene cambios sin guardar.');
+  };
   const m = modal({
-    titulo: titulo || (esNuevo ? 'Agregar cliente' : 'Cliente: ' + nombrePropio(c.nombre)), contenido: cuerpo, ancho: 760, alCerrar: () => ced.destruir(),
-    botones: [{ texto: 'Cancelar', clase: 'suave', onclick: (x) => x() }, { texto: esNuevo ? 'Guardar cliente' : 'Guardar cambios', clase: 'primario', onclick: (x) => guardar(x) }],
+    titulo: titulo || (esNuevo ? 'Agregar cliente' : 'Cliente: ' + nombrePropio(c.nombre)), contenido: cuerpo, ancho: 760, alCerrar: () => ced.destruir(), bloqueo,
+    botones: [{ texto: 'Cancelar', clase: 'suave', onclick: (x) => { const b = bloqueo(); if (!b) x(); else if (typeof b === 'string') toast(b, 'error', 5000); } }, { texto: esNuevo ? 'Guardar cliente' : 'Guardar cambios', clase: 'primario', onclick: (x) => guardar(x) }],
   });
   if (esNuevo) ced.enfocar();
   return m;

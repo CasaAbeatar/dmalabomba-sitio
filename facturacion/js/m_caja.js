@@ -1184,6 +1184,12 @@ export default {
           h('button.btn.peligro', { type: 'button', 'data-anular-cuenta': '1', onclick: salirAnulando }, 'Anular esta cuenta'));
         cajaBloqueo.hidden = false; avisoRep.hidden = true;
         if (m) actualizar();
+        irAlBloqueo();
+      }
+      // El aviso queda arriba y en el celular puede quedar fuera de pantalla: se lleva la vista y el foco hasta él (al aparecer y cada vez que se intenta cobrar)
+      function irAlBloqueo() {
+        if (cajaBloqueo.hidden) return;
+        try { cajaBloqueo.tabIndex = -1; cajaBloqueo.scrollIntoView({ block: 'center' }); cajaBloqueo.focus({ preventScroll: true }); } catch { /* nada */ }
       }
       const reemplazoListo = Promise.race([reemplazoInfo(ventaId), new Promise((ok) => setTimeout(() => ok({ ok: false }), 5000))])
         .then((r) => { if (r && r.ok && r.reemplaza) { reemplazo = r; if (!terminado) pintarReemplazo(); } return r || { ok: false }; })
@@ -1207,7 +1213,8 @@ export default {
       vigilaAjustes.observe(document.body, { childList: true });
       const btnVolver = h('button.btn', { type: 'button', onclick: () => { if (!cobrando) m.cerrar(); } }, 'Volver');
       // Un Enter que llega solo (tecla sostenida, o el Enter que acaba de abrir esta ventana) no cobra: el cobro necesita un toque o un Enter a propósito
-      const btnCobrar = h('button.btn.primario.grande.btn-confirmar-cobro', { type: 'button', onclick: (ev) => { if (ev.detail === 0 && performance.now() - abiertaEn < 500) return; confirmarCobro(); } }, 'Cobrar');
+      const btnCobrar = h('button.btn.primario.grande.btn-confirmar-cobro', { type: 'button', onclick: (ev) => { if (bloqueo) { irAlBloqueo(); return; } if (ev.detail === 0 && performance.now() - abiertaEn < 500) return; confirmarCobro(); } }, 'Cobrar');
+      const razonCobro = h('p.cobro-razon', { hidden: true, role: 'status' }, 'No se puede cobrar: lea el aviso de arriba.');
       btnCobrar.addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.repeat) e.preventDefault(); });
       const vistaPago = h('div.cobro',
         h('div.cobro-total', h('div.et', 'Total a cobrar (IVA incluido)'), montoTotal),
@@ -1222,7 +1229,7 @@ export default {
         h('label.etq', lblMonto, inpMonto),
         rapidos, refEtq, btnOtro, errEl, btnRevisar,
         resImp,
-        h('div.cobro-pie', btnVolver, btnCobrar));
+        h('div.cobro-pie', razonCobro, btnVolver, btnCobrar));
 
       const sinErr = () => { errEl.hidden = true; };
       const conErr = (t) => { errEl.textContent = t; errEl.hidden = false; };
@@ -1309,7 +1316,10 @@ export default {
         else if (r.ok) { resumen.classList.add('ok'); resumen.replaceChildren(h('span', 'Pago completo, sin vuelto'), h('span.grande', '✓')); }
         else { resumen.classList.add('falta'); resumen.replaceChildren(h('span', 'Falta por pagar'), h('span.grande', money(totalC / 100))); }
         btnCobrar.textContent = cobrando ? 'Cobrando…' : 'Cobrar ' + money(venta.total);
-        btnCobrar.disabled = cobrando || duda || !!bloqueo || !r.ok || !!b.malo;
+        // Con el cobro bloqueado el botón se ve apagado pero sigue recibiendo el toque (aunque falte el monto): el toque lleva la vista al aviso (no cobra) y al lado se dice por qué
+        btnCobrar.disabled = cobrando || (!bloqueo && (duda || !r.ok || !!b.malo));
+        btnCobrar.classList.toggle('bloqueado', !!bloqueo); if (bloqueo) btnCobrar.setAttribute('aria-disabled', 'true'); else btnCobrar.removeAttribute('aria-disabled');
+        razonCobro.hidden = !bloqueo; razonCobro.parentElement?.classList.toggle('con-razon', !!bloqueo);
         btnOtro.disabled = cobrando || !b.v || !!r.error;
         btnVolver.disabled = cobrando;
       }
