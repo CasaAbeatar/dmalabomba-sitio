@@ -51,8 +51,12 @@ export function pintarInsignias(raiz, app) {
 export function pantallaInicio(app, { alAbrir, alCerrarCaja, alAbrirCaja }) {
   const t = app.turno;
   const desde = t ? (new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Costa_Rica' }).format(new Date(t.abierto_en)) < hoyCR() ? ' del ' + fechaCorta(t.abierto_en) : '') : '';
-  const franja = h('div.hoy-franja', { role: 'status' },
-    h('div.hoy-texto', h('span.hoy-et', 'Hoy'), h('strong', t ? 'Caja abierta desde las ' + horaCorta(t.abierto_en) + desde : 'Caja cerrada')),
+  // Una caja que lleva más de 18 horas abierta casi siempre se olvidó de cerrar: el recuadro se pone ámbar y lo dice
+  const horasAbierta = t ? Math.floor((Date.now() - new Date(t.abierto_en).getTime()) / 3600000) : 0;
+  const larga = !!t && horasAbierta >= 18;
+  const franja = h('div.hoy-franja' + (larga ? '.larga' : ''), { role: 'status' },
+    h('div.hoy-texto', h('span.hoy-et', 'Hoy'), h('strong', t ? 'Caja abierta desde las ' + horaCorta(t.abierto_en) + desde : 'Caja cerrada'),
+      larga ? h('span.hoy-larga', 'Lleva ' + horasAbierta + ' horas abierta. ¿Hay que cerrarla?') : null),
     t ? h('button.btn', { type: 'button', onclick: alCerrarCaja }, 'Cerrar caja')
       : h('button.btn.primario', { type: 'button', onclick: alAbrirCaja }, 'Abrir caja'));
   const rejilla = h('div.mod-rejilla.principal', modulosDe('principal', app).map((m) => tarjetaModulo(m, app, alAbrir)));

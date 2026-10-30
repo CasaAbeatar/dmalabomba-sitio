@@ -4,6 +4,8 @@
 /* Franja de lo de hoy */
 .hoy-franja{display:flex;align-items:center;justify-content:space-between;gap:.5rem 1rem;flex-wrap:wrap;padding:.5rem .6rem .5rem 1rem;border:1px solid var(--linea2);border-radius:14px;background:var(--papel)}
 .hoy-texto{display:flex;align-items:baseline;gap:.2rem .7rem;flex-wrap:wrap;min-width:0}
+.hoy-franja.larga{background:var(--ambar-suave);border-color:var(--borde-ambar,#a87400)}
+.hoy-larga{flex:1 0 100%;color:#5c3d00;font-weight:600;font-size:.95rem}
 .hoy-et{font-size:.78rem;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--tinta2)}
 .hoy-texto strong{font-size:1.08rem}
 

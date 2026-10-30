@@ -856,7 +856,7 @@ export default {
         dato('Número completo', c.consecutivo, 'mono'),
         dato('Cuenta', [c.venta?.numero, c.venta?.tipo_servicio ? TIPOS_SERVICIO[c.venta.tipo_servicio] || c.venta.tipo_servicio : null, c.venta?.referencia].filter(Boolean).join(' · ') || 'Sin datos'),
         dato('Condición de venta', 'Contado'),
-        dato('Correo al cliente', c.correo_enviado_en ? `Enviado a ${c.correo_para || 'el cliente'} el ${fechaHora(c.correo_enviado_en)}` : c.correo_error ? correoAmable(c.correo_error) : 'Todavía no se ha enviado'),
+        dato('Correo al cliente', c.correo_enviado_en ? `Enviado a ${c.correo_para || 'el cliente'} el ${fechaHora(c.correo_enviado_en)}` : c.correo_error ? correoAmable(c.correo_error) : correoActivo(app) ? 'Todavía no se ha enviado' : 'No se envía: el envío por correo está apagado. Entregue el comprobante impreso.'),
         dato('Clave numérica de 50 dígitos', c.clave, 'mono')));
 
       // Cliente

@@ -141,7 +141,7 @@ export function crearZonaEfectivo({ turnoId = null, alAbrirCaja, conPie = true, 
   /* --- Sin turno --- */
   const avisoSinTurno = h('div.efz-sin',
     h('p.efz-sin-txt', 'Abra la caja para registrar efectivo'),
-    h('button.btn.primario.grande.efz-abrir', { type: 'button', onclick: () => alAbrirCaja?.() }, 'Escribir el efectivo de apertura'));
+    h('button.btn.grande.efz-abrir', { type: 'button', onclick: () => alAbrirCaja?.() }, 'Escribir el efectivo de apertura'));
 
   const sitioTarjeta = h('div.efz-sitio');
   const el = h('section.efz' + (sinTurno ? '.sin-turno' : '') + (enFlujo ? '.efz-flujo' : ''), { 'aria-label': 'Efectivo de la caja: entradas y salidas de dinero' },

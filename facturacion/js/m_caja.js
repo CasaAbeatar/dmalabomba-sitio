@@ -6,7 +6,7 @@ import { selectorCliente } from './ui_cliente.js';
 import { estadoDireccion } from './direccion_cliente.js';
 import { apiM } from './api_mantenimiento.js';
 import { esTransitorio, esPinObligatorio } from './api.js';
-import { reemplazoInfo, cobrarReemplazo, esRespuestaDeNegocio, tiposIdentificacion, avisoTipoId } from './api_documentos.js';
+import { reemplazoInfo, cobrarReemplazo, esRespuestaDeNegocio, tiposIdentificacion, avisoTipoId, correoActivo } from './api_documentos.js';
 import { TARIFAS_IVA, tarifaDeLinea, desgloseIva, tarifaHabitual } from './iva.js';
 import { infoActividad, textoActividad } from './actividades.js';
 import { ordenarMenu } from './orden_menu.js';
@@ -47,7 +47,8 @@ function llevarALaVista(el) {
     const vv = window.visualViewport;
     const tapado = vv ? Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop)) : 0;
     if (relleno) relleno.style.paddingBottom = tapado > 80 ? tapado + 'px' : '';
-    try { el.scrollIntoView({ block: 'center', inline: 'nearest' }); } catch { el.scrollIntoView(); }
+    const bloque = el.closest('.cobro') ? 'nearest' : 'center'; // en el cobro, solo lo necesario: la franja fija de arriba sigue a la vista
+    try { el.scrollIntoView({ block: bloque, inline: 'nearest' }); } catch { el.scrollIntoView(); }
     if (tapado > 80) {
       const r = el.getBoundingClientRect(), limite = vv.offsetTop + vv.height - 16;
       if (r.bottom > limite) (cont || document.scrollingElement).scrollTop += r.bottom - limite;
@@ -243,7 +244,7 @@ export default {
         // Antes de repetir se lee la cuenta del servidor: si el cambio sí había llegado, no se vuelve a hacer (así no se duplica un producto)
         const v = await api.venta(idCuenta);
         cur = v; guardarActiva();
-        if (firmaCuenta(v) !== antes) { quitarAviso(); repintar(); toast('El cambio sí se había guardado. La cuenta se actualizó con lo que hay en el servidor; revise que esté como esperaba.'); return; }
+        if (firmaCuenta(v) !== antes) { quitarAviso(); repintar(); toast('El cambio sí se había guardado. La cuenta se actualizó con lo que hay guardado; revise que esté como esperaba.'); return; }
         quitarAviso();
         await accion(fn);
       }));
@@ -1232,11 +1233,16 @@ export default {
       const btnCobrar = h('button.btn.primario.grande.btn-confirmar-cobro', { type: 'button', onclick: (ev) => { if (bloqueo) { irAlBloqueo(); return; } if (ev.detail === 0 && performance.now() - abiertaEn < 500) return; confirmarCobro(); } }, 'Cobrar');
       const razonCobro = h('p.cobro-razon', { hidden: true, role: 'status' }, 'No se puede cobrar: lea el aviso de arriba.');
       btnCobrar.addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.repeat) e.preventDefault(); });
+      // Franja fija arriba (no se desplaza con el resto): el total, cuánto falta o el vuelto y qué documento se va a emitir se ven siempre,
+      // aunque el cuerpo de la ventana baje hasta el campo del monto (computadora baja y celular).
+      const docLinea = h('div.cobro-doc-linea', { role: 'status' });
       const vistaPago = h('div.cobro',
-        h('div.cobro-total', h('div.et', 'Total a cobrar (IVA incluido)'), montoTotal),
+        h('div.cobro-fijo',
+          h('div.cobro-total', h('div.et', 'Total a cobrar (IVA incluido)'), montoTotal),
+          resumen,
+          docLinea),
         avisoRep,
         cajaBloqueo,
-        resumen,
         listaPagos,
         h('div.cobro-doc', h('div', h('div', docTxt), h('div', cliTxt)), h('div.fila', btnElegir, btnQuitarCli)),
         tipoIdEl,
@@ -1270,6 +1276,7 @@ export default {
       function pintarCliente() {
         docTxt.textContent = 'Documento: ' + (cliente ? TIPOS_DOC['01'] : TIPOS_DOC['04'] + ' (sin cliente)');
         cliTxt.textContent = cliente ? 'Cliente: ' + nombrePropio(cliente.nombre) + ' · ' + cliente.identificacion : '¿El cliente necesita factura a su nombre? Elíjalo aquí antes de cobrar.';
+        docLinea.textContent = cliente ? 'Se emite: ' + TIPOS_DOC['01'] + ' a nombre de ' + nombrePropio(cliente.nombre) : 'Se emite: ' + TIPOS_DOC['04'] + ', sin cliente';
         btnElegir.textContent = cliente ? 'Cambiar cliente' : 'Elegir cliente (factura)';
         btnQuitarCli.hidden = !cliente;
         const avTipo = avisoTipoCliente(cliente);
@@ -1308,7 +1315,9 @@ export default {
             h('button.btn', { type: 'button', onclick: () => vistaActividad() }, 'Cambiar')),
           cod ? null : h('small.tenue', 'Si el cliente declara IVA y pide que se anote su actividad, toque «Cambiar» y escriba el código.'),
           fueraDeLista ? h('div.act-aviso', 'Este código no está entre las actividades que Hacienda tiene para este cliente. Hacienda podría rechazar la factura.') : null,
-          !cliente.correo ? h('div.act-aviso', 'Este cliente no tiene correo. La factura se emite igual, pero la copia impresa no le sirve como gasto o crédito: con el correo recibiría el archivo que sí le sirve. Puede agregarlo en Clientes.') : null,
+          !cliente.correo ? h('div.act-aviso', correoActivo(app)
+            ? 'Este cliente no tiene correo. La factura se emite igual, pero la copia impresa no le sirve como gasto o crédito: con el correo recibiría el archivo que sí le sirve. Puede agregarlo en Clientes.'
+            : 'Este cliente no tiene correo guardado. La factura se emite igual. Hoy el sistema no envía correos: entregue el comprobante impreso. Puede agregar el correo en Clientes para cuando se active el envío.') : null,
           sinDireccion(cliente) ? h('div.act-aviso', 'Este cliente no tiene dirección guardada. La factura se emite igual y sale sin dirección; puede agregarla en Clientes si el cliente la quiere.') : null,
         ].filter(Boolean));
       }
@@ -1506,7 +1515,8 @@ export default {
           if (!vivo || !m) return;
           actualizar();
           // Una respuesta del negocio (por ejemplo, el cliente tipo 05 en una factura, sql/30b) ya dice qué hacer: se muestra tal cual, sin agregar «Revise e intente de nuevo»
-          if (v.estado === 'no') conErr('No se pudo cobrar: ' + textoDeError(e) + ' No se cobró nada.' + (esRespuestaDeNegocio(e) ? '' : ' Revise e intente de nuevo.'));
+          // Si fue un problema de conexión y la revisión ya confirmó que no se cobró, se dice solo eso (el texto de conexión pide «revisar si quedó guardado», y ya se revisó)
+          if (v.estado === 'no') conErr(esTransitorio(e) && !esRespuestaDeNegocio(e) ? 'No se pudo cobrar. Ya se revisó y no se cobró nada: puede tocar «Cobrar» otra vez.' : 'No se pudo cobrar: ' + textoDeError(e) + ' No se cobró nada.' + (esRespuestaDeNegocio(e) ? '' : ' Revise e intente de nuevo.'));
           else { conErr('No se pudo confirmar si el cobro quedó registrado (' + textoDeError(e) + '). No lo repita todavía: cuando vuelva la conexión toque «Revisar si se cobró».'); btnRevisar.hidden = false; }
           return;
         }
@@ -1516,7 +1526,7 @@ export default {
         const v = await verificarCobro();
         if (v.estado === 'cobrado') await terminar(v.comp, 'El cobro SÍ quedó registrado. No lo repita.', 0);
         else if (v.estado === 'no') { duda = false; ventasEnDuda.delete(ventaId); btnRevisar.hidden = true; actualizar(); conErr('Confirmado: no se cobró nada. Puede tocar «Cobrar» de nuevo.'); }
-        else conErr('Todavía no hay conexión con el servidor. Espere unos segundos y toque «Revisar si se cobró» otra vez.');
+        else conErr('Todavía no hay conexión. Espere unos segundos y toque «Revisar si se cobró» otra vez.');
       }));
 
       // Con el cobro en camino la ventana no se puede cerrar (ni con Escape, ni tocando fuera, ni con «Volver», ni con el botón Atrás)
@@ -1574,6 +1584,9 @@ export default {
       let cerrarM;
       const fmtPrincipal = aj.formato === 'carta' ? 'carta' : 'tiquete';
       const nombrePrincipal = fmtPrincipal === 'carta' ? 'factura carta' : 'tiquete';
+      const btnNueva = h('button.btn' + (aj.auto ? '.primario.grande' : '.grande'), { type: 'button', onclick: () => { cerrarM(); nuevaCuenta(); } }, 'Nueva cuenta');
+      const btnImprimir = h('button.btn' + (aj.auto ? '' : '.primario.grande'), { type: 'button', onclick: () => imprimir(fmtPrincipal) }, aj.auto ? 'Imprimir otra vez' : 'Imprimir ' + nombrePrincipal);
+      const btnOtroFormato = h('button.btn', { type: 'button', onclick: () => imprimir(fmtPrincipal === 'carta' ? 'tiquete' : 'carta') }, fmtPrincipal === 'carta' ? 'Imprimir tiquete' : 'Imprimir factura carta');
       const contenido = h('div.exito',
         h('div.gran', '✓ Cobro registrado'),
         aviso ? h('div.error-caja', aviso) : null,
@@ -1582,9 +1595,8 @@ export default {
         vuelto > 0 ? h('div.vuelto-caja', h('div', 'Entregue de vuelto'), h('div.monto', money(vuelto))) : h('p.tenue-linea', 'Sin vuelto.'),
         h('div.estado-caja', chip), msgEstado, impEstado,
         h('div.botones',
-          h('button.btn.primario.grande', { type: 'button', onclick: () => { cerrarM(); nuevaCuenta(); } }, 'Nueva cuenta'),
-          h('button.btn', { type: 'button', onclick: () => imprimir(fmtPrincipal) }, aj.auto ? 'Imprimir otra vez' : 'Imprimir ' + nombrePrincipal),
-          h('button.btn', { type: 'button', onclick: () => imprimir(fmtPrincipal === 'carta' ? 'tiquete' : 'carta') }, fmtPrincipal === 'carta' ? 'Imprimir tiquete' : 'Imprimir factura carta'),
+          // Si la impresión automática está apagada (su valor de fábrica en el celular), lo primero es entregar el comprobante: «Imprimir» va primero y destacado, y «Nueva cuenta» pasa a segundo
+          ...(aj.auto ? [btnNueva, btnImprimir, btnOtroFormato] : [btnImprimir, btnNueva, btnOtroFormato]),
           h('button.btn.suave', { type: 'button', onclick: () => cerrarM() }, 'Listo, cerrar'),
           h('button.btn.peligro', { type: 'button', onclick: () => { cerrarM(); app.ir('anular', comp.id ? { comprobante: String(comp.id) } : null); } }, 'Me equivoqué: anular esta factura')));
       const mo = modal({ titulo: 'Cobro listo', contenido, ancho: 520, alCerrar: () => { abierto = false; dejarDeVigilar(); if (vivo && buscador && fino()) buscador.inp.focus(); } });

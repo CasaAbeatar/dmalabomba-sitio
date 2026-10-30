@@ -117,7 +117,7 @@ export function crearCampoIdentificacion(opts = {}) {
   const sinEl = h('div.ced-sin', { hidden: true });
   const motivo = h('input.campo', { type: 'text', maxlength: 160, autocomplete: 'off', value: c?.verificacion_motivo || '', placeholder: 'Ej. persona recién inscrita, cliente de otro país', 'aria-label': 'Motivo para guardar sin confirmar' });
   const btnSin = h('button.btn', { type: 'button' }, 'Guardar de todos modos');
-  const nombre = h('input.campo.ced-nombre', { type: 'text', autocomplete: 'off', value: c?.nombre || '', placeholder: 'Se llena solo cuando Hacienda confirma el número', 'aria-label': 'Nombre o razón social' });
+  const nombre = h('input.campo.ced-nombre', { type: 'text', autocomplete: 'off', value: c?.nombre || '', placeholder: 'Lo llena Hacienda al confirmar', 'aria-label': 'Nombre o razón social' });
   const datos = h('div.ced-datos', { hidden: true });
   const actividad = h('input.campo.ced-act', { type: 'text', inputmode: 'decimal', autocomplete: 'off', maxlength: 6, value: c?.actividad_codigo || '', placeholder: 'Ej. 5610.0', 'aria-label': 'Código de actividad económica' });
   const actNota = h('div.ced-act-nota', { hidden: true });
@@ -360,7 +360,7 @@ export function crearCampoIdentificacion(opts = {}) {
     if (ident.getAttribute('inputmode') !== teclado) ident.setAttribute('inputmode', teclado);
 
     ayuda.hidden = n > 0; // al escribir, la caja de estado ya dice lo que falta
-    nombre.placeholder = ['no_encontrada', 'servicio', 'sesion', 'otro', 'formato'].includes(fase) ? 'Escriba el nombre o la razón social' : 'Se llena solo cuando Hacienda confirma el número';
+    nombre.placeholder = ['no_encontrada', 'servicio', 'sesion', 'otro', 'formato'].includes(fase) ? 'Escriba el nombre o la razón social' : 'Lo llena Hacienda al confirmar';
 
     // Tipo en palabras
     tipoTxt.replaceChildren();
