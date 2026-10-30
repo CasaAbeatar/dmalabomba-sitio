@@ -117,9 +117,12 @@ export default {
     const NOTA_IVA_CONTABLE = 'Esta cifra incluye comprobantes todavía pendientes de Hacienda. El «IVA del mes» de Contable cuenta solo los aceptados, por eso pueden no coincidir.';
     const kpi = (titulo, valor, nota, extra, aparte) => h('div.tarjeta.kpi' + (extra ? '.' + extra : ''), h('div.kpi-t', titulo), h('div.kpi-v.cifra', valor), h('div.kpi-n', nota), aparte ? h('div.kpi-n.kpi-aparte', aparte) : null);
 
-    function tablaSimple(cols, filas, pie) {
-      return h('div.tabla-caja', h('table.tabla', h('thead', h('tr', cols.map((c) => h('th' + (c.der ? '.der' : ''), c.t)))),
-        h('tbody', filas.map((f) => h('tr', f.map((v, i) => h('td' + (cols[i].der ? '.der' : ''), v))))), pie ? h('tfoot', pie) : null));
+    // cols[i].ancha: la columna solo se ve en pantalla ancha (en celular se esconde y su contenido va en otra parte de la fila)
+    // Una fila puede ser { celdas, sub }: `sub` es la fila de «cómo se llega al neto» que va debajo en celular. `ancha`: la columna solo se ve en pantalla ancha (en celular su cifra va debajo del monto). `fecha`: solo se ve desde 600 px (en celular las fechas van dentro de la primera celda). `extra`: clase de la tabla.
+    function tablaSimple(cols, filas, pie, extra) {
+      const clase = (c) => (c.der ? '.der' : '') + (c.ancha ? '.lis-ancha' : '') + (c.fecha ? '.lis-fecha' : '');
+      return h('div.tabla-caja', h('table.tabla' + (extra || ''), h('thead', h('tr', cols.map((c) => h('th' + clase(c), c.t)))),
+        h('tbody', filas.map((f) => { const celdas = Array.isArray(f) ? f : f.celdas, sub = Array.isArray(f) ? null : f.sub; return [h('tr' + (sub ? '.lis-con-sub' : ''), celdas.map((v, i) => h('td' + clase(cols[i]), v))), sub]; })), pie ? h('tfoot', pie) : null));
     }
 
     // gráfico con su lectura al tocar
@@ -314,47 +317,85 @@ export default {
     /* ---------- turnos, cajeros, IVA ---------- */
     // «Sin turno» (sin_turno de fx_listados2, 28d): lo del periodo que no cayó en ningún turno de caja, para que los turnos más esta fila sumen el total del periodo.
     // Son las notas que no mueven efectivo hechas con la caja cerrada y los documentos sin cuenta de caja. Solo sale si tiene algo.
-    const sinTurnoDe = (d) => { const s0 = d.sin_turno; return s0 && (Math.floor(+s0.ventas || 0) > 0 || Math.abs(+s0.total || 0) > 0.004) ? { ventas: Math.max(0, Math.floor(+s0.ventas || 0)), total: +s0.total || 0 } : null; };
+    // Cómo se llega al neto de una fila de «Por turno» y «Por cajero» (fx_listados2 desde fx_23a): bruto − devoluciones + notas_debito = total.
+    // `bruto` incluye lo que después se anuló; esas anulaciones, más las devoluciones y correcciones, vienen en `devoluciones`. null si la base no manda las tres cifras.
+    const desgloseDe = (x) => (x && x.bruto != null && x.devoluciones != null && x.notas_debito != null ? { bruto: +x.bruto || 0, dev: +x.devoluciones || 0, nd: +x.notas_debito || 0 } : null);
+    const hay = (n) => Math.abs(n) > 0.004;
+    // Las columnas del desglose salen solo si TODAS las filas traen las cifras y alguna tiene devoluciones o notas de débito (si no, «Vendido» sería igual al neto y solo estorbaría)
+    const hayAjustes = (filas) => filas.length > 0 && filas.every((x) => x.dsg) && filas.some((x) => hay(x.dsg.dev) || hay(x.dsg.nd));
+    const NOTA_NETAS_CUENTA = 'Montos con IVA incluido. Neto = vendido − devoluciones y anulaciones + notas de débito, cada nota en el día en que se hizo';
+    const NOTA_CUENTA = 'Vendido − devoluciones y anulaciones + notas de débito = neto. «Vendido» incluye lo que después se anuló: esa anulación se resta en «Devoluciones y anulaciones».';
+    // Excel y CSV: las mismas cifras que la pantalla (las tres columnas del desglose y el neto)
+    const colsAjustes = (conAj) => (conAj ? [{ clave: 'bruto', titulo: 'Vendido (₡)', tipo: 'moneda' }, { clave: 'dev', titulo: 'Devoluciones y anulaciones (₡, se restan)', tipo: 'moneda' }, { clave: 'nd', titulo: 'Notas de débito (₡, se suman)', tipo: 'moneda' }] : []);
+    const valsAjustes = (conAj, x) => (conAj ? { bruto: x.dsg.bruto, dev: x.dsg.dev, nd: x.dsg.nd } : {});
+    const totalesAjustes = (conAj) => (conAj ? { bruto: 'suma', dev: 'suma', nd: 'suma' } : {});
+    const tituloNeto = (conAj) => (conAj ? 'Monto neto con IVA (₡)' : 'Monto con IVA (₡)');
+    // Pantalla: en escritorio las tres cifras van en columnas; en celular (donde esas columnas se esconden) el desglose va debajo del neto, solo en las filas que tienen algo que restar o sumar
+    const celdasAjustes = (x) => [money(x.dsg.bruto), (hay(x.dsg.dev) ? '−' : '') + money(x.dsg.dev), (hay(x.dsg.nd) ? '+' : '') + money(x.dsg.nd)];
+    const cuentaDe = (g) => [['Vendido', money(g.bruto)], hay(g.dev) ? ['Devuelto o anulado', '−' + money(g.dev)] : null, hay(g.nd) ? ['Notas de débito', '+' + money(g.nd)] : null].filter(Boolean);
+    const tieneCuenta = (x, conAj) => !!(conAj && x.dsg && (hay(x.dsg.dev) || hay(x.dsg.nd)));
+    // Entre 601 y 820 px la cuenta va debajo del monto; hasta 600 px (celular) va en una fila propia, de lado a lado, debajo de la fila (el monto angosto la partía en pedazos)
+    const celdaNeto = (x, conAj) => (tieneCuenta(x, conAj) ? h('div', money(x.total), h('small.lis-concilia', cuentaDe(x.dsg).map(([r, v]) => h('span', r + ' ', h('span.nb', v))))) : money(x.total));
+    const filaCuenta = (x, conAj) => (tieneCuenta(x, conAj) ? h('tr.lis-sub', h('td', { colspan: 3 }, cuentaDe(x.dsg).map(([r, v]) => h('div.lis-sub-l', h('span', r), h('span.nb', v))))) : null);
+    const sinTurnoDe = (d) => { const s0 = d.sin_turno; return s0 && (Math.floor(+s0.ventas || 0) > 0 || Math.abs(+s0.total || 0) > 0.004) ? { ventas: Math.max(0, Math.floor(+s0.ventas || 0)), total: +s0.total || 0, dsg: desgloseDe(s0) } : null; };
     const NOTA_SIN_TURNO = 'Notas que no mueven efectivo hechas con la caja cerrada, y documentos sin cuenta de caja. No entran en ningún cierre de caja.';
     function tablaTurnos(d) {
-      const filas = [...(d.por_turno || [])].sort((x, y) => new Date(x.abierto_en) - new Date(y.abierto_en)); // en el archivo van del más antiguo al más reciente
+      const filas = [...(d.por_turno || [])].sort((x, y) => new Date(x.abierto_en) - new Date(y.abierto_en)).map((t) => ({ ...t, dsg: desgloseDe(t) })); // en el archivo van del más antiguo al más reciente
       const sin = sinTurnoDe(d);
       if (!filas.length && !sin) return null;
+      const conAj = hayAjustes([...filas, ...(sin ? [sin] : [])]);
       return {
-        titulo: 'Ventas por turno de caja', cifras: 'netas', cifrasNota: NOTA_NETAS,
-        columnas: [{ clave: 'abrio', titulo: 'Abrió (fecha y hora)', tipo: 'fechahora' }, { clave: 'cerro', titulo: 'Cerró (fecha y hora)', tipo: 'fechahora' }, { clave: 'por', titulo: 'Abierto por', tipo: 'texto' }, { clave: 'ventas', titulo: 'Ventas (número)', tipo: 'numero', dec: 0 }, { clave: 'total', titulo: 'Monto con IVA (₡)', tipo: 'moneda' }],
-        filas: [...filas.map((t) => ({ abrio: t.abierto_en, cerro: t.cerrado_en || 'Sigue abierto', por: t.abierto_por ? nombrePropio(t.abierto_por) : '', ventas: +t.ventas, total: +t.total })),
-          ...(sin ? [{ abrio: 'Sin turno', cerro: '', por: NOTA_SIN_TURNO, ventas: sin.ventas, total: sin.total }] : [])],
-        totales: { ventas: 'suma', total: 'suma' },
-        notas: ['Ordenado del turno más antiguo al más reciente. Cada nota cuenta en el turno en que se hizo.', ...(sin ? ['«Sin turno» va al final y es parte del total: ' + NOTA_SIN_TURNO] : [])],
+        titulo: 'Ventas por turno de caja', cifras: 'netas', cifrasNota: conAj ? NOTA_NETAS_CUENTA : NOTA_NETAS,
+        columnas: [{ clave: 'abrio', titulo: 'Abrió (fecha y hora)', tipo: 'fechahora' }, { clave: 'cerro', titulo: 'Cerró (fecha y hora)', tipo: 'fechahora' }, { clave: 'por', titulo: 'Abierto por', tipo: 'texto' }, { clave: 'ventas', titulo: 'Ventas (número)', tipo: 'numero', dec: 0 }, ...colsAjustes(conAj), { clave: 'total', titulo: tituloNeto(conAj), tipo: 'moneda' }],
+        filas: [...filas.map((t) => ({ abrio: t.abierto_en, cerro: t.cerrado_en || 'Sigue abierto', por: t.abierto_por ? nombrePropio(t.abierto_por) : '', ventas: +t.ventas, ...valsAjustes(conAj, t), total: +t.total })),
+          ...(sin ? [{ abrio: 'Sin turno', cerro: '', por: NOTA_SIN_TURNO, ventas: sin.ventas, ...valsAjustes(conAj, sin), total: sin.total }] : [])],
+        totales: { ventas: 'suma', ...totalesAjustes(conAj), total: 'suma' },
+        notas: ['Ordenado del turno más antiguo al más reciente. Cada nota cuenta en el turno en que se hizo.', ...(conAj ? [NOTA_CUENTA] : []), ...(sin ? ['«Sin turno» va al final y es parte del total: ' + NOTA_SIN_TURNO] : [])],
       };
     }
     function seccionTurnos(d) {
-      const filas = turnosRecientes(d.por_turno || []), sin = sinTurnoDe(d);
+      const filas = turnosRecientes(d.por_turno || []).map((t) => ({ ...t, dsg: desgloseDe(t) })), sin = sinTurnoDe(d);
       if (!filas.length && !sin) return null;
-      const suma = (k) => filas.reduce((a, t) => a + (+t[k] || 0), 0) + (sin ? (k === 'total' ? sin.total : sin.ventas) : 0);
+      const todas = [...filas, ...(sin ? [sin] : [])];
+      const conAj = hayAjustes(todas);
+      const suma = (k) => todas.reduce((a, t) => a + (+t[k] || 0), 0);
+      const sumaD = (k) => todas.reduce((a, t) => a + (t.dsg ? t.dsg[k] : 0), 0);
       const totalFilas = suma('total'), netas = +d.resumen?.ventas_netas || 0;
-      const filasTabla = [...filas.map((t) => [t.abierto_por ? 'Abrió ' + nombrePropio(t.abierto_por) : 'Turno', fechaHora(t.abierto_en), t.cerrado_en ? fechaHora(t.cerrado_en) : 'Sigue abierto', num(t.ventas, 0), money(t.total)]),
-        ...(sin ? [[h('b', 'Sin turno'), '', '', num(sin.ventas, 0), money(sin.total)]] : [])]; // la explicación va debajo de la tabla: en una celda angosta del celular quedaba una fila altísima
+      // En celular las columnas «Abrió» y «Cerró» se esconden y sus fechas pasan debajo del nombre del turno: así caben el monto y su cuenta sin deslizar la tabla de lado
+      const turnoCel = (t) => h('div', t.abierto_por ? 'Abrió ' + nombrePropio(t.abierto_por) : 'Turno', h('small.lis-fechas-cel', h('span', 'Desde ' + fechaHora(t.abierto_en)), h('span', t.cerrado_en ? 'Hasta ' + fechaHora(t.cerrado_en) : 'Sigue abierto')));
+      const filasTabla = [...filas.map((t) => ({ celdas: [turnoCel(t), fechaHora(t.abierto_en), t.cerrado_en ? fechaHora(t.cerrado_en) : 'Sigue abierto', num(t.ventas, 0), ...(conAj ? celdasAjustes(t) : []), celdaNeto(t, conAj)], sub: filaCuenta(t, conAj) })),
+        ...(sin ? [{ celdas: [h('b', 'Sin turno'), '', '', num(sin.ventas, 0), ...(conAj ? celdasAjustes(sin) : []), celdaNeto(sin, conAj)], sub: filaCuenta(sin, conAj) }] : [])]; // la explicación va debajo de la tabla: en una celda angosta del celular quedaba una fila altísima
+      const totalD = { dsg: { bruto: sumaD('bruto'), dev: sumaD('dev'), nd: sumaD('nd') }, total: totalFilas };
       return seccion('Por turno de caja', 'Cada turno abre y cierra la caja; el más reciente va primero. Cada nota cuenta en el turno en que se hizo. Monto neto (restadas las notas de crédito y sumadas las de débito), con IVA.' + (sin ? ' «Sin turno» reúne lo que no pertenece a ningún turno, para que las filas sumen el total.' : ''), () => conBase('Ventas por turno de caja', tablaTurnos(d)),
-        tablaSimple([{ t: 'Turno' }, { t: 'Abrió' }, { t: 'Cerró' }, { t: 'Ventas', der: 1 }, { t: 'Monto con IVA', der: 1 }], filasTabla,
-          h('tr', h('td', { colspan: 3 }, 'Total de las filas'), h('td.der', num(suma('ventas'), 0)), h('td.der', money(totalFilas)))),
+        tablaSimple([{ t: 'Turno' }, { t: 'Abrió', fecha: 1 }, { t: 'Cerró', fecha: 1 }, { t: 'Ventas', der: 1 }, ...(conAj ? [{ t: 'Vendido', der: 1, ancha: 1 }, { t: 'Devoluciones y anulaciones', der: 1, ancha: 1 }, { t: 'Notas de débito', der: 1, ancha: 1 }] : []), { t: conAj ? 'Neto con IVA' : 'Monto con IVA', der: 1 }], filasTabla,
+          [h('tr' + (tieneCuenta(totalD, conAj) ? '.lis-con-sub' : ''), h('td', 'Total de las filas'), h('td.lis-fecha'), h('td.lis-fecha'), h('td.der', num(suma('ventas'), 0)), ...(conAj ? celdasAjustes(totalD).map((c) => h('td.der.lis-ancha', c)) : []), h('td.der', celdaNeto(totalD, conAj))), filaCuenta(totalD, conAj)], '.lis-ajustes'),
+        conAj ? h('p.tenue.lis-cuenta', NOTA_CUENTA) : null,
         sin ? h('p.tenue.lis-sin-turno', h('b', '«Sin turno»: '), NOTA_SIN_TURNO) : null,
         Math.abs(totalFilas - netas) > 0.005 ? h('p.lis-aviso', `Las filas suman ${money(totalFilas)} y las ventas netas del resumen ${money(netas)}. La diferencia puede venir de una venta anulada en un periodo distinto al de la venta.`) : null);
     }
+    // Por cajero: quien COBRÓ cada venta (fact.pagos.cobrado_por, o quien abrió la cuenta si no hay cobro) y, en cada nota, quien la emitió (fx_listados2, 28d)
+    const cajerosDe = (d) => { const f = d.por_cajero || []; return !f.length || (f.length === 1 && f[0].cajero === 'Sin registrar') ? null : f.map((t) => ({ ...t, dsg: desgloseDe(t) })); };
     function tablaCajeros(d) {
-      const filas = d.por_cajero || []; if (!filas.length || (filas.length === 1 && filas[0].cajero === 'Sin registrar')) return null;
+      const filas = cajerosDe(d); if (!filas) return null;
+      const conAj = hayAjustes(filas);
       return {
-        titulo: 'Ventas por cajero', cifras: 'netas', cifrasNota: NOTA_NETAS,
-        columnas: [{ clave: 'cajero', titulo: 'Cajero (quien abrió la cuenta)', tipo: 'texto' }, { clave: 'ventas', titulo: 'Ventas (número)', tipo: 'numero', dec: 0 }, { clave: 'total', titulo: 'Monto con IVA (₡)', tipo: 'moneda' }],
-        filas: filas.map((t) => ({ cajero: nombrePropio(t.cajero), ventas: +t.ventas, total: +t.total })),
-        totales: { ventas: 'suma', total: 'suma' },
+        titulo: 'Ventas por cajero', cifras: 'netas', cifrasNota: conAj ? NOTA_NETAS_CUENTA : NOTA_NETAS,
+        columnas: [{ clave: 'cajero', titulo: 'Cajero (quien cobró la venta o hizo la nota)', tipo: 'texto' }, { clave: 'ventas', titulo: 'Ventas (número)', tipo: 'numero', dec: 0 }, ...colsAjustes(conAj), { clave: 'total', titulo: tituloNeto(conAj), tipo: 'moneda' }],
+        filas: filas.map((t) => ({ cajero: nombrePropio(t.cajero), ventas: +t.ventas, ...valsAjustes(conAj, t), total: +t.total })),
+        totales: { ventas: 'suma', ...totalesAjustes(conAj), total: 'suma' },
+        ...(conAj ? { notas: [NOTA_CUENTA] } : {}),
       };
     }
     function seccionCajeros(d) {
-      const filas = d.por_cajero || []; if (!filas.length || (filas.length === 1 && filas[0].cajero === 'Sin registrar')) return null;
-      return seccion('Por cajero', 'Quien abrió la cuenta de cada venta. Monto con IVA, sin ventas anuladas.', () => conBase('Ventas por cajero', tablaCajeros(d)),
-        tablaSimple([{ t: 'Cajero' }, { t: 'Ventas', der: 1 }, { t: 'Monto con IVA', der: 1 }], filas.map((t) => [nombrePropio(t.cajero), num(t.ventas, 0), money(t.total)])));
+      const filas = cajerosDe(d); if (!filas) return null;
+      const conAj = hayAjustes(filas);
+      const sumaD = (k) => filas.reduce((a, t) => a + t.dsg[k], 0);
+      const totalD = conAj ? { dsg: { bruto: sumaD('bruto'), dev: sumaD('dev'), nd: sumaD('nd') }, total: filas.reduce((a, t) => a + (+t.total || 0), 0) } : null;
+      return seccion('Por cajero', 'Quien cobró cada venta; cada nota cuenta para quien la hizo. Monto neto con IVA, sin ventas anuladas.', () => conBase('Ventas por cajero', tablaCajeros(d)),
+        tablaSimple([{ t: 'Cajero' }, { t: 'Ventas', der: 1 }, ...(conAj ? [{ t: 'Vendido', der: 1, ancha: 1 }, { t: 'Devoluciones y anulaciones', der: 1, ancha: 1 }, { t: 'Notas de débito', der: 1, ancha: 1 }] : []), { t: conAj ? 'Neto con IVA' : 'Monto con IVA', der: 1 }],
+          filas.map((t) => ({ celdas: [nombrePropio(t.cajero), num(t.ventas, 0), ...(conAj ? celdasAjustes(t) : []), celdaNeto(t, conAj)], sub: filaCuenta(t, conAj) })),
+          conAj ? [h('tr' + (tieneCuenta(totalD, true) ? '.lis-con-sub' : ''), h('td', 'Total de las filas'), h('td.der', num(filas.reduce((a, t) => a + (+t.ventas || 0), 0), 0)), ...celdasAjustes(totalD).map((c) => h('td.der.lis-ancha', c)), h('td.der', celdaNeto(totalD, true))), filaCuenta(totalD, true)] : null, '.lis-ajustes'),
+        conAj ? h('p.tenue.lis-cuenta', NOTA_CUENTA) : null);
     }
     // Una fila por tarifa de IVA (13 %, 2 %, 0 %...). Las notas de crédito restan, así que el total cuadra con las ventas netas de arriba.
     const nombreTarifa = (t) => {

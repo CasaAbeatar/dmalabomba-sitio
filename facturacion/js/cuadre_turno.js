@@ -31,6 +31,16 @@ export function docsDelTurno(lista, turno) {
   }).sort((a, b) => new Date(b.fecha_emision) - new Date(a.fecha_emision));
 }
 
+// Lo que una lista armada «desde la hora de apertura» cuenta de más frente al cierre de caja: documentos que no son de este turno (de otra caja, o notas hechas sin turno).
+// Devuelve { n: cuántos suman o restan, cent: cuánto en céntimos (con signo) }. Sin la llave turno_id no se puede saber: n = 0.
+export function fueraDelTurno(lista, turno) {
+  const dentro = new Set(docsDelTurno(lista, turno).map((d) => d.id));
+  const otros = (lista || []).filter((d) => d && !dentro.has(d.id));
+  return { n: otros.filter((d) => d.estado !== 'rechazado').length, cent: Math.round(sumarDocumentos(otros).neto * 100) };
+}
+export const fraseFueraDelTurno = ({ n, cent }) => (n > 0 && cent !== 0
+  ? `El total de arriba cuenta además ${plural(n, 'documento', 'documentos')} de esta lista que no ${n === 1 ? 'es' : 'son'} de este turno (de otra caja, o notas hechas con la caja cerrada): ${cent < 0 ? 'resta ' : 'suma '}${money(Math.abs(cent) / 100)}.` : null);
+
 // Lo que suma una lista de documentos (montos en céntimos para que no haya errores de redondeo). Un documento rechazado no existe para Hacienda: no suma.
 // Las notas de crédito restan (anulaciones, devoluciones y correcciones de monto) y las notas de débito suman: así el total coincide con total_ventas_netas de «Apertura y cierre de caja».
 // nAnul y nDev separan las anulaciones totales (código 01, o sin código) de las devoluciones y correcciones; si la lista no trae el código, todas cuentan como anulaciones, como antes.
