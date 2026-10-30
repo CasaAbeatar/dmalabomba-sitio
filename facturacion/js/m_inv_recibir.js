@@ -31,35 +31,60 @@ export async function abrir(ctx, id, pedido = {}) {
 /* =====================================================================================================================
    Lista de facturas por recibir
    ===================================================================================================================== */
+// Al entrar a una empresa, «Por recibir» abre con las facturas de ESA empresa; «Las dos empresas» queda a un toque. La última elección se recuerda por empresa mientras la página siga abierta.
+const FILTRO_RECUERDO = new Map();
 async function abrirLista(ctx) {
   const cat = ctx.cat;
-  const est = { sociedad: null, q: '', datos: null };
+  const propia = (cat.empresas || []).some((e) => e.id === ctx.app.socId) ? ctx.app.socId : null;
+  const est = { sociedad: FILTRO_RECUERDO.has(propia) ? FILTRO_RECUERDO.get(propia) : propia, q: '', datos: null, otra: null, otraVieja: true };
   let vivo = true, seq = 0;
   const buscar = h('input.campo', { type: 'search', placeholder: 'Proveedor, cédula, número o artículo', 'aria-label': 'Buscar factura por recibir', autocomplete: 'off' });
   const filtroEmp = h('div.inv-segmento', { role: 'group', 'aria-label': 'De qué empresa' });
   const deshechos = h('div.inv-deshechos', { 'aria-live': 'polite' });
   const lista = h('div.inv-fac-lista', cargando('Buscando facturas por recibir…'));
   const resumen = h('div.inv-resumen');
+  const cab = h('div.inv-ventana-cab');
+  const otraNota = h('div.inv-otra-nota');
   const contenido = [
-    h('div.inv-ventana-cab', h('p', 'Facturas de proveedores a nombre de ', h('strong', 'Soda La Bomba'), ' y de ', h('strong', 'Pollos La Bomba'), ' que traen líneas por entrar a la bodega. Lo que llegó hoy va primero.')),
+    cab,
     h('div.inv-filtros', filtroEmp, h('label.etq.inv-buscar', 'Buscar', campoBusqueda(buscar, () => { est.q = ''; cargar(); }))),
-    deshechos, lista, resumen];
-  const alCambio = () => { if (vivo) cargar(); };
+    otraNota, deshechos, lista, resumen];
+  const alCambio = () => { if (vivo) { est.otraVieja = true; cargar(); } };
   ventana({ titulo: 'Por recibir', contenido, alCerrar: () => { vivo = false; document.removeEventListener('inv:cambio', alCambio); } });
   document.addEventListener('inv:cambio', alCambio);
   buscar.addEventListener('input', debounce(() => { est.q = buscar.value.trim(); cargar(); }, 350));
 
+  function elegir(id) {
+    if (est.sociedad === id) return;
+    est.sociedad = id; FILTRO_RECUERDO.set(propia, id);
+    est.datos = null; pintarFiltro(); cargar();
+  }
   function pintarFiltro() {
-    const b = (id, t) => h('button.btn.inv-seg', { type: 'button', 'aria-pressed': String(est.sociedad === id), onclick: () => { if (est.sociedad === id) return; est.sociedad = id; pintarFiltro(); cargar(); } }, t);
-    poner(filtroEmp, b(null, 'Las dos empresas'), ...(cat.empresas || []).map((e) => b(e.id, e.nombre)));
+    const b = (id, t) => h('button.btn.inv-seg', { type: 'button', 'aria-pressed': String(est.sociedad === id), onclick: () => elegir(id) }, t);
+    const empresas = cat.empresas || [];
+    const mi = empresas.find((e) => e.id === propia);
+    // La empresa de la sesión va primero; «Las dos empresas» después
+    const otras = empresas.filter((e) => e.id !== propia);
+    poner(filtroEmp, ...(mi ? [b(mi.id, mi.nombre), b(null, 'Las dos empresas'), ...otras.map((e) => b(e.id, e.nombre))] : [b(null, 'Las dos empresas'), ...empresas.map((e) => b(e.id, e.nombre))]));
+    const e = empresas.find((x) => x.id === est.sociedad);
+    poner(cab, h('p', 'Facturas de proveedores a nombre de ',
+      ...(e ? [h('strong', e.nombre)] : empresas.flatMap((x, i) => [i ? ' y de ' : '', h('strong', x.nombre)])),
+      ' que traen líneas por entrar a la bodega. Lo que llegó hoy va primero.'));
+  }
+  // Con una sola empresa a la vista, avisa cuántas hay de la otra para que el número del inicio de Inventarios (las dos) cuadre
+  function pintarOtra() {
+    const falta = est.sociedad ? ((est.otra && est.otra.resumen && est.otra.resumen.por_empresa) || []).filter((e) => e.sociedad_id !== est.sociedad && Number(e.facturas) > 0) : [];
+    poner(otraNota, falta.length ? h('p.tenue.inv-chico', falta.map((e) => 'Hay ' + plural(e.facturas, 'factura por recibir', 'facturas por recibir') + ' a nombre de ' + e.sociedad_nombre + '. Para verlas toque «Las dos empresas».').join(' ')) : null);
   }
   async function cargar() {
     const mia = ++seq;
     if (!est.datos) poner(lista, cargando('Buscando facturas por recibir…'));
     try {
-      const d = await inv.pendientes(est.sociedad, est.q, 100);
+      const pedirOtra = est.sociedad && est.otraVieja;
+      const [d, otra] = await Promise.all([inv.pendientes(est.sociedad, est.q, 100), pedirOtra ? inv.pendientes(null, '', 1).catch(() => null) : Promise.resolve(undefined)]);
       if (!vivo || mia !== seq) return;
-      est.datos = d; pintar();
+      if (pedirOtra) { est.otra = otra; est.otraVieja = !otra; }
+      est.datos = d; pintar(); pintarOtra();
     } catch (e) {
       if (!vivo || mia !== seq) return;
       poner(lista, falla(e, () => { est.datos = null; cargar(); }, 'No se pudieron traer las facturas por recibir'));
@@ -77,7 +102,7 @@ async function abrirLista(ctx) {
       const totalFacs = Number((d.resumen || {}).facturas) || 0;
       const cuenta = (n) => String(n) + (d.truncado && totalFacs > facs.length ? ' de ' + totalFacs : '');
       poner(lista,
-        d.truncado ? aviso('espera', h('p', 'Se muestran las ' + facs.length + ' más recientes' + (totalFacs > facs.length ? ' de ' + totalFacs : '') + '. Use el buscador o escoja una empresa para ver las demás.')) : null,
+        d.truncado ? aviso('espera', h('p', 'Se muestran las ' + facs.length + ' más recientes' + (totalFacs > facs.length ? ' de ' + totalFacs : '') + (est.sociedad ? '. Use el buscador para ver las demás.' : '. Use el buscador o escoja una empresa para ver las demás.'))) : null,
         deHoy.length ? h('h3.inv-grupo-tit', 'Llegaron hoy', h('span.inv-cuenta', String(deHoy.length))) : null, ...deHoy.map(tarjeta),
         antes.length ? h('h3.inv-grupo-tit', deHoy.length ? 'De días anteriores' : 'Facturas por recibir', h('span.inv-cuenta', deHoy.length ? String(antes.length) : cuenta(antes.length))) : null, ...antes.map(tarjeta));
     }
