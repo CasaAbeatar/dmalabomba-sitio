@@ -9,9 +9,9 @@
 //   fx_venta_clonar_con_cliente(p_venta, p_cliente) -> lo mismo, pero la cuenta nueva queda con el cliente elegido (un tiquete no guarda cliente); sql/21h
 //   fx_comprobante_saldos(p_id)             -> qué se le puede hacer a una factura o tiquete (admite_anulacion, motivo_no_anulacion), sus notas (notas[], con viva) y sus saldos (CONTRATO_NC_SQL.md, sección 2.1)
 //   fx_nota_calcular, fx_nota_credito_devolucion, fx_nota_credito_monto, fx_nota_debito_monto, fx_nota_debito_sin_efecto -> notas parciales (CONTRATO_NC_SQL.md 2.2 a 2.6; las usa m_nota_parcial.js)
-//   fx_venta_reemplazo_info(p_venta)        -> si una cuenta abierta es la copia de un comprobante anulado ({reemplaza, original_id, consecutivo, estado_nota_credito})
+//   fx_venta_reemplazo_info(p_venta)        -> si una cuenta abierta es la copia de un comprobante anulado ({reemplaza, original_id, consecutivo, estado_nota_credito, otro_ambiente, otro_ambiente_motivo})
 //   fx_cobrar_reemplazo(p_venta, p_original, p_pagos, ...) -> cobra esa copia y deja guardada la referencia 07 «Sustituye al comprobante»
-import { api, rpc, ErrorApi } from './api.js';
+import { api, rpc, ErrorApi, esPinObligatorio } from './api.js';
 import { hoyCR, sumaDias, numeroDoc, traducirHacienda } from './util.js';
 
 // ¿La función de la base no existe todavía? api.js cambia el texto de todo error técnico por una frase general, así que el texto ya no sirve para saberlo:
@@ -144,15 +144,23 @@ export const sinEfectoDeSaldos = (s) => (s && Array.isArray(s.notas) ? s.notas.f
 
 /* ---------- Reemplazo: «Anular y hacer de nuevo» ---------- */
 // Pregunta si la cuenta abierta es la copia de un comprobante anulado. { ok: true, reemplaza: false } o
-// { ok: true, reemplaza: true, original_id, consecutivo, estado_nota_credito } (pendiente, enviado, aceptado o error). { ok: false } si no se pudo saber (la función no existe o no hubo conexión).
+// { ok: true, reemplaza: true, original_id, consecutivo, estado_nota_credito, otro_ambiente, otro_ambiente_motivo } (pendiente, enviado, aceptado o error). { ok: false } si no se pudo saber (la función no existe o no hubo conexión).
+// otro_ambiente (32l): el comprobante original se emitió en otro ambiente de Hacienda que el que usa hoy el local (por ejemplo, en pruebas y hoy se emite en producción). Entonces Hacienda no lo tiene
+// y la base no deja reemplazarlo: otro_ambiente_motivo es el texto en español de la base («Descarte esta cuenta con «Anular esta cuenta»…»). Si la base todavía no manda la llave, otro_ambiente es false.
 // Un error de negocio de la base (P0001 / PT4xx) NO se traga: se lanza tal cual con su texto en español. Es el caso de fx_23e: la anulación del original se dejó sin efecto con una nota de débito,
 // así que ese comprobante vuelve a valer y la cuenta no puede cobrarse como su reemplazo. Caja muestra ese texto y ofrece «Anular esta cuenta».
+// La excepción es el cambio de PIN obligatorio (PT409): no dice nada de esta cuenta, así que es «no se sabe» (main.js lleva a la persona a elegir su PIN).
+const MOTIVO_OTRO_AMBIENTE = 'Esta venta es la copia de un comprobante que se emitió en otro ambiente de Hacienda (pruebas o producción), y este local emite hoy en otro. Hacienda no lo tiene en el ambiente actual, así que no se puede reemplazar desde aquí. Descarte esta cuenta con «Anular esta cuenta» y haga una venta nueva normal.';
 export async function reemplazoInfo(ventaId) {
   try {
     const r = await rpc('fx_venta_reemplazo_info', { p_venta: ventaId });
     if (!r || typeof r !== 'object') return { ok: false };
-    return r.reemplaza === true && r.original_id ? { ok: true, reemplaza: true, original_id: r.original_id, consecutivo: r.consecutivo || '', estado_nota_credito: r.estado_nota_credito || '' } : { ok: true, reemplaza: false };
+    if (!(r.reemplaza === true && r.original_id)) return { ok: true, reemplaza: false };
+    const otro = r.otro_ambiente === true;
+    return { ok: true, reemplaza: true, original_id: r.original_id, consecutivo: r.consecutivo || '', estado_nota_credito: r.estado_nota_credito || '',
+      otro_ambiente: otro, otro_ambiente_motivo: otro ? (String(r.otro_ambiente_motivo || '').trim() || MOTIVO_OTRO_AMBIENTE) : '' };
   } catch (e) {
+    if (esPinObligatorio(e)) return { ok: false }; // «elija su PIN nuevo» no es una respuesta sobre esta cuenta
     if (esRespuestaDeNegocio(e)) throw e; // la base dijo que no, con palabras: se muestra
     return { ok: false }; // sin red, sin tiempo o sin la función: «no se sabe», y el cobro normal sigue (la base lo vuelve a revisar al cobrar)
   }

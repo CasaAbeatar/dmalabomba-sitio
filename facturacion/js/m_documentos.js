@@ -365,6 +365,8 @@ export default {
     const conDevolucion = (d) => Number(d.parciales_n) > 0;
     const conDebito = (d) => Number(d.debitos_n) > 0;
     let consulta = ''; // la búsqueda normalizada, una sola vez por pintura
+    let consultaId = ''; // la misma, solo letras y números: para buscar identificaciones escritas con guiones o espacios (3-101-123456) o con letras (pasaporte, tipos 05 y 06)
+    const sinSignos = (t) => norm(t).replace(/[^0-9a-z]/g, '');
     let ultimosVisibles = [];
     const visiblesAhora = () => ultimosVisibles;
     function coincide(d) {
@@ -386,6 +388,8 @@ export default {
         cacheTexto.set(d, texto);
       }
       if (texto.includes(consulta)) return true;
+      // La identificación del cliente se guarda sin guiones ni espacios y, en los tipos 05 y 06, con letras en mayúscula: se compara sin signos y sin distinguir mayúsculas
+      if (consultaId.length >= 3 && d.cliente_identificacion && sinSignos(d.cliente_identificacion).includes(consultaId)) return true;
       if (!/^[\d\s.,₡]+$/.test(q)) return false; // solo un número escrito se compara con montos y consecutivos
       const dig = q.replace(/\D/g, '');
       if (!dig) return false;
@@ -450,7 +454,7 @@ export default {
         .filter(Boolean).map(([k, t]) => h('button.btn' + (k === 'problemas' ? '.alerta' : ''), { type: 'button', 'aria-pressed': String(est.filtro === k), onclick: () => { est.filtro = k; est.avisoFiltro = null; est.pagina = 1; pintar(); } }, t)),
         ...(selTarifa ? [h('label.doc-tarifa', h('span', 'Tarifa de IVA'), selTarifa)] : []));
       if (est.avisoFiltro) zonaFiltros.append(h('p.doc-aviso-filtro', { role: 'status' }, est.avisoFiltro));
-      consulta = norm(est.q.trim());
+      consulta = norm(est.q.trim()); consultaId = sinSignos(est.q);
       const pasa = { todos: () => true, problemas: esProblema, pendientes: esPendiente, aceptados: (d) => d.estado === 'aceptado', rechazados: (d) => d.estado === 'rechazado', devoluciones: conDevolucion, debitos: conDebito }[est.filtro] || (() => true);
       const pasaTarifa = (d) => !est.tarifa || listaTarifas(d).includes(est.tarifa);
       const visibles = est.lista.filter((d) => pasa(d) && pasaTarifa(d) && coincide(d)); // la búsqueda y los filtros actúan sobre TODO el rango cargado

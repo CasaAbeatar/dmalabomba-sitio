@@ -846,14 +846,16 @@ async function cerrarSesion() {
 
 // Cambio de PIN obligatorio en medio del trabajo: cuando cualquier llamada contesta con el código PT409 (api.js avisa con 'app:pin-obligatorio'), se va a la pantalla de cambio de PIN de siempre.
 // Al guardar el PIN nuevo, arrancar() vuelve a la misma dirección (#) donde la persona estaba. Se detienen los avisos y se cierran las ventanas; las cuentas abiertas están guardadas en el sistema.
-// Hoy la base TODAVÍA no manda este código: el requisito no está activado y esto no se ve.
+// La base ya lo exige (fx_chk, interruptor pin_cambio_obligatorio): pasa, por ejemplo, cuando una persona administradora reinicia el PIN de alguien que tiene la sesión abierta.
+// fx_chk corre antes de cualquier escritura, así que la llamada que recibió el PT409 no hizo nada. Lo que se pierde es solo lo escrito en ventanas abiertas; las cuentas abiertas están guardadas en el sistema.
+const AVISO_PIN_OBLIGATORIO = 'Antes de seguir, elija su PIN nuevo. Al guardarlo vuelve a esta misma pantalla. Las cuentas abiertas siguen guardadas, pero lo que estaba escribiendo en una ventana se pierde.';
 document.addEventListener('app:pin-obligatorio', () => {
   if (!app.ctx || cambioPinActivo || cerrando) return;
   clearInterval(alTimer); alSeq++; irSeq++;
   try { limpieza?.(); } catch { /* nada */ }
   limpieza = null;
   cerrarVentanas();
-  pantallaCambioPin({ aviso: 'Antes de seguir, elija su PIN nuevo.' });
+  pantallaCambioPin({ aviso: AVISO_PIN_OBLIGATORIO });
 });
 
 /* ---------- Arranque ---------- */

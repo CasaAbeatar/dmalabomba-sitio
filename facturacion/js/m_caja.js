@@ -5,7 +5,7 @@ import { errorActividad, limpiarActividad } from './ui_cedula.js';
 import { selectorCliente } from './ui_cliente.js';
 import { estadoDireccion } from './direccion_cliente.js';
 import { apiM } from './api_mantenimiento.js';
-import { esTransitorio } from './api.js';
+import { esTransitorio, esPinObligatorio } from './api.js';
 import { reemplazoInfo, cobrarReemplazo, esRespuestaDeNegocio, tiposIdentificacion, avisoTipoId } from './api_documentos.js';
 import { TARIFAS_IVA, tarifaDeLinea, desgloseIva, tarifaHabitual } from './iva.js';
 import { infoActividad, textoActividad } from './actividades.js';
@@ -1202,7 +1202,13 @@ export default {
         try { cajaBloqueo.tabIndex = -1; cajaBloqueo.scrollIntoView({ block: 'center' }); cajaBloqueo.focus({ preventScroll: true }); } catch { /* nada */ }
       }
       const reemplazoListo = Promise.race([reemplazoInfo(ventaId), new Promise((ok) => setTimeout(() => ok({ ok: false }), 5000))])
-        .then((r) => { if (r && r.ok && r.reemplaza) { reemplazo = r; if (!terminado) pintarReemplazo(); } return r || { ok: false }; })
+        .then((r) => {
+          if (r && r.ok && r.reemplaza) {
+            // Copia de un comprobante de otro ambiente (32l): la base no deja reemplazarlo. Se dice antes de cobrar, con su motivo, y solo se ofrece «Anular esta cuenta»
+            if (r.otro_ambiente) { if (!terminado) bloquear(r.otro_ambiente_motivo); } else { reemplazo = r; if (!terminado) pintarReemplazo(); }
+          }
+          return r || { ok: false };
+        })
         .catch((e) => { if (esRespuestaDeNegocio(e)) { if (!terminado) bloquear(e.message); return { ok: false, bloqueada: true }; } return { ok: false }; });
       const btnRevisar = h('button.btn', { type: 'button', hidden: true }, 'Revisar si se cobró');
       // Impresión: se usan los ajustes de este aparato (botón «Impresora»); aquí solo se muestran y se pueden abrir para cambiarlos
@@ -1463,7 +1469,10 @@ export default {
           if (!info || !info.ok) {
             try { info = await reemplazoInfo(ventaId); }
             catch (e2) { if (esRespuestaDeNegocio(e2)) { bloquear(e2.message); throw noSeCobra(e2.message); } throw e2; }
-            if (info && info.ok && info.reemplaza) reemplazo = info;
+            if (info && info.ok && info.reemplaza) {
+              if (info.otro_ambiente) { bloquear(info.otro_ambiente_motivo); throw noSeCobra(bloqueo); } // la copia es de otro ambiente: no se cobra, el aviso ya está a la vista
+              reemplazo = info;
+            }
           }
           if (!info || !info.ok) {
             const sin = new Error('No se pudo comprobar si esta venta reemplaza a una factura anulada. Revise la conexión y toque «Cobrar» otra vez. No se cobró nada.');
@@ -1482,6 +1491,9 @@ export default {
             if (!vivo || !m) return;
             bloquear(e.message); return;
           }
+          // «Elija su PIN nuevo» (PT409): la base lo contestó antes de hacer nada, no se cobró. Main.js lleva a la persona a elegir su PIN; aquí no se deja la cuenta «en duda»
+          // (esa marca se queda guardada mientras la página siga abierta y obligaría a «Revisar si se cobró» al volver).
+          if (esPinObligatorio(e)) { cobrando = false; ventasEnCobro.delete(ventaId); if (!vivo || !m) return; actualizar(); return; }
           const v = await verificarCobro();
           if (v.estado === 'cobrado') {
             // Solo se habla de conexión si de verdad fue un problema de conexión; si el servidor dijo que la cuenta ya estaba cobrada, se dice eso

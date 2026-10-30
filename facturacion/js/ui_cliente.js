@@ -30,7 +30,7 @@ import { api } from './api.js';
 import { clientesTodos, clienteActivar } from './api_clientes.js';
 import { UBICACIONES } from './data_ubicaciones.js';
 import { cargarCss, campo, aviso, conBotonM, mensajeSeguro } from './ui_mant.js';
-import { crearCampoIdentificacion, leerCorreos } from './ui_cedula.js';
+import { crearCampoIdentificacion, leerCorreos, llevaLetras, limpiarNumeroId } from './ui_cedula.js';
 import { TARIFAS_CLIENTE, tarifaHabitual, clienteTraeTarifa } from './iva.js';
 import { SIN_DATO, partesParaPantalla, estadoDireccion, codigoUbicacion, fueraDeLista } from './direccion_cliente.js';
 
@@ -154,7 +154,14 @@ export function abrirFormCliente(app, cliente, { alGuardar, alCambiarEstado, tit
   // Número de identificación, nombre y actividad: se verifican en Hacienda (js/ui_cedula.js)
   const ced = crearCampoIdentificacion({
     cliente: esNuevo ? null : c,
-    revisarDuplicado: async (id) => (await clientesTodos(soc.id, id)).find((x) => x.identificacion === id && x.id !== c.id) || null,
+    // En 05 y 06 (pasaporte y otros documentos con letras) el número se busca y se compara como lo guarda la base: letras en mayúscula, sin guiones, espacios ni signos.
+    // A la base se le pregunta con ese mismo texto (fx_clientes_todos busca también por letras) y se comparan los dos lados ya limpios, por si algún cliente viejo quedó guardado de otra forma.
+    revisarDuplicado: async (id) => {
+      const letras = llevaLetras(ced.valores().tipo_id);
+      const buscado = letras ? limpiarNumeroId(id, '05') : id;
+      const igual = (x) => (letras ? limpiarNumeroId(x.identificacion, '05') === buscado : x.identificacion === buscado);
+      return (await clientesTodos(soc.id, buscado)).find((x) => igual(x) && x.id !== c.id) || null;
+    },
     accionDuplicado: { texto: 'Abrir el cliente que ya existe', fn: (otro) => { m.cerrar(); abrirFormCliente(app, otro, { alGuardar, alCambiarEstado, titulo }); } },
     numeroInicial: esNuevo ? numeroInicial : '',
     alTerminar: () => { [correos[0]].find((x) => !x.value.trim())?.focus(); },

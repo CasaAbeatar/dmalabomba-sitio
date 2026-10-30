@@ -6,7 +6,7 @@ import { h, esqueleto, bloqueError, textoDeError, confirmar, conBoton, toast, mo
 import { cargarHoja } from './ui_hojas.js';
 import { soloDigitos } from './ui_mant.js';
 import { avisos } from './api_avisos.js';
-import { EVENTOS, TITULO_EVENTO, NOTA_DEVOLUCIONES, estadoAvisos, resumenDeEstado, telefonoBonito, estadoDeAviso, vistaPrevia } from './avisos_texto.js';
+import { EVENTOS, TITULO_EVENTO, NOTA_DEVOLUCIONES, cuantasCosas, estadoAvisos, resumenDeEstado, telefonoBonito, estadoDeAviso, vistaPrevia } from './avisos_texto.js';
 
 const lista = (x) => (Array.isArray(x) ? x.filter((i) => i && typeof i === 'object') : []);
 
@@ -64,6 +64,8 @@ export default {
           h('div.av-persona-nombre', nombrePropio(p.nombre || ''), ' ', h('span.chip.' + (activa ? 'ok' : 'gris'), activa ? 'Recibe avisos' : 'No recibe avisos')),
           h('div.av-tel', telefonoBonito(p.telefono)),
           h('div.av-evs', evs.length ? evs.map((t) => h('span.chip.gris', t)) : h('span.tenue', 'Sin ningún aviso escogido')),
+          // Una persona agregada antes de que existiera este aviso no lo recibe hasta que se lo active (la base avisa solo a quien lo tiene escogido)
+          activa && evs.length && !(Array.isArray(p.eventos) && p.eventos.includes('devolucion_efectivo')) ? h('div.av-min', 'No recibe el aviso de devolución de efectivo con nota de crédito. Toque «Cambiar datos» si quiere que lo reciba.') : null,
           h('div.av-min', min > 0 ? 'Solo avisos de ' + money(min) + ' o más.' : 'Todos los montos.'),
           h('div.av-cons', p.consentimiento_en ? 'Aceptó recibir avisos el ' + fechaCorta(p.consentimiento_en) + (p.consentimiento_por ? ' (lo confirmó ' + p.consentimiento_por + ').' : '.') : 'Falta confirmar que aceptó recibir avisos.')),
         h('div.av-persona-btns',
@@ -78,7 +80,7 @@ export default {
           ? bloqueError({ titulo: 'No se pudo cargar la lista de personas', mensaje: textoDeError(errLista), alReintentar: () => cargar() })
           : personas.length ? h('ul.av-personas', personas.map(tarjetaPersona))
             : h('p.av-vacio', 'Todavía no hay nadie que reciba avisos. Toque «Agregar persona» para escribir el nombre y el teléfono de quien debe enterarse.'),
-        h('p.av-nota', 'El sistema avisa de cuatro cosas: ' + EVENTOS.map((e) => e.titulo.toLowerCase()).join(', ') + '. ' + NOTA_DEVOLUCIONES));
+        h('p.av-nota', 'El sistema avisa de ' + cuantasCosas() + ': ' + EVENTOS.map((e) => e.titulo.toLowerCase()).join(', ') + '. ' + NOTA_DEVOLUCIONES));
     }
 
     async function alternar(p, btn) {

@@ -1,9 +1,9 @@
 // Usuarios del facturador (solo administradores): crear, cambiar nombre, reiniciar PIN, activar o desactivar. Nunca se elimina.
 // Cada empresa tiene sus usuarios: el servidor (fx_usuarios) entrega solo los de la empresa de la sesión y un usuario nuevo queda en esa empresa.
 // fx_usuarios trae por usuario `empresas: [{ id, codigo, nombre_comercial }]`; de la fila del propio administrador salen las OTRAS empresas a las que él tiene acceso (casilla «También puede entrar a …»).
-import { h, modal, confirmar, pedir, conBoton, toast, fechaHora, pinDebil, conPunto, nombrePropio, nombreLocal, bloqueError, textoDeError } from './util.js';
+import { h, modal, confirmar, pedir, conBoton, toast, fechaHora, fechaCorta, pinDebil, conPunto, nombrePropio, nombreLocal, bloqueError, textoDeError } from './util.js';
 import { api } from './api.js';
-import { seguridad, normalizarSeguridad } from './api_seguridad.js';
+import { seguridad, normalizarSeguridad, normalizarAparatos } from './api_seguridad.js';
 import { haceCuanto } from './api_respaldos.js';
 import { cargarCss, aviso, campo, soloDigitos, diaCR } from './ui_mant.js';
 
@@ -27,6 +27,7 @@ export default {
     const lista = h('div');
     const resumen = h('p.mt-nota');
     const segEl = h('section.tarjeta.mt-seg', { 'aria-label': 'Seguridad del ingreso' });
+    const aparEl = h('section.tarjeta.mt-apa', { 'aria-label': 'Aparatos de confianza' });
     let usuarios = [];
     const esYo = (u) => String(u.usuario).toLowerCase() === String(app.usuario || '').toLowerCase();
     const miEmpresa = app.empresa?.nombre || 'esta empresa';
@@ -120,17 +121,36 @@ export default {
         h('p.mt-nota', 'Aquí aparece un aviso cuando alguien se equivoca muchas veces con el PIN. El ingreso nunca se bloquea: esto es solo para que usted se entere.'),
         pend.length ? h('ul.mt-seg-lista', pend.map(avisoIngreso)) : (r.pendientes > 0 ? null : h('p.mt-seg-ok', 'No hay avisos de ingreso por atender.')),
         masSinVer > 0 ? h('p.mt-nota', 'Hay ' + masSinVer + (masSinVer === 1 ? ' aviso más' : ' avisos más') + ' sin atender, más antiguos que los de arriba. Atienda estos y aparecerán.') : null,
-        pend.length ? h('p.mt-seg-pie', 'El aviso no dice desde qué aparato se hizo el intento: el sistema todavía no lo guarda.') : null,
+        pend.length ? h('p.mt-seg-pie', 'La red se muestra resumida, sin la dirección completa.') : null,
         antes.length ? h('details.mt-seg-antes', h('summary', 'Avisos ya atendidos (' + antes.length + ')'),
           h('ul', antes.map((a) => h('li', h('span', fechaHora(a.creada_en) + ' · ' + a.mensaje), h('span.chip.gris', 'Atendido'))))) : null].filter(Boolean));
     }
 
+    // De dónde vino el intento, en palabras simples. El texto del aviso (lo escribe la base) ya nombra la primera red y, cuando lo sabe, el aparato:
+    // aquí solo se suma lo que ese texto no dice (las otras redes con su cuenta de intentos, y si la red o el aparato son conocidos).
+    function origenDe(a) {
+      const m = a.mensaje || '';
+      const red = (x) => (x.ip === 'sin dato' ? 'una red que no se pudo identificar' : 'la red ' + x.ip) + (x.fallos ? ' (' + (x.fallos === 1 ? '1 intento' : x.fallos + ' intentos') + ')' : '');
+      const partes = [];
+      if (a.ips.length > 1) partes.push('Los intentos vinieron de ' + a.ips.map(red).join(', ') + '.');
+      else if (a.ips.length === 1 && a.ips[0].ip !== 'sin dato' && !m.includes(a.ips[0].ip)) partes.push('Los intentos vinieron de ' + red(a.ips[0]) + '.');
+      else if (!a.ips.length && a.ip && a.ip !== 'sin dato' && !m.includes(a.ip)) partes.push('Red: ' + a.ip + '.');
+      if (a.ip_conocida != null && !/red (nueva|que esa persona ya usa)/i.test(m)) partes.push(a.ip_conocida ? 'Es una red que esa persona ya usa.' : 'Es una red nueva para esa persona.');
+      if (a.aparato && !/aparato/i.test(m)) {
+        const quien = a.aparato.etiqueta ? ' (' + a.aparato.etiqueta + ')' : '';
+        partes.push((a.tipo === 'acierto_tras_fallos' ? 'Entró' : 'Los intentos vinieron') + ' desde un aparato ' + (a.aparato.estado === 'nuevo' ? 'nuevo' : 'que ya se conocía') + quien + '.');
+      }
+      return partes.join(' ');
+    }
+
     function avisoIngreso(a) {
+      const origen = origenDe(a);
       const quien = a.usuario ? usuarios.find((u) => u.usuario === a.usuario) : null;
       const btnAtender = h('button.btn.primario', { type: 'button', onclick: (e) => atenderAviso(a, e.currentTarget) }, 'Marcar como atendida');
       const btnPin = quien && !esYo(quien) && quien.activo ? h('button.btn', { type: 'button', onclick: (e) => reiniciarPin(quien, e.currentTarget) }, 'Reiniciar PIN de ' + nombrePropio(quien.nombre || quien.usuario)) : null;
       return h('li.mt-seg-aviso',
         h('p.mt-seg-que', a.mensaje || 'Aviso de ingreso.'),
+        origen ? h('p.mt-seg-origen', origen) : null,
         h('p.mt-seg-cuando', a.creada_en ? fechaHora(a.creada_en) + ' (' + haceCuanto(a.creada_en) + ')' : ''),
         QUE_HACER[a.tipo] ? h('p.mt-seg-guia', QUE_HACER[a.tipo]) : null,
         h('div.mt-seg-btns', btnAtender, btnPin));
@@ -145,6 +165,61 @@ export default {
         toast('Aviso marcado como atendido.');
         app.alertas?.refrescar?.(); // la insignia de Usuarios se pone al día
         await cargarSeguridad();
+      });
+    }
+
+    /* ---------- Aparatos de confianza (fx_login_aparatos): los aparatos desde los que cada persona ya entró; se les puede quitar la confianza ---------- */
+    let nApa = 0, ultimaApa = null, verTodos = false;
+    const cbTodos = h('input', { type: 'checkbox', onchange: () => { verTodos = cbTodos.checked; cargarAparatos(); } });
+    async function cargarAparatos() {
+      const mi = ++nApa;
+      let r = null, falla = null;
+      try { r = normalizarAparatos(await seguridad.aparatos(null, verTodos)); if (!r) falla = new Error('El sistema contestó algo que no se pudo leer.'); } catch (e) { falla = e; }
+      if (mi !== nApa) return;
+      if (falla) {
+        ultimaApa = null;
+        aparEl.replaceChildren(h('h2', 'Aparatos de confianza'), bloqueError({ titulo: 'No se pudo cargar la lista de aparatos', mensaje: textoDeError(falla), alReintentar: () => cargarAparatos() }));
+        return;
+      }
+      ultimaApa = r; pintarAparatos();
+    }
+    function filaAparato(a) {
+      const estado = a.activo ? '' : (a.revocado_en ? 'Se le quitó la confianza el ' + fechaCorta(a.revocado_en) + '.' : 'Venció el ' + fechaCorta(a.vence_en) + '.');
+      const datos = [a.desde ? 'Desde el ' + fechaCorta(a.desde) : '', a.ultimo_uso ? 'último uso ' + haceCuanto(a.ultimo_uso) : 'sin uso registrado', a.activo && a.vence_en ? 'vence el ' + fechaCorta(a.vence_en) : '', a.ip_resumen ? 'red ' + a.ip_resumen : ''].filter(Boolean).join(' · ');
+      return h('li.mt-apa-item' + (a.activo ? '' : '.inactivo'),
+        h('div.mt-apa-datos', h('strong', a.etiqueta || 'Aparato sin nombre'), h('p.mt-apa-linea', datos + (estado ? ' · ' + estado : ''))),
+        a.activo ? h('button.btn', { type: 'button', onclick: (e) => quitarConfianza(a, e.currentTarget) }, 'Quitar confianza') : h('span.chip.gris', 'Sin confianza'));
+    }
+    function pintarAparatos() {
+      const r = ultimaApa;
+      if (!r) { if (!aparEl.children.length) aparEl.replaceChildren(h('h2', 'Aparatos de confianza'), h('p.mt-nota', 'Revisando los aparatos…')); return; }
+      // Agrupados por persona, en el orden que manda la base (por usuario, el de uso más reciente primero)
+      const grupos = new Map();
+      for (const a of r.aparatos) { const k = a.usuario || '—'; if (!grupos.has(k)) grupos.set(k, { nombre: a.nombre || a.usuario, usuario: a.usuario, lista: [] }); grupos.get(k).lista.push(a); }
+      aparEl.replaceChildren(...[
+        h('div.mt-seg-cab', h('h2', 'Aparatos de confianza'), h('span.chip' + (r.activos ? '.ok' : '.gris'), r.activos === 1 ? '1 aparato activo' : r.activos + ' aparatos activos')),
+        h('p.mt-nota', 'Un aparato de confianza es uno que el sistema reconoce porque esa persona ya entró desde él. Se olvida solo si pasan 90 días sin usarlo. Con esto los avisos de ingreso pueden decir si un intento vino de un aparato conocido.'),
+        h('p.mt-nota', 'Quitar la confianza no cierra la sesión que esa persona tenga abierta ni le impide entrar con su PIN. Para cortar el acceso, reinicie su PIN o desactívela en la lista de usuarios, más abajo.'),
+        r.aparatos.length ? [...grupos.values()].map((g) => h('div.mt-apa-grupo', h('h3', nombrePropio(g.nombre || '') + (g.usuario && nombrePropio(g.nombre || '').toLowerCase() !== g.usuario ? ' (' + g.usuario + ')' : '')), h('ul.mt-apa-lista', g.lista.map(filaAparato))))
+          : h('p.mt-seg-ok', verTodos ? 'No hay aparatos registrados.' : 'No hay aparatos de confianza activos.'),
+        h('label.mt-apa-ver', cbTodos, h('span', 'Mostrar también los que ya no valen (quitados o vencidos)'))].flat());
+    }
+    async function quitarConfianza(a, btn) {
+      const quien = nombrePropio(a.nombre || a.usuario || 'esa persona');
+      let motivo = '';
+      for (;;) {
+        const v = await pedir({ titulo: 'Quitar la confianza a este aparato', etiqueta: 'Motivo (de 3 a 200 letras)', valor: motivo, multilinea: true, boton: 'Quitar la confianza',
+          nota: (a.etiqueta ? '«' + a.etiqueta + '», de ' + quien + '. ' : 'Aparato de ' + quien + '. ') + 'En los avisos de ingreso dejará de aparecer como aparato conocido. No se cierra su sesión abierta: para cortarle el acceso, reinicie su PIN o desactívela. El motivo queda anotado.' });
+        if (v == null) return;
+        motivo = v.trim();
+        if (motivo.length < 3) { toast('Escriba el motivo, al menos 3 letras.', 'error'); continue; }
+        if (motivo.length > 200) { toast('El motivo puede tener hasta 200 letras.', 'error'); continue; }
+        break;
+      }
+      await conBoton(btn, async () => {
+        const r = await seguridad.quitarAparato(a.id, motivo);
+        toast(r && r.ya_estaba_revocado ? 'Ese aparato ya estaba sin confianza.' : 'Listo. Se quitó la confianza a ese aparato de ' + quien + '. Su sesión abierta sigue igual.', 'ok', 6000);
+        await cargarAparatos();
       });
     }
 
@@ -233,7 +308,7 @@ export default {
       h('div.mt-cab',
         h('div', h('p', 'Las personas que pueden entrar al facturador de ', h('strong', miEmpresa), '. Nunca se elimina a nadie: se desactiva.')),
         h('div.mt-acciones', h('button.btn.primario.grande', { type: 'button', onclick: agregar }, 'Agregar usuario'))),
-      segEl, resumen, lista,
+      segEl, aparEl, resumen, lista,
       // Lo de hoy primero (quién ingresó hoy); la explicación del PIN va al final y se abre con un botón grande
       h('details.tarjeta', { style: 'margin-top:1.2rem' },
         h('summary', 'Cómo funciona el PIN'),
@@ -245,7 +320,9 @@ export default {
           h('li', 'Cada persona entra solo a la empresa que se le dio. Aquí se ven y se crean los usuarios de ' + miEmpresa + '.'),
           h('li', 'Dentro de la empresa todos los usuarios tienen acceso a todo. Solo esta pantalla de Usuarios es exclusiva de los administradores.'))));
     pintarSeguridad(); // «Revisando…» mientras llega
+    pintarAparatos();
     cargarSeguridad(); // en paralelo con la lista de usuarios: si falla, la lista igual se ve
+    cargarAparatos();
     await cargar();
   },
 };
