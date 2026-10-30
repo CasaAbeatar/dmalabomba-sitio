@@ -1,5 +1,4 @@
 // Caja: la pantalla que usa el cajero todo el día (abrir caja, cuentas, productos, prefactura y cobro).
-import { crearZonaEfectivo } from './ui_efectivo_rapido.js';
 import { crearFormularioApertura } from './ui_apertura.js';
 import { errorActividad, limpiarActividad } from './ui_cedula.js';
 import { selectorCliente } from './ui_cliente.js';
@@ -350,9 +349,9 @@ export default {
           if (res && res.ya_abierto) toast('La caja ya estaba abierta (la abrió ' + (res.abierto_por || 'otra persona') + ') con ' + money(res.fondo_inicial ?? 0) + '. No se cambió el efectivo con que abrió.', 'ok', 9000);
           if ((app.turno?.id || null) !== turnoMostrado) await iniciar();
         } });
-      zonaEfectivo?.destruir();
-      zonaEfectivo = crearZonaEfectivo({ turnoId: null, alAbrirCaja: () => form.enfocar(), motivos: { entrada: app.ctx?.motivos_entrada_efectivo, salida: app.ctx?.motivos_salida_efectivo } });
-      root.replaceChildren(h('div.caja-sin-turno', zonaEfectivo.el), h('div.caja-abrir.tarjeta',
+      // Decisión de Emil (30 oct 2026): entradas y salidas de efectivo ya no se ven en Facturación (confunden a la vendedora); se anotan en «Apertura y cierre de caja».
+      zonaEfectivo?.destruir(); zonaEfectivo = null;
+      root.replaceChildren(h('div.caja-sin-turno'), h('div.caja-abrir.tarjeta',
         h('h1', 'Abrir caja'),
         h('p', 'La caja de ' + nombreLocal(app.soc) + ' está cerrada. Para empezar a vender, abra la caja.'),
         form.el));
@@ -373,14 +372,13 @@ export default {
       asideCuenta = h('aside.caja-cuenta', { 'aria-label': 'Cuenta activa' });
       barraMovil = h('div.barra-movil');
       barraAviso = h('div.avisos-caja');
-      zonaEfectivo?.destruir();
-      zonaEfectivo = crearZonaEfectivo({ turnoId: turnoMostrado, motivos: { entrada: app.ctx?.motivos_entrada_efectivo, salida: app.ctx?.motivos_salida_efectivo } });
+      zonaEfectivo?.destruir(); zonaEfectivo = null;
       cajaEl = h('div.caja.v-' + vista,
         barraAviso,
         h('div.caja-cuerpo',
           h('div.caja-izq', barraCuentas, buscadorWrap,
             h('section.caja-catalogo', { 'aria-label': 'Productos' }, tabsCajon, medioCat)),
-          h('div.caja-der', zonaEfectivo.el, asideCuenta)),
+          h('div.caja-der', asideCuenta)),
         barraMovil);
       root.replaceChildren(cajaEl);
       buscador.inp.addEventListener('focus', () => { cajaEl.classList.add('bus-activo'); if (!fino()) setTimeout(irAlBuscador, 250); });
