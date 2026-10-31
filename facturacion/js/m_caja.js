@@ -1054,7 +1054,8 @@ export default {
       zonaEfectivo?.destruir();
       const zona = crearZonaEfectivo({ turnoId: turnoMostrado, enFlujo: true, motivos: { entrada: app.ctx?.motivos_entrada_efectivo, salida: app.ctx?.motivos_salida_efectivo } });
       zonaEfectivo = zona;
-      modal({ titulo: 'Entradas y salidas de efectivo', ancho: 640, contenido: zona.el, botones: [{ texto: 'Cerrar', onclick: (c) => c() }],
+      modal({ titulo: 'Entradas y salidas de efectivo', ancho: 640, contenido: zona.el, bloqueo: () => (zona.ocupado() ? 'Se está guardando el movimiento. Espere un momento.' : ''),
+        botones: [{ texto: 'Cerrar', onclick: (c) => { if (zona.ocupado()) { toast('Se está guardando el movimiento. Espere un momento.', 'error'); return; } c(); } }],
         alCerrar: () => { zona.destruir(); if (zonaEfectivo === zona) zonaEfectivo = null; } });
     }
 

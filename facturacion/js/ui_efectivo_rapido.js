@@ -438,6 +438,7 @@ export function crearZonaEfectivo({ turnoId = null, alAbrirCaja, conPie = true, 
   return {
     el,
     refrescar,
+    ocupado: () => enviando,
     destruir() {
       vivo = false;
       timers.forEach(clearInterval);

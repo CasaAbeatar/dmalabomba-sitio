@@ -290,7 +290,7 @@ export function modeloPrefactura(r, soc) {
   const iva = r2(desglose.reduce((a, f) => a + f.iva, 0));
   return {
     clase: 'prefactura', tipo: 'PRE', titulo: 'PREFACTURA', soc: datosSoc(soc), cliente: datosCliente(r.cliente),
-    lineas, total, iva, subtotal: r2(total - iva), desglose, pagos: [], consecutivo: '', clave: '', fecha: v.prefacturada_en || new Date().toISOString(),
+    lineas, total, iva, subtotal: r2(total - iva), desglose, exonerado: r2(lineas.filter((l) => l.exoneracion).reduce((a, l) => a + partesExoneradas(l).monto, 0)), pagos: [], consecutivo: '', clave: '', fecha: v.prefacturada_en || new Date().toISOString(),
     estado: null, sandbox: false, motivo: '', original: null, venta: { numero: v.numero, tipo_servicio: v.tipo_servicio, referencia: v.referencia, prefactura_numero: v.prefactura_numero, prefactura_revision: v.prefactura_revision },
   };
 }
