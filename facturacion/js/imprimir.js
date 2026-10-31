@@ -149,6 +149,22 @@ function direccion(x) {
 const fechaLinea = (d) => d ? fechaCorta(d) + ' ' + horaCorta(d) : '';
 const numCorto = (cons) => { const n = parseInt(String(cons || '').slice(-10), 10); return Number.isFinite(n) ? String(n) : ''; };
 
+// Exoneración con autorización (tipo de documento, número e institución, nota 10.1 y 23): el mismo texto que imprime el PDF del servidor.
+const TIPO_EXON = { '02': 'Ventas exentas a diplomáticos', '03': 'Autorizado por ley especial', '04': 'Exenciones Dirección General de Hacienda', '08': 'Zona franca', '09': 'Servicios complementarios a la exportación', '10': 'Órgano de las corporaciones municipales', '11': 'Autorización de impuesto local concreta' };
+const INST_EXON = { '01': 'Ministerio de Hacienda', '02': 'Ministerio de Relaciones Exteriores', '03': 'Ministerio de Agricultura y Ganadería', '04': 'Ministerio de Economía, Industria y Comercio', '05': 'Cruz Roja Costarricense', '06': 'Benemérito Cuerpo de Bomberos de Costa Rica', '07': 'Asociación Obras del Espíritu Santo', '08': 'FECRUNAPA', '09': 'EARTH', '10': 'INCAE', '11': 'Junta de Protección Social', '12': 'Autoridad Reguladora de los Servicios Públicos' };
+function textoExoneracion(l) {
+  const e = l?.exoneracion; if (!e) return '';
+  const tipo = e.tipo === '99' ? (e.tipo_otro || 'Otros') : (TIPO_EXON[e.tipo] || e.tipo);
+  const inst = e.institucion === '99' ? (e.institucion_otros || '') : (INST_EXON[e.institucion] || e.institucion || '');
+  return 'Exonerado: ' + tipo + ', N.° ' + e.numero + (inst ? ', ' + inst : '');
+}
+// Parte exonerada de una línea: base sin IVA según la tarifa neta, por los puntos exonerados (igual que el XML).
+function partesExoneradas(l) {
+  const e = l.exoneracion, tf = tarifaDeLinea(l), te = Number(e?.tarifa) || 0, bruto = Number(l.total_linea) || 0;
+  const base = r2(bruto / (1 + ((tf.pct || 0) - te) / 100));
+  return { base, exonBase: tf.pct > 0 ? r2(base * te / tf.pct) : 0, monto: r2(base * te / 100) };
+}
+
 // Etiqueta impresa de una tarifa. Con 0 % hay varias cosas distintas, y por eso se separan por código.
 function etiquetaIva(t, codigo) {
   if (t > 0) return 'IVA ' + num(t, 2) + '%';
@@ -165,6 +181,7 @@ const etiquetaLarga = (t, codigo) => 'Impuesto sobre el Valor Agregado ' + (t > 
 function desgloseIva(lineas, ivaOficial) {
   const g = new Map();
   for (const l of lineas) {
+    if (l.exoneracion) continue; // las líneas exoneradas no llevan IVA cobrado: se muestran aparte
     const tf = tarifaDeLinea(l);
     const clave = tf.codigo || String(tf.pct);
     const x = g.get(clave) || { t: tf.pct, codigo: tf.codigo, bruto: 0 };
@@ -183,14 +200,19 @@ function desgloseIva(lineas, ivaOficial) {
 // Solo salen los renglones con monto. Si alguna línea no dice si es servicio o mercancía (datos viejos), no se inventa: se devuelve null y solo se imprime el precio neto.
 function desgloseTipo(lineas) {
   if (!lineas.length || lineas.some((l) => typeof l.es_servicio !== 'boolean')) return null;
-  const t = { mg: 0, me: 0, mn: 0, sg: 0, se: 0, sn: 0 };
+  const t = { mg: 0, me: 0, mn: 0, mx: 0, sg: 0, se: 0, sn: 0, sx: 0 };
   for (const l of lineas) {
+    if (l.exoneracion) {
+      const p = partesExoneradas(l), k = l.es_servicio ? 's' : 'm';
+      t[k + 'x'] = r2(t[k + 'x'] + p.exonBase); t[k + 'g'] = r2(t[k + 'g'] + (p.base - p.exonBase));
+      continue;
+    }
     const tf = tarifaDeLinea(l), bruto = Number(l.total_linea) || 0;
     const base = r2(bruto / (1 + (tf.pct || 0) / 100));
     const clase = tf.pct > 0 ? 'g' : (tf.codigo === '01' || tf.codigo === '11') ? 'n' : 'e';
     t[(l.es_servicio ? 's' : 'm') + clase] = r2(t[(l.es_servicio ? 's' : 'm') + clase] + base);
   }
-  const nombres = [['mg', 'Mercancías gravadas'], ['me', 'Mercancías exentas'], ['mn', 'Mercancías no sujetas'], ['sg', 'Servicios gravados'], ['se', 'Servicios exentos'], ['sn', 'Servicios no sujetos']];
+  const nombres = [['mg', 'Mercancías gravadas'], ['me', 'Mercancías exentas'], ['mn', 'Mercancías no sujetas'], ['mx', 'Mercancías exoneradas'], ['sg', 'Servicios gravados'], ['se', 'Servicios exentos'], ['sn', 'Servicios no sujetos'], ['sx', 'Servicios exonerados']];
   return nombres.filter(([k]) => t[k] > 0).map(([k, etq]) => ({ etq, monto: t[k] }));
 }
 // Unidad de medida (Reg. 13 inc. 10). El XML usa la unidad de la línea y, si no trae, «Sp» para servicios y «Unid» para mercancías.
@@ -248,7 +270,7 @@ export function modeloComprobante(c) {
   return {
     clase: 'comprobante', tipo: c.tipo_doc, titulo: TITULOS[c.tipo_doc] || 'COMPROBANTE ELECTRÓNICO',
     soc: datosSoc({ ...(c.sociedad || {}), ambiente: c.ambiente || c.sociedad?.ambiente }), cliente: datosCliente(c.cliente_snapshot),
-    lineas, total, iva, subtotal: r2(total - iva), desglose: desgloseIva(lineas, iva),
+    lineas, total, iva, subtotal: r2(total - iva), desglose: desgloseIva(lineas, iva), exonerado: r2(lineas.filter((l) => l.exoneracion).reduce((a, l) => a + partesExoneradas(l).monto, 0)),
     pagos: c.pagos_snapshot || [], consecutivo: c.consecutivo || '', clave: c.clave || '', fecha: c.fecha_emision, estado: c.estado,
     sandbox: (c.ambiente || c.sociedad?.ambiente) !== 'produccion', motivo: c.motivo || '',
     original: c.original || null, venta: c.venta || null,
@@ -369,6 +391,7 @@ function nodoTiquete(m, { papel, logo, copia }) {
       h('div.d', l.descripcion || ''),
       h('div.q', h('span', pre ? `${num(l.cantidad)} x ${money(l.precio_final)}` : `${num(l.cantidad)} ${unidadDeLinea(l)} x ${money(l.precio_final)}`), h('b', money(l.total_linea))),
       tarifaDeLinea(l).pct !== 13 ? h('div.iva-lin', etiquetaIva(tarifaDeLinea(l).pct, tarifaDeLinea(l).codigo)) : null,
+      l.exoneracion ? h('div.iva-lin', textoExoneracion(l)) : null,
       l.nota ? h('div.nota', l.nota) : null));
   }
   raiz.append(linea('doble'));
@@ -381,6 +404,7 @@ function nodoTiquete(m, { papel, logo, copia }) {
   // Monto del impuesto de cada tarifa, con la indicación que pide la norma
   if (m.desglose.length) raiz.append(h('div.etq-chica', 'Impuesto sobre el Valor Agregado'));
   for (const f of m.desglose) raiz.append(fila(pre ? f.etq : f.etqTarifa, money(f.iva)));
+  if (m.exonerado > 0) raiz.append(fila('IVA exonerado (no se cobra)', money(m.exonerado)));
   raiz.append(h('div.fila-tq.total', h('span', nc ? 'TOTAL ACREDITADO' : 'TOTAL'), h('span.v', money(m.total))));
   if (m.pagos.length) {
     raiz.append(linea());
@@ -477,7 +501,7 @@ function nodoCarta(m, { logo, copia }) {
     h('thead', h('tr', h('th', 'CABYS'), h('th', 'Descripción'), h('th', 'Unidad'), h('th.der', 'Cant.'), h('th.der', 'Precio unit.'), h('th.der', 'IVA'), h('th.der', 'Total'))),
     h('tbody', m.lineas.map((l) => h('tr',
       h('td.cod', l.cabys || ''),
-      h('td', h('div', l.descripcion || ''), l.nota ? h('div.ct-tenue', l.nota) : null),
+      h('td', h('div', l.descripcion || ''), l.exoneracion ? h('div.ct-tenue', textoExoneracion(l)) : null, l.nota ? h('div.ct-tenue', l.nota) : null),
       h('td.uni', unidadDeLinea(l)),
       h('td.der', num(l.cantidad)),
       h('td.der', money(l.precio_final)),
@@ -498,6 +522,7 @@ function nodoCarta(m, { logo, copia }) {
     (m.tipos || []).map((t) => h('div.ct-fila', h('span', t.etq), h('span.v', money(t.monto)))),
     h('div.ct-fila.neto', h('span', 'Precio neto de venta (sin IVA)'), h('span.v', money(m.subtotal))),
     m.desglose.map((f) => h('div.ct-fila', h('span', f.etqLarga), h('span.v', money(f.iva)))),
+    m.exonerado > 0 ? h('div.ct-fila', h('span', 'IVA exonerado (no se cobra)'), h('span.v', money(m.exonerado))) : null,
     h('div.ct-fila.gran', h('span', nc ? 'Total acreditado' : 'Total'), h('span.v', money(m.total))));
   raiz.append(h('div.ct-cierre', pagos, tot));
 
