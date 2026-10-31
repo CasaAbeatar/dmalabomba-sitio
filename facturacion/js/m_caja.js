@@ -1397,11 +1397,14 @@ export default {
           const docs = exoDocs(cliente);
           if (exo.length) {
             const num = exo[0].exoneracion.numero;
-            const faltan = lineas.filter((l) => !l.exoneracion && Number(l.tarifa_iva) > 0);
             const doc = docs.find((d) => d.documento === num);
+            const cubre = (l) => !(doc?.cabys || []).length || doc.cabys.includes(String(l.cabys));
+            const sinExo = lineas.filter((l) => !l.exoneracion && Number(l.tarifa_iva) > 0);
+            const faltan = sinExo.filter(cubre), noCubiertas = sinExo.filter((l) => !cubre(l));
             nodos.push(h('div.aviso-tarifa.lista', { role: 'group', 'aria-label': 'Exoneración aplicada' },
               h('strong', 'Exonerada: ' + exo.length + (exo.length === 1 ? ' línea' : ' líneas') + ' sin IVA según el documento ' + num + '.'),
               h('small', 'El cliente paga el precio sin IVA. En la factura saldrá «Exonerado» con el número del documento.'),
+              noCubiertas.length ? h('small', (noCubiertas.length === 1 ? 'Una línea no está' : noCubiertas.length + ' líneas no están') + ' en la lista de productos que cubre el documento y lleva' + (noCubiertas.length === 1 ? '' : 'n') + ' el IVA normal.') : null,
               h('div.fila',
                 faltan.length && doc ? h('button.btn.chico', { type: 'button', onclick: () => aplicarExo(doc) }, 'Aplicar a las ' + faltan.length + ' línea(s) que faltan') : null,
                 h('button.btn.chico', { type: 'button', onclick: () => quitarExo() }, 'Quitar la exoneración'))));
