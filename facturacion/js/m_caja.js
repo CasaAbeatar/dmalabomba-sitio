@@ -981,6 +981,8 @@ export default {
       if (!cur) return false;
       const id = cur.venta.id, st = {};
       await accion(async () => {
+        // Una exoneración es de un cliente y un documento: si cambia o se quita el cliente, la cuenta vuelve al IVA normal antes del cambio
+        if ((cur.lineas || []).some((l) => l.exoneracion) && (!cl || cl.id !== cur.venta.cliente_id)) { await api.ventaExonerar(id, null, '', false); }
         cur = await api.ventaDatos(id, cl ? { cliente: cl.id } : { quitarCliente: true });
         repintar();
         toast(cl ? 'Cliente elegido: ' + nombrePropio(cl.nombre) + '. Se emitirá una factura electrónica a su nombre.' : 'Cliente quitado. Se emitirá un tiquete electrónico.');
@@ -1179,9 +1181,10 @@ export default {
         asignarCliente(c).then((ok) => { if (ok && !terminado && cur?.cliente?.id === c.id) { cliente = cur.cliente; pintarCliente(); } });
       };
       const btnElegir = h('button.btn', { type: 'button', onclick: () => selectorCliente(app, { alElegir: elegirCliente }) }, 'Elegir cliente (factura)');
-      const btnQuitarCli = h('button.btn.suave', { type: 'button', onclick: () => { cliente = null; actividadFactura = null; pintarCliente(); asignarCliente(null); } }, 'Quitar cliente');
+      const btnQuitarCli = h('button.btn.suave', { type: 'button', onclick: async () => { if (cur && (cur.lineas || []).some((l) => l.exoneracion)) { await quitarExo(true); } cliente = null; actividadFactura = null; pintarCliente(); asignarCliente(null); } }, 'Quitar cliente');
       const actEl = h('div.cobro-act', { hidden: true });
       const tarEl = h('div.cobro-tarifa', { hidden: true });
+      const exoEl = h('div.cobro-tarifa.cobro-exo', { hidden: true });
       const tipoIdEl = h('div.cobro-tipo-id', { hidden: true }); // el cliente elegido no puede llevar factura (o trae una advertencia de la base)
       const montoTotal = h('div.monto', money(venta.total));
       const mediosBtns = Object.entries(MEDIOS).map(([k, v]) => h('button.medio-btn', { type: 'button', dataset: { medio: k }, onclick: () => { medio = k; auto = true; sugerir(); actualizar(); inpMonto.focus(); inpMonto.select(); } }, v));
@@ -1282,6 +1285,7 @@ export default {
         h('div.cobro-doc', h('div', h('div', docTxt), h('div', cliTxt)), h('div.fila', btnElegir, btnQuitarCli)),
         tipoIdEl,
         tarEl,
+        exoEl,
         actEl,
         h('div.col', h('strong', 'Forma de pago'), h('div.medios', mediosBtns)),
         h('label.etq', lblMonto, inpMonto),
@@ -1348,6 +1352,7 @@ export default {
         const pend = bloqueCedulaPendiente();
         tipoIdEl.hidden = !avTipo && !pend; tipoIdEl.replaceChildren(...[avTipo, pend].filter(Boolean));
         pintarTarifa();
+        pintarExo();
         pintarActividad();
       }
       // Tarifa de IVA habitual del cliente: avisa con palabras claras y ofrece aplicarla (nunca la aplica sola)
@@ -1356,6 +1361,61 @@ export default {
         if (!ok || !cur || terminado) return;
         venta = cur.venta; totalC = cents(venta.total); montoTotal.textContent = money(venta.total);
         pintarTarifa(); sugerir(); actualizar();
+      }
+
+      /* Exoneración con autorización (documento verificado con Hacienda): el cliente paga la base sin IVA. Nunca se aplica sola. */
+      const hoyCR = () => new Date().toLocaleDateString('en-CA', { timeZone: 'America/Costa_Rica' });
+      const fechaCR = (iso) => (iso ? String(iso).slice(0, 10).split('-').reverse().join('/') : '');
+      const exoDocs = (cl) => (cl?.exoneraciones || []).filter((x) => x && x.verificada === true && !['01', '05', '06', '07'].includes(String(x.tipo || '')) && (!x.vence || String(x.vence).slice(0, 10) >= hoyCR()));
+      async function sincronizarTotal() {
+        cur = await api.venta(cur.venta.id); venta = cur.venta; totalC = cents(venta.total); montoTotal.textContent = money(venta.total);
+        repintar(); pintarExo(); sugerir(); actualizar();
+      }
+      async function aplicarExo(doc) {
+        const st = {};
+        await accion(async () => {
+          const r = await api.ventaExonerar(cur.venta.id, cliente.id, doc.documento, true);
+          await sincronizarTotal();
+          toast('Exoneración aplicada a ' + r.lineas + (r.lineas === 1 ? ' línea' : ' líneas') + '. El total nuevo es ' + money(cur.venta.total) + '.');
+        }, st);
+        return !st.error;
+      }
+      async function quitarExo(silencioso = false) {
+        const st = {};
+        await accion(async () => {
+          await api.ventaExonerar(cur.venta.id, null, '', false);
+          await sincronizarTotal();
+          if (!silencioso) toast('Exoneración quitada. El total vuelve a llevar el IVA.');
+        }, st);
+        return !st.error;
+      }
+      function pintarExo() {
+        const nodos = [];
+        if (cliente && cur) {
+          const lineas = cur.lineas || [];
+          const exo = lineas.filter((l) => l.exoneracion);
+          const docs = exoDocs(cliente);
+          if (exo.length) {
+            const num = exo[0].exoneracion.numero;
+            const faltan = lineas.filter((l) => !l.exoneracion && Number(l.tarifa_iva) > 0);
+            const doc = docs.find((d) => d.documento === num);
+            nodos.push(h('div.aviso-tarifa.lista', { role: 'group', 'aria-label': 'Exoneración aplicada' },
+              h('strong', 'Exonerada: ' + exo.length + (exo.length === 1 ? ' línea' : ' líneas') + ' sin IVA según el documento ' + num + '.'),
+              h('small', 'El cliente paga el precio sin IVA. En la factura saldrá «Exonerado» con el número del documento.'),
+              h('div.fila',
+                faltan.length && doc ? h('button.btn.chico', { type: 'button', onclick: () => aplicarExo(doc) }, 'Aplicar a las ' + faltan.length + ' línea(s) que faltan') : null,
+                h('button.btn.chico', { type: 'button', onclick: () => quitarExo() }, 'Quitar la exoneración'))));
+          } else if (docs.length && lineas.length) {
+            docs.forEach((d) => nodos.push(h('div.aviso-tarifa', { role: 'group', 'aria-label': 'Exoneración del cliente' },
+              h('strong', 'Este cliente tiene la exoneración ' + d.documento + (d.vence ? ', vigente hasta el ' + fechaCR(d.vence) : '') + '.'),
+              h('small', 'Cubre ' + Number(d.porcentaje || 13) + ' % del IVA' + ((d.cabys || []).length ? ' en los productos de su lista de Hacienda (' + d.cabys.length + ' códigos)' : '') + '. No se aplica sola: si la aplica, el cliente paga el precio sin IVA.'),
+              h('button.btn.primario', { type: 'button', onclick: () => aplicarExo(d) }, 'Aplicar la exoneración'))));
+          } else if ((cliente.exoneraciones || []).length && !docs.length) {
+            nodos.push(h('div.act-aviso.info', 'Este cliente tiene exoneración registrada, pero ninguna está verificada con Hacienda y vigente. Verifíquela en Clientes para poder aplicarla.'));
+          }
+        }
+        exoEl.hidden = !nodos.length;
+        exoEl.replaceChildren(...nodos);
       }
       function pintarTarifa() {
         const a = cliente && cur ? avisoTarifaCliente(cliente, aplicarEnCobro, pintarTarifa) : null;
@@ -1384,7 +1444,6 @@ export default {
           (!cliente.correo && !sinCorreo()) ? h('div.act-aviso', correoActivo(app)
             ? 'Este cliente no tiene correo. La factura se emite igual, pero la copia impresa no le sirve como gasto o crédito: con el correo recibiría el archivo que sí le sirve. Puede agregarlo en Clientes.'
             : 'Este cliente no tiene correo guardado. La factura se emite igual. Hoy el sistema no envía correos: entregue el comprobante impreso. Puede agregar el correo en Clientes para cuando se active el envío.') : null,
-          (cliente.exoneraciones || []).length ? h('div.act-aviso.info', 'Este cliente tiene ' + cliente.exoneraciones.length + ' exoneración(es) registrada(s) (' + cliente.exoneraciones.map((x) => x.documento).join(', ') + '). Todavía no se aplican solas al cobrar: el sistema solo lo recuerda.') : null,
           sinDireccion(cliente) ? h('div.act-aviso', 'Este cliente no tiene dirección guardada. La factura se emite igual y sale sin dirección; puede agregarla en Clientes si el cliente la quiere.') : null,
         ].filter(Boolean));
       }
