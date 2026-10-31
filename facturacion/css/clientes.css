@@ -1,0 +1,4 @@
+
+/* Exoneraciones en la ficha del cliente */
+.mt-exo { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: baseline; padding: 6px 0; border-bottom: 1px solid var(--linea, #e4e4e4); }
+.mt-exo.sin strong { color: #8a5a00; }

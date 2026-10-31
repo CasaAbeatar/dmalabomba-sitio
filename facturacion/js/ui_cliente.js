@@ -26,7 +26,7 @@
 //     pregunta antes «¿Salir sin guardar?». (Cuando el sistema cierra todas las ventanas por su cuenta, al cambiar de pantalla o al cerrar la sesión,
 //     no se puede preguntar: util.js cierra sin consultar.)
 import { h, modal, debounce, TIPOS_ID, toast, nombrePropio, confirmar } from './util.js';
-import { api } from './api.js';
+import { api, funcion } from './api.js';
 import { clientesTodos, clienteActivar } from './api_clientes.js';
 import { UBICACIONES } from './data_ubicaciones.js';
 import { cargarCss, campo, aviso, conBotonM, mensajeSeguro } from './ui_mant.js';
@@ -291,6 +291,42 @@ export function abrirFormCliente(app, cliente, { alGuardar, alCambiarEstado, tit
       h('div.mt-tarifas', { role: 'group', 'aria-label': 'Tarifa de IVA habitual' }, botonesTarifa),
       tarAyuda));
 
+
+  // Exoneración con autorización de Hacienda: se escribe el número UNA vez, Hacienda devuelve fecha, vigencia, porcentaje y los productos que cubre, y queda guardado.
+  // Solo se puede aplicar al cobrar si Hacienda dice que el documento es de esta misma cédula.
+  const fechaDMA = (iso) => (iso ? String(iso).slice(0, 10).split('-').reverse().join('/') : '');
+  const exoLista = h('div.col');
+  const exoNum = h('input', { type: 'text', placeholder: 'AL-00000000-00', maxlength: '14', autocapitalize: 'characters', 'aria-label': 'Número de autorización de la exoneración' });
+  const exoMsg = h('small.tenue');
+  const exoBtn = h('button.btn', { type: 'button' }, 'Verificar con Hacienda');
+  let exoDocs = Array.isArray(c.exoneraciones) ? c.exoneraciones.slice() : [];
+  function pintarExo() {
+    exoLista.replaceChildren(...(exoDocs.length ? exoDocs.map((d) => h('div.mt-exo' + (d.verificada === true ? '' : '.sin'),
+      h('strong', d.documento || '(sin número)'),
+      h('span', ' ' + (d.verificada === true ? 'Verificada con Hacienda' : (d.estado || 'Sin verificar'))),
+      d.vence ? h('small.tenue', ' · vence el ' + fechaDMA(d.vence)) : null,
+      d.porcentaje ? h('small.tenue', ' · ' + Number(d.porcentaje) + ' % del IVA') : null,
+      Array.isArray(d.cabys) && d.cabys.length ? h('small.tenue', ' · ' + d.cabys.length + ' productos cubiertos') : null)) : [h('small.tenue', 'Este cliente no tiene exoneraciones guardadas.')]));
+  }
+  pintarExo();
+  exoBtn.onclick = async () => {
+    const num = exoNum.value.trim().toUpperCase();
+    if (!/^AL-\d{8}-\d{2}$/.test(num)) { exoMsg.textContent = 'El número tiene la forma AL-00000000-00: dos letras, ocho números y dos números.'; return; }
+    exoBtn.disabled = true; exoMsg.textContent = 'Consultando a Hacienda…';
+    try {
+      const r = await funcion('fn_exoneracion', { cliente_id: c.id, documento: num });
+      if (!r?.ok) { exoMsg.textContent = r?.mensaje || 'No se pudo verificar.'; return; }
+      exoDocs = exoDocs.filter((x) => String(x.documento || '').toUpperCase() !== num).concat([r.doc]);
+      c.exoneraciones = exoDocs; pintarExo(); exoNum.value = '';
+      exoMsg.textContent = r.doc.verificada === true ? 'Listo: Hacienda confirma que el documento es de este cliente.' : 'Hacienda tiene el documento, pero es de otra cédula (' + (r.doc.titular || '?') + '). No se podrá aplicar a este cliente.';
+    } catch (e) { exoMsg.textContent = (e && e.message) || 'No se pudo consultar a Hacienda. Intente de nuevo.'; }
+    finally { exoBtn.disabled = false; }
+  };
+  const bloqueExo = h('fieldset', h('legend', 'Exoneración con autorización de Hacienda'),
+    h('div.col',
+      h('small.tenue', 'Si el cliente tiene una exoneración (por ejemplo la Cruz Roja o los Bomberos), escriba su número una sola vez. Hacienda confirma la vigencia y los productos que cubre, y desde ahí se aplica al cobrar con un botón.'),
+      esNuevo ? h('small.tenue', 'Primero guarde el cliente; después podrá verificar su exoneración.') : h('div.col', exoLista, h('div.fila', exoNum, exoBtn), exoMsg)));
+
   // Datos que Hacienda no pide para facturar. En un cliente nuevo quedan detrás del botón «Agregar más datos del cliente»; al editar se ven siempre.
   const estadoDir = esNuevo ? null : estadoDireccion(c); // 'sin' | 'parcial' | 'completa' (null en un cliente nuevo); la lista de Clientes usa la misma función
   const conTope = (etq, ...extra) => { etq.append(...extra); return etq; };
@@ -314,6 +350,7 @@ export function abrirFormCliente(app, cliente, { alGuardar, alCambiarEstado, tit
         conTope(campo('Barrio (opcional)', barrio), cuentaBarrio, topeBarrio),
         conTope(campo('Otras señas', senas, 'Por ejemplo: 200 metros norte de la iglesia, portón negro.'), cuentaSenas, topeSenas))),
     bloqueTarifa,
+    bloqueExo,
     h('fieldset', h('legend', 'Notas internas'),
       campo('Notas (solo las ve usted, no salen en la factura)', notas)));
   const masBtn = h('button.btn.mt-mas', { type: 'button', hidden: !esNuevo, 'aria-expanded': 'false', 'aria-controls': 'mt-mas-datos', onclick: () => abrirMas(masBloque.hidden) });
