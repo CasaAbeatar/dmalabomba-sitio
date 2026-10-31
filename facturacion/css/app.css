@@ -26,7 +26,7 @@ input[type=checkbox],input[type=radio]{width:24px;height:24px;accent-color:var(-
 .bloque-error-tit{margin:0;font-weight:700;color:var(--tinta);font-size:1.05rem}
 
 /* Botones: grandes, con texto, borde fino */
-.btn{display:inline-flex;align-items:center;justify-content:center;gap:.4rem;min-height:44px;padding:.4rem .9rem;border:1px solid var(--borde-control,#8f8672);background:var(--papel);border-radius:var(--r);font-weight:600;cursor:pointer;text-align:center;transition:background .12s,border-color .12s,transform .05s}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:.4rem;min-height:48px;padding:.4rem .9rem;border:1px solid var(--borde-control,#8f8672);background:var(--papel);border-radius:var(--r);font-weight:600;cursor:pointer;text-align:center;transition:background .12s,border-color .12s,transform .05s}
 .btn:hover{border-color:var(--tinta)}
 .btn:active{transform:translateY(1px)}
 .btn.primario{background:var(--rojo);border-color:var(--rojo);color:#fff}
@@ -36,7 +36,7 @@ input[type=checkbox],input[type=radio]{width:24px;height:24px;accent-color:var(-
 .btn.peligro:hover{background:var(--rojo-suave)}
 .btn.suave{background:transparent}
 .btn.grande{min-height:52px;font-size:1.08rem;padding:.55rem 1.2rem}
-.btn.chico{min-height:44px;padding:.25rem .75rem;font-size:.92rem}
+.btn.chico{min-height:48px;padding:.25rem .75rem;font-size:.92rem}
 .btn[disabled]{opacity:.5;cursor:not-allowed}
 .btn[data-ocupado]{opacity:.6}
 .fila{display:flex;gap:.4rem;flex-wrap:wrap;align-items:center}
@@ -82,7 +82,7 @@ table.tabla{width:100%;border-collapse:collapse;font-size:.95rem}
 .cab-franja-in{max-width:1400px;margin:0 auto;padding:.1rem 1rem;min-height:26px;display:flex;align-items:center;justify-content:space-between;gap:.6rem}
 .cab-emp{font-size:.88rem;font-weight:700;letter-spacing:.04em;text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 /* El nombre del negocio y el logo son botones que llevan al inicio: se ven como texto y como imagen, con área de toque cómoda */
-button.cab-emp{appearance:none;background:none;border:0;color:inherit;font-family:inherit;text-align:left;padding:.4rem 0;margin:-.4rem 0;cursor:pointer;border-radius:4px;max-width:70%}
+button.cab-emp{min-height:48px;display:inline-flex;align-items:center;appearance:none;background:none;border:0;color:inherit;font-family:inherit;text-align:left;padding:.875rem 0;margin:-.875rem 0;cursor:pointer;border-radius:4px;max-width:70%}
 button.cab-emp:hover{text-decoration:underline}
 button.marca{appearance:none;background:none;border:0;padding:0;color:inherit;cursor:pointer;border-radius:6px}
 .cab-franja .amb{flex:0 0 auto;font-size:.74rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;border-radius:6px;padding:.05rem .5rem;white-space:nowrap}
