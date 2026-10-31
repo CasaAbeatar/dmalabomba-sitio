@@ -339,6 +339,8 @@ export async function abrirFactura(ctx, clave, { previa = null, recibirSugeridas
     const noVence = h('input', { type: 'checkbox', onchange: () => { vence.disabled = noVence.checked; pintarVence(); } });
     const pintarVence = () => { venceEco.className = 'inv-eco'; if (noVence.checked) venceEco.textContent = 'No vence.'; else if (!vence.value) { venceEco.textContent = 'Escriba la fecha o marque «No vence».'; venceEco.className = 'inv-eco mal'; } else if (vence.value < ctx.hoy && venceEditada) { venceEco.textContent = 'La fecha no puede ser anterior a hoy.'; venceEco.className = 'inv-eco mal'; } else if (vence.value < ctx.hoy) { const cc = art && (cat.categorias || []).find((x) => x.id === art.categoria_id); venceEco.textContent = (!cc || cc.salida_automatica !== false) ? 'Por la fecha de la factura ya cumplió sus días: al recibirla entra y sale como consumo automático.' : 'Por la fecha de la factura ya venció.'; } else venceEco.textContent = 'Vence el ' + diaTxt(vence.value) + '.'; };
     const costoTxtEl = h('span.inv-costo');
+    const costoAviso = h('p.inv-costo-aviso', { role: 'status', hidden: true });
+    const refCosto = new Map();
     const costoInput = h('input.campo.inv-num', { type: 'text', inputmode: 'decimal', autocomplete: 'off', 'aria-label': 'Costo sin IVA por unidad del artículo' });
     const costoDet = h('details.inv-corregir', h('summary', 'Corregir el costo'), h('label.etq', 'Costo sin IVA por unidad del artículo (₡)', costoInput, h('small', 'Solo si el costo de la factura no es el correcto. Déjelo vacío para usar el de la factura.')));
     const zona = h('div');
@@ -370,7 +372,8 @@ export async function abrirFactura(ctx, clave, { previa = null, recibirSugeridas
       h('label.etq.inv-c-conv', h('span', 'Conversión'), h('span.inv-con-unidad', h('span.inv-pre', 'Cada «' + (l.unidad || 'unidad') + '» de la factura trae'), factor, h('span.inv-unidad.inv-u-art')), factorEco),
       h('label.etq.inv-c-ubic', 'Dónde se guarda', ubic),
       h('div.etq.inv-c-vence', h('span', 'Vence'), vence, venceEco, h('label.inv-casilla.chica', noVence, h('span', 'No vence'))),
-      h('div.inv-costo-fila', h('span.inv-costo-et', 'Costo sin IVA:'), costoTxtEl, costoDet));
+      h('div.inv-costo-fila', h('span.inv-costo-et', 'Costo sin IVA:'), costoTxtEl, costoDet),
+      costoAviso);
     const artFila = h('div.inv-campo-art', h('span.etq', 'Artículo del inventario'), h('div.inv-art-fila', nombreArt, btnArt));
     const detalles = h('details.inv-detalles', h('summary', 'Detalles: conversión, dónde se guarda, vencimiento y costo'), artFila, filaNombre, campos);
     const sugTxt = sugerenciaTxt(sug);
@@ -460,6 +463,32 @@ export async function abrirFactura(ctx, clave, { previa = null, recibirSugeridas
     function pintarCosto() {
       const c = costoCalculado();
       costoTxtEl.textContent = c == null ? 'Se calcula al escribir la conversión.' : costoTxt(c) + ' por ' + unidadTxt(art?.unidad || 'unidad', 1) + ' (sale de la factura)';
+      revisarCosto(c);
+    }
+    // Revisión por patrón: un costo muy lejos del precio de venta (o del costo anterior) casi siempre es un factor de caja mal escrito
+    function revisarCosto(c) {
+      costoAviso.hidden = true; costoAviso.textContent = '';
+      if (c == null || !art || !(c > 0)) return;
+      const id = art.id;
+      if (!refCosto.has(id)) {
+        refCosto.set(id, null);
+        inv.costoReferencia(id).then((r) => { refCosto.set(id, r || { hay: false }); if (art && art.id === id) revisarCosto(costoCalculado()); }).catch(() => refCosto.set(id, { hay: false }));
+        return;
+      }
+      const r = refCosto.get(id);
+      if (!r || !r.hay) return;
+      let t = '';
+      const v = Number(r.precio_venta_sin_iva);
+      const hist = Number(r.costo_medio_anterior);
+      if (v > 0) {
+        const pct = c / v * 100;
+        if (pct < 15 || pct > 110) t = 'Este costo es el ' + num(pct, 0) + ' % del precio de venta sin IVA (' + money(v) + '). Lo normal está entre 15 % y 110 %. Revise cuántas unidades trae cada «' + (l.unidad || 'unidad') + '» de la factura: casi seguro la conversión está mal.';
+      }
+      if (!t && hist > 0 && Number(r.lotes_anteriores) >= 1) {
+        const razon = c / hist;
+        if (razon < 0.2 || razon > 5) t = 'Este costo es ' + num(razon, 1) + ' veces el costo de las compras anteriores (' + money(hist) + '). Revise la conversión de la caja.';
+      }
+      if (t) { costoAviso.textContent = t; costoAviso.hidden = false; }
     }
     factor.addEventListener('input', () => { cantidadTocada = false; const fv = leerFactor(); if (Number.isFinite(fv) && fv > 0) cantidad.poner(Math.round(Number(l.cantidad) * fv * 1000) / 1000); pintarFactor(); pintarCosto(); cambio(); });
     chk.addEventListener('change', async () => {

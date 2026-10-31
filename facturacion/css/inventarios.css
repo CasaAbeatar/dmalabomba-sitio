@@ -529,3 +529,5 @@ body:has(.inv-fondo) .cabecera:has(.cab-usuario.abierto){z-index:120}
 .inv-fl-sug{font-size:.85rem;font-weight:600;color:var(--tinta)}
 .inv-fl-sug.sin{font-weight:400;color:var(--tinta2)}
 @media(max-width:640px){.inv-fac-lineas li{grid-template-columns:minmax(0,1fr) auto}.inv-fl-sug{grid-column:1/-1;grid-row:2}}
+.inv-costo-aviso{margin:.4rem 0 0;padding:.5rem .7rem;border-radius:var(--r);border:1px solid var(--rojo-osc,#8a1017);background:#fdeceb;color:var(--rojo-osc,#8a1017);font-weight:600;font-size:.92rem;line-height:1.35}
+.inv-costo-aviso[hidden]{display:none}

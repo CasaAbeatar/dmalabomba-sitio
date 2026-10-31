@@ -54,6 +54,7 @@ export const inv = {
   /* ---------- Lecturas (cualquier usuario) ---------- */
   catalogos: () => leer('fx_inv_catalogos'),
   articulos: (q = '', categoria = null, incluirInactivos = false) => leer('fx_inv_articulos', { p_q: q, p_categoria: categoria, p_incluir_inactivos: !!incluirInactivos }),
+  costoReferencia: (articulo) => leer('fx_inv_costo_referencia', { p_articulo: articulo }),
   cabysSugerencia: (cabys) => leer('fx_inv_cabys_sugerencia', { p_cabys: cabys }),
   pendientes: (sociedad = null, q = '', limite = 100) => leer('fx_inv_pendientes', { p_sociedad: sociedad, p_q: q, p_limite: limite }),
   factura: (clave) => leer('fx_inv_factura', { p_clave: clave }),
