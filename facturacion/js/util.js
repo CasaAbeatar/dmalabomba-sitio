@@ -443,3 +443,18 @@ export function conPistaDesliz(cont, texto = 'Deslice hacia los lados para ver m
   setTimeout(revisar, 0);
   return env;
 }
+
+
+// Estética del usuario (31/10/2026): al escribir el usuario, la primera letra va siempre en mayúscula y las demás siempre en minúscula (Emil, María),
+// aunque la persona use el teclado de otra manera. Solo cambia lo que se ve: el usuario guardado sigue siendo el de siempre en minúsculas (se normaliza al enviar).
+export const usuarioBonito = (v) => { const t = String(v ?? ''); return t ? t.charAt(0).toLocaleUpperCase('es') + t.slice(1).toLocaleLowerCase('es') : ''; };
+export function estiloUsuario(inp, limpiar = (x) => x) {
+  const poner = () => {
+    const pos = inp.selectionStart;
+    const v = usuarioBonito(limpiar(inp.value));
+    if (v !== inp.value) { inp.value = v; try { const p = Math.min(pos ?? v.length, v.length); inp.setSelectionRange(p, p); } catch { /* campo sin selección */ } }
+  };
+  inp.addEventListener('input', poner);
+  poner();
+  return inp;
+}

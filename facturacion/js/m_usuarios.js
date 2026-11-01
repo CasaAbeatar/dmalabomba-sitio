@@ -1,7 +1,7 @@
 // Usuarios del facturador (solo administradores): crear, cambiar nombre, reiniciar PIN, activar o desactivar. Nunca se elimina.
 // Cada empresa tiene sus usuarios: el servidor (fx_usuarios) entrega solo los de la empresa de la sesión y un usuario nuevo queda en esa empresa.
 // fx_usuarios trae por usuario `empresas: [{ id, codigo, nombre_comercial }]`; de la fila del propio administrador salen las OTRAS empresas a las que él tiene acceso (casilla «También puede entrar a …»).
-import { h, modal, confirmar, pedir, conBoton, toast, fechaHora, fechaCorta, pinDebil, conPunto, nombrePropio, nombreLocal, bloqueError, textoDeError } from './util.js';
+import { estiloUsuario, h, modal, confirmar, pedir, conBoton, toast, fechaHora, fechaCorta, pinDebil, conPunto, nombrePropio, nombreLocal, bloqueError, textoDeError } from './util.js';
 import { api } from './api.js';
 import { seguridad, normalizarSeguridad, normalizarAparatos } from './api_seguridad.js';
 import { haceCuanto } from './api_respaldos.js';
@@ -262,7 +262,7 @@ export default {
       const err = h('div.error-caja', { hidden: true, role: 'alert' });
       const mostrar = (m, el) => { err.textContent = m; err.hidden = !m; el?.focus(); };
       const usr = h('input.campo', { type: 'text', autocapitalize: 'none', autocorrect: 'off', spellcheck: 'false', autocomplete: 'off', 'aria-label': 'Usuario' });
-      usr.addEventListener('input', () => { const v = usuarioLimpio(usr.value); if (v !== usr.value) usr.value = v; });
+      estiloUsuario(usr, usuarioLimpio); // se ve «Maria»; lo que se guarda es siempre «maria» (usuarioLimpio al enviar)
       const nom = h('input.campo', { type: 'text', autocomplete: 'off', 'aria-label': 'Nombre' });
       const pin = soloDigitos(h('input.campo', { type: 'text', inputmode: 'numeric', autocomplete: 'off', maxlength: 4, 'aria-label': 'PIN de 4 números' }), 4);
       let admin = false;

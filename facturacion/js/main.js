@@ -2,7 +2,7 @@
 // Nunca se muestra dentro de otra página (un marco): GitHub Pages no deja poner cabeceras y una etiqueta meta no admite frame-ancestors, así que se corta aquí.
 if (window.top !== window.self) { document.documentElement.replaceChildren(); throw new Error('El facturador no se muestra dentro de otra página.'); }
 import { sb, api, entrar, salir, consultarEmpresa, normalizarEmpresa, esTransitorio, esSesionVencida, esPinObligatorio } from './api.js';
-import { h, toast, modal, conBoton, esqueleto, bloqueError, nombreLocal, cerrarVentanas, asentarVentanas, popEsDeVentana, conPunto, pinDebil, textoDeError, MSG_SIN_INTERNET } from './util.js';
+import { estiloUsuario, h, toast, modal, conBoton, esqueleto, bloqueError, nombreLocal, cerrarVentanas, asentarVentanas, popEsDeVentana, conPunto, pinDebil, textoDeError, MSG_SIN_INTERNET } from './util.js';
 import { buscar, padreDe } from './modulos.js';
 import { pantallaInicio, pantallaAdmin, pintarInsignias } from './ui_inicio.js';
 import { crearAvisosAdmin } from './avisos_admin.js';
@@ -195,6 +195,7 @@ function pantallaUsuario(emp, mensaje) {
   raiz.replaceChildren();
   const recordado = leer('usuario') || '';
   const usuario = h('input.campo', { type: 'text', autocomplete: 'username', autocapitalize: 'none', autocorrect: 'off', spellcheck: 'false', placeholder: 'Su usuario', 'aria-label': 'Usuario', value: recordado });
+  estiloUsuario(usuario);
   // En un aparato que usan varias personas el usuario de la vez anterior aparece escrito: se avisa con palabras y, al tocar el campo, queda seleccionado para escribir encima
   const notaUsuario = recordado ? h('small.tenue.usr-nota', 'Es el último usuario que entró en este aparato. Si usted es otra persona, escriba el suyo.') : null;
   const err = h('div.error-caja', { hidden: true, role: 'alert' });
