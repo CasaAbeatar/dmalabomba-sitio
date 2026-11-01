@@ -10,7 +10,7 @@
 //     "cliente" es la fila completa de fact.clientes: { id, tipo_id, identificacion, nombre, nombre_comercial, correo, telefono,
 //     provincia, canton, distrito, barrio, otras_senas, actividad_codigo, notas, ... }.
 //
-//   abrirFormCliente(app, cliente|null, { alGuardar(cliente), titulo?, numeroInicial? })
+//   abrirFormCliente(app, cliente|null, { alGuardar(cliente), titulo?, numeroInicial?, completo? })   completo: en un cliente nuevo muestra de una vez todos los datos que se guardan (módulo Clientes)
 //     Abre el formulario para crear (cliente = null) o ver/editar un cliente. Devuelve { cerrar }.
 //     Cliente NUEVO = formulario rápido: solo lo mínimo a la vista (número de identificación verificado en Hacienda, nombre, actividad que
 //     llena Hacienda y correo principal). Lo demás (otros correos, teléfono, dirección, tarifa de IVA habitual, notas) queda detrás del botón
@@ -61,7 +61,7 @@ const MAX_SENAS = 160;
 const MAX_BARRIO = 50;
 const nombresOrdenados = (obj, i) => Object.entries(obj || {}).sort((a, b) => String(i ? a[1][0] : a[1]).localeCompare(String(i ? b[1][0] : b[1]), 'es'));
 
-export function abrirFormCliente(app, cliente, { alGuardar, alCambiarEstado, titulo, numeroInicial } = {}) {
+export function abrirFormCliente(app, cliente, { alGuardar, alCambiarEstado, titulo, numeroInicial, completo } = {}) {
   cargarCss();
   const soc = app.soc;
   const c = cliente || {};
@@ -244,8 +244,22 @@ export function abrirFormCliente(app, cliente, { alGuardar, alCambiarEstado, tit
       let r;
       try { r = await api.clienteGuardar(datos); } catch (e) { const t = mensajeSeguro(e); return mostrarError(t, campoDelError(t)); } // la ventana sigue abierta con lo escrito
       const tarifaNoGuardada = !!tarifaSel && !!r && (!('tarifa_habitual_codigo' in r) || String(r.tarifa_habitual_codigo ?? '') !== tarifaSel);
+      // Cliente nuevo con número de exoneración escrito: ya existe el cliente, así que Hacienda lo puede verificar
+      let exoTxt = '';
+      if (esNuevo && r?.id) {
+        const numExo = exoNum.value.trim().toUpperCase();
+        if (numExo) {
+          if (!/^AL-\d{8}-\d{2}$/.test(numExo)) exoTxt = ' La exoneración no se verificó: el número tiene la forma AL-00000000-00.';
+          else {
+            try {
+              const rx = await funcion('fn_exoneracion', { cliente_id: r.id, documento: numExo });
+              exoTxt = rx?.ok ? (rx.doc?.verificada === true ? ' Exoneración verificada con Hacienda.' : ' Hacienda tiene la exoneración, pero es de otra cédula (' + (rx.doc?.titular || '?') + ').') : ' La exoneración no se pudo verificar: ' + (rx?.mensaje || 'intente de nuevo desde el cliente.');
+            } catch (e) { exoTxt = ' La exoneración no se pudo verificar ahora; se puede intentar desde el cliente.'; }
+          }
+        }
+      }
       toast((esNuevo ? 'Cliente agregado.' : 'Cliente guardado.') + (r?.verificado ? '' : ' Quedó marcado como sin verificar en Hacienda.')
-        + (tarifaNoGuardada ? ' La tarifa de IVA habitual todavía no se pudo guardar en este sistema; se cambia producto por producto al cobrar.' : ''), tarifaNoGuardada ? 'error' : 'ok', tarifaNoGuardada ? 9000 : 3500);
+        + exoTxt + (tarifaNoGuardada ? ' La tarifa de IVA habitual todavía no se pudo guardar en este sistema; se cambia producto por producto al cobrar.' : ''), tarifaNoGuardada ? 'error' : 'ok', tarifaNoGuardada || exoTxt ? 9000 : 3500);
       cerrar();
       alGuardar?.(r);
     });
@@ -325,12 +339,12 @@ export function abrirFormCliente(app, cliente, { alGuardar, alCambiarEstado, tit
   const bloqueExo = h('fieldset', h('legend', 'Exoneración con autorización de Hacienda'),
     h('div.col',
       h('small.tenue', 'Si el cliente tiene una exoneración (por ejemplo la Cruz Roja o los Bomberos), escriba su número una sola vez. Hacienda confirma la vigencia y los productos que cubre, y desde ahí se aplica al cobrar con un botón.'),
-      esNuevo ? h('small.tenue', 'Primero guarde el cliente; después podrá verificar su exoneración.') : h('div.col', exoLista, h('div.fila', exoNum, exoBtn), exoMsg)));
+      esNuevo ? h('div.col', h('small.tenue', 'Si ya tiene el número, escríbalo aquí: Hacienda lo verifica justo después de guardar el cliente. Si lo deja vacío, se puede agregar después.'), exoNum, exoMsg) : h('div.col', exoLista, h('div.fila', exoNum, exoBtn), exoMsg)));
 
   // Datos que Hacienda no pide para facturar. En un cliente nuevo quedan detrás del botón «Agregar más datos del cliente»; al editar se ven siempre.
   const estadoDir = esNuevo ? null : estadoDireccion(c); // 'sin' | 'parcial' | 'completa' (null en un cliente nuevo); la lista de Clientes usa la misma función
   const conTope = (etq, ...extra) => { etq.append(...extra); return etq; };
-  const masBloque = h('div.mt-form', { hidden: esNuevo, id: 'mt-mas-datos' },
+  const masBloque = h('div.mt-form', { hidden: esNuevo && !completo, id: 'mt-mas-datos' },
     h('fieldset', h('legend', 'Otros correos (opcionales)'),
       h('div.col',
         h('small.tenue', 'Puede agregar hasta 7 correos más: a todos se les enviará la factura con su PDF y sus archivos para Hacienda.'),
@@ -353,7 +367,7 @@ export function abrirFormCliente(app, cliente, { alGuardar, alCambiarEstado, tit
     bloqueExo,
     h('fieldset', h('legend', 'Notas internas'),
       campo('Notas (solo las ve usted, no salen en la factura)', notas)));
-  const masBtn = h('button.btn.mt-mas', { type: 'button', hidden: !esNuevo, 'aria-expanded': 'false', 'aria-controls': 'mt-mas-datos', onclick: () => abrirMas(masBloque.hidden) });
+  const masBtn = h('button.btn.mt-mas', { type: 'button', hidden: !esNuevo || !!completo, 'aria-expanded': 'false', 'aria-controls': 'mt-mas-datos', onclick: () => abrirMas(masBloque.hidden) });
   function pintarMasBtn() {
     masBtn.replaceChildren(h('b', masBloque.hidden ? 'Agregar más datos del cliente (opcional)' : 'Ocultar los datos opcionales'),
       h('small', masBloque.hidden ? 'Otros correos, teléfono, dirección, tarifa de IVA habitual y notas. Hacienda no los pide para facturar.' : 'Lo que escribió aquí se guarda igual.'));

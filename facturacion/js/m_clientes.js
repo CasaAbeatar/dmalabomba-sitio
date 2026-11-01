@@ -71,7 +71,7 @@ export default {
     root.append(
       h('div.mt-cab',
         h('div', h('h1', 'Clientes de ' + nombreLocal(soc)), h('p', 'Los clientes guardados aquí se pueden elegir al cobrar para emitir una factura electrónica a su nombre. Cada local tiene su propia lista.')),
-        h('div.mt-acciones', h('button.btn.primario.grande', { type: 'button', onclick: () => { const d = q.value.replace(/\D/g, ''); abrirFormCliente(app, null, { numeroInicial: d.length >= 9 ? d : '', alGuardar: () => cargar() }); } }, 'Agregar cliente'))),
+        h('div.mt-acciones', h('button.btn.primario.grande', { type: 'button', onclick: () => { const d = q.value.replace(/\D/g, ''); abrirFormCliente(app, null, { numeroInicial: d.length >= 9 ? d : '', completo: true, alGuardar: () => cargar() }); } }, 'Agregar cliente'))),
       q, casilla, resumen, lista);
     await cargar();
     if (!document.querySelector('.modal-fondo')) q.focus({ preventScroll: true }); // no le quita el foco a un formulario que ya se abrió
