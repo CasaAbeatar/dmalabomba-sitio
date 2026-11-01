@@ -68,5 +68,13 @@ export function abrirPreguntaClaude(app) {
   });
   const uso = h('small.tenue');
   rpc('fx_ia_uso').then((u) => { if (u?.permitido) uso.textContent = 'Gasto de Claude este mes: US$ ' + Number(u.gasto_mes_usd).toFixed(2) + ' de US$ ' + Number(u.tope_mensual_usd).toFixed(0) + ' de tope.' + ((u.por_modulo || []).length ? ' Por módulo: ' + u.por_modulo.map((m) => m.modulo + ' US$ ' + Number(m.usd).toFixed(2)).join(', ') + '.' : ''); }).catch(() => {});
-  return modal({ titulo: 'Preguntarle a Claude', ancho: 640, contenido: h('div.claude-bloque', h('p.tenue', 'Claude lee lo que está viendo en esta pantalla (' + modulo + ') y le responde con esas cifras. No cambia nada.'), pregunta, h('div', enviar), zona, uso), botones: [{ texto: 'Cerrar', clase: 'suave', onclick: (c) => c() }] });
+  const semanal = h('details.claude-semanal', { hidden: true }, h('summary', 'Resumen semanal de Claude'), h('div.claude-zona'));
+  rpc('fx_ia_informe_ultimo').then((x) => {
+    if (!x?.hay) return;
+    const cuando = new Intl.DateTimeFormat('es-CR', { timeZone: 'America/Costa_Rica', dateStyle: 'long' }).format(new Date(x.creado_en));
+    semanal.querySelector('summary').textContent = 'Resumen semanal de Claude (' + cuando + ')';
+    semanal.querySelector('.claude-zona').replaceChildren(h('strong', x.titulo), ...String(x.texto).split(/\n\n+/).map((p) => h('p', p)));
+    semanal.hidden = false;
+  }).catch(() => {});
+  return modal({ titulo: 'Preguntarle a Claude', ancho: 640, contenido: h('div.claude-bloque', h('p.tenue', 'Claude lee lo que está viendo en esta pantalla (' + modulo + ') y le responde con esas cifras. No cambia nada.'), semanal, pregunta, h('div', enviar), zona, uso), botones: [{ texto: 'Cerrar', clase: 'suave', onclick: (c) => c() }] });
 }
