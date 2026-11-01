@@ -529,7 +529,7 @@ export async function abrirFactura(ctx, clave, { previa = null, recibirSugeridas
       if (notaAuto && fv === 1) motivos.push('La conversión se ajustó sola porque la del nombre daba un precio sin sentido.');
       if (ia) {
         if (ia.nivel !== 'verde') motivos.push('Claude pide revisarla (su razón está más abajo).');
-        if (ia.factor != null && Number(ia.factor) !== fv) motivos.push('Claude propone una conversión de ' + num(ia.factor, 6) + ' y aquí hay ' + num(fv, 6) + '.');
+        if (!enColones() && ia.factor != null && Number(ia.factor) !== fv) motivos.push('Claude propone una conversión de ' + num(ia.factor, 6) + ' y aquí hay ' + num(fv, 6) + '.');
         if (ia.articulo_id && art && ia.articulo_id !== art.id) motivos.push('Claude propone otro artículo.');
       }
       if (unidadReal(l.cantidad, l.unidad).corregida) motivos.push('La factura dice «' + unidadReal(l.cantidad, l.unidad).original + '» pero por los decimales es peso (kg).');
@@ -548,7 +548,7 @@ export async function abrirFactura(ctx, clave, { previa = null, recibirSugeridas
       el.dataset.semaforo = sem.nivel;
       if (ia) {
         const fv = leerFactor();
-        const usar = ia.factor != null && Number.isFinite(fv) && Number(ia.factor) !== fv;
+        const usar = !enColones() && ia.factor != null && Number.isFinite(fv) && Number(ia.factor) !== fv;
         iaEl.replaceChildren(...[h('strong', 'Propuesta de Claude (' + iaModelo + '): '), ia.razon + ' ',
           usar ? h('button.btn.chico', { type: 'button', onclick: () => { factor.value = String(ia.factor).replace('.', ','); factor.dispatchEvent(new Event('input', { bubbles: true })); } }, 'Usar la conversión propuesta (' + num(ia.factor, 6) + ')') : null].filter(Boolean));
       }
