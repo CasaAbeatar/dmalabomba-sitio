@@ -123,10 +123,10 @@ export function nodoInforme(texto, soc, copia = true) {
     h('div.c.p', (copia ? 'COPIA · ' : '') + 'Impreso ' + fechaHora(new Date())));
 }
 
-// Imprime sola si este aparato tiene la impresión automática encendida; si no, no hace nada (quien llama muestra su botón).
+// Apertura, cierre y vales SIEMPRE se mandan solos a la impresora POS, sin importar el ajuste de impresión automática de las ventas:
+// el comprobante físico se adjunta al cierre y no puede depender de que alguien se acuerde de tocar un botón. «Volver a imprimir» queda aparte.
 async function sola(nodo, titulo) {
   const aj = await ajustes();
-  if (!aj.auto) return false;
   for (let i = 0; i < aj.copias; i++) await imprimirNodo(nodo, titulo);
   return true;
 }

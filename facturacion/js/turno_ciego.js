@@ -8,7 +8,7 @@ import { textoError } from './api_efectivo.js';
 import { anularSalida, anularEntrada, listaSalidas } from './ui_salidas.js';
 import { crearZonaEfectivo } from './ui_efectivo_rapido.js';
 import { crearFormularioApertura } from './ui_apertura.js';
-import { imprimirNodo, nodoApertura, nodoCierreCajera, imprimirValeAuto, imprimirCierreAuto } from './imprimir_caja.js';
+import { imprimirNodo, nodoApertura, nodoVale, nodoCierreCajera, imprimirValeAuto, imprimirCierreAuto } from './imprimir_caja.js';
 
 const MAX_NOTAS = 200;
 const TOPE = 99999999.99;
@@ -90,9 +90,14 @@ export async function montarCajera(root, app) {
     const entradas = est.entradas || [], salidas = est.salidas || [];
     slotMov.replaceChildren(...[
       h('div.calc-fila', h('span', 'Efectivo con que abrió la caja'), h('span.v', money(est.fondo ?? est.turno?.fondo_inicial ?? 0))),
-      entradas.length ? h('div', h('h4', 'Entradas de efectivo'), listaSalidas(entradas, alAnular(anularEntrada), 'entrada')) : null,
-      salidas.length ? h('div', h('h4', 'Salidas de efectivo'), listaSalidas(salidas, alAnular(anularSalida), 'salida')) : null].filter(Boolean));
+      entradas.length ? h('div', h('h4', 'Entradas de efectivo'), listaSalidas(entradas, alAnular(anularEntrada), 'entrada'), reimpresiones(entradas, 'entrada')) : null,
+      salidas.length ? h('div', h('h4', 'Salidas de efectivo'), listaSalidas(salidas, alAnular(anularSalida), 'salida'), reimpresiones(salidas, 'salida')) : null].filter(Boolean));
   }
+
+  // Los vales salen solos al registrarlos; esto es solo para volver a imprimir uno (sale marcado como copia)
+  const reimpresiones = (lista, tipo) => h('div.col', lista.map((m) => h('button.btn', { type: 'button',
+    onclick: () => imprimirNodo(nodoVale(soc, turnoActual(), { tipo, monto: m.monto, motivo: m.motivo, quien: m.creado_por || m.usuario, cuando: m.creado_en || m.fecha, id: m.id }, true), tipo === 'entrada' ? 'Vale de entrada' : 'Vale de salida') },
+    'Volver a imprimir el vale de ' + money(m.monto) + (m.motivo ? ' (' + m.motivo + ')' : ''))));
 
   function seccionAbierta() {
     const t = est.turno;
