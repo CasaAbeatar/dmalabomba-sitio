@@ -40,3 +40,13 @@ export function revisarConversion({ descripcion, subtotal, cantidad, factorNombr
   }
   return { factor: actual, aviso: 'Con esta conversión cada unidad sale a ' + dicho(a) + ', ' + razon + ' de lo normal en bebidas (entre ' + fmt(BANDA_POR_LITRO.min) + ' y ' + fmt(BANDA_POR_LITRO.max) + ' por litro). Revise cuántas unidades trae cada una de la factura.' };
 }
+
+// Algunos proveedores (por ejemplo de carnes) escriben «Unid» aunque venden por peso: si la cantidad trae decimales y la unidad es de conteo, es peso (kg).
+// Devuelve la unidad que se debe mostrar y usar: { unidad, corregida }.
+export function unidadReal(cantidad, unidad) {
+  const u = String(unidad || '').trim().toLowerCase().replace(/\./g, '');
+  const conteo = ['', 'unid', 'und', 'un', 'unidad', 'unidades', '1', 'sp'].includes(u);
+  const n = Number(cantidad);
+  const fraccion = Number.isFinite(n) && Math.abs(n - Math.round(n)) > 0.0005;
+  return conteo && fraccion ? { unidad: 'kg', corregida: true, original: String(unidad || 'Unid') } : { unidad: unidad || '', corregida: false, original: String(unidad || '') };
+}

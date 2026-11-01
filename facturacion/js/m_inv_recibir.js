@@ -4,7 +4,8 @@
 // Una factura que Contable o Hacienda rechazaron no se puede recibir (puede_recibir = false): solo se puede marcar «No es de inventario».
 import { h, money, num, fechaHora, horaCorta, debounce, campoBusqueda, sumaDias } from './util.js';
 import { inv, cant, dinero } from './api_inventarios.js';
-import { revisarConversion } from './inv_sentido.js';
+import { revisarConversion, unidadReal } from './inv_sentido.js';
+const uFac = (l) => unidadReal(l.cantidad, l.unidad).unidad; // «Unid» con decimales es peso: se muestra y se usa como kg
 import {
   ventana, dialogo, cargando, falla, vacio, aviso, cantTxt, costoTxt, unidadTxt, dma, diaTxt, plural, empresaChip, numFactura, proveedorTxt, tipoDocTxt,
   accionSegura, botonSeguro, rotular, repetidaTxt, campoCantidad, leerCantidad, leerMonto, selectUbicacion, nombreUbicacion, elegirArticulo, opcionDeArticulo,
@@ -133,7 +134,7 @@ async function abrirLista(ctx) {
       !puede ? aviso('mal', h('p', h('strong', (ec.texto || 'Rechazada, no entra') + '. '), 'Esta factura no se puede recibir al inventario. Si la mercadería no se quedó, márquela «No es de inventario» para que salga de esta lista.'))
         : (f.aviso || ec.aviso) ? aviso('espera', h('p', f.aviso || ec.aviso)) : null,
       h('p.inv-fac-cuenta', h('strong', plural(f.lineas_pendientes, 'línea por recibir', 'líneas por recibir')), ' de ' + num(f.lineas_total, 0) + (decididas ? ' (' + [f.lineas_recibidas ? plural(f.lineas_recibidas, 'recibida', 'recibidas') : '', f.lineas_ignoradas ? plural(f.lineas_ignoradas, 'no es de inventario', 'no son de inventario') : ''].filter(Boolean).join(', ') + ')' : '')),
-      h('ul.inv-fac-lineas', (f.lineas || []).slice(0, 8).map((l) => h('li', h('span.inv-fl-desc', l.descripcion), h('span.inv-fl-sug' + (sugRecibe(l) ? '' : '.sin'), sugTexto(l)), h('span.tenue.cifra', num(l.cantidad, 3) + ' ' + (l.unidad || ''))))),
+      h('ul.inv-fac-lineas', (f.lineas || []).slice(0, 8).map((l) => h('li', h('span.inv-fl-desc', l.descripcion), h('span.inv-fl-sug' + (sugRecibe(l) ? '' : '.sin'), sugTexto(l)), h('span.tenue.cifra', num(l.cantidad, 3) + ' ' + uFac(l))))),
       (f.lineas || []).length > 8 ? h('p.tenue.inv-chico', 'y ' + plural(f.lineas.length - 8, 'línea más', 'líneas más')) : null,
       h('div.inv-fac-btns',
         puede && (f.lineas || []).some(sugRecibe) ? h('button.btn.primario', { type: 'button', onclick: () => abrirFactura(ctx, f.clave, { previa: f, recibirSugeridas: true, alRecibir: () => cargar() }) }, (f.lineas || []).every(sugRecibe) ? 'Recibir todas las líneas' : 'Recibir las líneas con sugerencia') : null,
@@ -298,7 +299,7 @@ export async function abrirFactura(ctx, clave, { previa = null, recibirSugeridas
   /* ---------- Una línea pendiente: lo que se va a recibir ---------- */
   // Descripción de la línea tal como viene en la factura
   const descLinea = (l) => h('div.inv-linea-desc', h('strong', 'Línea ' + l.linea + ': ' + l.descripcion),
-    h('small', 'En la factura: ' + num(l.cantidad, 3) + ' ' + (l.unidad || '') + ' a ' + costoTxt(l.costo_unitario_factura) + ' cada una, sin IVA · subtotal ' + money(l.subtotal_crc) + ' sin IVA' + (l.tarifa_iva != null ? ' · IVA ' + num(l.tarifa_iva, 2) + '%' : '')),
+    h('small', 'En la factura: ' + num(l.cantidad, 3) + ' ' + uFac(l) + (unidadReal(l.cantidad, l.unidad).corregida ? ' (la factura dice «' + unidadReal(l.cantidad, l.unidad).original + '», pero por los decimales es peso)' : '') + ' a ' + costoTxt(l.costo_unitario_factura) + ' cada una, sin IVA · subtotal ' + money(l.subtotal_crc) + ' sin IVA' + (l.tarifa_iva != null ? ' · IVA ' + num(l.tarifa_iva, 2) + '%' : '')),
     l.cabys ? h('small', 'CABYS ' + l.cabys + (l.cabys_descripcion ? ': ' + l.cabys_descripcion : '')) : null,
     l.reabierta ? h('small.inv-marca', 'Volvió a pendiente después de una corrección') : null);
   function formaLinea(f, l, puede) {
@@ -372,7 +373,7 @@ export async function abrirFactura(ctx, clave, { previa = null, recibirSugeridas
     rubro.hidden = true;
     rubro.parentElement.append(buscar, datos);
     const campos = h('div.inv-linea-campos',
-      h('label.etq.inv-c-conv', h('span', 'Conversión'), h('span.inv-con-unidad', h('span.inv-pre', 'Cada «' + (l.unidad || 'unidad') + '» de la factura trae'), factor, h('span.inv-unidad.inv-u-art')), factorEco, avisoConv),
+      h('label.etq.inv-c-conv', h('span', 'Conversión'), h('span.inv-con-unidad', h('span.inv-pre', 'Cada «' + (uFac(l) || 'unidad') + '» de la factura trae'), factor, h('span.inv-unidad.inv-u-art')), factorEco, avisoConv),
       h('label.etq.inv-c-ubic', 'Dónde se guarda', ubic),
       h('div.etq.inv-c-vence', h('span', 'Vence'), vence, venceEco, h('label.inv-casilla.chica', noVence, h('span', 'No vence'))),
       h('div.inv-costo-fila', h('span.inv-costo-et', 'Costo sin IVA:'), costoTxtEl), // el costo sale de la factura: no se corrige a mano (si no cuadra, lo que se corrige es la conversión)
@@ -433,7 +434,7 @@ export async function abrirFactura(ctx, clave, { previa = null, recibirSugeridas
       const g = grupoDe(cat, art);
       el.classList.toggle('inv-ver-ubic', !ubic.value);
       const donde = ubic.value ? (ubic.selectedOptions[0]?.textContent || '') : '';
-      resumen.textContent = !art ? '' : enColones() ? 'Entran ' + money(valorLinea()) + ' sin IVA a la bolsa ' + (GRUPOS[g] || '') + (donde ? ' · se guarda en ' + donde : '') + ' (referencia de la factura: ' + num(l.cantidad, 3) + ' ' + (l.unidad || '') + ')' : 'Bolsa: ' + (GRUPOS[g] || 'sin bolsa') + (donde ? ' · se guarda en ' + donde : '') + (noVence.checked ? ' · no vence' : vence.value ? ' · vence el ' + dma(vence.value) : '');
+      resumen.textContent = !art ? '' : enColones() ? 'Entran ' + money(valorLinea()) + ' sin IVA a la bolsa ' + (GRUPOS[g] || '') + (donde ? ' · se guarda en ' + donde : '') + ' (referencia de la factura: ' + num(l.cantidad, 3) + ' ' + uFac(l) + ')' : 'Bolsa: ' + (GRUPOS[g] || 'sin bolsa') + (donde ? ' · se guarda en ' + donde : '') + (noVence.checked ? ' · no vence' : vence.value ? ' · vence el ' + dma(vence.value) : '');
     }
     function ubicacionPorOmision(a) {
       if (!a) return '';
@@ -491,7 +492,7 @@ export async function abrirFactura(ctx, clave, { previa = null, recibirSugeridas
       const hist = Number(r.costo_medio_anterior);
       if (v > 0) {
         const pct = c / v * 100;
-        if (pct < 15 || pct > 110) t = 'Este costo es el ' + num(pct, 0) + ' % del precio de venta sin IVA (' + money(v) + '). Lo normal está entre 15 % y 110 %. Revise cuántas unidades trae cada «' + (l.unidad || 'unidad') + '» de la factura: casi seguro la conversión está mal.';
+        if (pct < 15 || pct > 110) t = 'Este costo es el ' + num(pct, 0) + ' % del precio de venta sin IVA (' + money(v) + '). Lo normal está entre 15 % y 110 %. Revise cuántas unidades trae cada «' + (uFac(l) || 'unidad') + '» de la factura: casi seguro la conversión está mal.';
       }
       if (!t && hist > 0 && Number(r.lotes_anteriores) >= 1) {
         const razon = c / hist;
@@ -517,7 +518,7 @@ export async function abrirFactura(ctx, clave, { previa = null, recibirSugeridas
         const porColones = !!cr && cr.grupo !== 'unitario';
         const nuevo = porColones
           ? (articulos.find((a) => a.categoria_id === rubro.value && a.unidad === 'colon' && a.activo !== false) || await inv.articuloRapido(cr.nombre + ' (en colones)', rubro.value, '', 'colon'))
-          : await inv.articuloRapido(nombre, rubro.value, l.cabys || '', unidadSugerida(l.unidad));
+          : await inv.articuloRapido(nombre, rubro.value, l.cabys || '', unidadSugerida(uFac(l)));
         ctx.articulos.olvidar();
         articulos = await ctx.articulos.lista(true);
         art = articulos.find((a) => a.id === nuevo.id) || nuevo;
@@ -533,7 +534,7 @@ export async function abrirFactura(ctx, clave, { previa = null, recibirSugeridas
         ayuda: '«' + l.descripcion + '»' + (l.cabys ? ' · CABYS ' + l.cabys : '') + '. ' + (ctx.esAdmin ? '' : 'Si no está en la lista, pídale a un administrador que lo cree en «Catálogo».'),
         crear: ctx.esAdmin ? async (texto) => {
           const { formArticulo } = await import('./m_inv_catalogo.js');
-          const nuevo = await formArticulo(ctx, null, { nombre: texto || l.descripcion.slice(0, 120), cabys: l.cabys || '', categoria_id: sug.categoria_id || '', unidad: unidadSugerida(l.unidad) });
+          const nuevo = await formArticulo(ctx, null, { nombre: texto || l.descripcion.slice(0, 120), cabys: l.cabys || '', categoria_id: sug.categoria_id || '', unidad: unidadSugerida(uFac(l)) });
           if (!nuevo) return null;
           articulos = await ctx.articulos.lista(true);
           return opcionDeArticulo(articulos.find((a) => a.id === nuevo.id) || nuevo);
