@@ -67,7 +67,7 @@ export function abrirPreguntaClaude(app) {
     finally { enviar.disabled = false; enviar.textContent = 'Preguntar otra vez'; }
   });
   const uso = h('small.tenue');
-  rpc('fx_ia_uso').then((u) => { if (u?.permitido) uso.textContent = 'Gasto de Claude este mes: US$ ' + Number(u.gasto_mes_usd).toFixed(2) + ' de US$ ' + Number(u.tope_mensual_usd).toFixed(0) + ' de tope.' + ((u.por_modulo || []).length ? ' Por módulo: ' + u.por_modulo.map((m) => m.modulo + ' US$ ' + Number(m.usd).toFixed(2)).join(', ') + '.' : ''); }).catch(() => {});
+  rpc('fx_ia_uso').then((u) => { if (u?.permitido) uso.textContent = 'Gasto de Claude este mes: US$ ' + Number(u.gasto_mes_usd).toFixed(2) + ' de US$ ' + Number(u.tope_mensual_usd).toFixed(0) + ' de tope.' + ((u.por_modulo || []).length ? ' Por módulo: ' + u.por_modulo.map((m) => m.modulo + ' US$ ' + Number(m.usd).toFixed(2)).join(', ') + '.' : '') + (u.proyeccion_mes_usd != null ? ' Al ritmo de este mes terminaría en unos US$ ' + Number(u.proyeccion_mes_usd).toFixed(2) + '.' : '') + ((u.alertas || []).length ? ' ATENCIÓN: ' + u.alertas.join(' ') : ''); }).catch(() => {});
   const semanal = h('details.claude-semanal', { hidden: true }, h('summary', 'Resumen semanal de Claude'), h('div.claude-zona'));
   rpc('fx_ia_informe_ultimo').then((x) => {
     if (!x?.hay) return;
