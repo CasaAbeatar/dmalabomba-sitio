@@ -10,6 +10,7 @@ import { sumarDocumentos, frasesDeLista, puenteConTurno, docsDelTurno, fueraDelT
 import { imprimirComprobante, reimprimirComprobante, formatoDireccion, formatoCedula, formatoTelefono, numeroCorto, NOMBRES_DOCUMENTO } from './imprimir.js';
 import { crearDescarga, nombrePeriodo } from './descargas.js';
 import { textoRango } from './periodo.js';
+import { explicarRechazoConClaude } from './claude_ayuda.js';
 
 if (!document.querySelector('link[data-fx-documentos]')) document.head.append(h('link', { rel: 'stylesheet', href: new URL('../css/documentos.css', import.meta.url).href, 'data-fx-documentos': '1' }));
 
@@ -916,7 +917,8 @@ export default {
           h('div.doc-tecnico', th.items.map((i) => h('p', (i.codigo ? `Código ${i.codigo}: ` : '') + i.original)),
             h('details.doc-crudo', h('summary.btn', 'Texto técnico sin cambios'), h('pre', String(c.mensaje)))))
         : null;
-      return h('div.doc-estado.' + (CLASE_ESTADO[c.estado] || ''), h('p', t), motivos, tecnico);
+      const claude = app.admin && c.estado === 'rechazado' && c.id ? explicarRechazoConClaude({ comprobanteId: c.id }) : null; // solo administración
+      return h('div.doc-estado.' + (CLASE_ESTADO[c.estado] || ''), h('p', t), motivos, claude, tecnico);
     }
 
     /* ---------- acciones ---------- */

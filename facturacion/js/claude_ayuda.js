@@ -50,6 +50,30 @@ export function revisarClienteConClaude({ leer, usar }) {
   return h('div.claude-bloque', h('small.tenue', 'Claude puede revisar lo que escribió, buscar clientes repetidos y explicarle por qué Hacienda podría rechazar la factura.'), btn, zona);
 }
 
+const QUIEN = { caja: 'La caja', administracion: 'Administración', contadora: 'La contadora', soporte_tecnico: 'Soporte técnico', nadie_es_normal_en_pruebas: 'Nadie: es normal en el modo de pruebas' };
+const CERTEZA = { alta: 'Claude está bastante seguro', media: 'Claude lo cree probable', baja: 'Claude no está seguro' };
+
+// Solo administración: «Explicar con Claude» en un documento que Hacienda rechazó. Lee el comprobante de la base; no cambia nada.
+export function explicarRechazoConClaude({ comprobanteId }) {
+  const zona = h('div.claude-zona', { 'aria-live': 'polite' });
+  const btn = h('button.btn', { type: 'button' }, 'Explicar con Claude por qué lo rechazaron');
+  btn.addEventListener('click', async () => {
+    btn.disabled = true; btn.textContent = 'Claude está revisando…'; zona.replaceChildren();
+    try {
+      const r = await pedir('rechazo_explicar', { comprobante_id: comprobanteId });
+      zona.replaceChildren(
+        h('p.inv-semaforo.ambar', h('strong.inv-sem-et', 'En corto: '), r.en_corto || ''),
+        h('p', h('strong', 'Causa más probable: '), r.causa_probable || ''),
+        (r.que_conviene_hacer || []).length ? h('div', h('strong', 'Lo que conviene hacer:'), h('ul', r.que_conviene_hacer.map((x) => h('li', x)))) : null,
+        r.dato_a_revisar ? h('p', h('strong', 'Dato a revisar: '), r.dato_a_revisar) : null,
+        h('p.tenue', 'Quién puede resolverlo: ' + (QUIEN[r.quien] || 'Administración') + '. ' + (CERTEZA[r.certeza] || '')),
+        h('small.tenue', 'Es una explicación de Claude, no una decisión: usted decide qué hacer con el documento.'));
+    } catch (e) { zona.replaceChildren(h('p.error-caja', e?.message || 'No se pudo consultar a Claude ahora.')); }
+    finally { btn.disabled = false; btn.textContent = 'Explicar otra vez con Claude'; }
+  });
+  return h('div.claude-bloque', btn, zona);
+}
+
 // Solo administración: preguntarle a Claude sobre lo que se ve en la pantalla
 export function abrirPreguntaClaude(app) {
   const pregunta = h('textarea.campo', { rows: 3, placeholder: 'Por ejemplo: ¿qué proveedor subió más de precio? ¿Por qué hay tantos ámbar?', 'aria-label': 'Su pregunta para Claude' });
