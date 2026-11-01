@@ -71,10 +71,8 @@ export async function abrirCajaAhora(app, { alAbrir, sigue = () => true, textoOk
   abriendoCaja = true;
   try {
     const terminal = Number.isInteger(app?.terminal) ? app.terminal : 1;
-    let sugerido = null;
-    try { const sg = await conTope(app.api.turnoSugerencia(app.socId, terminal)); const uc = sg?.ultimo_cierre; if (sg && sg.origen === 'contado' && uc?.cerrado_en && sg.sugerido != null) sugerido = { monto: Number(sg.sugerido), cuando: uc.cerrado_en }; } catch { /* sin sugerencia: la persona escribe el monto */ }
     if (!sigue()) return;
-    const form = crearFormularioApertura({ api: app.api, socId: app.socId, terminal, local: nombreLocal(app.soc), sugerido,
+    const form = crearFormularioApertura({ api: app.api, socId: app.socId, terminal, local: nombreLocal(app.soc), soc: app.soc,
       alAbrir: async () => {
         v.cerrar();
         try { await app.refrescar(); } catch { /* la cabecera se pone al día sola */ }

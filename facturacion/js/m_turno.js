@@ -8,6 +8,8 @@ import { crearFormularioApertura } from './ui_apertura.js';
 import { documentos } from './api_documentos.js';
 import { fraseParaTurno, docsDelTurno } from './cuadre_turno.js';
 import { crearDescarga, nombrePeriodo } from './descargas.js';
+import { montarCajera } from './turno_ciego.js';
+import { imprimirNodo as imprimirPos, nodoInforme } from './imprimir_caja.js';
 
 const CSS_URL = new URL('../css/caja.css', import.meta.url).href;
 function cargarCss() {
@@ -256,6 +258,8 @@ export default {
   titulo: 'Apertura y cierre de caja',
   async mount(root, app) {
     await cargarCss();
+    // La persona de caja usa otra pantalla: no ve cuánto debe haber, ni lo vendido, ni el historial de cierres (cierre ciego)
+    if (!app.admin) return montarCajera(root, app);
     const api = app.api;
     const socId = app.soc.id;
     const soc = app.soc;
@@ -263,8 +267,7 @@ export default {
     let final = null; // resumen del cierre que se acaba de hacer
     let finalAviso = null; // frase que acompaña al resumen cuando la caja ya estaba cerrada
     let turnoVisto = null;
-    let est = null, abiertas = [], historial = [];
-    let sugerencia = null; // fx_turno_sugerencia_apertura: lo contado al cerrar el último turno de ESTA terminal (null si no se pudo leer)
+    let est = null, abiertas = [], historial = [], informes = [];
     let contadoTxt = '';
     let notas = '';
     let zona = null; // zona de efectivo (entradas y salidas), la misma que usa Facturación
@@ -282,13 +285,13 @@ export default {
       turnoVisto = app.turno?.id || null;
       soltarZona();
       contenedor.replaceChildren(esqueleto(4, 'Cargando el cierre de caja…'));
-      let e, ab, hist, sug;
+      let e, ab, hist, inf;
       try {
-        [e, ab, hist, sug] = await Promise.all([
+        [e, ab, hist, inf] = await Promise.all([
           turnoVisto ? api.turnoEstado(turnoVisto) : null,
           turnoVisto ? api.ventasAbiertas(socId) : [],
           api.turnos(socId, 30),
-          turnoVisto ? null : api.turnoSugerencia(socId, app.terminal).catch(() => null), // solo informa: si falla no se detiene la pantalla
+          api.turnoInformes(socId, 30).catch(() => []), // el registro de cierres es un extra: si falla no se detiene la pantalla
         ]);
         if (mi !== nCarga) return;
       } catch (er) {
@@ -303,7 +306,7 @@ export default {
         if (!vivo || mi !== nCarga) return;
         turnoVisto = null; e = null; ab = [];
       }
-      est = e; abiertas = ab || []; historial = hist || []; sugerencia = sug || null;
+      est = e; abiertas = ab || []; historial = hist || []; informes = Array.isArray(inf) ? inf : [];
       pintar();
     }
 
@@ -332,6 +335,7 @@ export default {
       contenedor.replaceChildren(
         h('p.tenue.mt-intro', nombreLocal(soc) + '. Un turno no es el día: empieza cuando se abre la caja y termina cuando se cierra, aunque cruce la medianoche.'),
         final ? seccionFinal() : (turnoVisto && est ? seccionActual() : seccionSinTurno()),
+        seccionInformes(),
         seccionHistorial());
     }
 
@@ -351,13 +355,9 @@ export default {
     function seccionSinTurno() {
       // Lo que se contó al cerrar el último turno de esta terminal solo se muestra como dato; nunca se escribe solo.
       // Viene del servidor (fx_turno_sugerencia_apertura); si no se pudo leer, se usa el historial ya cargado.
-      const uc = sugerencia?.ultimo_cierre;
-      const delServidor = sugerencia && sugerencia.origen === 'contado' && uc?.cerrado_en && sugerencia.sugerido != null
-        ? { monto: Number(sugerencia.sugerido), cuando: uc.cerrado_en } : null;
-      const ultimo = historial.find((x) => x.cerrado_en && x.contado_efectivo != null);
       const form = crearFormularioApertura({
         api, socId, terminal: app.terminal, local: nombreLocal(soc),
-        sugerido: sugerencia ? delServidor : (ultimo ? { monto: Number(ultimo.contado_efectivo), cuando: ultimo.cerrado_en } : null),
+        soc,
         alAbrir: async (res, monto) => {
           try { await app.refrescar(); } catch { toast('La caja se abrió, pero no se pudo actualizar la pantalla. Revise la conexión y toque «Abrir caja» otra vez: el sistema no abre otra.', 'error', 9000); return; }
           if (res && res.ya_abierto) toast('La caja ya estaba abierta (la abrió ' + (res.abierto_por || 'otra persona') + ') con ' + money(res.fondo_inicial ?? 0) + '. No se cambió el efectivo con que abrió.', 'ok', 9000);
@@ -498,7 +498,7 @@ export default {
       try { await app.refrescar(); } catch { /* la cabecera se actualiza sola luego */ }
       turnoVisto = null; est = null; abiertas = [];
       try { historial = (await api.turnos(socId, 30)) || []; } catch { /* queda el anterior */ }
-      try { sugerencia = await api.turnoSugerencia(socId, app.terminal); } catch { sugerencia = null; }
+      try { informes = (await api.turnoInformes(socId, 30)) || []; } catch { /* queda el anterior */ }
       pintar();
       window.scrollTo({ top: 0 });
       toast(aviso ? 'Esta caja ya estaba cerrada.' : 'Caja cerrada.');
@@ -600,7 +600,7 @@ export default {
           }
         }
         let res;
-        try { res = await api.turnoCerrar(turnoVisto, { efectivo: contado, notas: notasTxt || null }); }
+        try { res = await api.turnoCerrar(turnoVisto, { efectivo: contado, notas: notasTxt || null, aceptaFaltante: true }); /* administración ya vio la diferencia y decidió cerrar */ }
         catch (e) {
           // El servidor no deja cerrar con cuentas abiertas (otro aparato dejó una después de la revisión): se leen de nuevo y se ofrece cobrarlas o anularlas, como en la revisión de antes
           if (rechazoPorCuentas(e)) {
@@ -637,6 +637,40 @@ export default {
       const tj = Number(t.contado_tarjeta || 0), sp = Number(t.contado_sinpe || 0), tr = Number(t.contado_transferencia || 0);
       const sin = () => h('span.tenue', 'Sin dato');
       return [h('td.der', ef == null ? sin() : money(ef)), h('td.der', money(tj)), h('td.der', money(sp)), h('td.der', money(tr)), h('td.der', ef == null ? sin() : h('b', money(r2(ef + tj + sp + tr))))];
+    }
+
+
+    /* ---------- Registro de cierres con su informe completo (solo administración) ---------- */
+    const ESTADO_ENVIO = { pendiente: 'Pendiente', enviando: 'Enviando', enviado: 'Enviado', simulado: 'En prueba, no se envió', error: 'No se pudo enviar', cancelado: 'Cancelado' };
+    const textoEnvio = (x) => (x ? String(x).split(', ').map((e) => ESTADO_ENVIO[e] || e).join(', ') : 'Sin envío');
+    async function verInforme(t) {
+      let r;
+      try { r = await api.turnoInforme(t.id); } catch (er) { toast(conPunto(textoError(er, 'No se pudo abrir el informe de ese cierre.')), 'error'); return; }
+      modal({ titulo: 'Cierre No. ' + String(t.numero_cierre || 0).padStart(6, '0'), ancho: 640,
+        contenido: h('div.col',
+          h('pre.informe-texto', { style: 'white-space:pre-wrap;font:13px/1.45 ui-monospace,monospace;margin:0' }, r.texto || ''),
+          h('p.tenue-linea', 'Correo: ' + textoEnvio(r.correo_estado) + (r.correo_para ? ' (' + r.correo_para + ')' : '') + (r.correo_error ? '. ' + r.correo_error : '') + '. WhatsApp: ' + textoEnvio(t.whatsapp_estado) + '.')),
+        botones: [{ texto: 'Cerrar', onclick: (c) => c() }, { texto: 'Imprimir informe', clase: 'primario', onclick: () => imprimirPos(nodoInforme(r.texto, soc), 'Informe de cierre') }] });
+    }
+    function seccionInformes() {
+      if (!informes.length) return h('section.col', h('h2', 'Informes de cierre'), h('div.vacio', 'Todavía no hay cierres con informe.'));
+      const filas = informes.map((t) => {
+        const dif = t.diferencia_efectivo == null ? null : Number(t.diferencia_efectivo);
+        return h('tr',
+          h('td', '#' + String(t.numero_cierre || 0).padStart(6, '0')),
+          h('td', fechaPartida(t.cerrado_en), h('div.tenue', t.cerrado_por || '')),
+          h('td.der', money(t.esperado_efectivo)), h('td.der', money(t.contado_efectivo)),
+          h('td', chipDif(dif)),
+          h('td.der', String(t.conteos_n || 0) + (Number(t.faltante_reconocido) > 0 ? ' (cerró con faltante)' : (t.conteos || []).some((c) => Number(c.faltante) > 0) ? ' (hubo faltante y recontó)' : '')),
+          h('td', h('div', 'Correo: ' + textoEnvio(t.correo_estado)), h('div.tenue', 'WhatsApp: ' + textoEnvio(t.whatsapp_estado))),
+          h('td', h('button.btn.chico', { type: 'button', onclick: () => verInforme(t) }, 'Ver informe')));
+      });
+      return h('section.col',
+        h('h2', 'Informes de cierre'),
+        h('p.tenue-linea', 'Aquí se ve todo lo que la cajera no ve: lo que debía haber, la diferencia (faltante o sobrante) y los conteos que hizo. El informe también sale por correo y WhatsApp.'),
+        conPistaDesliz(h('div.tabla-caja', h('table.tabla',
+          h('thead', h('tr', ['Cierre', 'Cerró', 'Debía haber', 'Contado', 'Resultado', 'Conteos', 'Envío', ''].map((x) => h('th', x)))),
+          h('tbody', filas))), 'Deslice la tabla hacia los lados para ver más columnas y el botón «Ver informe».'));
     }
 
     function seccionHistorial() {

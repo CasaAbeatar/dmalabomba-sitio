@@ -119,7 +119,7 @@ const VIDA_CATALOGO = 5 * 60 * 1000;
 export function invalidarCatalogo(soc) { versionCatalogo++; if (soc) cacheCatalogo.delete(soc); else cacheCatalogo.clear(); }
 const CAMBIA_CATALOGO = /^fx_(producto_guardar|cajon_guardar|precios_lote)$/;
 // Solo las consultas (no cambian datos) se repiten solas una vez si falla la red. Una escritura NUNCA se repite sola.
-const SOLO_LECTURA = /^fx_(contexto|catalogo|clientes|venta|ventas_abiertas|turno_estado|turno_sugerencia_apertura|movimientos_efectivo|turnos|salidas|comprobante|comprobantes|comprobante_nc|comprobante_saldos|comprobante_xml|listados2?|documentos|documentos_pagina|alertas|usuarios|recibidas?|respuesta_recibida|producto_historial|venta_reemplazo_info|nota_calcular|cabys_buscar|cabys_verificar|inv_(alertas|alertas_resumen|articulos|cabys_reglas|cabys_sugerencia|catalogos|conteos?|equivalencias|existencias|factura|factura_estado|lotes|mermas|movimientos|notas_proveedor|pendientes|valorizacion))$/;
+const SOLO_LECTURA = /^fx_(contexto|catalogo|clientes|venta|ventas_abiertas|turno_estado|turno_sugerencia_apertura|turno_informes?|movimientos_efectivo|turnos|salidas|comprobante|comprobantes|comprobante_nc|comprobante_saldos|comprobante_xml|listados2?|documentos|documentos_pagina|alertas|usuarios|recibidas?|respuesta_recibida|producto_historial|venta_reemplazo_info|nota_calcular|cabys_buscar|cabys_verificar|inv_(alertas|alertas_resumen|articulos|cabys_reglas|cabys_sugerencia|catalogos|conteos?|equivalencias|existencias|factura|factura_estado|lotes|mermas|movimientos|notas_proveedor|pendientes|valorizacion))$/;
 
 // Todos los módulos llaman a sb.rpc: aquí se les da tiempo máximo, un reintento en las consultas y mensajes claros en las fallas de red.
 const rpcOriginal = sb.rpc.bind(sb);
@@ -217,7 +217,12 @@ export const api = {
   turnoEstado: (turno) => rpc('fx_turno_estado', { p_turno: turno }),
   // Cierre: solo se cuenta el EFECTIVO. esperado = fondo + efectivo de ventas - salidas. Siempre deja cerrar; si no coincide queda discrepancia=true y diferencia_efectivo (contado - esperado).
   // El efectivo de ventas es lo que corresponde a cada venta (monto), nunca lo que entregó el cliente (recibido).
-  turnoCerrar: (turno, c) => rpc('fx_turno_cerrar', { p_turno: turno, p_efectivo: c.efectivo, p_notas: c.notas ?? null }),
+  turnoCerrar: (turno, c) => rpc('fx_turno_cerrar', { p_turno: turno, p_efectivo: c.efectivo, p_notas: c.notas ?? null, p_acepta_faltante: !!c.aceptaFaltante }),
+  // Cierre ciego: anota un conteo y devuelve solo { intento, faltante } (faltante vacío si no se le debe avisar). Nunca devuelve cuánto debía haber. Es una escritura: no se repite sola.
+  turnoConteo: (turno, efectivo) => rpc('fx_turno_conteo', { p_turno: turno, p_efectivo: efectivo }),
+  // Solo administración: cierres con su informe (esperado, diferencia, conteos, envío por correo y WhatsApp) y el texto completo de uno.
+  turnoInformes: (soc, limite = 60) => rpc('fx_turno_informes', { p_soc: soc, p_limite: limite }),
+  turnoInforme: (turno) => rpc('fx_turno_informe', { p_turno: turno }),
   // Salidas de efectivo de la caja durante el turno (pagos a proveedor, vuelto de devolución, etc.)
   salidaRegistrar: (turno, monto, motivo) => rpc('fx_salida_registrar', { p_turno: turno, p_monto: monto, p_motivo: motivo }),
   salidaAnular: (id) => rpc('fx_salida_anular', { p_id: id }),

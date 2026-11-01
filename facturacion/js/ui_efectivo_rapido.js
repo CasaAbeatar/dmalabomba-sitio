@@ -96,7 +96,7 @@ export function anularMovimiento(mov) {
 // alAbrirCaja(): lo que hace el botón «Abrir la caja» cuando no hay turno.
 // Opciones para usarla fuera de Facturación (Apertura y cierre de caja): conPie=false quita «Debe haber en caja» y el enlace a los movimientos (esa pantalla ya los muestra),
 // enFlujo=true abre la tarjeta en su lugar y no encima, alCambiar() avisa cada vez que se guardó o se anuló algo, motivos={ entrada, salida } son las listas del servidor.
-export function crearZonaEfectivo({ turnoId = null, alAbrirCaja, conPie = true, enFlujo = false, alCambiar, motivos } = {}) {
+export function crearZonaEfectivo({ turnoId = null, alAbrirCaja, conPie = true, enFlujo = false, alCambiar, alGuardar, motivos } = {}) {
   const TIPOS = {
     entrada: { ...TIPOS_BASE.entrada, motivos: motivosValidos(motivos?.entrada, MOTIVOS_ENTRADA) },
     salida: { ...TIPOS_BASE.salida, motivos: motivosValidos(motivos?.salida, MOTIVOS_SALIDA) },
@@ -108,6 +108,7 @@ export function crearZonaEfectivo({ turnoId = null, alAbrirCaja, conPie = true, 
   let abierta = null; // 'entrada' | 'salida' | null: tarjeta abierta
   let tarjeta = null; // { el, monto, motivo, ... } de la tarjeta abierta
   let enviando = false;
+  let ultimo = null; // lo último que se mandó a guardar { tipo, monto, motivo }: lo recibe alGuardar para imprimir el vale
   let duda = null; // un guardado que no se pudo confirmar por la red: { tipo, c, motivo, antes }
   let abiertaEn = 0;
   const borradores = { entrada: { monto: '', motivo: '' }, salida: { monto: '', motivo: '' } };
@@ -166,7 +167,7 @@ export function crearZonaEfectivo({ turnoId = null, alAbrirCaja, conPie = true, 
       const t = textoResumen(tipo);
       if (cajas[tipo].resumen.textContent !== t) cajas[tipo].resumen.textContent = t;
     }
-    const c = datos ? colones(datos.esperado) : '';
+    const c = datos && conPie ? colones(datos.esperado) : '';
     if (cifra.textContent !== c) cifra.textContent = c;
     const hr = datos ? 'a las ' + horaCorta(datos.leidoEn) : (fallo ? 'No se pudo leer' : 'Cargando…');
     if (hora.textContent !== hr) hora.textContent = hr;
@@ -331,6 +332,7 @@ export function crearZonaEfectivo({ turnoId = null, alAbrirCaja, conPie = true, 
     const v = validar();
     if (!v) return;
     const { monto, motivo } = v;
+    ultimo = { tipo, monto, motivo };
     const t = tarjeta;
     enviando = true; pintarBotonGuardar();
     const mismaDuda = duda && duda.tipo === tipo && duda.c === cents(monto) && duda.motivo === motivo;
@@ -381,6 +383,7 @@ export function crearZonaEfectivo({ turnoId = null, alAbrirCaja, conPie = true, 
     mostrarGuardado(tipo, monto);
     refrescar();
     try { alCambiar?.(tipo); } catch { /* quien escucha no debe romper el guardado */ }
+    try { alGuardar?.(ultimo && ultimo.tipo === tipo ? ultimo : { tipo, monto, motivo: '' }); } catch { /* el vale se puede reimprimir */ }
   }
 
   /* --- Lista de movimientos del turno --- */

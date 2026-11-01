@@ -332,19 +332,8 @@ export default {
     /* ---------- Sin turno: abrir caja ---------- */
     async function pintarSinTurno() {
       // Mismo formulario que «Apertura y cierre de caja»: el monto se escribe, se lee «Abrirá la caja con ₡X» y no se abre en ₡0 por descuido.
-      // El dato del último cierre (lo contado) viene del servidor para esta terminal; solo informa, nunca se escribe solo.
-      let sugerido = null;
-      try {
-        const s = await api.turnoSugerencia(socId, app.terminal);
-        if (s && s.origen === 'contado' && s.ultimo_cierre?.cerrado_en && s.sugerido != null) sugerido = { monto: Number(s.sugerido), cuando: s.ultimo_cierre.cerrado_en };
-      } catch {
-        try {
-          const t = ((await api.turnos(socId, 5)) || []).find((x) => x.cerrado_en && x.contado_efectivo != null);
-          if (t) sugerido = { monto: Number(t.contado_efectivo), cuando: t.cerrado_en };
-        } catch { /* el dato es opcional */ }
-      }
       if (!vivo) return;
-      const form = crearFormularioApertura({ api, socId, terminal: app.terminal, local: nombreLocal(app.soc), sugerido,
+      const form = crearFormularioApertura({ api, socId, terminal: app.terminal, local: nombreLocal(app.soc), soc: app.soc,
         alAbrir: async (res) => {
           await app.refrescar();
           if (res && res.ya_abierto) toast('La caja ya estaba abierta (la abrió ' + (res.abierto_por || 'otra persona') + ') con ' + money(res.fondo_inicial ?? 0) + '. No se cambió el efectivo con que abrió.', 'ok', 9000);
@@ -1052,7 +1041,8 @@ export default {
     function abrirEfectivo() {
       if (!turnoMostrado) { toast('Abra la caja para anotar entradas y salidas de efectivo.', 'error'); return; }
       zonaEfectivo?.destruir();
-      const zona = crearZonaEfectivo({ turnoId: turnoMostrado, enFlujo: true, motivos: { entrada: app.ctx?.motivos_entrada_efectivo, salida: app.ctx?.motivos_salida_efectivo } });
+      const zona = crearZonaEfectivo({ turnoId: turnoMostrado, enFlujo: true, conPie: app.admin, motivos: { entrada: app.ctx?.motivos_entrada_efectivo, salida: app.ctx?.motivos_salida_efectivo },
+        alGuardar: (v) => import('./imprimir_caja.js').then((m) => m.imprimirValeAuto(app.soc, { ...(app.turno || {}), terminal: app.terminal }, { ...v, quien: app.ctx?.nombre || app.usuario, cuando: new Date() })).catch(() => false) });
       zonaEfectivo = zona;
       modal({ titulo: 'Entradas y salidas de efectivo', ancho: 640, contenido: zona.el, bloqueo: () => (zona.ocupado() ? 'Se está guardando el movimiento. Espere un momento.' : ''),
         botones: [{ texto: 'Cerrar', onclick: (c) => { if (zona.ocupado()) { toast('Se está guardando el movimiento. Espere un momento.', 'error'); return; } c(); } }],

@@ -311,3 +311,7 @@ table.hist th{min-width:0}
 .contador-notas{align-self:flex-end;font-weight:400;color:var(--tinta2);font-variant-numeric:tabular-nums}
 
 button,input,select,textarea{font-family:inherit}
+/* Informe de cierre (administración): el texto se parte en renglones en vez de ensanchar la ventana en el celular */
+.modal{min-width:0;max-width:100%}
+.modal-cuerpo .col{min-width:0}
+.informe-texto{max-width:100%;overflow-wrap:anywhere;word-break:break-word}

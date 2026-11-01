@@ -252,7 +252,7 @@ export default {
         const desdeTurno = est.rango === 'hoy' && turnoDeAyer() ? new Date(turnoDeAyer().abierto_en).getTime() : 0;
         // En «Hoy» con la caja abierta también se lee el estado del turno, para mostrar cómo cuadra con «Apertura y cierre de caja» (si no se puede leer, solo falta esa explicación)
         const turnoId = est.rango === 'hoy' ? turnoAbierto()?.id : null;
-        const [pag0, turno] = await Promise.all([documentosPagina(app.soc.id, est.desde, est.hasta), turnoId ? app.api.turnoEstado(turnoId).catch(() => null) : null]);
+        const [pag0, turno] = await Promise.all([documentosPagina(app.soc.id, est.desde, est.hasta), turnoId && app.admin ? app.api.turnoEstado(turnoId).catch(() => null) : null]); // la persona de caja no ve cuadre de efectivo (cierre ciego)
         if (mi !== nCarga) return; // llegó tarde: ya se pidió otra cosa
         // Cuántas tandas se quieren se calcula AHORA, con lo que hay cargado ahora (no con lo que había cuando empezó esta lectura): las que cubren lo que ya se veía más los documentos nuevos
         const cubrir = Math.min(pag0.total || 0, est.n + Math.max(0, (pag0.total || 0) - est.total));
