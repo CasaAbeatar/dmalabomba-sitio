@@ -206,6 +206,7 @@ export async function abrirFactura(ctx, clave, { previa = null, recibirSugeridas
   const recordados = new Map(); // línea -> sugerencia que trajo la lista (por si la consulta de la factura no la repite)
   (previa?.lineas || []).forEach((l) => recordados.set(l.linea, l.sugerencia));
   let articulos = [];
+  let iaPorLinea = new Map(); // línea -> propuesta de la IA (solo administración)
   const recordar = h('input', { type: 'checkbox', checked: true });
   // Lo que la persona ya llenó en cada línea pendiente: se conserva cuando la ventana se vuelve a pintar (después de marcar otra línea «No es de inventario», por ejemplo)
   const memoria = new Map();
@@ -214,6 +215,8 @@ export async function abrirFactura(ctx, clave, { previa = null, recibirSugeridas
     let d;
     try { [d, articulos] = await Promise.all([inv.factura(clave), ctx.articulos.lista()]); }
     catch (e) { if (vivo) poner(cuerpo, falla(e, () => { poner(cuerpo, cargando()); cargar(primera); }, 'No se pudo abrir la factura')); return; }
+    if (!vivo) return;
+    if (ctx.esAdmin) { const ia = await inv.iaPropuestas(clave).catch(() => []); iaPorLinea = new Map((ia || []).map((x) => [x.linea, x])); }
     if (!vivo) return;
     pintar(d);
     if (primera) enfocar(cuerpo);
@@ -389,6 +392,9 @@ export async function abrirFactura(ctx, clave, { previa = null, recibirSugeridas
     const simple = esSimple(cat);
     const resumen = h('p.tenue.inv-chico.inv-resumen-simple');
     // Semáforo de la línea: verde = igual que una compra anterior de este proveedor y con sentido; ámbar = revisar; rojo = no se puede recibir así
+    const ia = iaPorLinea.get(l.linea) || null;
+    const iaEl = h('div.inv-ia', { hidden: !ia });
+    const iaModelo = ia && /sonnet|opus/.test(ia.modelo || '') ? 'segunda revisión' : 'primera revisión';
     const semEl = h('p.inv-semaforo', { role: 'status' });
     let sem = { nivel: 'rojo', razon: '' };
     function evaluarSem() {
@@ -405,6 +411,11 @@ export async function abrirFactura(ctx, clave, { previa = null, recibirSugeridas
       else if (sug.articulo_id && sug.articulo_id !== art.id) motivos.push('Se cambió el artículo que recordaba el sistema.');
       if (sug.fuente === 'memoria' && sug.factor != null && Number(sug.factor) !== fv) motivos.push('La conversión es distinta a la de la vez pasada (' + num(sug.factor, 6) + ').');
       if (notaAuto && fv === 1) motivos.push('La conversión se ajustó sola porque la del nombre daba un precio sin sentido.');
+      if (ia) {
+        if (ia.nivel !== 'verde') motivos.push('La IA pide revisarla (su razón está más abajo).');
+        if (ia.factor != null && Number(ia.factor) !== fv) motivos.push('La IA propone una conversión de ' + num(ia.factor, 6) + ' y aquí hay ' + num(fv, 6) + '.');
+        if (ia.articulo_id && art && ia.articulo_id !== art.id) motivos.push('La IA propone otro artículo.');
+      }
       if (unidadReal(l.cantidad, l.unidad).corregida) motivos.push('La factura dice «' + unidadReal(l.cantidad, l.unidad).original + '» pero por los decimales es peso (kg).');
       if (!costoAviso.hidden && costoAviso.textContent) motivos.push(costoAviso.textContent);
       else {
@@ -412,19 +423,25 @@ export async function abrirFactura(ctx, clave, { previa = null, recibirSugeridas
         if (hist > 0 && c > 0 && Number(r.lotes_anteriores) >= 1 && (c / hist > 1.35 || c / hist < 1 / 1.35)) motivos.push('El costo (' + money(c) + ') es ' + num(Math.abs(c / hist - 1) * 100, 0) + ' % ' + (c > hist ? 'más alto' : 'más bajo') + ' que el de las compras anteriores (' + money(hist) + ').');
       }
       if (motivos.length) return { nivel: 'ambar', razon: motivos.join(' ') };
-      return { nivel: 'verde', razon: 'Igual que la vez pasada con este proveedor: ' + art.nombre + (enColones() ? ', entra por su valor en colones' : ', cada una trae ' + num(fv, 6) + ' ' + unidadTxt(art.unidad, fv)) + '. El precio tiene sentido.' };
+      return { nivel: 'verde', razon: 'Igual que la vez pasada con este proveedor: ' + art.nombre + (enColones() ? ', entra por su valor en colones' : ', cada una trae ' + num(fv, 6) + ' ' + unidadTxt(art.unidad, fv)) + '. El precio tiene sentido.' + (ia && ia.nivel === 'verde' ? ' La IA coincide.' : '') };
     }
     function pintarSem() {
       sem = evaluarSem();
       semEl.className = 'inv-semaforo ' + sem.nivel;
       semEl.replaceChildren(h('strong', { class: 'inv-sem-et' }, ({ verde: 'Verde: lista', ambar: 'Ámbar: revise', rojo: 'Rojo: no se puede' })[sem.nivel]), ' ' + sem.razon);
       el.dataset.semaforo = sem.nivel;
+      if (ia) {
+        const fv = leerFactor();
+        const usar = ia.factor != null && Number.isFinite(fv) && Number(ia.factor) !== fv;
+        iaEl.replaceChildren(...[h('strong', 'Propuesta de la IA (' + iaModelo + '): '), ia.razon + ' ',
+          usar ? h('button.btn.chico', { type: 'button', onclick: () => { factor.value = String(ia.factor).replace('.', ','); factor.dispatchEvent(new Event('input', { bubbles: true })); } }, 'Usar la conversión propuesta (' + num(ia.factor, 6) + ')') : null].filter(Boolean));
+      }
     }
     const el = h('article.inv-linea' + (simple ? '.inv-simple' : ''), { 'data-linea': l.linea },
       h('div.inv-linea-cab',
         h('label.inv-recibir-chk', chk, h('span', 'Recibir')),
         descLinea(l)),
-      semEl,
+      semEl, iaEl,
       sugTxt ? h('p.inv-sug' + (sug.no_inventario ? '.no-inv' : ''), h('span.inv-sug-et', 'Sugerencia: '), sugTxt) : null,
       resumen,
       filaRubro, errorRubro,

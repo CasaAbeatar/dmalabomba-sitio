@@ -540,3 +540,7 @@ body:has(.inv-fondo) .cabecera:has(.cab-usuario.abierto){z-index:120}
 .inv-semaforo.rojo{background:#fdeceb;border-color:#8a1017;color:#8a1017}
 .inv-resumen-sem{margin:.3rem 0}
 .inv-simple .inv-semaforo{grid-column:1/-1}
+.inv-ia{margin:.2rem 0 .5rem;padding:.45rem .7rem;border-left:3px solid var(--linea2,#c9bfa8);font-size:.9rem;line-height:1.4;color:inherit;background:transparent}
+.inv-ia[hidden]{display:none}
+.inv-ia .btn{margin-left:.4rem}
+.inv-simple .inv-ia{grid-column:1/-1}
