@@ -32,6 +32,7 @@ import { UBICACIONES } from './data_ubicaciones.js';
 import { cargarCss, campo, aviso, conBotonM, mensajeSeguro } from './ui_mant.js';
 import { crearCampoIdentificacion, leerCorreos, llevaLetras, limpiarNumeroId } from './ui_cedula.js';
 import { TARIFAS_CLIENTE, tarifaHabitual, clienteTraeTarifa } from './iva.js';
+import { revisarClienteConClaude } from './claude_ayuda.js';
 import { SIN_DATO, partesParaPantalla, estadoDireccion, codigoUbicacion, fueraDeLista } from './direccion_cliente.js';
 
 export { leerCorreos };
@@ -388,6 +389,10 @@ export function abrirFormCliente(app, cliente, { alGuardar, alCambiarEstado, tit
         campo(rotulosCorreo[0], correos[0]),
         avisoCorreo)),
     h('fieldset', h('legend', 'Actividad económica'), actividadBloque),
+    h('fieldset', h('legend', 'Ayuda de Claude'), revisarClienteConClaude({
+      leer: () => ({ id: c.id || null, sociedad_id: soc.id, ...ced.valores(), nombre_comercial: comercial.value.trim(), correos: correos.map((x) => x.value.trim()).filter(Boolean), telefono: telefono.value.replace(/\D/g, ''),
+        provincia: prov.value, canton: cant.value, distrito: dist.value, barrio: barrio.value.trim(), otras_senas: senas.value.trim(), exoneracion: exoNum.value.trim(), correo: correos.map((x) => x.value.trim()).filter(Boolean).join(', ') }),
+      usar: (campo, valor) => { const el = campo === 'correo' ? correos[0] : telefono; el.value = valor; el.dispatchEvent(new Event('input', { bubbles: true })); } })),
     masBtn,
     masBloque,
     !esNuevo && c.creado_en ? h('small.tenue', 'Cliente agregado el ' + new Intl.DateTimeFormat('es-CR', { timeZone: 'America/Costa_Rica', dateStyle: 'long' }).format(new Date(c.creado_en)) + '.') : null);

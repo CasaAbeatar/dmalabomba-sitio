@@ -791,6 +791,7 @@ function armarApp(reciente = false) {
     h('button.btn.cab-menu', { type: 'button', 'aria-haspopup': 'true', 'aria-expanded': 'false', 'aria-controls': 'cab-panel', onclick: () => abrirMenu(!menuEl.classList.contains('abierto')) }, 'Menú ▾'),
     h('div#cab-panel.cab-panel',
       h('span.cab-sesion', 'Sesión de ', h('strong', app.ctx.nombre || app.usuario)),
+      app.admin ? h('button.btn.chico', { type: 'button', onclick: async () => { abrirMenu(false); (await import('./claude_ayuda.js')).abrirPreguntaClaude(app); } }, 'Preguntar a Claude') : null,
       h('button.btn.chico', { type: 'button', onclick: () => { abrirMenu(false); cerrarSesion(); } }, 'Cerrar sesión')));
   volverEl = h('button.btn.cab-volver', { type: 'button' });
   inicioEl = h('button.btn.cab-inicio', { type: 'button', onclick: () => subir('inicio') }, 'Inicio');

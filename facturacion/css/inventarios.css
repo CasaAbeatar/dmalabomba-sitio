@@ -559,3 +559,4 @@ body:has(.inv-fondo) .cabecera:has(.cab-usuario.abierto){z-index:120}
 .inv-prod.verde{border-left-color:#2e7d32}.inv-prod.ambar{border-left-color:#c77700}.inv-prod.rojo{border-left-color:var(--rojo)}
 .inv-prod-datos{display:grid;gap:.15rem;flex:1 1 16rem;min-width:0}
 .inv-prod-datos small{color:var(--tinta-suave,#555)}
+

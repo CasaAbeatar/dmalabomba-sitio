@@ -1,0 +1,12 @@
+/* Ayuda de Claude: se carga junto con js/claude_ayuda.js (sirve en Clientes, en la pantalla de administración y donde se pregunte) */
+.inv-semaforo{margin:.35rem 0;padding:.45rem .7rem;border-radius:var(--r);border:1px solid;font-size:.92rem;line-height:1.35}
+.inv-semaforo .inv-sem-et{margin-right:.3rem}
+.inv-semaforo.verde{background:#eaf6ec;border-color:#2e7d32;color:#1b5e20}
+.inv-semaforo.ambar{background:#fff5df;border-color:#b26a00;color:#7a4a00}
+.inv-semaforo.rojo{background:#fdeceb;border-color:#8a1017;color:#8a1017}
+
+/* Ayuda de Claude */
+.claude-bloque{display:grid;gap:.6rem}
+.claude-zona{display:grid;gap:.5rem}
+.claude-hallazgo{display:grid;gap:.25rem;border:1px solid var(--borde);border-left-width:4px;border-radius:.6rem;padding:.55rem .75rem;background:#fff}
+.claude-hallazgo.verde{border-left-color:#2e7d32}.claude-hallazgo.ambar{border-left-color:#c77700}.claude-hallazgo.rojo{border-left-color:var(--rojo)}
