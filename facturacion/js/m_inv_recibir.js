@@ -4,6 +4,7 @@
 // Una factura que Contable o Hacienda rechazaron no se puede recibir (puede_recibir = false): solo se puede marcar «No es de inventario».
 import { h, money, num, fechaHora, horaCorta, debounce, campoBusqueda, sumaDias } from './util.js';
 import { inv, cant, dinero } from './api_inventarios.js';
+import { revisarConversion } from './inv_sentido.js';
 import {
   ventana, dialogo, cargando, falla, vacio, aviso, cantTxt, costoTxt, unidadTxt, dma, diaTxt, plural, empresaChip, numFactura, proveedorTxt, tipoDocTxt,
   accionSegura, botonSeguro, rotular, repetidaTxt, campoCantidad, leerCantidad, leerMonto, selectUbicacion, nombreUbicacion, elegirArticulo, opcionDeArticulo,
@@ -331,6 +332,8 @@ export async function abrirFactura(ctx, clave, { previa = null, recibirSugeridas
     const errorRubro = h('small.inv-eco.mal');
     const factor = h('input.campo.inv-num', { type: 'text', inputmode: 'decimal', autocomplete: 'off', 'aria-label': 'Cuántas unidades del artículo trae cada unidad de la factura' });
     const factorEco = h('small.inv-eco');
+    let notaAuto = ''; // explicación de por qué la conversión arrancó en 1 aunque el nombre diga otra cosa
+    const avisoConv = h('p.inv-costo-aviso', { role: 'status', hidden: true }); // sentido comercial: ¿el costo por unidad que sale de esta conversión es creíble?
     const cantidad = campoCantidad({ etiqueta: 'Cantidad que entra', unidad: art?.unidad || '', alCambiar: () => { cantidadTocada = true; pintarCosto(); cambio(); } });
     const ubic = selectUbicacion(cat, { etiqueta: 'Dónde se guarda', alCambiar: cambio });
     let venceEditada = false; // solo si una persona escribe la fecha se manda; si no, la base aplica la misma regla desde la fecha de la factura
@@ -369,10 +372,10 @@ export async function abrirFactura(ctx, clave, { previa = null, recibirSugeridas
     rubro.hidden = true;
     rubro.parentElement.append(buscar, datos);
     const campos = h('div.inv-linea-campos',
-      h('label.etq.inv-c-conv', h('span', 'Conversión'), h('span.inv-con-unidad', h('span.inv-pre', 'Cada «' + (l.unidad || 'unidad') + '» de la factura trae'), factor, h('span.inv-unidad.inv-u-art')), factorEco),
+      h('label.etq.inv-c-conv', h('span', 'Conversión'), h('span.inv-con-unidad', h('span.inv-pre', 'Cada «' + (l.unidad || 'unidad') + '» de la factura trae'), factor, h('span.inv-unidad.inv-u-art')), factorEco, avisoConv),
       h('label.etq.inv-c-ubic', 'Dónde se guarda', ubic),
       h('div.etq.inv-c-vence', h('span', 'Vence'), vence, venceEco, h('label.inv-casilla.chica', noVence, h('span', 'No vence'))),
-      h('div.inv-costo-fila', h('span.inv-costo-et', 'Costo sin IVA:'), costoTxtEl, costoDet),
+      h('div.inv-costo-fila', h('span.inv-costo-et', 'Costo sin IVA:'), costoTxtEl), // el costo sale de la factura: no se corrige a mano (si no cuadra, lo que se corrige es la conversión)
       costoAviso);
     const artFila = h('div.inv-campo-art', h('span.etq', 'Artículo del inventario'), h('div.inv-art-fila', nombreArt, btnArt));
     const detalles = h('details.inv-detalles', h('summary', 'Detalles: conversión, dónde se guarda, vencimiento y costo'), artFila, filaNombre, campos);
@@ -403,7 +406,10 @@ export async function abrirFactura(ctx, clave, { previa = null, recibirSugeridas
       if (!cambiar) { pintarResumen(); return; }
       // Valores por omisión de ese artículo: los de la sugerencia si es el mismo; si no, la regla del contrato (3.3)
       const mismo = art && sug.articulo_id === art.id;
-      const fac = mismo && sug.factor != null ? Number(sug.factor) : sug.factor_sugerido != null ? Number(sug.factor_sugerido) : 1;
+      let fac = mismo && sug.factor != null ? Number(sug.factor) : sug.factor_sugerido != null ? Number(sug.factor_sugerido) : 1;
+      // El nombre puede decir «8U» y la factura cobrar cada unidad suelta: si con ese número el costo por litro no es creíble y con 1 sí, se empieza en 1 (y se explica)
+      notaAuto = '';
+      if (!(mismo && sug.factor != null) && fac !== 1) { const r0 = revisarConversion({ descripcion: l.descripcion, subtotal: l.subtotal_crc, cantidad: l.cantidad, factorActual: fac }, (n) => money(n)); fac = r0.factor; if (r0.cambiado) notaAuto = r0.aviso; }
       factor.value = String(fac).replace('.', ',');
       if (!cantidadTocada) cantidad.poner(Math.round(Number(l.cantidad) * fac * 1000) / 1000);
       ubic.value = (mismo && sug.ubicacion_id) || ubicacionPorOmision(art) || '';
@@ -452,6 +458,9 @@ export async function abrirFactura(ctx, clave, { previa = null, recibirSugeridas
       const fv = leerFactor();
       if (!Number.isFinite(fv) || fv <= 0) { factorEco.textContent = 'Escriba cuántas trae cada una (mayor que cero, hasta 6 decimales). Si es lo mismo, escriba 1.'; factorEco.className = 'inv-eco mal'; return; }
       factorEco.className = 'inv-eco';
+      const rev = enColones() ? { aviso: '' } : revisarConversion({ descripcion: l.descripcion, subtotal: l.subtotal_crc, cantidad: l.cantidad, factorActual: fv }, (n) => money(n));
+      // Si la persona escribió una conversión creíble no se le dice nada; si no lo es, se le explica con la cifra (no se cambia lo que escribió)
+      avisoConv.textContent = rev.aviso && !rev.cambiado ? rev.aviso : (fv === 1 ? notaAuto : ''); avisoConv.hidden = !avisoConv.textContent;
       factorEco.textContent = 'La factura dice ' + num(l.cantidad, 3) + ' × ' + num(fv, 6) + ' = ' + (art ? cantTxt(Math.round(Number(l.cantidad) * fv * 1000) / 1000, art.unidad) : num(Number(l.cantidad) * fv, 3)) + '. Si llegó menos, corrija la cantidad.';
     }
     function costoCalculado() {
