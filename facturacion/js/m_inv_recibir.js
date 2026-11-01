@@ -35,13 +35,15 @@ export async function abrir(ctx, id, pedido = {}) {
    ===================================================================================================================== */
 // Al entrar a una empresa, «Por recibir» abre con las facturas de ESA empresa; «Las dos empresas» queda a un toque. La última elección se recuerda por empresa mientras la página siga abierta.
 const FILTRO_RECUERDO = new Map();
+let VISTA_RECUERDO = 'fecha'; // cómo se ordena la lista: por fecha o por proveedor (se recuerda mientras la página siga abierta)
 async function abrirLista(ctx) {
   const cat = ctx.cat;
   const propia = (cat.empresas || []).some((e) => e.id === ctx.app.socId) ? ctx.app.socId : null;
-  const est = { sociedad: FILTRO_RECUERDO.has(propia) ? FILTRO_RECUERDO.get(propia) : propia, q: '', datos: null, otra: null, otraVieja: true };
+  const est = { vista: VISTA_RECUERDO, sociedad: FILTRO_RECUERDO.has(propia) ? FILTRO_RECUERDO.get(propia) : propia, q: '', datos: null, otra: null, otraVieja: true };
   let vivo = true, seq = 0;
   const buscar = h('input.campo', { type: 'search', placeholder: 'Proveedor, cédula, número o artículo', 'aria-label': 'Buscar factura por recibir', autocomplete: 'off' });
   const filtroEmp = h('div.inv-segmento', { role: 'group', 'aria-label': 'De qué empresa' });
+  const filtroVista = h('div.inv-segmento', { role: 'group', 'aria-label': 'Cómo ordenar la lista' });
   const deshechos = h('div.inv-deshechos', { 'aria-live': 'polite' });
   const lista = h('div.inv-fac-lista', cargando('Buscando facturas por recibir…'));
   const resumen = h('div.inv-resumen');
@@ -49,7 +51,7 @@ async function abrirLista(ctx) {
   const otraNota = h('div.inv-otra-nota');
   const contenido = [
     cab,
-    h('div.inv-filtros', filtroEmp, h('label.etq.inv-buscar', 'Buscar', campoBusqueda(buscar, () => { est.q = ''; cargar(); }))),
+    h('div.inv-filtros', filtroEmp, filtroVista, h('label.etq.inv-buscar', 'Buscar', campoBusqueda(buscar, () => { est.q = ''; cargar(); }))),
     otraNota, deshechos, lista, resumen];
   const alCambio = () => { if (vivo) { est.otraVieja = true; cargar(); } };
   ventana({ titulo: 'Por recibir', contenido, alCerrar: () => { vivo = false; document.removeEventListener('inv:cambio', alCambio); } });
@@ -61,7 +63,15 @@ async function abrirLista(ctx) {
     est.sociedad = id; FILTRO_RECUERDO.set(propia, id);
     est.datos = null; pintarFiltro(); cargar();
   }
+  function elegirVista(v) {
+    if (est.vista === v) return;
+    est.vista = v; VISTA_RECUERDO = v; pintarFiltro(); if (est.datos) pintar();
+  }
   function pintarFiltro() {
+    poner(filtroVista, ...[['fecha', 'Ver por fecha'], ['proveedor', 'Ver por proveedor']].map(([v, t]) => h('button.btn.inv-seg', { type: 'button', 'aria-pressed': String(est.vista === v), onclick: () => elegirVista(v) }, t)));
+    pintarEmpresas();
+  }
+  function pintarEmpresas() {
     const b = (id, t) => h('button.btn.inv-seg', { type: 'button', 'aria-pressed': String(est.sociedad === id), onclick: () => elegir(id) }, t);
     const empresas = cat.empresas || [];
     const mi = empresas.find((e) => e.id === propia);
@@ -103,7 +113,9 @@ async function abrirLista(ctx) {
       // Si hay más de las que se muestran, el aviso va ARRIBA y el contador dice «100 de 119» (antes quedaba al final de la lista, tras 100 tarjetas)
       const totalFacs = Number((d.resumen || {}).facturas) || 0;
       const cuenta = (n) => String(n) + (d.truncado && totalFacs > facs.length ? ' de ' + totalFacs : '');
-      poner(lista,
+      if (est.vista === 'proveedor') {
+        poner(lista, d.truncado ? aviso('espera', h('p', 'Se muestran las ' + facs.length + ' facturas más recientes' + (Number((d.resumen || {}).facturas) > facs.length ? ' de ' + (d.resumen || {}).facturas : '') + '. Use el buscador para ver las demás.')) : null, ...seccionesPorProveedor(facs));
+      } else poner(lista,
         d.truncado ? aviso('espera', h('p', 'Se muestran las ' + facs.length + ' más recientes' + (totalFacs > facs.length ? ' de ' + totalFacs : '') + (est.sociedad ? '. Use el buscador para ver las demás.' : '. Use el buscador o escoja una empresa para ver las demás.'))) : null,
         deHoy.length ? h('h3.inv-grupo-tit', 'Llegaron hoy', h('span.inv-cuenta', String(deHoy.length))) : null, ...deHoy.map(tarjeta),
         antes.length ? h('h3.inv-grupo-tit', deHoy.length ? 'De días anteriores' : 'Facturas por recibir', h('span.inv-cuenta', deHoy.length ? String(antes.length) : cuenta(antes.length))) : null, ...antes.map(tarjeta));
@@ -116,6 +128,27 @@ async function abrirLista(ctx) {
         r.facturas_rechazadas ? h('li', h('span', 'Facturas rechazadas (no entran)'), h('strong.cifra', num(r.facturas_rechazadas, 0))) : null,
         ...(r.por_empresa || []).map((e) => h('li', empresaChip(e.sociedad_nombre, codigoEmp(cat, e.sociedad_id)), h('strong.cifra', plural(e.facturas, 'factura', 'facturas') + ' · ' + plural(e.lineas, 'línea', 'líneas'))))),
       h('p.tenue.inv-chico', 'Se toman en cuenta las facturas emitidas desde el ' + dma(d.desde) + '.'));
+  }
+  // Vista por proveedor: una sección por proveedor con sus facturas; lo que casi nunca es de inventario (ferretería, combustible, servicios) va al final
+  const SIN_INVENTARIO = /ferreter|materiales|constru|combustible|gasolin|servicentro|estaci[oó]n de servicio|repuesto|el[eé]ctric|seguro|alquiler|internet|telecom|municipalidad/i;
+  function seccionesPorProveedor(facs) {
+    const grupos = new Map();
+    for (const f of facs) {
+      const k = f.proveedor_cedula || f.proveedor_nombre || 'sin dato';
+      if (!grupos.has(k)) grupos.set(k, { nombre: f.proveedor_nombre, facturas: [], pend: 0, total: 0 });
+      const g = grupos.get(k); g.facturas.push(f); g.pend += Number(f.lineas_pendientes) || 0; g.total += Number(f.total) || 0;
+    }
+    const lista = [...grupos.values()].map((g) => {
+      const ls = g.facturas.flatMap((f) => f.lineas || []);
+      g.aparte = SIN_INVENTARIO.test(g.nombre || '') || (ls.length > 0 && ls.filter((l) => l.sugerencia && l.sugerencia.no_inventario).length >= ls.length * 0.8);
+      return g;
+    }).sort((a, b) => (a.aparte - b.aparte) || (b.pend - a.pend) || String(a.nombre).localeCompare(String(b.nombre), 'es'));
+    const fila = (g) => h('details.inv-prov' + (g.aparte ? '.aparte' : ''), { open: grupos.size === 1 },
+      h('summary', h('strong', proveedorTxt(g.nombre)), h('span.inv-prov-datos', plural(g.facturas.length, 'factura', 'facturas') + ' · ' + plural(g.pend, 'línea por recibir', 'líneas por recibir') + ' · ' + money(g.total) + ' con IVA'), g.aparte ? h('span.chip', 'Casi nunca es de inventario') : null),
+      h('div.inv-prov-facturas', g.facturas.map(tarjeta)));
+    const normales = lista.filter((g) => !g.aparte), aparte = lista.filter((g) => g.aparte);
+    return [normales.length ? h('h3.inv-grupo-tit', 'Proveedores de mercadería', h('span.inv-cuenta', String(normales.length))) : null, ...normales.map(fila),
+      aparte.length ? h('h3.inv-grupo-tit', 'Ferretería, combustible y servicios', h('span.inv-cuenta', String(aparte.length))) : null, ...aparte.map(fila)];
   }
   // Lo que se sugiere para cada línea (rubro y categoría) y si el botón «Recibir todas» la puede recibir
   const sugRecibe = (l) => { const sg = l.sugerencia || {}; return l.estado ? l.estado === 'pendiente' && !!sg.categoria_id && !sg.no_inventario : !!sg.categoria_id && !sg.no_inventario && sg.fuente !== 'servicio'; };
