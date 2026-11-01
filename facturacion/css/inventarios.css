@@ -551,3 +551,11 @@ body:has(.inv-fondo) .cabecera:has(.cab-usuario.abierto){z-index:120}
 .inv-prov-datos{font-size:.9rem;color:var(--tinta-suave,#555)}
 .inv-prov.aparte{background:#fafafa}
 .inv-prov-facturas{display:grid;gap:.6rem;padding:0 .7rem .8rem}
+
+/* Por producto, dentro de un proveedor */
+.inv-prov-acciones{display:flex;flex-wrap:wrap;gap:.5rem;padding:0 .9rem .7rem}
+.inv-prod-lista{display:grid;gap:.5rem;margin:.6rem 0}
+.inv-prod{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:.5rem .8rem;border:1px solid var(--borde);border-left-width:4px;border-radius:.6rem;padding:.6rem .8rem;background:#fff}
+.inv-prod.verde{border-left-color:#2e7d32}.inv-prod.ambar{border-left-color:#c77700}.inv-prod.rojo{border-left-color:var(--rojo)}
+.inv-prod-datos{display:grid;gap:.15rem;flex:1 1 16rem;min-width:0}
+.inv-prod-datos small{color:var(--tinta-suave,#555)}

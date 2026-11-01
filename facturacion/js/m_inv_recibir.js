@@ -145,6 +145,7 @@ async function abrirLista(ctx) {
     }).sort((a, b) => (a.aparte - b.aparte) || (b.pend - a.pend) || String(a.nombre).localeCompare(String(b.nombre), 'es'));
     const fila = (g) => h('details.inv-prov' + (g.aparte ? '.aparte' : ''), { open: grupos.size === 1 },
       h('summary', h('strong', proveedorTxt(g.nombre)), h('span.inv-prov-datos', plural(g.facturas.length, 'factura', 'facturas') + ' · ' + plural(g.pend, 'línea por recibir', 'líneas por recibir') + ' · ' + money(g.total) + ' con IVA'), g.aparte ? h('span.chip', 'Casi nunca es de inventario') : null),
+      h('div.inv-prov-acciones', h('button.btn', { type: 'button', onclick: () => abrirProductosProveedor(ctx, g, () => cargar()) }, 'Ver por producto: decidir cada uno una sola vez')),
       h('div.inv-prov-facturas', g.facturas.map(tarjeta)));
     const normales = lista.filter((g) => !g.aparte), aparte = lista.filter((g) => g.aparte);
     return [normales.length ? h('h3.inv-grupo-tit', 'Proveedores de mercadería', h('span.inv-cuenta', String(normales.length))) : null, ...normales.map(fila),
@@ -225,9 +226,88 @@ export function pedirIgnorar(ctx, f, lineas, alTerminar) {
 }
 
 /* =====================================================================================================================
+   Un proveedor, producto por producto: las líneas de todas sus facturas por recibir juntas, cada producto una sola vez
+   ===================================================================================================================== */
+const claveProducto = (l) => norm(l.descripcion) + '|' + String(l.cabys || '');
+// Cálculo rápido con lo que ya se sabe de cada línea (compra anterior del proveedor y sentido del precio). Antes de recibir, cada línea vuelve a pasar por su semáforo completo, incluida la revisión de Claude.
+function nivelProducto(ls) {
+  if (ls.every((l) => (l.sugerencia || {}).no_inventario)) return { nivel: 'rojo', razon: 'Parece que no es de inventario. Se marca como «No es de inventario» desde cada factura.' };
+  const buenas = ls.filter((l) => {
+    const sg = l.sugerencia || {};
+    if (sg.no_inventario || sg.fuente !== 'memoria' || !sg.articulo_id || !(Number(sg.factor) > 0)) return false;
+    return sg.unidad === 'colon' || !revisarConversion({ descripcion: l.descripcion, subtotal: l.subtotal_crc, cantidad: l.cantidad, factorActual: Number(sg.factor) }).aviso;
+  });
+  if (buenas.length === ls.length) return { nivel: 'verde', razon: 'Igual que compras anteriores de este proveedor.' };
+  if (buenas.length) return { nivel: 'ambar', razon: plural(buenas.length, 'línea ya tiene', 'líneas ya tienen') + ' una compra anterior; las otras ' + (ls.length - buenas.length) + ' hay que mirarlas.' };
+  return { nivel: 'ambar', razon: 'Producto nuevo para este proveedor: se decide una sola vez y las demás facturas lo recuerdan.' };
+}
+
+export async function abrirProductosProveedor(ctx, g, alCambiar) {
+  let vivo = true;
+  const cuerpo = h('div.inv-productos', cargando('Leyendo las líneas de ' + plural(g.facturas.length, 'factura', 'facturas') + '…'));
+  ventana({ titulo: proveedorTxt(g.nombre) + ': por producto', volver: 'Por recibir', contenido: [cuerpo], alCerrar: () => { vivo = false; alCambiar?.(); } });
+  async function cargar() {
+    poner(cuerpo, cargando('Leyendo las líneas de ' + plural(g.facturas.length, 'factura', 'facturas') + '…'));
+    const facs = [];
+    try {
+      const cola = [...g.facturas];
+      await Promise.all(Array.from({ length: 3 }, async () => { while (cola.length) { const f = cola.shift(); const d = await inv.factura(f.clave); facs.push({ clave: f.clave, consecutivo: f.consecutivo, puede: (d.factura || {}).puede_recibir !== false, lineas: (d.lineas || []).filter((l) => l.estado === 'pendiente') }); } }));
+    } catch (e) { if (vivo) poner(cuerpo, falla(e, cargar, 'No se pudieron leer las facturas')); return; }
+    if (!vivo) return;
+    const prod = new Map();
+    for (const f of facs) for (const l of f.lineas) {
+      const k = claveProducto(l);
+      if (!prod.has(k)) prod.set(k, { nombre: l.descripcion, lineas: [], claves: new Set(), cant: 0, unidad: l.unidad, unidades: new Set() });
+      const p = prod.get(k); p.lineas.push({ ...l, factura: f }); p.claves.add(f.clave); p.cant += Number(l.cantidad) || 0; p.unidades.add(String(l.unidad || ''));
+    }
+    const filas = [...prod.values()].map((p) => ({ ...p, ...nivelProducto(p.lineas) }))
+      .sort((a, b) => ({ ambar: 0, rojo: 1, verde: 2 })[a.nivel] - ({ ambar: 0, rojo: 1, verde: 2 })[b.nivel] || b.lineas.length - a.lineas.length);
+    const cuenta = (n) => filas.filter((x) => x.nivel === n).length;
+    const lineasVerdes = filas.filter((x) => x.nivel === 'verde').reduce((s, x) => s + x.lineas.length, 0);
+    const facturasVerdes = [...new Set(filas.filter((x) => x.nivel === 'verde').flatMap((x) => x.lineas.map((l) => l.factura)))].filter((f) => f.puede);
+    const lineasTotal = filas.reduce((s, x) => s + x.lineas.length, 0);
+    const tabla = h('div.inv-prod-lista', filas.map((p) => h('article.inv-prod.' + p.nivel,
+      h('div.inv-prod-datos', h('strong', p.nombre),
+        h('small', plural(p.lineas.length, 'línea', 'líneas') + ' en ' + plural(p.claves.size, 'factura', 'facturas') + ' · ' + (p.unidades.size === 1 ? num(p.cant, 3) + ' ' + (p.unidad || 'unid.') + ' en total' : 'unidades distintas, se revisan una por una')),
+        h('small.inv-prod-razon', h('strong', ({ verde: 'Verde', ambar: 'Ámbar', rojo: 'Rojo' })[p.nivel] + ': '), p.razon)),
+      p.nivel === 'verde' ? null : h('button.btn', { type: 'button', onclick: () => abrirFactura(ctx, [...p.claves][0], { alRecibir: () => { if (vivo) cargar(); } }) }, p.nivel === 'rojo' ? 'Abrir la primera factura' : 'Decidir este producto'))));
+    const recibir = h('button.btn.primario', { type: 'button', disabled: !lineasVerdes, onclick: () => confirmarVerdes() }, lineasVerdes ? 'Recibir las ' + lineasVerdes + ' líneas verdes' : 'No hay productos verdes');
+    function confirmarVerdes() {
+      const ok = h('button.btn.primario', { type: 'button' }, 'Sí, recibir las verdes');
+      const d = dialogo({ titulo: 'Recibir los productos en verde', ancho: 600, contenido: [
+        h('p', 'Se van a recibir ' + plural(lineasVerdes, 'línea', 'líneas') + ' de ' + plural(facturasVerdes.length, 'factura', 'facturas') + ' de ' + proveedorTxt(g.nombre) + ', que corresponden a ' + plural(cuenta('verde'), 'producto', 'productos') + ':'),
+        h('ul.inv-datos-lista', filas.filter((x) => x.nivel === 'verde').slice(0, 25).map((x) => h('li', h('span', x.nombre), h('strong', plural(x.lineas.length, 'línea', 'líneas') + ' · ' + num(x.cant, 3) + ' ' + (x.unidad || ''))))),
+        filas.filter((x) => x.nivel === 'verde').length > 25 ? h('p.tenue.inv-chico', 'y ' + (filas.filter((x) => x.nivel === 'verde').length - 25) + ' productos más.') : null,
+        h('p.tenue.inv-chico', 'Antes de recibir, cada línea vuelve a pasar por su revisión completa (incluida la de Claude). Las que no la pasen quedan sin recibir y se lo digo al final. Lo ámbar y lo rojo no se toca.')],
+        botones: [{ texto: 'No, volver', onclick: (c) => c() }] });
+      d.el.querySelector('.modal-pie').append(ok);
+      ok.addEventListener('click', async () => {
+        ok.disabled = true; ok.textContent = 'Recibiendo…';
+        let recibidas = 0; const sinRecibir = [];
+        for (const f of facturasVerdes) {
+          let recib = false;
+          await new Promise((res) => { abrirFactura(ctx, f.clave, { recibirSugeridas: true, alRecibir: () => { recib = true; }, alFin: res }).catch(res); });
+          if (recib) recibidas++; else sinRecibir.push(f);
+        }
+        d.cerrar?.(); ctx.articulos.olvidar();
+        (sinRecibir.length ? toastMal : toastOk)(recibidas + ' de ' + facturasVerdes.length + ' facturas recibidas.' + (sinRecibir.length ? ' ' + plural(sinRecibir.length, 'factura quedó', 'facturas quedaron') + ' sin recibir porque alguna línea no pasó la revisión completa; ábrala para verla.' : ''));
+        if (vivo) cargar();
+      });
+    }
+    poner(cuerpo,
+      h('p.tenue', plural(lineasTotal, 'línea por recibir', 'líneas por recibir') + ' de ' + plural(g.facturas.length, 'factura', 'facturas') + ' son ' + plural(filas.length, 'producto distinto', 'productos distintos') + '.'),
+      h('p.tenue.inv-chico.inv-resumen-sem', cuenta('verde') + ' verdes, ' + cuenta('ambar') + ' ámbar, ' + cuenta('rojo') + ' rojos.'),
+      h('div.inv-prov-acciones', recibir),
+      tabla,
+      h('p.tenue.inv-chico', 'Cuando decide un producto nuevo y deja marcado «Recordarlo», las demás facturas de este proveedor lo toman igual y pasan a verde.'));
+  }
+  await cargar();
+}
+
+/* =====================================================================================================================
    Ventana de una factura: recibir sus líneas
    ===================================================================================================================== */
-export async function abrirFactura(ctx, clave, { previa = null, recibirSugeridas = false, alRecibir = null } = {}) {
+export async function abrirFactura(ctx, clave, { previa = null, recibirSugeridas = false, alRecibir = null, alFin = null } = {}) {
   let autoRecibir = recibirSugeridas;
   let silencioso = recibirSugeridas; // «Recibir todas» desde la lista: no se abre la ventana salvo que algo necesite revisarse
   const cat = ctx.cat;
@@ -324,15 +404,18 @@ export async function abrirFactura(ctx, clave, { previa = null, recibirSugeridas
         h('button.btn', { type: 'button', onclick: () => ctx.abrir('notas') }, 'Abrir Notas de proveedor')) : null);
     contar(); pintarResumenSem();
     // «Recibir todas las líneas» desde la lista: se marcan las que traen rubro sugerido y, si todo está en orden, se reciben; si algo falla se queda la ventana abierta para revisarlo
+    if (autoRecibir && !puede) { autoRecibir = false; if (silencioso) { silencioso = false; vivo = false; toastMal('La factura de ' + proveedorTxt(f.proveedor_nombre) + ' no se puede recibir ahora.'); } alFin?.(); }
     if (autoRecibir && puede) {
       autoRecibir = false;
       (async () => {
+        try {
         for (const x of formas) if (x.verde()) await x.marcarOCrear();
         contar();
         const sel = marcadas();
         const mal = sel.map((x) => x.problema()).find(Boolean);
         if (sel.length && !mal) { const r = await accRecibir.ejecutar(); if (r == null && silencioso) { silencioso = false; vivo = false; } }
         else if (silencioso) { silencioso = false; vivo = false; toastMal('No se recibió la factura de ' + proveedorTxt(f.proveedor_nombre) + ': ' + (mal || 'ninguna línea está en verde') + ' Use «Escoger qué líneas recibir» para revisarla.'); }
+        } finally { alFin?.(); }
       })();
     }
   }
