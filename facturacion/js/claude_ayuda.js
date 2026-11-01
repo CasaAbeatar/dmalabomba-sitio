@@ -104,7 +104,7 @@ export function abrirPreguntaClaude(app) {
   rpc('fx_ia_informes_negocio').then((x) => {
     if (!x?.permitido) return;
     const fmt = new Intl.DateTimeFormat('es-CR', { timeZone: 'America/Costa_Rica', dateStyle: 'long' });
-    const nombres = { costos: 'Costos y compras', conciliacion: 'Tarjetas y SINPE del BCR', cierre_caja: 'Cierre de caja' };
+    const nombres = { costos: 'Costos y compras', recibidas: 'Facturas recibidas y Prisma', conciliacion: 'Tarjetas y SINPE del BCR', cierre_caja: 'Cierre de caja' };
     negocio.replaceChildren(...(x.informes || []).map((i) => h('details.claude-semanal', h('summary', (nombres[i.tipo] || i.tipo) + ' (' + fmt.format(new Date(i.creado_en)) + ')'), h('div.claude-zona', h('strong', i.titulo), ...String(i.texto).split(/\n\n+/).map((p) => h('p', p))))));
   }).catch(() => {});
   return modal({ titulo: 'Preguntarle a Claude', ancho: 640, contenido: h('div.claude-bloque', h('p.tenue', 'Claude lee lo que está viendo en esta pantalla (' + modulo + ') y le responde con esas cifras. No cambia nada.'), semanal, negocio, pregunta, h('div', enviar), zona, uso), botones: [{ texto: 'Cerrar', clase: 'suave', onclick: (c) => c() }] });
