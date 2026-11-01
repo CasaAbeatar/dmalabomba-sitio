@@ -459,9 +459,10 @@ async function actualizarAlertas(forzar = false) {
       const antes = recepcionCache && recepcionCache.pendientes_en_plazo === a.recepcion_por_responder ? recepcionCache.vencen_pronto : 0;
       // recepcion_vencidas: si la función todavía no la trae, se usa la que vio Contable (o el conteo de Recepción cada 5 minutos)
       let venc = a.recepcion_vencidas != null ? Number(a.recepcion_vencidas) : recepcionCache?.vencidas;
-      if (venc == null || (a.recepcion_vencidas == null && Date.now() - recepcionHora > 5 * 60 * 1000)) { try { const { contarPendientes } = await import('./api_recepcion.js'); venc = vencidasDe(await contarPendientes(soc)); recepcionHora = Date.now(); } catch { venc = venc ?? 0; } }
+      if (app.admin && (venc == null || (a.recepcion_vencidas == null && Date.now() - recepcionHora > 5 * 60 * 1000))) { try { const { contarPendientes } = await import('./api_recepcion.js'); venc = vencidasDe(await contarPendientes(soc)); recepcionHora = Date.now(); } catch { venc = venc ?? 0; } }
       recepcionCache = { pendientes_en_plazo: a.recepcion_por_responder, vencen_pronto: a.recepcion_vencen_pronto != null ? a.recepcion_vencen_pronto : antes, vencidas: venc };
-    } else if (!recepcionCache || Date.now() - recepcionHora > 5 * 60 * 1000) {
+    } else if (app.admin && (!recepcionCache || Date.now() - recepcionHora > 5 * 60 * 1000)) {
+      // La persona de caja no ve las insignias de Contable y la base le rechaza fx_recibidas («solo_administrador»): para ella no se consulta.
       // Sin fx_alertas, la cifra sale de Recepción (cada 5 minutos, porque trae toda la lista)
       try { const { contarPendientes } = await import('./api_recepcion.js'); recepcionCache = await contarPendientes(soc); recepcionHora = Date.now(); } catch { /* queda la anterior */ }
     }
