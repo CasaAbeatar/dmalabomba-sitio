@@ -412,9 +412,9 @@ export async function abrirFactura(ctx, clave, { previa = null, recibirSugeridas
       if (sug.fuente === 'memoria' && sug.factor != null && Number(sug.factor) !== fv) motivos.push('La conversión es distinta a la de la vez pasada (' + num(sug.factor, 6) + ').');
       if (notaAuto && fv === 1) motivos.push('La conversión se ajustó sola porque la del nombre daba un precio sin sentido.');
       if (ia) {
-        if (ia.nivel !== 'verde') motivos.push('La IA pide revisarla (su razón está más abajo).');
-        if (ia.factor != null && Number(ia.factor) !== fv) motivos.push('La IA propone una conversión de ' + num(ia.factor, 6) + ' y aquí hay ' + num(fv, 6) + '.');
-        if (ia.articulo_id && art && ia.articulo_id !== art.id) motivos.push('La IA propone otro artículo.');
+        if (ia.nivel !== 'verde') motivos.push('Claude pide revisarla (su razón está más abajo).');
+        if (ia.factor != null && Number(ia.factor) !== fv) motivos.push('Claude propone una conversión de ' + num(ia.factor, 6) + ' y aquí hay ' + num(fv, 6) + '.');
+        if (ia.articulo_id && art && ia.articulo_id !== art.id) motivos.push('Claude propone otro artículo.');
       }
       if (unidadReal(l.cantidad, l.unidad).corregida) motivos.push('La factura dice «' + unidadReal(l.cantidad, l.unidad).original + '» pero por los decimales es peso (kg).');
       if (!costoAviso.hidden && costoAviso.textContent) motivos.push(costoAviso.textContent);
@@ -423,7 +423,7 @@ export async function abrirFactura(ctx, clave, { previa = null, recibirSugeridas
         if (hist > 0 && c > 0 && Number(r.lotes_anteriores) >= 1 && (c / hist > 1.35 || c / hist < 1 / 1.35)) motivos.push('El costo (' + money(c) + ') es ' + num(Math.abs(c / hist - 1) * 100, 0) + ' % ' + (c > hist ? 'más alto' : 'más bajo') + ' que el de las compras anteriores (' + money(hist) + ').');
       }
       if (motivos.length) return { nivel: 'ambar', razon: motivos.join(' ') };
-      return { nivel: 'verde', razon: 'Igual que la vez pasada con este proveedor: ' + art.nombre + (enColones() ? ', entra por su valor en colones' : ', cada una trae ' + num(fv, 6) + ' ' + unidadTxt(art.unidad, fv)) + '. El precio tiene sentido.' + (ia && ia.nivel === 'verde' ? ' La IA coincide.' : '') };
+      return { nivel: 'verde', razon: 'Igual que la vez pasada con este proveedor: ' + art.nombre + (enColones() ? ', entra por su valor en colones' : ', cada una trae ' + num(fv, 6) + ' ' + unidadTxt(art.unidad, fv)) + '. El precio tiene sentido.' + (ia && ia.nivel === 'verde' ? ' Claude coincide.' : '') };
     }
     function pintarSem() {
       sem = evaluarSem();
@@ -433,7 +433,7 @@ export async function abrirFactura(ctx, clave, { previa = null, recibirSugeridas
       if (ia) {
         const fv = leerFactor();
         const usar = ia.factor != null && Number.isFinite(fv) && Number(ia.factor) !== fv;
-        iaEl.replaceChildren(...[h('strong', 'Propuesta de la IA (' + iaModelo + '): '), ia.razon + ' ',
+        iaEl.replaceChildren(...[h('strong', 'Propuesta de Claude (' + iaModelo + '): '), ia.razon + ' ',
           usar ? h('button.btn.chico', { type: 'button', onclick: () => { factor.value = String(ia.factor).replace('.', ','); factor.dispatchEvent(new Event('input', { bubbles: true })); } }, 'Usar la conversión propuesta (' + num(ia.factor, 6) + ')') : null].filter(Boolean));
       }
     }
