@@ -252,7 +252,11 @@ export async function abrirFactura(ctx, clave, { previa = null, recibirSugeridas
         await cargar();
       } });
     btnRecibir.addEventListener('click', () => accRecibir.ejecutar());
-    const marcarTodas = h('button.btn', { type: 'button', onclick: async () => { for (const x of formas) await x.marcarOCrear(); contar(); } }, 'Marcar todas las que ya tienen rubro o artículo');
+    const nVerdes = () => formas.filter((x) => x.verde()).length;
+    const marcarTodas = h('button.btn', { type: 'button', onclick: async () => { for (const x of formas.filter((y) => y.verde())) await x.marcarOCrear(); contar(); } }, 'Marcar las verdes');
+    const resumenSem = h('p.tenue.inv-chico.inv-resumen-sem');
+    const pintarResumenSem = () => { const c = { verde: 0, ambar: 0, rojo: 0 }; formas.forEach((x) => { c[x.semaforo().nivel || 'rojo']++; }); resumenSem.textContent = c.verde + ' verdes (listas), ' + c.ambar + ' ámbar (revisar una por una), ' + c.rojo + ' rojas (falta algo o no tiene sentido).'; marcarTodas.disabled = !c.verde; marcarTodas.textContent = c.verde ? 'Marcar las ' + c.verde + ' verdes' : 'No hay líneas verdes'; };
+    formas.forEach((x) => x.alCambiar(pintarResumenSem));
     const ignorarToda = h('button.btn', { type: 'button', onclick: () => pedirIgnorar(ctx, f, null, () => cargar()) }, 'Toda la factura no es de inventario');
     const contableAqui = f.sociedad_id && f.sociedad_id === ctx.app.socId;
 
@@ -271,6 +275,7 @@ export async function abrirFactura(ctx, clave, { previa = null, recibirSugeridas
         : h('p.tenue.inv-chico', 'Esta factura es de ' + (f.sociedad_nombre || 'la otra empresa') + ': en Contable se responde desde una sesión de esa empresa.')),
       pend.length ? h('section.inv-grupo', h('h3', 'Líneas por recibir', h('span.inv-cuenta', String(pend.length))),
         puede ? h('p.tenue.inv-chico', 'Toque la bolsa de cada línea. Lo que no es de inventario (costos, servicios) va en «No es de inventario».') : null,
+        puede ? resumenSem : null,
         h('div.inv-lineas-acciones', puede ? marcarTodas : null, ignorarToda),
         h('div.inv-lineas', formas.map((x) => x.el)),
         puede ? h('div.inv-barra-recibir',
@@ -281,17 +286,17 @@ export async function abrirFactura(ctx, clave, { previa = null, recibirSugeridas
       (d.notas_proveedor || []).length ? h('section.inv-grupo', h('h3', 'Notas del proveedor sobre esta factura'),
         h('ul.inv-datos-lista', d.notas_proveedor.map((n) => h('li', h('span', tipoDocTxt(n.tipo) + ' N.° ' + numFactura(n.consecutivo) + ' del ' + dma(n.fecha)), h('strong', ({ por_revisar: 'Por revisar', devuelta: 'Mercadería devuelta', ignorada: 'No afecta el inventario' })[n.estado] || n.estado || '')))),
         h('button.btn', { type: 'button', onclick: () => ctx.abrir('notas') }, 'Abrir Notas de proveedor')) : null);
-    contar();
+    contar(); pintarResumenSem();
     // «Recibir todas las líneas» desde la lista: se marcan las que traen rubro sugerido y, si todo está en orden, se reciben; si algo falla se queda la ventana abierta para revisarlo
     if (autoRecibir && puede) {
       autoRecibir = false;
       (async () => {
-        for (const x of formas) if (x.sugerida()) await x.marcarOCrear();
+        for (const x of formas) if (x.verde()) await x.marcarOCrear();
         contar();
         const sel = marcadas();
         const mal = sel.map((x) => x.problema()).find(Boolean);
         if (sel.length && !mal) { const r = await accRecibir.ejecutar(); if (r == null && silencioso) { silencioso = false; vivo = false; } }
-        else if (silencioso) { silencioso = false; vivo = false; toastMal('No se recibió la factura de ' + proveedorTxt(f.proveedor_nombre) + ': ' + (mal || 'ninguna línea trae sugerencia') + ' Use «Escoger qué líneas recibir» para revisarla.'); }
+        else if (silencioso) { silencioso = false; vivo = false; toastMal('No se recibió la factura de ' + proveedorTxt(f.proveedor_nombre) + ': ' + (mal || 'ninguna línea está en verde') + ' Use «Escoger qué líneas recibir» para revisarla.'); }
       })();
     }
   }
@@ -307,7 +312,7 @@ export async function abrirFactura(ctx, clave, { previa = null, recibirSugeridas
     if (!puede) {
       const el = h('article.inv-linea.bloqueada', { 'data-linea': l.linea }, h('div.inv-linea-cab', descLinea(l)),
         h('div.inv-linea-pie', h('button.btn', { type: 'button', onclick: () => pedirIgnorar(ctx, f, [l.linea], () => cargar()) }, 'No es de inventario')));
-      return { el, sugerida: () => false, marcada: () => false, marcarSiTiene() {}, marcarOCrear: async () => {}, alCambiar() {}, problema: () => '', enfocarProblema() {}, datos: () => null };
+      return { el, semaforo: () => ({ nivel: 'rojo' }), verde: () => false, sugerida: () => false, marcada: () => false, marcarSiTiene() {}, marcarOCrear: async () => {}, alCambiar() {}, problema: () => '', enfocarProblema() {}, datos: () => null };
     }
     const sug = l.sugerencia || recordados.get(l.linea) || {};
     const avisarCambio = [];
@@ -383,10 +388,43 @@ export async function abrirFactura(ctx, clave, { previa = null, recibirSugeridas
     const sugTxt = sugerenciaTxt(sug);
     const simple = esSimple(cat);
     const resumen = h('p.tenue.inv-chico.inv-resumen-simple');
+    // Semáforo de la línea: verde = igual que una compra anterior de este proveedor y con sentido; ámbar = revisar; rojo = no se puede recibir así
+    const semEl = h('p.inv-semaforo', { role: 'status' });
+    let sem = { nivel: 'rojo', razon: '' };
+    function evaluarSem() {
+      const fv = leerFactor();
+      const rojo = (razon, bloquea) => ({ nivel: 'rojo', razon, bloquea: !!bloquea });
+      if (sug.no_inventario) return rojo('Parece que no es de inventario (' + (sug.fuente === 'memoria' ? 'así se marcó la vez pasada' : sug.fuente === 'servicio' ? 'parece un servicio' : 'por su CABYS') + '). Si no lo es, toque «No es de inventario».');
+      if (!art && !rubro.value) return rojo('Falta escoger el rubro.');
+      if (!art) return { nivel: 'ambar', razon: 'No hay un artículo igual todavía: al marcarla se crea uno nuevo en el rubro «' + (nombreRubro() || 'escogido') + '». Mire si no existe ya uno parecido.' };
+      if (!Number.isFinite(fv) || fv <= 0) return rojo('Revise la conversión: debe ser mayor que cero.');
+      const rev = enColones() ? { aviso: '' } : revisarConversion({ descripcion: l.descripcion, subtotal: l.subtotal_crc, cantidad: l.cantidad, factorActual: fv }, (n) => money(n));
+      if (rev.aviso) return rojo('El precio por unidad no tiene sentido con esta conversión. ' + rev.aviso, true);
+      const motivos = [];
+      if (sug.fuente !== 'memoria') motivos.push(sug.fuente ? 'Es una sugerencia del sistema, no una compra anterior de este proveedor (' + String(FUENTES[sug.fuente] || 'por parecido').replace(/^./, (c) => c.toLowerCase()) + ').' : 'No hay una compra anterior de este proveedor con lo mismo.');
+      else if (sug.articulo_id && sug.articulo_id !== art.id) motivos.push('Se cambió el artículo que recordaba el sistema.');
+      if (sug.fuente === 'memoria' && sug.factor != null && Number(sug.factor) !== fv) motivos.push('La conversión es distinta a la de la vez pasada (' + num(sug.factor, 6) + ').');
+      if (notaAuto && fv === 1) motivos.push('La conversión se ajustó sola porque la del nombre daba un precio sin sentido.');
+      if (unidadReal(l.cantidad, l.unidad).corregida) motivos.push('La factura dice «' + unidadReal(l.cantidad, l.unidad).original + '» pero por los decimales es peso (kg).');
+      if (!costoAviso.hidden && costoAviso.textContent) motivos.push(costoAviso.textContent);
+      else {
+        const r = art && refCosto.get(art.id); const c = costoCalculado(); const hist = r && r.hay ? Number(r.costo_medio_anterior) : 0;
+        if (hist > 0 && c > 0 && Number(r.lotes_anteriores) >= 1 && (c / hist > 1.35 || c / hist < 1 / 1.35)) motivos.push('El costo (' + money(c) + ') es ' + num(Math.abs(c / hist - 1) * 100, 0) + ' % ' + (c > hist ? 'más alto' : 'más bajo') + ' que el de las compras anteriores (' + money(hist) + ').');
+      }
+      if (motivos.length) return { nivel: 'ambar', razon: motivos.join(' ') };
+      return { nivel: 'verde', razon: 'Igual que la vez pasada con este proveedor: ' + art.nombre + (enColones() ? ', entra por su valor en colones' : ', cada una trae ' + num(fv, 6) + ' ' + unidadTxt(art.unidad, fv)) + '. El precio tiene sentido.' };
+    }
+    function pintarSem() {
+      sem = evaluarSem();
+      semEl.className = 'inv-semaforo ' + sem.nivel;
+      semEl.replaceChildren(h('strong', { class: 'inv-sem-et' }, ({ verde: 'Verde: lista', ambar: 'Ámbar: revise', rojo: 'Rojo: no se puede' })[sem.nivel]), ' ' + sem.razon);
+      el.dataset.semaforo = sem.nivel;
+    }
     const el = h('article.inv-linea' + (simple ? '.inv-simple' : ''), { 'data-linea': l.linea },
       h('div.inv-linea-cab',
         h('label.inv-recibir-chk', chk, h('span', 'Recibir')),
         descLinea(l)),
+      semEl,
       sugTxt ? h('p.inv-sug' + (sug.no_inventario ? '.no-inv' : ''), h('span.inv-sug-et', 'Sugerencia: '), sugTxt) : null,
       resumen,
       filaRubro, errorRubro,
@@ -404,20 +442,20 @@ export async function abrirFactura(ctx, clave, { previa = null, recibirSugeridas
       cantidad.unidad(art?.unidad || '');
       el.dataset.grupo = grupoDe(cat, art) || '';
       if (simple && el.dataset.grupo === 'unitario') detalles.open = true; // en modo simple no hay cajón: los campos del unitario salen a la vista
-      if (!cambiar) { pintarResumen(); return; }
+      if (!cambiar) { pintarResumen(); pintarSem(); return; }
       // Valores por omisión de ese artículo: los de la sugerencia si es el mismo; si no, la regla del contrato (3.3)
       const mismo = art && sug.articulo_id === art.id;
       let fac = mismo && sug.factor != null ? Number(sug.factor) : sug.factor_sugerido != null ? Number(sug.factor_sugerido) : 1;
       // El nombre puede decir «8U» y la factura cobrar cada unidad suelta: si con ese número el costo por litro no es creíble y con 1 sí, se empieza en 1 (y se explica)
       notaAuto = '';
-      if (!(mismo && sug.factor != null) && fac !== 1) { const r0 = revisarConversion({ descripcion: l.descripcion, subtotal: l.subtotal_crc, cantidad: l.cantidad, factorActual: fac }, (n) => money(n)); fac = r0.factor; if (r0.cambiado) notaAuto = r0.aviso; }
+      if (!(mismo && sug.factor != null && sug.fuente === 'memoria') && fac !== 1) { const r0 = revisarConversion({ descripcion: l.descripcion, subtotal: l.subtotal_crc, cantidad: l.cantidad, factorActual: fac }, (n) => money(n)); fac = r0.factor; if (r0.cambiado) notaAuto = r0.aviso; }
       factor.value = String(fac).replace('.', ',');
       if (!cantidadTocada) cantidad.poner(Math.round(Number(l.cantidad) * fac * 1000) / 1000);
       ubic.value = (mismo && sug.ubicacion_id) || ubicacionPorOmision(art) || '';
       const ven = mismo ? sug.vence_en : venceDe(art);
       venceEditada = false; noVence.checked = !ven; vence.disabled = !ven; vence.value = ven || '';
       if (enColones()) aplicarColones();
-      pintarFactor(); pintarCosto(); pintarVence(); pintarResumen();
+      pintarFactor(); pintarCosto(); pintarVence(); pintarResumen(); pintarSem();
     }
     // Comida preparada y suministros se llevan en colones: la línea entra a la bolsa por lo que costó sin IVA (cada unidad de la factura trae su precio en colones)
     function aplicarColones() {
@@ -457,12 +495,13 @@ export async function abrirFactura(ctx, clave, { previa = null, recibirSugeridas
     const leerFactor = () => { const t = String(factor.value).trim().replace(',', '.'); return /^\d*(\.\d{0,6})?$/.test(t) && /\d/.test(t) ? Number(t) : NaN; };
     function pintarFactor() {
       const fv = leerFactor();
-      if (!Number.isFinite(fv) || fv <= 0) { factorEco.textContent = 'Escriba cuántas trae cada una (mayor que cero, hasta 6 decimales). Si es lo mismo, escriba 1.'; factorEco.className = 'inv-eco mal'; return; }
+      if (!Number.isFinite(fv) || fv <= 0) { factorEco.textContent = 'Escriba cuántas trae cada una (mayor que cero, hasta 6 decimales). Si es lo mismo, escriba 1.'; factorEco.className = 'inv-eco mal'; pintarSem(); return; }
       factorEco.className = 'inv-eco';
       const rev = enColones() ? { aviso: '' } : revisarConversion({ descripcion: l.descripcion, subtotal: l.subtotal_crc, cantidad: l.cantidad, factorActual: fv }, (n) => money(n));
       // Si la persona escribió una conversión creíble no se le dice nada; si no lo es, se le explica con la cifra (no se cambia lo que escribió)
       avisoConv.textContent = rev.aviso && !rev.cambiado ? rev.aviso : (fv === 1 ? notaAuto : ''); avisoConv.hidden = !avisoConv.textContent;
       factorEco.textContent = 'La factura dice ' + num(l.cantidad, 3) + ' × ' + num(fv, 6) + ' = ' + (art ? cantTxt(Math.round(Number(l.cantidad) * fv * 1000) / 1000, art.unidad) : num(Number(l.cantidad) * fv, 3)) + '. Si llegó menos, corrija la cantidad.';
+      pintarSem();
     }
     function costoCalculado() {
       const fv = leerFactor();
@@ -499,10 +538,13 @@ export async function abrirFactura(ctx, clave, { previa = null, recibirSugeridas
         if (razon < 0.2 || razon > 5) t = 'Este costo es ' + num(razon, 1) + ' veces el costo de las compras anteriores (' + money(hist) + '). Revise la conversión de la caja.';
       }
       if (t) { costoAviso.textContent = t; costoAviso.hidden = false; }
+      pintarSem();
     }
     factor.addEventListener('input', () => { cantidadTocada = false; const fv = leerFactor(); if (Number.isFinite(fv) && fv > 0) cantidad.poner(Math.round(Number(l.cantidad) * fv * 1000) / 1000); pintarFactor(); pintarCosto(); cambio(); });
     chk.addEventListener('change', async () => {
       if (chk.checked && !art) { chk.checked = false; if (await asegurarArticulo()) chk.checked = true; }
+      pintarSem();
+      if (chk.checked && sem.bloquea) { chk.checked = false; errorRubro.textContent = 'Línea ' + l.linea + ': ' + sem.razon; }
       el.classList.toggle('marcada', chk.checked); pintarBotones(); cambio();
     });
     // Sin artículo todavía: se crea con el nombre y el rubro de esta línea (o se usa el que ya tenga ese nombre) y se llenan solos la bolsa, dónde se guarda y el vencimiento
@@ -564,6 +606,8 @@ export async function abrirFactura(ctx, clave, { previa = null, recibirSugeridas
     el.addEventListener('input', guardarEstado); el.addEventListener('change', guardarEstado); costoDet.addEventListener('toggle', guardarEstado);
     return {
       el,
+      semaforo: () => sem,
+      verde: () => sem.nivel === 'verde',
       sugerida: () => !!rubro.value && !sug.no_inventario && sug.fuente !== 'servicio' && !!(sug.categoria_id || art),
       marcada: () => chk.checked,
       marcarSiTiene: () => { if (art) { chk.checked = true; el.classList.add('marcada'); } },

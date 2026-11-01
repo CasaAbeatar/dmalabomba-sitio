@@ -531,3 +531,12 @@ body:has(.inv-fondo) .cabecera:has(.cab-usuario.abierto){z-index:120}
 @media(max-width:640px){.inv-fac-lineas li{grid-template-columns:minmax(0,1fr) auto}.inv-fl-sug{grid-column:1/-1;grid-row:2}}
 .inv-costo-aviso{margin:.4rem 0 0;padding:.5rem .7rem;border-radius:var(--r);border:1px solid var(--rojo-osc,#8a1017);background:#fdeceb;color:var(--rojo-osc,#8a1017);font-weight:600;font-size:.92rem;line-height:1.35}
 .inv-costo-aviso[hidden]{display:none}
+
+/* Semáforo de recepción: cada línea dice con palabras si está lista, si se revisa o si no se puede */
+.inv-semaforo{margin:.35rem 0;padding:.45rem .7rem;border-radius:var(--r);border:1px solid;font-size:.92rem;line-height:1.35}
+.inv-semaforo .inv-sem-et{margin-right:.3rem}
+.inv-semaforo.verde{background:#eaf6ec;border-color:#2e7d32;color:#1b5e20}
+.inv-semaforo.ambar{background:#fff5df;border-color:#b26a00;color:#7a4a00}
+.inv-semaforo.rojo{background:#fdeceb;border-color:#8a1017;color:#8a1017}
+.inv-resumen-sem{margin:.3rem 0}
+.inv-simple .inv-semaforo{grid-column:1/-1}
