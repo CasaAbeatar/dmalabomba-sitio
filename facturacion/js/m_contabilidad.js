@@ -7,6 +7,7 @@ import { cargarHoja } from './ui_hojas.js';
 // Orden de las pestañas. Cada fase agrega la suya aquí.
 const PESTANAS = [
   () => import('./c_libro.js'),
+  () => import('./c_compras.js'),
   () => import('./c_catalogo.js'),
 ];
 

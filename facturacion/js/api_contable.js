@@ -18,3 +18,11 @@ export const balanza = (soc, desde, hasta) => rpc('fx_contable_balanza', { p_soc
 export const mayor = (soc, cuenta, desde, hasta) => rpc('fx_contable_mayor', { p_soc: soc, p_cuenta: cuenta, p_desde: desde, p_hasta: hasta });
 export const periodos = (soc) => rpc('fx_contable_periodos', { p_soc: soc });
 export const periodoEstado = (soc, anio, mes, cerrar, nota = null) => rpc('fx_contable_periodo_estado', { p_soc: soc, p_anio: anio, p_mes: mes, p_cerrar: cerrar, p_nota: nota });
+
+// Fase 3: facturas de proveedores a cuentas
+export const compras = (soc, desde, hasta, filtro = 'por_clasificar', q = null) => rpc('fx_contable_compras', { p_soc: soc, p_desde: desde, p_hasta: hasta, p_filtro: filtro, p_q: q });
+export const compra = (soc, clave) => rpc('fx_contable_compra', { p_soc: soc, p_clave: clave });
+export const compraConfirmar = (soc, clave, items, contabilizar = true) => rpc('fx_contable_compra_confirmar', { p_soc: soc, p_clave: clave, p_items: items, p_contabilizar: contabilizar });
+export const comprasAceptarSugerencias = (soc, claves) => rpc('fx_contable_compras_aceptar_sugerencias', { p_soc: soc, p_claves: claves });
+export const reglas = (soc) => rpc('fx_contable_reglas', { p_soc: soc });
+export const reglaQuitar = (soc, id) => rpc('fx_contable_regla_quitar', { p_soc: soc, p_regla: id });

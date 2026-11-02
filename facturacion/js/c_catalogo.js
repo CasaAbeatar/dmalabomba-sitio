@@ -2,6 +2,7 @@
 // El catálogo se lee de fx_contable_catalogo; los parámetros, de fx_contable_parametros. Nada se calcula aquí.
 import { h, esqueleto, bloqueError, textoDeError, toast, conBoton } from './util.js';
 import { catalogo, catalogoIniciar, cuentaGuardar, parametros, parametroGuardar } from './api_contable.js';
+import { llenar } from './c_comun.js';
 
 export const TIPOS = { activo: 'Activo', pasivo: 'Pasivo', patrimonio: 'Patrimonio', ingreso: 'Ingreso', costo: 'Costo', gasto: 'Gasto' };
 // Para qué sirve cada cuenta con función, dicho en palabras (el código técnico no se muestra)
@@ -28,9 +29,9 @@ export default {
     let datos = null, params = null;
 
     async function cargar() {
-      if (!datos) cuerpo.replaceChildren(esqueleto(4, 'Cargando el catálogo…'));
+      if (!datos) llenar(cuerpo, esqueleto(4, 'Cargando el catálogo…'));
       try { [datos, params] = await Promise.all([catalogo(soc.id), parametros(soc.id)]); }
-      catch (e) { cuerpo.replaceChildren(bloqueError({ titulo: 'No se pudo cargar el catálogo', mensaje: textoDeError(e), alReintentar: cargar })); return; }
+      catch (e) { llenar(cuerpo, bloqueError({ titulo: 'No se pudo cargar el catálogo', mensaje: textoDeError(e), alReintentar: cargar })); return; }
       pintar();
     }
 
@@ -38,7 +39,7 @@ export default {
       const cuentas = datos.cuentas || [];
       const pendientes = (params || []).filter((p) => p.decide_contadora && !p.resuelto);
       ctx.avisar?.('catalogo', pendientes.length);
-      cuerpo.replaceChildren(bloqueDecisiones(pendientes), cuentas.length ? bloqueCuentas(cuentas) : bloqueVacio());
+      llenar(cuerpo, bloqueDecisiones(pendientes), cuentas.length ? bloqueCuentas(cuentas) : bloqueVacio());
     }
 
     function bloqueVacio() {
@@ -73,7 +74,7 @@ export default {
       function pintarFilas() {
         const f = norm(filtro);
         const vis = cuentas.filter((c) => !f || norm(c.codigo + ' ' + c.nombre).includes(f));
-        tbody.replaceChildren(...vis.flatMap((c) => {
+        llenar(tbody, ...vis.flatMap((c) => {
           const fila = h('tr.con-toque' + (c.imputable ? '' : '.con-grupo') + (c.activa ? '' : '.con-neutro'), { tabindex: 0, role: 'button', 'aria-label': 'Editar la cuenta ' + c.nombre,
             onclick: () => abrir(c.id), onkeydown: (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); abrir(c.id); } } },
             h('td.con-codigo', c.codigo), h('td', h('span.con-sangria', { style: 'padding-left:' + (Math.max(0, c.nivel - 1) * 14) + 'px' }, c.nombre, c.activa ? '' : ' (inactiva)')),

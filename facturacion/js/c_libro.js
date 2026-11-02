@@ -4,6 +4,7 @@ import { h, money, fechaCorta, hoyCR, sumaDias, esqueleto, bloqueError, textoDeE
 import { selectorPeriodo, fechaLarga, fechaDMA, textoRango } from './periodo.js';
 import { hoy, ventasDiaRegistrar, asientoManual, asientoReversar, diario, balanza, mayor, periodos, periodoEstado, catalogo } from './api_contable.js';
 import { ROLES } from './c_catalogo.js';
+import { llenar } from './c_comun.js';
 
 const ORIGEN = { manual: 'Manual', ventas_dia: 'Ventas del día', compra: 'Compra', planilla: 'Planilla', caja: 'Caja', reversa: 'Reversa', ajuste: 'Ajuste' };
 const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
@@ -22,9 +23,9 @@ export default {
     /* ---------- Hoy ---------- */
     async function cargarHoy() {
       const mi = ++fichaHoy;
-      bHoy.replaceChildren(h('h2', 'El día'), esqueleto(2, 'Revisando las ventas del día…'));
+      llenar(bHoy, h('h2', 'El día'), esqueleto(2, 'Revisando las ventas del día…'));
       let d;
-      try { d = await hoy(soc.id, dia); } catch (e) { if (mi === fichaHoy) bHoy.replaceChildren(h('h2', 'El día'), bloqueError({ titulo: 'No se pudo revisar el día', mensaje: textoDeError(e), alReintentar: cargarHoy })); return; }
+      try { d = await hoy(soc.id, dia); } catch (e) { if (mi === fichaHoy) llenar(bHoy, h('h2', 'El día'), bloqueError({ titulo: 'No se pudo revisar el día', mensaje: textoDeError(e), alReintentar: cargarHoy })); return; }
       if (mi !== fichaHoy) return;
       const c = d.calculo, lineas = c.lineas || [];
       const sel = h('input.campo', { type: 'date', value: dia, max: hoyCR(), 'aria-label': 'Día que se revisa', onchange: (e) => { if (e.target.value) { dia = e.target.value; memoria.libroDia = dia; cargarHoy(); } } });
@@ -38,7 +39,7 @@ export default {
       if (c.rechazados > 0) avisos.push(h('p.con-nota', c.rechazados + ' documento(s) fueron rechazados por Hacienda y no se contabilizan.'));
       if (!d.periodo_abierto) avisos.push(h('p.con-nota.con-mas', 'El período de este día está cerrado: no recibe asientos.'));
       const puede = lineas.length && d.periodo_abierto && !d.asiento_id;
-      bHoy.replaceChildren(
+      llenar(bHoy, 
         h('div.con-fila', h('h2', { style: 'flex:1' }, fechaLarga(dia)), estado),
         h('div.con-fila', mover(-1), sel, mover(1)),
         h('div.con-cifras', { style: 'margin:.8rem 0' },
@@ -68,12 +69,12 @@ export default {
     let filtroQ = memoria.libroQ || '';
     async function cargarDiario() {
       const mi = ++fichaDiario;
-      const lista = h('div'); bDiario.replaceChildren(encabezadoDiario(), lista); lista.append(esqueleto(2, 'Cargando el libro diario…'));
+      const lista = h('div'); llenar(bDiario, encabezadoDiario(), lista); lista.append(esqueleto(2, 'Cargando el libro diario…'));
       let r;
-      try { r = await diario(soc.id, rango[0], rango[1], filtroQ || null); } catch (e) { if (mi === fichaDiario) lista.replaceChildren(bloqueError({ titulo: 'No se pudo cargar el libro diario', mensaje: textoDeError(e), alReintentar: cargarDiario })); return; }
+      try { r = await diario(soc.id, rango[0], rango[1], filtroQ || null); } catch (e) { if (mi === fichaDiario) llenar(lista, bloqueError({ titulo: 'No se pudo cargar el libro diario', mensaje: textoDeError(e), alReintentar: cargarDiario })); return; }
       if (mi !== fichaDiario) return;
       const as = r.asientos || [];
-      lista.replaceChildren(
+      llenar(lista, 
         r.ambiente !== 'produccion' ? h('p.con-nota', 'Asientos de PRUEBAS (' + r.ambiente + '): no son cifras reales.') : null,
         as.length ? h('div', as.map(filaAsiento)) : h('div.con-vacio', 'No hay asientos en ' + textoRango(rango[0], rango[1]) + '.'));
     }
@@ -100,7 +101,7 @@ export default {
     /* ---------- Asiento manual ---------- */
     let cuentas = null;
     async function montarManual() {
-      bManual.replaceChildren(h('summary', 'Asiento manual'), h('p.con-ayuda', 'Para lo que no viene de una factura: aportes de capital, ajustes, pagos del banco. Debe y haber tienen que sumar igual.'));
+      llenar(bManual, h('summary', 'Asiento manual'), h('p.con-ayuda', 'Para lo que no viene de una factura: aportes de capital, ajustes, pagos del banco. Debe y haber tienen que sumar igual.'));
       const f = { fecha: h('input.campo', { type: 'date', value: hoyCR(), 'aria-label': 'Fecha del asiento' }), concepto: h('input.campo', { type: 'text', placeholder: 'Qué se registra', maxlength: 300, 'aria-label': 'Concepto' }) };
       const filas = h('div'); const resumen = h('p.con-nota'); let guardar;
       const nuevaFila = () => {
@@ -133,9 +134,9 @@ export default {
     /* ---------- Balanza ---------- */
     async function cargarBalanza() {
       if (!bBalanza.open) return;
-      bBalanza.replaceChildren(h('summary', 'Balanza de comprobación'), esqueleto(2, 'Calculando la balanza…'));
+      llenar(bBalanza, h('summary', 'Balanza de comprobación'), esqueleto(2, 'Calculando la balanza…'));
       let r;
-      try { r = await balanza(soc.id, rango[0], rango[1]); } catch (e) { bBalanza.replaceChildren(h('summary', 'Balanza de comprobación'), bloqueError({ titulo: 'No se pudo calcular la balanza', mensaje: textoDeError(e), alReintentar: cargarBalanza })); return; }
+      try { r = await balanza(soc.id, rango[0], rango[1]); } catch (e) { llenar(bBalanza, h('summary', 'Balanza de comprobación'), bloqueError({ titulo: 'No se pudo calcular la balanza', mensaje: textoDeError(e), alReintentar: cargarBalanza })); return; }
       const cu = r.cuentas || [];
       const cuerpoTabla = h('tbody');
       for (const c of cu) {
@@ -143,29 +144,29 @@ export default {
         cuerpoTabla.append(h('tr.con-toque', { tabindex: 0, role: 'button', 'aria-label': 'Ver el movimiento de ' + c.nombre, onclick: () => verMayor(c, det), onkeydown: (e) => { if (e.key === 'Enter') verMayor(c, det); } },
           h('td', h('span.con-codigo', c.codigo), ' ', c.nombre), h('td.der', dm(c.saldo_inicial)), h('td.der', dm(c.debe)), h('td.der', dm(c.haber)), h('td.der', money(c.saldo_final))), det);
       }
-      bBalanza.replaceChildren(h('summary', 'Balanza de comprobación'),
+      llenar(bBalanza, h('summary', 'Balanza de comprobación'),
         h('p.con-ayuda', 'Saldos de cada cuenta en ' + textoRango(rango[0], rango[1]) + ' (positivo = saldo deudor; negativo = acreedor). Toque una cuenta para ver su movimiento.'),
         cu.length ? h('div.tabla-caja', h('table.con-tabla', h('thead', h('tr', h('th', 'Cuenta'), h('th.der', 'Saldo inicial'), h('th.der', 'Debe'), h('th.der', 'Haber'), h('th.der', 'Saldo final'))), cuerpoTabla,
           h('tfoot', h('tr.con-grupo', h('td', 'Totales del período'), h('td'), h('td.der', money(r.total_debe)), h('td.der', money(r.total_haber)), h('td.der', r.total_debe === r.total_haber ? 'Cuadra' : 'No cuadra'))))) : h('div.con-vacio', 'No hay movimientos en el período.'));
     }
     async function verMayor(c, fila) {
       if (!fila.hidden) { fila.hidden = true; return; }
-      fila.hidden = false; const td = fila.firstChild; td.replaceChildren(esqueleto(1, 'Cargando el movimiento…'));
+      fila.hidden = false; const td = fila.firstChild; llenar(td, esqueleto(1, 'Cargando el movimiento…'));
       try {
         const r = await mayor(soc.id, c.cuenta_id, rango[0], rango[1]);
-        td.replaceChildren(h('table.con-tabla', h('thead', h('tr', h('th', 'Fecha'), h('th', 'Asiento'), h('th.der', 'Debe'), h('th.der', 'Haber'), h('th.der', 'Saldo'))),
+        llenar(td, h('table.con-tabla', h('thead', h('tr', h('th', 'Fecha'), h('th', 'Asiento'), h('th.der', 'Debe'), h('th.der', 'Haber'), h('th.der', 'Saldo'))),
           h('tbody', r.movimientos.map((m) => h('tr', h('td', fechaDMA(m.fecha)), h('td', '#' + m.numero + ' ' + m.concepto), h('td.der', dm(m.debe)), h('td.der', dm(m.haber)), h('td.der', money(m.saldo)))))));
-      } catch (e) { td.replaceChildren(h('p.con-mas', textoDeError(e))); }
+      } catch (e) { llenar(td, h('p.con-mas', textoDeError(e))); }
     }
     bBalanza.addEventListener('toggle', () => { if (bBalanza.open) cargarBalanza(); });
     bBalanza.append(h('summary', 'Balanza de comprobación'));
 
     /* ---------- Períodos ---------- */
     async function cargarPeriodos() {
-      bPeriodos.replaceChildren(h('summary', 'Cierre de períodos'), esqueleto(1, 'Cargando…'));
+      llenar(bPeriodos, h('summary', 'Cierre de períodos'), esqueleto(1, 'Cargando…'));
       let r;
-      try { r = await periodos(soc.id); } catch (e) { bPeriodos.replaceChildren(h('summary', 'Cierre de períodos'), bloqueError({ titulo: 'No se pudieron cargar los períodos', mensaje: textoDeError(e), alReintentar: cargarPeriodos })); return; }
-      bPeriodos.replaceChildren(h('summary', 'Cierre de períodos'),
+      try { r = await periodos(soc.id); } catch (e) { llenar(bPeriodos, h('summary', 'Cierre de períodos'), bloqueError({ titulo: 'No se pudieron cargar los períodos', mensaje: textoDeError(e), alReintentar: cargarPeriodos })); return; }
+      llenar(bPeriodos, h('summary', 'Cierre de períodos'),
         h('p.con-ayuda', 'Un mes cerrado ya no recibe asientos nuevos. Si hay que corregirlo, se reabre dejando escrito el motivo. Del más antiguo al más reciente.'),
         h('div.tabla-caja', h('table.con-tabla', h('thead', h('tr', h('th', 'Mes'), h('th.der', 'Asientos'), h('th', 'Estado'), h('th', ''))),
           h('tbody', r.map((p) => h('tr', h('td', MESES[p.mes - 1] + ' ' + p.anio), h('td.der', String(p.asientos)), h('td', h('span.chip' + (p.estado === 'cerrado' ? '.ok' : ''), p.estado === 'cerrado' ? 'Cerrado' : 'Abierto'), p.cerrado_por ? h('span.con-nota', ' por ' + p.cerrado_por) : null),
