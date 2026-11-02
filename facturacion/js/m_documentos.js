@@ -856,6 +856,7 @@ export default {
         h('div', h('div.doc-etq', tipoNombre), h('div.doc-num', 'N.° ' + numeroCorto(c.consecutivo)), h('div.tenue', fechaHora(c.fecha_emision))),
         h('div.doc-chips', h('span.chip.' + (CLASE_ESTADO[c.estado] || ''), ETQ_ESTADO[c.estado] || c.estado), c.ambiente !== 'produccion' ? h('span.chip.espera', 'Prueba, sin validez') : null, nc ? h('span.chip.anulado', 'Anulado') : null, ctx.sinEfecto ? h('span.chip.nota', 'Anulación dejada sin efecto') : null,
           (esNC || esND) && nombreNota ? h('span.chip.nota', nombreNota) : null, otras.length ? h('span.chip.nota', otras.some((n) => n.tipo_doc === '03') ? 'Con devolución' : 'Con nota de débito') : null)));
+      raiz.append(barraRapida(c, nc, ctx));
       raiz.append(textoEstado(c, !!nc));
 
       // Datos
@@ -940,6 +941,37 @@ export default {
       return 'No se pudo enviar el correo al cliente. Revise que el correo del cliente esté bien escrito o avise a la persona encargada.';
     }
     const nombreArchivo = (c, sufijo) => `${norm(NOMBRES_DOCUMENTO[c.tipo_doc] || 'comprobante').replace(/\s+/g, '-')}-${c.consecutivo}-${sufijo}.xml`;
+
+    // Barra de acciones junto al encabezado del detalle: las tres que más se usan, con las mismas palabras y el mismo orden que en la fila de la lista (Anular, Reimprimir, Reenviar al correo),
+    // para no tener que bajar hasta el final de una ventana larga. Queda pegada arriba al desplazarse. Abajo siguen las acciones completas (formato carta, archivos, notas parciales...).
+    // Si algo no se puede, el botón queda apagado y una línea debajo dice por qué, con palabras.
+    function barraRapida(c, nc, ctx) {
+      const quien = `${(NOMBRES_DOCUMENTO[c.tipo_doc] || 'documento').toLowerCase()} número ${numeroCorto(c.consecutivo)}`;
+      const motivos = [];
+      const boton = (texto, clase, onclick, motivo) => {
+        const b = h('button.btn.doc-bot' + clase, { type: 'button', 'aria-label': texto + ' ' + quien + (motivo ? '. No disponible: ' + motivo : ''), disabled: !!motivo }, texto);
+        if (!motivo) b.addEventListener('click', () => ejecutar(b, onclick)); else motivos.push(texto + ': ' + motivo + '.');
+        return b;
+      };
+      const doc = { ...c, cliente: c.cliente_snapshot?.nombre || '' };
+      let anular = null;
+      if (esVenta(c) && !nc) {
+        const permiso = permiteAnular(ctx.saldos);
+        const motivo = deOtroAmbiente(c) && c.estado !== 'rechazado' ? 'se emitió en otro ambiente de Hacienda'
+          : c.estado === 'rechazado' || c.estado === 'error' ? 'Hacienda no lo aceptó'
+          : c.estado !== 'aceptado' ? 'Hacienda todavía no lo ha aceptado'
+          : ctx.falloNC ? 'no se pudo comprobar si ya está anulado'
+          : permiso.sabe && !permiso.permite ? 'ya tiene devoluciones o notas, abajo se ve qué sí se puede hacer' : '';
+        anular = boton('Anular', '.peligro', async () => { abrirAnular(doc, { alTerminar: async () => { await ctx.repintar(true); await refrescarTras(); }, alVerNC: (n) => { ctx.cerrar(); abrirDetalle(n.id); } }); }, motivo);
+      }
+      const puedeCorreo = correoActivo(app) && !!c.cliente_snapshot && c.estado === 'aceptado';
+      const reenviar = boton('Reenviar al correo', '', () => reenviarPorCorreo(c, ctx),
+        puedeCorreo ? '' : !correoActivo(app) ? 'el correo todavía no está activo' : !c.cliente_snapshot ? 'no tiene cliente' : 'Hacienda todavía no lo acepta');
+      const reimprimir = boton('Reimprimir', '', () => reimprimirComprobante(c.id), '');
+      return h('div.doc-barra', { role: 'group', 'aria-label': 'Acciones rápidas del documento' },
+        h('div.doc-barra-bot', anular, reimprimir, reenviar),
+        motivos.length ? h('small.doc-barra-motivo', motivos.join(' ')) : null);
+    }
 
     function acciones(c, nc, ctx, hechoHace) {
       const hechoXml = async (cual, sufijo, vacio) => {
