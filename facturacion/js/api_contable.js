@@ -44,3 +44,11 @@ export const d270Calendario = (soc) => rpc('fx_contable_d270_calendario', { p_so
 // Fase 6: estados financieros (NIIF para las PYMES) y analítica
 export const estados = (soc, desde, hasta) => rpc('fx_contable_estados', { p_soc: soc, p_desde: desde, p_hasta: hasta });
 export const analitica = (soc, desde, hasta) => rpc('fx_contable_analitica', { p_soc: soc, p_desde: desde, p_hasta: hasta });
+
+// Fase 7: conciliación de caja y planilla (comprobante de la CCSS)
+export const cajaDia = (soc, dia = null) => rpc('fx_contable_caja_dia', { p_soc: soc, p_dia: dia });
+export const cajaRegistrar = (soc, dia, decisiones) => rpc('fx_contable_caja_registrar', { p_soc: soc, p_dia: dia, p_dec: decisiones });
+export const planilla = (soc, periodo) => rpc('fx_contable_planilla', { p_soc: soc, p_periodo: periodo });
+export const planillaCargar = (soc, datos) => rpc('fx_contable_planilla_cargar', { p_soc: soc, p: datos });
+export const planillaContabilizar = (soc, periodo) => rpc('fx_contable_planilla_contabilizar', { p_soc: soc, p_periodo: periodo });
+export const planillaHistoria = (soc) => rpc('fx_contable_planilla_historia', { p_soc: soc });

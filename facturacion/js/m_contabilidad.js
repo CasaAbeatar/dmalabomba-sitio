@@ -9,6 +9,7 @@ const PESTANAS = [
   () => import('./c_libro.js'),
   () => import('./c_compras.js'),
   () => import('./c_formularios.js'),
+  () => import('./c_planilla.js'),
   () => import('./c_estados.js'),
   () => import('./c_analisis.js'),
   () => import('./c_catalogo.js'),
