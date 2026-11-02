@@ -26,3 +26,9 @@ export const compraConfirmar = (soc, clave, items, contabilizar = true) => rpc('
 export const comprasAceptarSugerencias = (soc, claves) => rpc('fx_contable_compras_aceptar_sugerencias', { p_soc: soc, p_claves: claves });
 export const reglas = (soc) => rpc('fx_contable_reglas', { p_soc: soc });
 export const reglaQuitar = (soc, id) => rpc('fx_contable_regla_quitar', { p_soc: soc, p_regla: id });
+
+// Fase 4: D-150 (IVA) y declaraciones guardadas
+export const d150 = (soc, mes) => rpc('fx_contable_d150', { p_soc: soc, p_mes: mes });
+export const declaracionGuardar = (soc, tipo, periodo, entradas) => rpc('fx_contable_declaracion_guardar', { p_soc: soc, p_tipo: tipo, p_periodo: periodo, p_entradas: entradas });
+export const d150Presentar = (soc, mes, numero) => rpc('fx_contable_d150_presentar', { p_soc: soc, p_mes: mes, p_numero: numero });
+export const declaraciones = (soc, tipo = 'D150') => rpc('fx_contable_declaraciones', { p_soc: soc, p_tipo: tipo });

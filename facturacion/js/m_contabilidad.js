@@ -8,6 +8,7 @@ import { cargarHoja } from './ui_hojas.js';
 const PESTANAS = [
   () => import('./c_libro.js'),
   () => import('./c_compras.js'),
+  () => import('./c_formularios.js'),
   () => import('./c_catalogo.js'),
 ];
 
