@@ -309,9 +309,12 @@ export default {
       guardarActiva();
     }
     function ventaVacia(v) { return { venta: v, lineas: [], pagos: [], cliente: null, comprobante: null }; }
-    function sacarDeLista(id) { abiertas = abiertas.filter((a) => a.id !== id); }
+    let lugarQueQuedo = -1; // dónde estaba la cuenta que se acaba de cobrar o anular: la caja sigue en la vecina, no salta a la más antigua
+    function sacarDeLista(id) { lugarQueQuedo = abiertas.findIndex((a) => a.id === id); abiertas = abiertas.filter((a) => a.id !== id); }
     async function pasarALaSiguiente() {
-      const sig = abiertas.find((a) => a.id === lsGet('cuenta_' + socId)) || abiertas[0];
+      const vecina = lugarQueQuedo >= 0 && abiertas.length ? abiertas[Math.min(lugarQueQuedo, abiertas.length - 1)] : null;
+      lugarQueQuedo = -1;
+      const sig = vecina || abiertas.find((a) => a.id === lsGet('cuenta_' + socId)) || abiertas[0];
       cur = sig ? await api.venta(sig.id) : null;
       guardarActiva();
     }
@@ -919,8 +922,11 @@ export default {
       nota.addEventListener('change', () => { if (nota.value.trim() !== (l.nota || '')) editar({ nota: nota.value.trim() }); });
       [qty, precio, nota].forEach((i) => {
         i.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); i.blur(); } });
-        i.addEventListener('focus', () => llevarALaVista(i));
+        i.addEventListener('focus', () => { llevarALaVista(i); if (i !== nota) setTimeout(() => { try { i.select(); } catch { /* sin selección */ } }, 0); }); // el número se reemplaza al escribir: 2 sobre «1» da 2, no 12
       });
+      const cambiarCant = (d) => { const v = r3(cantidad + d); if (v > 0) editar({ cantidad: v }); };
+      const menos = h('button.cant-paso', { type: 'button', disabled: cantidad <= 1, 'aria-label': 'Una menos de ' + l.descripcion, onclick: () => cambiarCant(-1) }, '−');
+      const mas = h('button.cant-paso', { type: 'button', 'aria-label': 'Una más de ' + l.descripcion, onclick: () => cambiarCant(1) }, '+');
       const tar = tarifaDeLinea(l);
       const nombreBase = prod && !prod.descripcion_libre ? (String(prod.nombre_venta || '').trim() || prod.nombre) : null; // lo que el catálogo manda al tiquete
       const detalleCambiado = !!prod && !prod.descripcion_libre && l.descripcion !== prod.nombre && l.descripcion !== nombreBase;
@@ -943,7 +949,7 @@ export default {
       const nombreBtn = h('button.linea-nombre', { type: 'button', 'aria-expanded': String(abierta), title: l.descripcion, 'aria-label': (abierta ? 'Cerrar las opciones de ' : 'Abrir las opciones de ') + l.descripcion, onclick: alternar }, corto);
       const quitar = h('button.linea-x', { type: 'button', 'aria-label': 'Quitar ' + l.descripcion + ' de la cuenta', title: 'Quitar de la cuenta', onclick: () => accion(async () => { cur = await api.lineaQuitar(l.id); lineasAbiertas.delete(l.id); repintar(); toast('Quitado: ' + l.descripcion); }) }, '×');
       return h('div.linea' + (editada ? '.editada' : '') + (detalleCambiado || tarifaCambiada ? '.personalizada' : '') + (abierta ? '.abierta' : ''), { 'data-linea': l.id },
-        nombreBtn, qty, precio,
+        nombreBtn, h('div.cant-ctl', menos, qty, mas), precio,
         h('div.linea-total', money(l.total_linea).replace(/,00$/, '')),
         quitar,
         marcas.length ? h('div.linea-sub', marcas) : null,
@@ -1132,6 +1138,9 @@ export default {
     let cobroAbierto = false; // hay una ventana «Cobrar» abierta (o abriéndose): un Enter repetido no abre otra encima
     async function abrirCobro() {
       if (cobroAbierto) return;
+      // El campo que se estaba escribiendo se cierra primero: en el celular el botón no le quita el foco y el cambio quedaba sin guardar (total viejo)
+      const activo = document.activeElement;
+      if (activo && activo.matches && activo.matches('input,textarea') && activo.closest('.linea')) { activo.blur(); await new Promise((r) => setTimeout(r, 0)); }
       if (cur?.lineas.some(sinPrecioLinea)) { toast('Falta escribir el precio de «' + cur.lineas.find(sinPrecioLinea).descripcion + '».', 'error'); document.querySelector('.precio-inp.pendiente')?.focus(); return; }
       cobroAbierto = true;
       let creada = false;
