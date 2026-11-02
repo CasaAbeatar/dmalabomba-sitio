@@ -1,9 +1,9 @@
 /* Lote 5, simetría. Va al final de todo para ordenar lo que cada pantalla hizo por su lado:
-   1) todo lo que se toca mide al menos 44 px de alto;
+   1) todo lo que se toca mide al menos 48 px de alto;
    2) todas las casillas y botones de opción miden lo mismo (28 px) y su renglón entero es tocable;
    3) los botones de periodo son iguales en todas las pantallas (6 iguales: 3 por fila en celular, 6 en una fila en pantalla ancha);
    4) en toda ventana el botón principal queda siempre a la derecha y los demás a su izquierda. */
-:root{--tocable:44px;--casilla:28px}
+:root{--tocable:48px;--casilla:28px}
 
 /* 1) Alturas táctiles */
 html body .btn,html body .campo,html body select,html body summary,html body button.cerrar,html body .per-btn,html body .doc-rango .btn{min-height:var(--tocable)}

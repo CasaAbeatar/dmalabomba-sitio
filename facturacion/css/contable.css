@@ -1,7 +1,7 @@
 /* Contabilidad: líneas finas, mucho aire, una sola tinta con el rojo de la marca solo para lo que pide atención */
 .con-raiz{display:flex;flex-direction:column;gap:1rem}
 .con-tabs{display:flex;gap:.3rem;flex-wrap:wrap;border-bottom:1px solid var(--linea);padding-bottom:.1rem}
-.con-tab{min-height:44px;padding:.55rem .95rem;border:0;border-bottom:2px solid transparent;background:none;cursor:pointer;color:var(--tinta2);font-weight:600}
+.con-tab{min-height:48px;padding:.55rem .95rem;border:0;border-bottom:2px solid transparent;background:none;cursor:pointer;color:var(--tinta2);font-weight:600}
 .con-tab[aria-selected=true]{color:var(--tinta);border-bottom-color:var(--rojo)}
 .con-tab .chip{margin-left:.4rem}
 .con-bloque{background:var(--papel);border:1px solid var(--linea);border-radius:var(--r);padding:1rem 1.1rem}

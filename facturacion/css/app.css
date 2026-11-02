@@ -45,7 +45,7 @@ input[type=checkbox],input[type=radio]{width:24px;height:24px;accent-color:var(-
 .crece{flex:1 1 auto;min-width:0}
 
 /* Campos */
-.campo,select.campo,textarea.campo{width:100%;min-height:44px;padding:.4rem .7rem;border:1px solid var(--borde-control,#8f8672);border-radius:var(--r);background:#fff;font:inherit;color:inherit}
+.campo,select.campo,textarea.campo{width:100%;min-height:48px;padding:.4rem .7rem;border:1px solid var(--borde-control,#8f8672);border-radius:var(--r);background:#fff;font:inherit;color:inherit}
 .campo:focus{outline:none;border-color:var(--rojo);box-shadow:0 0 0 3px rgba(184,22,34,.12)}
 .etq{display:flex;flex-direction:column;gap:.15rem;font-weight:600;font-size:.92rem}
 .etq small{font-weight:400}
@@ -84,7 +84,7 @@ table.tabla{width:100%;border-collapse:collapse;font-size:.95rem}
 /* El nombre del negocio y el logo son botones que llevan al inicio: se ven como texto y como imagen, con área de toque cómoda */
 button.cab-emp{min-height:48px;display:inline-flex;align-items:center;appearance:none;background:none;border:0;color:inherit;font-family:inherit;text-align:left;padding:.875rem 0;margin:-.875rem 0;cursor:pointer;border-radius:4px;max-width:70%}
 button.cab-emp:hover{text-decoration:underline}
-button.marca{min-height:44px;min-width:44px;appearance:none;background:none;border:0;padding:0;color:inherit;cursor:pointer;border-radius:6px}
+button.marca{min-height:48px;min-width:44px;appearance:none;background:none;border:0;padding:0;color:inherit;cursor:pointer;border-radius:6px}
 .cab-franja .amb{flex:0 0 auto;font-size:.74rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;border-radius:6px;padding:.05rem .5rem;white-space:nowrap}
 .cab-franja .amb-prueba{background:#1d1a17;color:#f3a62c;border:1px solid #1d1a17}
 .cab-franja .amb-prod{background:#fff;color:var(--rojo-osc);border:1px solid #fff}
@@ -218,7 +218,7 @@ input[type=search]::-webkit-search-cancel-button,input[type=search]::-webkit-sea
 input[type=search]{-webkit-appearance:none;appearance:none}
 .bx-envuelve{position:relative;display:block;flex:1 1 auto;min-width:0;width:100%}
 .bx-envuelve>input[type=search]{padding-right:6.2rem}
-.bx-borrar{position:absolute;right:.45rem;top:50%;transform:translateY(-50%);min-height:44px;padding:0 .8rem;border:1px solid var(--borde-control,#8f8672);border-radius:999px;background:#fff;color:var(--tinta,#1d1a17);font:inherit;font-size:.95rem;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:.35rem}
+.bx-borrar{position:absolute;right:.45rem;top:50%;transform:translateY(-50%);min-height:48px;padding:0 .8rem;border:1px solid var(--borde-control,#8f8672);border-radius:999px;background:#fff;color:var(--tinta,#1d1a17);font:inherit;font-size:.95rem;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:.35rem}
 .bx-borrar[hidden]{display:none}
 .bx-borrar:hover,.bx-borrar:focus-visible{border-color:var(--rojo);color:var(--rojo);outline:none}
 .buscar-fila{display:flex;gap:.5rem;align-items:center}
