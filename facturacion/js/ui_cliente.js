@@ -69,9 +69,13 @@ export function abrirFormCliente(app, cliente, { alGuardar, alCambiarEstado, tit
   const esNuevo = !c.id;
   let activo = c.activo !== false; // un cliente desactivado no aparece al buscar cliente para facturar
   const err = h('div.error-caja', { hidden: true, role: 'alert' });
+  const rapido = esNuevo && !completo; // cliente nuevo desde Facturación o Anular: formulario rápido, lo opcional queda detrás de «Agregar más datos del cliente»
+  let masBloque = null, masBtn = null; // se arman más abajo (solo en el formulario rápido)
+  const abrirMas = (abrir) => { if (!masBloque) return; masBloque.hidden = !abrir; masBtn.replaceChildren(h('b', abrir ? 'Ocultar los datos opcionales' : 'Agregar más datos del cliente (opcional)'), h('small', abrir ? 'Lo que escribió aquí se guarda igual.' : 'Nombre comercial, otros correos, teléfono, dirección, tarifa de IVA, exoneración y notas. Hacienda no los pide para facturar.')); masBtn.setAttribute('aria-expanded', String(abrir)); };
   const mostrarError = (m, campoEl) => {
     err.textContent = m; err.hidden = !m;
     if (!m) return;
+    if (campoEl && masBloque && masBloque.hidden && masBloque.contains(campoEl)) abrirMas(true); // el campo con el problema está en «más datos»: se abre para que se vea
     err.scrollIntoView({ block: 'nearest' });
     campoEl?.focus();
   };
@@ -354,10 +358,12 @@ export function abrirFormCliente(app, cliente, { alGuardar, alCambiarEstado, tit
       h('small.tenue', 'Si el cliente tiene una exoneración (por ejemplo la Cruz Roja o los Bomberos), escriba su número una sola vez. Hacienda confirma la vigencia y los productos que cubre, y desde ahí se aplica al cobrar con un botón.'),
       esNuevo ? h('div.col', h('small.tenue', 'Si ya tiene el número, escríbalo aquí: Hacienda lo verifica justo después de guardar el cliente. Si lo deja vacío, se puede agregar después.'), exoNum, exoMsg) : h('div.col', exoLista, h('div.fila', exoNum, exoBtn), exoMsg)));
 
-  // Datos que Hacienda no pide para facturar. Todo se ve siempre, en el orden en que se llena: cédula, nombre, nombre comercial, actividad, correo principal, otros correos, teléfono, dirección, tarifa, exoneración, ayuda de Claude y notas.
+  // Datos que Hacienda no pide para facturar. Al EDITAR (y en Clientes) todo se ve, en el orden en que se llena: cédula, nombre, nombre comercial, actividad, correo principal, otros correos, teléfono, dirección, tarifa, exoneración, ayuda de Claude y notas.
+  // Un cliente NUEVO desde Facturación o Anular es el formulario rápido: cédula, nombre, actividad y correo principal a la vista; lo demás, detrás de un solo botón.
   const estadoDir = esNuevo ? null : estadoDireccion(c); // 'sin' | 'parcial' | 'completa' (null en un cliente nuevo); la lista de Clientes usa la misma función
   const conTope = (etq, ...extra) => { etq.append(...extra); return etq; };
   // Piezas del formulario, en el orden en que se llenan (lo opcional va justo después de lo principal)
+  const bloqueComercial = h('div.col.mt-comercial', h('b', 'Nombre comercial'), h('div.mt-tarifas', { role: 'group', 'aria-label': 'Nombre comercial' }, botonesComercial), cajaComercial);
   const bloqueOtrosCorreos = h('div.col',
     h('small.tenue', 'Opcional. Puede agregar hasta 7 correos más: a todos se les enviará la factura con su PDF y sus archivos para Hacienda.'),
     h('div.rejilla.dos', cajasCorreo),
@@ -374,32 +380,44 @@ export function abrirFormCliente(app, cliente, { alGuardar, alCambiarEstado, tit
       conTope(campo('Otras señas', senas, 'Por ejemplo: 200 metros norte de la iglesia, portón negro.'), cuentaSenas, topeSenas)));
   const bloqueNotas = h('fieldset', h('legend', 'Notas internas'),
     campo('Notas (solo las ve usted, no salen en la factura)', notas));
-  // La actividad económica casi siempre la llena Hacienda sola: va justo después del nombre y del nombre comercial
+  // La actividad económica casi siempre la llena Hacienda sola: va justo después del nombre
   const actividadBloque = ced.el.querySelector('.ced-bloque:last-child');
-  const cuerpo = h('div.mt-form',
-    err,
-    esNuevo ? null : h('fieldset', h('legend', 'Estado del cliente'), h('div.col', estadoTexto, estadoBtn)),
-    h('fieldset', h('legend', 'Datos del cliente'),
-      ced.el, avisoTipo05,
-      h('div.col.mt-comercial', h('b', 'Nombre comercial'), h('div.mt-tarifas', { role: 'group', 'aria-label': 'Nombre comercial' }, botonesComercial), cajaComercial),
-      actividadBloque),
-    h('fieldset', h('legend', 'Correo para enviar la factura'),
-      h('div.col',
-        h('small.tenue', CORREO_OBLIGATORIO ? 'El correo principal es obligatorio: es adonde llega la factura y es el que se informa a Hacienda.' : 'El correo principal es adonde llega la factura y el que se informa a Hacienda.'),
-        campo(rotulosCorreo[0], correos[0]),
-        avisoCorreo,
-        h('b', 'Otros correos'),
-        bloqueOtrosCorreos)),
-    bloqueTelefono,
-    bloqueDireccion,
-    bloqueTarifa,
-    bloqueExo,
-    h('fieldset', h('legend', 'Ayuda de Claude'), revisarClienteConClaude({
+  const bloqueClaude = h('fieldset', h('legend', 'Ayuda de Claude'), revisarClienteConClaude({
       leer: () => ({ id: c.id || null, sociedad_id: soc.id, ...ced.valores(), nombre_comercial: valorComercial(), correos: correos.map((x) => x.value.trim()).filter(Boolean), telefono: telefono.value.replace(/\D/g, ''),
         provincia: prov.value, canton: cant.value, distrito: dist.value, barrio: barrio.value.trim(), otras_senas: senas.value.trim(), exoneracion: exoNum.value.trim(), correo: correos.map((x) => x.value.trim()).filter(Boolean).join(', ') }),
-      usar: (campo, valor) => { const el = campo === 'correo' ? correos[0] : telefono; el.value = valor; el.dispatchEvent(new Event('input', { bubbles: true })); } })),
-    bloqueNotas,
-    !esNuevo && c.creado_en ? h('small.tenue', 'Cliente agregado el ' + new Intl.DateTimeFormat('es-CR', { timeZone: 'America/Costa_Rica', dateStyle: 'long' }).format(new Date(c.creado_en)) + '.') : null);
+      usar: (campo, valor) => { const el = campo === 'correo' ? correos[0] : telefono; el.value = valor; el.dispatchEvent(new Event('input', { bubbles: true })); } }));
+  const bloqueCorreo = (...mas) => h('fieldset', h('legend', 'Correo para enviar la factura'),
+    h('div.col',
+      h('small.tenue', CORREO_OBLIGATORIO ? 'El correo principal es obligatorio: es adonde llega la factura y es el que se informa a Hacienda.' : 'El correo principal es adonde llega la factura y el que se informa a Hacienda.'),
+      campo(rotulosCorreo[0], correos[0]),
+      avisoCorreo,
+      ...mas));
+  const pieFicha = !esNuevo && c.creado_en ? h('small.tenue', 'Cliente agregado el ' + new Intl.DateTimeFormat('es-CR', { timeZone: 'America/Costa_Rica', dateStyle: 'long' }).format(new Date(c.creado_en)) + '.') : null;
+  if (rapido) {
+    masBloque = h('div.mt-form', { hidden: true, id: 'mt-mas-datos' },
+      bloqueComercial,
+      h('fieldset', h('legend', 'Otros correos (opcionales)'), bloqueOtrosCorreos),
+      bloqueTelefono, bloqueDireccion, bloqueTarifa, bloqueExo, bloqueNotas);
+    masBtn = h('button.btn.mt-mas', { type: 'button', 'aria-expanded': 'false', 'aria-controls': 'mt-mas-datos', onclick: () => abrirMas(masBloque.hidden) });
+    abrirMas(false);
+  }
+  const cuerpo = rapido
+    ? h('div.mt-form', err,
+      h('fieldset', h('legend', 'Datos del cliente'), ced.el, avisoTipo05, actividadBloque),
+      bloqueCorreo(),
+      bloqueClaude, masBtn, masBloque)
+    : h('div.mt-form',
+      err,
+      esNuevo ? null : h('fieldset', h('legend', 'Estado del cliente'), h('div.col', estadoTexto, estadoBtn)),
+      h('fieldset', h('legend', 'Datos del cliente'), ced.el, avisoTipo05, bloqueComercial, actividadBloque),
+      bloqueCorreo(h('b', 'Otros correos'), bloqueOtrosCorreos),
+      bloqueTelefono,
+      bloqueDireccion,
+      bloqueTarifa,
+      bloqueExo,
+      bloqueClaude,
+      bloqueNotas,
+      pieFicha);
 
   cuerpo.addEventListener('input', () => { if (!err.hidden) mostrarError(''); }); // el aviso de un intento anterior se quita en cuanto la persona corrige algo
 
