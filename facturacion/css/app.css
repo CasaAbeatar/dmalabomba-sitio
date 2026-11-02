@@ -84,7 +84,7 @@ table.tabla{width:100%;border-collapse:collapse;font-size:.95rem}
 /* El nombre del negocio y el logo son botones que llevan al inicio: se ven como texto y como imagen, con área de toque cómoda */
 button.cab-emp{min-height:48px;display:inline-flex;align-items:center;appearance:none;background:none;border:0;color:inherit;font-family:inherit;text-align:left;padding:.875rem 0;margin:-.875rem 0;cursor:pointer;border-radius:4px;max-width:70%}
 button.cab-emp:hover{text-decoration:underline}
-button.marca{appearance:none;background:none;border:0;padding:0;color:inherit;cursor:pointer;border-radius:6px}
+button.marca{min-height:44px;min-width:44px;appearance:none;background:none;border:0;padding:0;color:inherit;cursor:pointer;border-radius:6px}
 .cab-franja .amb{flex:0 0 auto;font-size:.74rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;border-radius:6px;padding:.05rem .5rem;white-space:nowrap}
 .cab-franja .amb-prueba{background:#1d1a17;color:#f3a62c;border:1px solid #1d1a17}
 .cab-franja .amb-prod{background:#fff;color:var(--rojo-osc);border:1px solid #fff}

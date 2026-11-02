@@ -667,9 +667,9 @@ export default {
       });
       return h('section.col',
         h('h2', 'Informes de cierre'),
-        h('p.tenue-linea', 'Aquí se ve todo lo que la cajera no ve: lo que debía haber, la diferencia (faltante o sobrante) y los conteos que hizo. El informe también sale por correo y WhatsApp.'),
+        h('p.tenue-linea', 'Aquí se ve todo lo que la cajera no ve: lo que debe haber en caja, la diferencia (faltante o sobrante) y los conteos que hizo. El informe también sale por correo y WhatsApp.'),
         conPistaDesliz(h('div.tabla-caja', h('table.tabla',
-          h('thead', h('tr', ['Cierre', 'Cerró', 'Debía haber', 'Contado', 'Resultado', 'Conteos', 'Envío', ''].map((x) => h('th', x)))),
+          h('thead', h('tr', ['Cierre', 'Cerró', 'Debe haber en caja', 'Contado', 'Resultado', 'Conteos', 'Envío', ''].map((x) => h('th', x)))),
           h('tbody', filas))), 'Deslice la tabla hacia los lados para ver más columnas y el botón «Ver informe».'));
     }
 
