@@ -205,6 +205,29 @@ window.addEventListener('popstate', () => {
 // Escape, tocar fuera, «Cerrar ✕» y el botón Atrás respetan el bloqueo y muestran ese texto; cerrar() desde el código siempre cierra.
 const pilaModales = [];
 let contadorModal = 0;
+// El teclado del celular no debe tapar los botones de una ventana: mientras haya ventanas abiertas, el área de la ventana sigue a lo que realmente se ve (visualViewport),
+// con --mv-alto (alto visible) y --mv-arriba (desde dónde). Sin teclado valen el alto y el tope de la pantalla. Se suelta al cerrar la última ventana.
+let sigueTeclado = null;
+function seguirTeclado(activar) {
+  const vv = typeof window !== 'undefined' ? window.visualViewport : null;
+  const raiz = document.documentElement;
+  if (!activar) {
+    if (sigueTeclado) { vv?.removeEventListener('resize', sigueTeclado); vv?.removeEventListener('scroll', sigueTeclado); sigueTeclado = null; }
+    raiz.style.removeProperty('--mv-alto'); raiz.style.removeProperty('--mv-arriba'); raiz.removeAttribute('data-teclado');
+    return;
+  }
+  if (sigueTeclado || !vv) return;
+  sigueTeclado = () => {
+    raiz.style.setProperty('--mv-alto', Math.round(vv.height) + 'px');
+    raiz.style.setProperty('--mv-arriba', Math.round(vv.offsetTop) + 'px');
+    if (window.innerHeight - vv.height > 80) raiz.setAttribute('data-teclado', ''); else raiz.removeAttribute('data-teclado');
+    // El campo que se está escribiendo no debe quedar bajo el teclado
+    const f = document.activeElement;
+    if (f && /^(INPUT|TEXTAREA|SELECT)$/.test(f.tagName) && f.closest('.modal')) { try { f.scrollIntoView({ block: 'nearest' }); } catch { /* nada */ } }
+  };
+  vv.addEventListener('resize', sigueTeclado); vv.addEventListener('scroll', sigueTeclado);
+  sigueTeclado();
+}
 const FOCOS = 'button:not([disabled]),[href],input:not([disabled]):not([type=hidden]),select:not([disabled]),textarea:not([disabled]),summary,[tabindex]:not([tabindex="-1"])';
 export function modal({ titulo, contenido, botones = [], ancho = 520, alCerrar, bloqueo }) {
   const fondo = h('div.modal-fondo');
@@ -230,6 +253,7 @@ export function modal({ titulo, contenido, botones = [], ancho = 520, alCerrar, 
     fondo.remove();
     document.removeEventListener('keydown', teclas);
     const i = pilaModales.indexOf(fondo); if (i >= 0) pilaModales.splice(i, 1);
+    if (!pilaModales.length) seguirTeclado(false);
     if (!pilaModales.length && conHistorial !== false) soltarEntrada();
     // El foco vuelve al botón que abrió la ventana: si ya no queda ninguna ventana, o si ese botón está dentro de la ventana que queda abajo (por ejemplo, «Devolver parte» dentro del detalle de un documento)
     const debajo = pilaModales[pilaModales.length - 1];
@@ -247,6 +271,7 @@ export function modal({ titulo, contenido, botones = [], ancho = 520, alCerrar, 
   document.addEventListener('keydown', teclas);
   pilaModales.push(fondo);
   document.body.append(fondo);
+  seguirTeclado(true);
   // La entrada del historial se pone al abrir (si un history.back() anterior sigue pendiente, se espera a que termine)
   if (!entradaVentana) {
     if (atrasPendiente > 0) esperarHistorial().then(() => { if (!cerrado && pilaModales.length) empujarEntrada(); });
