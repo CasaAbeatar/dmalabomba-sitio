@@ -105,6 +105,7 @@ export const inv = {
   ubicacionGuardar: (p, idem) => escribir('fx_inv_ubicacion_guardar', { p, p_idem: idem }),
   // Estas tres no llevan clave de repetición en el contrato (7): guardar dos veces lo mismo deja lo mismo
   cabysReglaGuardar: (p) => escribir('fx_inv_cabys_regla_guardar', { p }),
+  decidirProducto: (p) => escribir('fx_inv_decidir_producto', { p }),
   equivalenciaGuardar: (p) => escribir('fx_inv_equivalencia_guardar', { p }),
   configGuardar: (p) => escribir('fx_inv_config_guardar', { p }),
 };

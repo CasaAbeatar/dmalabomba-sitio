@@ -244,6 +244,8 @@ function nivelProducto(ls) {
 
 export async function abrirProductosProveedor(ctx, g, alCambiar) {
   let vivo = true;
+  let orden = null; // posición de cada producto: al volver de decidir uno, la lista no se reordena
+  let filtroNivel = 'todos'; // el filtro puesto se conserva al volver
   const cuerpo = h('div.inv-productos', cargando('Leyendo las líneas de ' + plural(g.facturas.length, 'factura', 'facturas') + '…'));
   ventana({ titulo: proveedorTxt(g.nombre) + ': por producto', volver: 'Por recibir', contenido: [cuerpo], alCerrar: () => { vivo = false; alCambiar?.(); } });
   async function cargar() {
@@ -254,24 +256,71 @@ export async function abrirProductosProveedor(ctx, g, alCambiar) {
       await Promise.all(Array.from({ length: 3 }, async () => { while (cola.length) { const f = cola.shift(); const d = await inv.factura(f.clave); facs.push({ clave: f.clave, consecutivo: f.consecutivo, puede: (d.factura || {}).puede_recibir !== false, lineas: (d.lineas || []).filter((l) => l.estado === 'pendiente') }); } }));
     } catch (e) { if (vivo) poner(cuerpo, falla(e, cargar, 'No se pudieron leer las facturas')); return; }
     if (!vivo) return;
+    // Propuestas de Claude (solo administración): una consulta por factura, de a tres
+    const iaMapa = new Map();
+    if (ctx.esAdmin) {
+      const cola2 = facs.map((f) => f.clave);
+      await Promise.all(Array.from({ length: 3 }, async () => { while (cola2.length) { const c = cola2.shift(); const r = await inv.iaPropuestas(c).catch(() => []); (r || []).forEach((x) => iaMapa.set(c + '|' + x.linea, x)); } }));
+      if (!vivo) return;
+    }
     const prod = new Map();
     for (const f of facs) for (const l of f.lineas) {
       const k = claveProducto(l);
       if (!prod.has(k)) prod.set(k, { nombre: l.descripcion, lineas: [], claves: new Set(), cant: 0, unidad: l.unidad, unidades: new Set() });
       const p = prod.get(k); p.lineas.push({ ...l, factura: f }); p.claves.add(f.clave); p.cant += Number(l.cantidad) || 0; p.unidades.add(String(l.unidad || ''));
     }
-    const filas = [...prod.values()].map((p) => ({ ...p, ...nivelProducto(p.lineas) }))
-      .sort((a, b) => ({ ambar: 0, rojo: 1, verde: 2 })[a.nivel] - ({ ambar: 0, rojo: 1, verde: 2 })[b.nivel] || b.lineas.length - a.lineas.length);
+    const filas = [...prod.entries()].map(([k, p]) => ({ ...p, k, ...nivelProducto(p.lineas), ia: p.lineas.map((l) => iaMapa.get(l.factura.clave + '|' + l.linea)).find(Boolean) || null }))
+      .sort((a, b) => orden ? (orden.has(a.k) ? orden.get(a.k) : 1e6) - (orden.has(b.k) ? orden.get(b.k) : 1e6) : ({ ambar: 0, rojo: 1, verde: 2 })[a.nivel] - ({ ambar: 0, rojo: 1, verde: 2 })[b.nivel] || b.lineas.length - a.lineas.length);
+    orden = new Map(filas.map((x, i) => [x.k, i]));
+    const cedulaProv = (g.facturas[0] || {}).proveedor_cedula || '';
     const cuenta = (n) => filas.filter((x) => x.nivel === n).length;
-    const lineasVerdes = filas.filter((x) => x.nivel === 'verde').reduce((s, x) => s + x.lineas.length, 0);
-    const facturasVerdes = [...new Set(filas.filter((x) => x.nivel === 'verde').flatMap((x) => x.lineas.map((l) => l.factura)))].filter((f) => f.puede);
+    let lineasVerdes = filas.filter((x) => x.nivel === 'verde').reduce((s, x) => s + x.lineas.length, 0);
+    let facturasVerdes = [...new Set(filas.filter((x) => x.nivel === 'verde').flatMap((x) => x.lineas.map((l) => l.factura)))].filter((f) => f.puede);
     const lineasTotal = filas.reduce((s, x) => s + x.lineas.length, 0);
-    const tabla = h('div.inv-prod-lista', filas.map((p) => h('article.inv-prod.' + p.nivel,
-      h('div.inv-prod-datos', h('strong', p.nombre),
-        h('small', plural(p.lineas.length, 'línea', 'líneas') + ' en ' + plural(p.claves.size, 'factura', 'facturas') + ' · ' + (p.unidades.size === 1 ? num(p.cant, 3) + ' ' + (p.unidad || 'unid.') + ' en total' : 'unidades distintas, se revisan una por una')),
-        h('small.inv-prod-razon', h('strong', ({ verde: 'Verde', ambar: 'Ámbar', rojo: 'Rojo' })[p.nivel] + ': '), p.razon)),
-      p.nivel === 'verde' ? null : h('button.btn', { type: 'button', onclick: () => abrirFactura(ctx, [...p.claves][0], { alRecibir: () => { if (vivo) cargar(); } }) }, p.nivel === 'rojo' ? 'Abrir la primera factura' : 'Decidir este producto'))));
+    const NIVEL = { verde: 'Verde', ambar: 'Ámbar', rojo: 'Rojo' };
+    const tabla = h('div.inv-prod-lista');
+    function pintarFila(p) {
+      const ia = p.ia, ven = ia && ia.venta_neta != null ? Number(ia.venta_neta) : 0, cu = ia && ia.costo_unidad != null ? Number(ia.costo_unidad) : 0;
+      const puedeAceptar = !!(ia && ia.articulo_id && Number(ia.factor) > 0 && p.nivel !== 'verde' && ia.nivel !== 'rojo' && cedulaProv);
+      const aceptar = h('button.btn.primario', { type: 'button' }, 'Aceptar y recordar');
+      aceptar.addEventListener('click', async () => {
+        aceptar.disabled = true; aceptar.textContent = 'Guardando…';
+        try {
+          await inv.decidirProducto({ proveedor_cedula: cedulaProv, cabys: p.lineas[0].cabys || '', descripcion: p.nombre, articulo_id: ia.articulo_id, factor: String(ia.factor) });
+          p.nivel = 'verde'; p.razon = 'Decidido por usted: ' + ia.articulo + ', cada unidad trae ' + num(ia.factor, 6) + '. Las demás facturas de este proveedor lo toman igual.';
+          toastOk('Guardado: ' + p.nombre);
+          repintar(p);
+        } catch (e) { aceptar.disabled = false; aceptar.textContent = 'Aceptar y recordar'; toastMal(e?.message || 'No se pudo guardar'); }
+      });
+      return h('article.inv-prod.' + p.nivel, { 'data-k': p.k },
+        h('div.inv-prod-datos', h('strong', p.nombre),
+          h('small', plural(p.lineas.length, 'línea', 'líneas') + ' en ' + plural(p.claves.size, 'factura', 'facturas') + ' · ' + (p.unidades.size === 1 ? num(p.cant, 3) + ' ' + (p.unidad || 'unid.') + ' en total' : 'unidades distintas, se revisan una por una')),
+          h('small.inv-prod-razon', h('strong', NIVEL[p.nivel] + ': '), p.razon),
+          ia && p.nivel !== 'verde' ? h('div.inv-prod-ia',
+            h('small', h('strong', 'Propuesta de Claude: '), ia.articulo ? ia.articulo + (Number(ia.factor) > 0 ? ', cada unidad de la factura trae ' + num(ia.factor, 6) : '') : 'no encontró un artículo seguro'),
+            cu > 0 ? h('small', 'Costo por unidad ' + money(cu) + (ven > 0 ? ' · se vende a ' + money(ven) + ' sin IVA · el costo es el ' + num(cu / ven * 100, 0) + ' % del precio' : ' · no hay producto de venta parecido para comparar')) : null,
+            h('small.tenue', ia.razon)) : null),
+        p.nivel === 'verde' ? null : h('div.inv-prod-acc', puedeAceptar ? aceptar : null,
+          h('button.btn', { type: 'button', onclick: () => abrirFactura(ctx, [...p.claves][0], { alRecibir: () => { if (vivo) cargar(); } }) }, p.nivel === 'rojo' ? 'Abrir la primera factura' : puedeAceptar ? 'Cambiar' : 'Decidir este producto')));
+    }
+    function repintar(p) {
+      const viejo = tabla.querySelector('[data-k="' + CSS.escape(p.k) + '"]'); if (viejo) viejo.replaceWith(pintarFila(p));
+      pintarResumen(); aplicarFiltro();
+    }
+    function aplicarFiltro() {
+      for (const x of filas) { const el = tabla.querySelector('[data-k="' + CSS.escape(x.k) + '"]'); if (el) el.hidden = filtroNivel !== 'todos' && x.nivel !== filtroNivel; }
+      botonesFiltro.forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.nivel === filtroNivel)));
+    }
+    const resumenEl = h('p.tenue.inv-chico.inv-resumen-sem');
+    const botonesFiltro = [['todos', 'Todos'], ['ambar', 'Ámbar'], ['rojo', 'Rojo'], ['verde', 'Verde']].map(([n, t]) => h('button.btn.chico', { type: 'button', 'data-nivel': n, onclick: () => { filtroNivel = n; aplicarFiltro(); } }, t));
+    filas.forEach((p) => tabla.append(pintarFila(p)));
     const recibir = h('button.btn.primario', { type: 'button', disabled: !lineasVerdes, onclick: () => confirmarVerdes() }, lineasVerdes ? 'Recibir las ' + lineasVerdes + ' líneas verdes' : 'No hay productos verdes');
+    function pintarResumen() {
+      lineasVerdes = filas.filter((x) => x.nivel === 'verde').reduce((t, x) => t + x.lineas.length, 0);
+      facturasVerdes = [...new Set(filas.filter((x) => x.nivel === 'verde').flatMap((x) => x.lineas.map((l) => l.factura)))].filter((f) => f.puede);
+      resumenEl.textContent = cuenta('verde') + ' verdes, ' + cuenta('ambar') + ' ámbar, ' + cuenta('rojo') + ' rojos.';
+      recibir.disabled = !lineasVerdes; recibir.textContent = lineasVerdes ? 'Recibir las ' + lineasVerdes + ' líneas verdes' : 'No hay productos verdes';
+    }
     function confirmarVerdes() {
       const ok = h('button.btn.primario', { type: 'button' }, 'Sí, recibir las verdes');
       const d = dialogo({ titulo: 'Recibir los productos en verde', ancho: 600, contenido: [
@@ -296,10 +345,12 @@ export async function abrirProductosProveedor(ctx, g, alCambiar) {
     }
     poner(cuerpo,
       h('p.tenue', plural(lineasTotal, 'línea por recibir', 'líneas por recibir') + ' de ' + plural(g.facturas.length, 'factura', 'facturas') + ' son ' + plural(filas.length, 'producto distinto', 'productos distintos') + '.'),
-      h('p.tenue.inv-chico.inv-resumen-sem', cuenta('verde') + ' verdes, ' + cuenta('ambar') + ' ámbar, ' + cuenta('rojo') + ' rojos.'),
+      resumenEl,
+      h('div.inv-prov-acciones.inv-filtro', h('span.tenue.inv-chico', 'Ver:'), ...botonesFiltro),
       h('div.inv-prov-acciones', recibir),
       tabla,
       h('p.tenue.inv-chico', 'Cuando decide un producto nuevo y deja marcado «Recordarlo», las demás facturas de este proveedor lo toman igual y pasan a verde.'));
+    pintarResumen(); aplicarFiltro();
   }
   await cargar();
 }

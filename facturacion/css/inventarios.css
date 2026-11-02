@@ -560,3 +560,7 @@ body:has(.inv-fondo) .cabecera:has(.cab-usuario.abierto){z-index:120}
 .inv-prod-datos{display:grid;gap:.15rem;flex:1 1 16rem;min-width:0}
 .inv-prod-datos small{color:var(--tinta-suave,#555)}
 
+.inv-prod-ia{display:grid;gap:.1rem;margin-top:.35rem;padding:.4rem .6rem;border-left:2px solid var(--borde);background:#fafafa;border-radius:.3rem}
+.inv-prod-acc{display:flex;flex-wrap:wrap;gap:.4rem;align-items:center}
+.inv-filtro{align-items:center;gap:.35rem}.inv-filtro .btn[aria-pressed="true"]{border-color:#111;font-weight:600}
+.inv-prod[hidden]{display:none}
