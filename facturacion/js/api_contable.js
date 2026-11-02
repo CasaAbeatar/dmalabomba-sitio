@@ -40,3 +40,7 @@ export const d270Quitar = (soc, id) => rpc('fx_contable_d270_operacion_quitar', 
 export const d270Presentar = (soc, periodo, numero) => rpc('fx_contable_d270_presentar', { p_soc: soc, p_periodo: periodo, p_numero: numero });
 export const d270Rectificar = (soc, periodo) => rpc('fx_contable_d270_rectificar', { p_soc: soc, p_periodo: periodo });
 export const d270Calendario = (soc) => rpc('fx_contable_d270_calendario', { p_soc: soc });
+
+// Fase 6: estados financieros (NIIF para las PYMES) y analítica
+export const estados = (soc, desde, hasta) => rpc('fx_contable_estados', { p_soc: soc, p_desde: desde, p_hasta: hasta });
+export const analitica = (soc, desde, hasta) => rpc('fx_contable_analitica', { p_soc: soc, p_desde: desde, p_hasta: hasta });

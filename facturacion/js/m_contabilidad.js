@@ -9,6 +9,8 @@ const PESTANAS = [
   () => import('./c_libro.js'),
   () => import('./c_compras.js'),
   () => import('./c_formularios.js'),
+  () => import('./c_estados.js'),
+  () => import('./c_analisis.js'),
   () => import('./c_catalogo.js'),
 ];
 
@@ -27,15 +29,19 @@ export default {
     const barra = h('div.con-tabs', { role: 'tablist', 'aria-label': 'Secciones de la contabilidad' });
     const panel = h('div', { role: 'tabpanel' });
     const botones = new Map();
-    let actual = null, vivo = true;
+    let actual = null, vivo = true, limpiar = null;
     const ctx = { app, soc, memoria, avisar: (id, n) => { const b = botones.get(id); if (!b) return; b.querySelector('.chip')?.remove(); if (n > 0) b.append(h('span.chip.mal', String(n))); } };
     async function ir(id) {
       if (!vivo) return;
       actual = id; poner('con-pestana', id);
       botones.forEach((b, k) => b.setAttribute('aria-selected', String(k === id)));
-      panel.replaceChildren();
+      if (typeof limpiar === 'function') { try { limpiar(); } catch { /* nada que limpiar */ } }
+      limpiar = null;
+      // cada pestaña trabaja en su propia caja: si se cambia de pestaña antes de que una termine de cargar, lo que llegue tarde cae en una caja que ya no se ve
+      const caja = h('div'); panel.replaceChildren(caja);
       const m = mods.find((x) => x.id === id) || mods[0];
-      await m.montar(panel, ctx);
+      const l = await m.montar(caja, ctx);
+      if (panel.firstChild === caja) limpiar = l; else if (typeof l === 'function') { try { l(); } catch { /* ya no está */ } }
     }
     for (const m of mods) {
       const b = h('button.con-tab', { type: 'button', role: 'tab', 'aria-selected': 'false', onclick: () => ir(m.id) }, m.texto);
@@ -44,6 +50,6 @@ export default {
     root.append(h('div.con-raiz', h('p.tenue', 'Libros contables de ', h('strong', soc?.nombre_comercial || soc?.nombre || 'la empresa'), '. Las cifras salen de las facturas, los cierres de caja y los comprobantes de la CCSS que usted cargue; nada se digita dos veces.'), barra, panel));
     const guardada = leer('con-pestana');
     await ir(mods.some((m) => m.id === guardada) ? guardada : mods[0].id);
-    return () => { vivo = false; };
+    return () => { vivo = false; if (typeof limpiar === 'function') { try { limpiar(); } catch { /* ya no está */ } } };
   },
 };
