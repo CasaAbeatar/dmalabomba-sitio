@@ -670,6 +670,7 @@ let veniaDe = null;
 function pintarVista(dest) {
   const tipo = tipoDe(dest);
   cab.dataset.vista = tipo;
+  cab.dataset.modulo = dest.id || ''; // en «Anular y reimprimir» el atajo «Anular factura» sobra: ya se está ahí (css/app.css lo oculta)
   tituloEl.textContent = dest.titulo;
   const aAdmin = tipo === 'sub';
   volverEl.replaceChildren(h('span', { 'aria-hidden': 'true' }, '‹'), ' ', aAdmin ? 'Administración' : 'Inicio');

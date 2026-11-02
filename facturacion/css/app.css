@@ -110,6 +110,7 @@ button.marca{min-height:44px;min-width:44px;appearance:none;background:none;bord
 .estado-turno.cerrado{border-color:var(--borde-ambar);background:var(--ambar-suave);color:#7a4f00}
 .btn.cab-anular{min-height:48px;border-color:var(--rojo);color:var(--rojo);font-weight:700;background:#fff;white-space:nowrap}
 .btn.cab-anular:hover{background:var(--rojo);color:#fff}
+.cabecera[data-modulo=anular] .btn.cab-anular{display:none}
 /* Facturación: la barra más delgada posible para dejarle el espacio a la caja */
 .cabecera[data-vista=facturar] .cab-fila{padding-block:.3rem}
 .cabecera[data-vista=facturar] .cab-titulo{font-size:1.25rem}
