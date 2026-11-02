@@ -3,6 +3,7 @@
 import { h, money, hoyCR, esqueleto, bloqueError, textoDeError, toast, conBoton } from './util.js';
 import { fechaDMA } from './periodo.js';
 import { llenar } from './c_comun.js';
+import { montarD270 } from './c_d270.js';
 import { d150, declaracionGuardar, d150Presentar, parametroGuardar, declaraciones } from './api_contable.js';
 
 const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
@@ -98,7 +99,6 @@ export default {
             h('td', h('button.btn.chico', { type: 'button', onclick: () => { per = f.p; memoria.d150Mes = per; cargarD150(); bD150.scrollIntoView?.({ behavior: 'smooth' }); } }, 'Abrir'))))))));
     }
 
-    await Promise.all([cargarCalendario(), cargarD150()]);
-    if (ctx.fase5) await ctx.fase5(bD270);
+    await Promise.all([cargarCalendario(), cargarD150(), montarD270(bD270, ctx)]);
   },
 };

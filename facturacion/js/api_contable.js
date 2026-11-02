@@ -32,3 +32,11 @@ export const d150 = (soc, mes) => rpc('fx_contable_d150', { p_soc: soc, p_mes: m
 export const declaracionGuardar = (soc, tipo, periodo, entradas) => rpc('fx_contable_declaracion_guardar', { p_soc: soc, p_tipo: tipo, p_periodo: periodo, p_entradas: entradas });
 export const d150Presentar = (soc, mes, numero) => rpc('fx_contable_d150_presentar', { p_soc: soc, p_mes: mes, p_numero: numero });
 export const declaraciones = (soc, tipo = 'D150') => rpc('fx_contable_declaraciones', { p_soc: soc, p_tipo: tipo });
+
+// Fase 5: D-270
+export const d270 = (soc, periodo) => rpc('fx_contable_d270', { p_soc: soc, p_periodo: periodo });
+export const d270Guardar = (soc, datos) => rpc('fx_contable_d270_operacion_guardar', { p_soc: soc, p: datos });
+export const d270Quitar = (soc, id) => rpc('fx_contable_d270_operacion_quitar', { p_soc: soc, p_id: id });
+export const d270Presentar = (soc, periodo, numero) => rpc('fx_contable_d270_presentar', { p_soc: soc, p_periodo: periodo, p_numero: numero });
+export const d270Rectificar = (soc, periodo) => rpc('fx_contable_d270_rectificar', { p_soc: soc, p_periodo: periodo });
+export const d270Calendario = (soc) => rpc('fx_contable_d270_calendario', { p_soc: soc });
