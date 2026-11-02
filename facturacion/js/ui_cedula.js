@@ -22,6 +22,7 @@
 // De Hacienda solo se usan el nombre, el tipo y las actividades económicas (que se muestran en palabras, no como código crudo).
 import { h, TIPOS_ID, fechaCorta, nombrePropio } from './util.js';
 import { apiM } from './api_mantenimiento.js';
+import { cargarBanderaCedula } from './api_clientes.js';
 import { infoActividad, textoActividad } from './actividades.js';
 
 let cssListo = null;
@@ -77,6 +78,7 @@ let contador = 0;
 
 export function crearCampoIdentificacion(opts = {}) {
   cargarCssCedula();
+  cargarBanderaCedula(); // si la cédula jurídica con letras está encendida, la pantalla las admite (apagada por defecto)
   const c = opts.cliente || null;
   const nuevo = !c;
   const uid = ++contador;
