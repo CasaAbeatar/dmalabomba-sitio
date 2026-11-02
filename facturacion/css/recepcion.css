@@ -231,3 +231,6 @@ div.rec-fila{cursor:default}
 }
 
 .lis-aviso{margin:.4rem 0;padding:.6rem .85rem;border:1px solid #efd08f;background:var(--ambar-suave);border-radius:var(--r);color:#6b4600;font-size:.92rem}
+/* Lote 4: aceptar en un solo paso */
+.rec-un-paso{margin-top:.8rem;display:flex;flex-direction:column;gap:.6rem}
+.rec-base-legal{margin-top:.8rem;max-width:62ch}

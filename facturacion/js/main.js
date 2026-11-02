@@ -405,9 +405,8 @@ document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && menuEl?.
 // Fuente: fx_alertas (contrato 3). Mientras no exista, api_documentos.js usa un valor de reserva sacado de fx_documentos.
 // Se actualiza cada 60 segundos, al volver a la pestaña del navegador y cuando una pantalla lo pide con el evento 'app:alertas'.
 let alSeq = 0, alTimer = null, alUltimo = 0, recepcionCache = null, recepcionHora = 0;
-// Pantalla baja (menos de 900 px de alto): el aviso es UNA línea compacta, «Hacienda no aceptó 1 documento. Ver». En pantallas altas va completo, con el motivo.
-const pantallaBaja = window.matchMedia ? window.matchMedia('(max-height:899px)') : { matches: false };
-pantallaBaja.addEventListener?.('change', () => { if (alertaEl && app.alertas.datos) aplicarAlertas(app.alertas.datos); });
+// Lote 6: el aviso rojo es SIEMPRE una sola línea compacta, «Hacienda no aceptó N documentos», con un botón que lleva a resolver (si es uno solo, abre ese documento; si son varios, la lista de los que tienen problemas).
+// El motivo y el artículo 10 de la resolución MH-DGT-RES-0027-2024 (emitir de inmediato la nota de crédito o de débito) se leen dentro del documento.
 // «La ubicación del emisor no coincide con Hacienda (es solo un aviso)» (código -37) no es el motivo del rechazo: no se mezcla en el aviso rojo
 const sinAvisoUbicacion = (t) => String(t || '').replace(/\s*La ubicaci[oó]n del emisor no coincide con Hacienda[^.]*\.?/i, '').replace(/\s+/g, ' ').trim();
 function aplicarAlertas(a) {
@@ -416,14 +415,15 @@ function aplicarAlertas(a) {
   const r = a ? a.rechazados : 0, p = a ? a.pendientes : 0;
   if (!r && !p) { alertaEl.hidden = true; sincronizarAlturas(); document.dispatchEvent(new CustomEvent('app:alertas-cambio', { detail: a })); return; }
   const docs = (n) => (n === 1 ? '1 documento' : n + ' documentos');
-  const titulo = pantallaBaja.matches
-    ? (r && p ? 'Hacienda no aceptó ' + docs(r) + ' y ' + (p === 1 ? '1 todavía no llegó a Hacienda.' : p + ' todavía no llegaron a Hacienda.')
-      : r ? 'Hacienda no aceptó ' + docs(r) + '.' : docs(p) + (p === 1 ? ' no ha llegado a Hacienda.' : ' no han llegado a Hacienda.'))
-    : [r ? 'Hacienda no aceptó ' + docs(r) + '.' : '', p ? (p === 1 ? '1 documento todavía no llegó a Hacienda.' : p + ' documentos todavía no llegaron a Hacienda.') : ''].filter(Boolean).join(' ');
+  const titulo = r && p ? 'Hacienda no aceptó ' + docs(r) + ' y ' + (p === 1 ? '1 todavía no llegó a Hacienda.' : p + ' todavía no llegaron a Hacienda.')
+    : r ? 'Hacienda no aceptó ' + docs(r) + '.' : docs(p) + (p === 1 ? ' no ha llegado a Hacienda.' : ' no han llegado a Hacienda.');
   const u = a.ultimos && a.ultimos[0];
   const motivo = u ? sinAvisoUbicacion(u.mensaje) : '';
   const detalle = motivo ? (u.numero ? 'N.° ' + u.numero + ': ' : '') + conPunto(motivo) : 'Toque «Ver cuáles son» para revisar qué pasó y qué hay que hacer.';
   alertaEl.querySelector('strong').textContent = titulo;
+  const bVer = alertaEl.querySelector('.alerta-ver');
+  bVer.textContent = r ? 'Resolver ahora' : 'Ver cuáles son';
+  bVer.setAttribute('aria-label', r ? 'Resolver los documentos que Hacienda no aceptó' : 'Ver cuáles son los documentos que no han llegado a Hacienda');
   alertaEl.querySelector('.alerta-detalle').textContent = detalle;
   alertaEl.hidden = false;
   sincronizarAlturas();
@@ -431,7 +431,9 @@ function aplicarAlertas(a) {
 }
 function verAlertas() {
   const a = app.alertas.datos;
-  app.ir('anular', { filtro: 'problemas', desde: a?.desde || null });
+  // Un solo rechazado: se abre directo ese documento (con lo que dijo Hacienda y lo que se puede hacer). Varios: la lista de los que tienen problemas, ya filtrada.
+  const unico = a && a.rechazados === 1 ? (a.ultimos || []).find((u) => u.estado === 'rechazado' && u.id) : null;
+  app.ir('anular', { filtro: 'problemas', desde: a?.desde || null, ...(unico ? { comprobante: String(unico.id) } : {}) });
 }
 // Cifra de facturas recibidas por responder: la misma que muestra Contable. Alimenta las insignias de las tarjetas de Contable y de Administración.
 // Vencidas para la insignia: las que llegaron en los últimos 25 días con el plazo ya pasado (fx_alertas.recepcion_vencidas, o vencidas_recientes del conteo de Contable)

@@ -9,3 +9,5 @@
 .per-aviso{flex-basis:100%;color:var(--rojo-osc);font-weight:600}
 
 @media(max-width:640px){.per-btn{min-width:calc(50% - .3rem)}}
+.per-nota{color:var(--tinta2);max-width:62ch}
+.per-nota[hidden]{display:none}

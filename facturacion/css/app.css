@@ -171,12 +171,11 @@ button.marca{min-height:44px;min-width:44px;appearance:none;background:none;bord
 .ayuda-red-bloque ul{margin:0;padding-left:1.2rem;display:grid;gap:.4rem}
 .usr-nota{display:block;font-weight:400}
 
-/* Pantalla baja (menos de 900 px de alto): el aviso rojo es UNA línea, «Hacienda no aceptó 1 documento. Ver». La versión completa (motivo y qué hacer) queda para pantallas altas. */
-@media(max-height:899px){
-  .alerta-in{padding:.2rem 1rem}
-  .alerta-detalle{display:none}
-  .alerta-texto strong{font-size:.98rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-}
+/* Lote 6: el aviso rojo es SIEMPRE una línea compacta, «Hacienda no aceptó N documentos», con un botón «Resolver ahora». El motivo se lee dentro del documento. */
+.alerta-in{padding:.2rem 1rem}
+.alerta-detalle{display:none}
+.alerta-texto strong{font-size:.98rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.alerta-cab .btn.alerta-ver{font-weight:700}
 
 main#vista{max-width:1400px;margin:0 auto;padding:1rem}
 

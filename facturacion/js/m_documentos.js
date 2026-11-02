@@ -1,4 +1,4 @@
-// Anular y reimprimir: una sola ventana con los documentos de Hoy, Este mes, Mes anterior o Cualquier fecha, buscador por número, cliente, cédula, estado o monto,
+// Anular y reimprimir: una sola ventana con los documentos de Hoy, Ayer, Esta semana, Este mes, Mes pasado u Otro periodo (los mismos botones que Informes y Contable), buscador por número, cliente, cédula, estado o monto,
 // y en cada fila los botones «Reimprimir» y «Anular». La lista se pinta por tandas («Mostrar más»): la búsqueda y los filtros actúan sobre todo lo cargado. Tocar la fila abre el detalle (estado en Hacienda, «Ya lo atendí», archivos, reenvíos).
 // La anulación con nota de crédito es la de m_anular.js; la impresión es la de imprimir.js.
 import { h, money, modal, toast, descargar, hoyCR, sumaDias, fechaHora, horaCorta, debounce, num, r2, nombrePropio, nombreLocal, traducirHacienda, campoBusqueda, TIPOS_SERVICIO, MEDIOS, TIPOS_ID } from './util.js';
@@ -9,7 +9,7 @@ import { selectorCliente } from './ui_cliente.js';
 import { sumarDocumentos, frasesDeLista, puenteConTurno, docsDelTurno, fueraDelTurno, fraseFueraDelTurno } from './cuadre_turno.js';
 import { imprimirComprobante, reimprimirComprobante, formatoDireccion, formatoCedula, formatoTelefono, numeroCorto, NOMBRES_DOCUMENTO } from './imprimir.js';
 import { crearDescarga, nombrePeriodo } from './descargas.js';
-import { textoRango } from './periodo.js';
+import { textoRango, rangoPeriodo } from './periodo.js';
 import { explicarRechazoConClaude } from './claude_ayuda.js';
 
 if (!document.querySelector('link[data-fx-documentos]')) document.head.append(h('link', { rel: 'stylesheet', href: new URL('../css/documentos.css', import.meta.url).href, 'data-fx-documentos': '1' }));
@@ -94,7 +94,7 @@ export default {
     const turnoAbierto = () => app.turno || null;
     const turnoDeAyer = () => (turnoAbierto() && ymdDe(turnoAbierto().abierto_en) < hoyCR() ? turnoAbierto() : null);
     est.desde = turnoDeAyer() ? ymdDe(turnoDeAyer().abierto_en) : hoyCR();
-    // Si otra pantalla pidió ver los problemas (el aviso rojo del encabezado), se abre con ese filtro y con las mismas fechas del aviso (esas fechas caen en «Cualquier fecha»)
+    // Si otra pantalla pidió ver los problemas (el aviso rojo del encabezado), se abre con ese filtro y con las mismas fechas del aviso (esas fechas caen en «Otro periodo»)
     const pedido = app.pedido; app.pedido = null;
     if (pedido?.filtro === 'problemas') {
       est.filtro = 'problemas';
@@ -112,11 +112,12 @@ export default {
       if (r === 'hoy') return [turnoDeAyer() ? ymdDe(turnoDeAyer().abierto_en) : hoy, hoy];
       if (r === 'mes') return [primerDiaMes(hoy), hoy]; // del día 1 a hoy, en hora de Costa Rica
       if (r === 'anterior') return mesAnterior(hoy);    // del día 1 al último día del mes anterior
+      if (r === 'ayer' || r === 'semana') return rangoPeriodo(r, hoy); // iguales a los del selector de Informes y Contable
       return [est.desde, est.hasta];
     };
     const titulo = h('p.doc-fecha');
     const botonesRango = h('div.doc-rango', { role: 'group', 'aria-label': 'Fechas a mostrar' },
-      [['hoy', 'Hoy'], ['mes', 'Este mes'], ['anterior', 'Mes anterior'], ['otro', 'Cualquier fecha']].map(([r, t]) =>
+      [['hoy', 'Hoy'], ['ayer', 'Ayer'], ['semana', 'Esta semana'], ['mes', 'Este mes'], ['anterior', 'Mes pasado'], ['otro', 'Otro periodo']].map(([r, t]) =>
         h('button.btn', { type: 'button', 'data-r': r, onclick: () => elegirRango(r) }, t)));
     const inDesde = h('input.campo', { type: 'date', 'aria-label': 'Desde', max: hoyCR() });
     const inHasta = h('input.campo', { type: 'date', 'aria-label': 'Hasta', max: hoyCR() }); // no hay documentos de días que no han llegado; el botón «Hoy» pone el día de hoy sin buscarlo en el calendario
@@ -919,7 +920,9 @@ export default {
             h('details.doc-crudo', h('summary.btn', 'Texto técnico sin cambios'), h('pre', String(c.mensaje)))))
         : null;
       const claude = app.admin && c.estado === 'rechazado' && c.id ? explicarRechazoConClaude({ comprobanteId: c.id }) : null; // solo administración
-      return h('div.doc-estado.' + (CLASE_ESTADO[c.estado] || ''), h('p', t), motivos, claude, tecnico);
+      // Resolución MH-DGT-RES-0027-2024, art. 10: ante un rechazo o una aceptación parcial, quien emitió el comprobante debe emitir de inmediato la nota de crédito o de débito que corresponda
+      const base = c.estado === 'rechazado' ? h('p.tenue.doc-base-legal', 'Si el cliente o el proveedor lo rechazó, o lo aceptó solo en parte, hay que emitir de inmediato la nota de crédito o de débito que corresponda (Resolución MH-DGT-RES-0027-2024, artículo 10).') : null;
+      return h('div.doc-estado.' + (CLASE_ESTADO[c.estado] || ''), h('p', t), motivos, base, claude, tecnico);
     }
 
     /* ---------- acciones ---------- */
@@ -1217,7 +1220,7 @@ export default {
     if (alFinal) buscador.focus(); // desde el botón rojo «Anular y reimprimir»: el cursor queda en el buscador
     if (verDocumento) abrirDetalle(verDocumento); // desde «Me equivoqué» del cobro: se abre el documento recién emitido
     // Los documentos cambian de estado solos (en cola, enviado, aceptado): «Hoy» se actualiza cada 20 segundos. Un mes entero pesa mucho más:
-    // «Este mes» y «Cualquier fecha» se actualizan cada minuto y «Mes anterior» solo con el botón «Actualizar».
+    // «Este mes» y «Otro periodo» se actualizan cada minuto y «Mes pasado» solo con el botón «Actualizar».
     const reloj = setInterval(() => {
       if (document.hidden || !root.isConnected) return;
       const espera = est.rango === 'hoy' ? 15000 : est.rango === 'anterior' ? Infinity : 60000;

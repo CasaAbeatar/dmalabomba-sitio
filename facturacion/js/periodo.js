@@ -3,7 +3,8 @@ import { h, hoyCR, sumaDias } from './util.js';
 
 const cssUrl = new URL('../css/periodo.css', import.meta.url).href;
 const pad = (n) => String(n).padStart(2, '0');
-export function rangoPeriodo(id, hoy = hoyCR()) {
+// desdeTurno: día (AAAA-MM-DD) en que se abrió el turno que sigue abierto, si es anterior a hoy. «Hoy» es el turno de caja abierto: empieza ese día (así lo entiende todo el sistema).
+export function rangoPeriodo(id, hoy = hoyCR(), desdeTurno = null) {
   const [y, m] = hoy.split('-').map(Number);
   const dow = new Date(hoy + 'T12:00:00Z').getUTCDay(); // 0 = domingo
   switch (id) {
@@ -11,7 +12,7 @@ export function rangoPeriodo(id, hoy = hoyCR()) {
     case 'semana': return [sumaDias(hoy, -((dow + 6) % 7)), hoy]; // semana desde el lunes
     case 'mes': return [`${y}-${pad(m)}-01`, hoy];
     case 'mes_pasado': { const ult = sumaDias(`${y}-${pad(m)}-01`, -1); return [ult.slice(0, 8) + '01', ult]; }
-    default: return [hoy, hoy];
+    default: return [desdeTurno && desdeTurno < hoy ? desdeTurno : hoy, hoy];
   }
 }
 
@@ -29,12 +30,18 @@ export const OPCIONES = [
 ];
 
 // alCambiar([desde, hasta], id) se llama al elegir. Devuelve {el, rango(), id(), elegir(id)}
-export function selectorPeriodo({ inicial = 'hoy', alCambiar }) {
+// turnoAbierto: opcional, función que devuelve el turno abierto ({abierto_en}) o null. Si ese turno viene de un día anterior, «Hoy» empieza cuando se abrió y el selector lo dice debajo.
+export function selectorPeriodo({ inicial = 'hoy', alCambiar, turnoAbierto = null }) {
   if (!document.getElementById('css-periodo')) document.head.append(h('link', { id: 'css-periodo', rel: 'stylesheet', href: cssUrl }));
-  let actual = inicial, rango = rangoPeriodo(inicial === 'otro' ? 'hoy' : inicial);
+  const diaCR = (iso) => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Costa_Rica' }).format(new Date(iso));
+  const turnoViejo = () => { try { const t = turnoAbierto ? turnoAbierto() : null; return t && t.abierto_en && diaCR(t.abierto_en) < hoyCR() ? t : null; } catch { return null; } };
+  const desdeTurno = () => { const t = turnoViejo(); return t ? diaCR(t.abierto_en) : null; };
+  const rangoDe = (id) => rangoPeriodo(id, hoyCR(), desdeTurno());
+  let actual = inicial, rango = rangoDe(inicial === 'otro' ? 'hoy' : inicial);
   const desde = h('input.campo', { type: 'date', 'aria-label': 'Desde', value: rango[0], max: hoyCR() });
   const hasta = h('input.campo', { type: 'date', 'aria-label': 'Hasta', value: rango[1], max: hoyCR() });
   const aviso = h('small.per-aviso', { hidden: true });
+  const nota = h('small.per-nota', { hidden: true, role: 'note' });
   const verBtn = h('button.btn.primario', { type: 'button', onclick: () => {
     if (!desde.value || !hasta.value) { aviso.textContent = 'Escoja las dos fechas.'; aviso.hidden = false; return; }
     if (hasta.value < desde.value) { aviso.textContent = 'La fecha final no puede ser anterior a la inicial.'; aviso.hidden = false; return; }
@@ -47,10 +54,17 @@ export function selectorPeriodo({ inicial = 'hoy', alCambiar }) {
     botones.forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.id === id)));
     otro.hidden = id !== 'otro';
     if (id === 'otro') { desde.focus(); return; }
-    rango = rangoPeriodo(id);
+    rango = rangoDe(id);
     desde.value = rango[0]; hasta.value = rango[1];
+    pintarNota();
     if (avisar) alCambiar(rango, id);
   }
-  const el = h('div.periodo', h('div.per-botones', { role: 'group', 'aria-label': 'Periodo' }, botones), otro);
+  function pintarNota() {
+    const t = actual === 'hoy' ? turnoViejo() : null;
+    nota.hidden = !t;
+    if (t) nota.textContent = '«Hoy» incluye todo el turno de caja: se abrió el ' + diaCR(t.abierto_en).split('-').reverse().join('/') + ' a las ' + new Intl.DateTimeFormat('es-CR', { timeZone: 'America/Costa_Rica', hour: 'numeric', minute: '2-digit' }).format(new Date(t.abierto_en)) + ' y sigue abierto.';
+  }
+  const el = h('div.periodo', h('div.per-botones', { role: 'group', 'aria-label': 'Periodo' }, botones), nota, otro);
+  pintarNota();
   return { el, rango: () => rango, id: () => actual, elegir: (id) => elegir(id, true) };
 }

@@ -23,15 +23,14 @@ export default {
     let ficha = 0; // descarta respuestas viejas
     const est = { desde: null, hasta: null, turno: '', datos: null, demo: false, vista: 'arbol', orden: 'monto', ordenLista: { col: 'total', dir: -1 }, filtro: '', abiertos: new Set(), verTodos: false };
 
-    const periodo = selectorPeriodo({ inicial: 'hoy', alCambiar: ([d, a]) => { est.turno = ''; cargar(d, a); } });
+    const periodo = selectorPeriodo({ inicial: 'hoy', turnoAbierto: () => app.turno, alCambiar: ([d, a]) => { est.turno = ''; cargar(d, a); } });
     const turnoSel = h('select.campo', { 'aria-label': 'Turno', onchange: () => { est.turno = turnoSel.value; cargar(est.desde, est.hasta, true); } });
     const turnoCaja = h('label.etq.lis-turno', 'Ver solo un turno de caja (opcional)', turnoSel);
     const rotulo = h('p.lis-rotulo');
     // fx_listados2 trae `ambiente` (solo cuenta los comprobantes del modo vigente de la empresa, 27f): se dice, para que nadie tome cifras de prueba por ventas reales
     // ni se pregunte adónde fueron las de prueba cuando el sistema pase a facturas reales.
     const ambienteEl = h('p.lis-ambiente', { hidden: true, role: 'note' });
-    // «Hoy» aquí es el día natural. Si la caja sigue abierta desde un día anterior, sus ventas no caen en «Hoy»: se avisa y se dice cómo verlas (en «Anular y reimprimir», «Hoy» sí es todo el turno)
-    const turnoViejoEl = h('p.lis-ambiente', { hidden: true, role: 'note' });
+    // «Hoy» es el turno de caja abierto (igual que en Anular y reimprimir): si viene de un día anterior, el selector empieza ese día y lo dice debajo de los botones
     const resumenEl = h('div');
     const cuerpo = h('div');
     // Franja que acompaña a toda la pantalla mientras se ve la muestra, para que nadie la confunda con ventas reales
@@ -43,17 +42,13 @@ export default {
         h('div.fila', crearDescarga(() => informeCompleto(), { texto: 'Descargar todo el informe', etiqueta: 'Descargar todo el informe de ventas, con una hoja por tabla' }),
           h('button.btn', { type: 'button', onclick: (e) => imprimir(e.currentTarget) }, 'Imprimir resumen'))),
       h('div.tarjeta.lis-filtros', periodo.el, turnoCaja),
-      demoBanner, rotulo, ambienteEl, turnoViejoEl, resumenEl, cuerpo);
+      demoBanner, rotulo, ambienteEl, resumenEl, cuerpo);
 
     async function cargar(desde, hasta, mismoTurno) {
       est.desde = desde; est.hasta = hasta;
       const mia = ++ficha;
       rotulo.textContent = 'Mostrando ' + textoRango(desde, hasta) + (est.turno ? ' · un solo turno' : ' · todos los turnos') + '. Colones (₡), IVA incluido salvo donde se indique.';
       ambienteEl.hidden = true;
-      const tAb = app.turno;
-      const viejo = !est.demo && !est.turno && periodo.id() === 'hoy' && !!tAb && new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Costa_Rica' }).format(new Date(tAb.abierto_en)) < hoyCR();
-      turnoViejoEl.textContent = viejo ? 'Hay una caja abierta desde el ' + fechaCorta(tAb.abierto_en) + ' a las ' + horaCorta(tAb.abierto_en) + '. Sus ventas de ayer no salen en «Hoy». Para verlas todas juntas, escoja el turno en «Ver solo un turno de caja».' : '';
-      turnoViejoEl.hidden = !viejo;
       limpiezas.splice(0).forEach((f) => f());
       resumenEl.replaceChildren(); cuerpo.replaceChildren(h('p.cargando', 'Cargando ventas…'));
       try {

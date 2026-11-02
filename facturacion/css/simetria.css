@@ -1,0 +1,27 @@
+/* Lote 5, simetría. Va al final de todo para ordenar lo que cada pantalla hizo por su lado:
+   1) todo lo que se toca mide al menos 44 px de alto;
+   2) todas las casillas y botones de opción miden lo mismo (28 px) y su renglón entero es tocable;
+   3) los botones de periodo son iguales en todas las pantallas (6 iguales: 3 por fila en celular, 6 en una fila en pantalla ancha);
+   4) en toda ventana el botón principal queda siempre a la derecha y los demás a su izquierda. */
+:root{--tocable:44px;--casilla:28px}
+
+/* 1) Alturas táctiles */
+html body .btn,html body .campo,html body select,html body summary,html body button.cerrar,html body .per-btn,html body .doc-rango .btn{min-height:var(--tocable)}
+html body input.campo,html body select.campo{min-height:var(--tocable)}
+@media(max-width:700px){html body .linea>.cant-inp,html body .linea>.precio-inp,html body .linea .linea-nombre,html body .linea .linea-x,html body .inv-simple .inv-rubro-fila .campo{min-height:var(--tocable)}}
+html body .inv-simple .inv-rubro-fila .campo{min-height:var(--tocable)}
+
+/* 2) Casillas y botones de opción */
+html body input[type=checkbox],html body input[type=radio],html body .av-check input,html body .cobro-chk input,html body .mt-radios input,html body .mt-interruptor input{width:var(--casilla);height:var(--casilla);flex:0 0 auto;accent-color:var(--rojo)}
+html body label:has(>input[type=checkbox]),html body label:has(>input[type=radio]),html body .inv-casilla,html body .av-check{min-height:var(--tocable);display:flex;align-items:center;gap:.6rem;cursor:pointer}
+
+/* 3) Selector de periodo igual en todas partes */
+html body .per-botones,html body .doc-rango{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.5rem}
+html body .per-btn,html body .doc-rango .btn{min-width:0;padding-inline:.4rem;font-size:1rem;line-height:1.15}
+@media(min-width:760px){html body .per-botones,html body .doc-rango{grid-template-columns:repeat(6,minmax(0,1fr))}}
+html body .per-btn[aria-pressed=true],html body .doc-rango .btn[aria-pressed=true]{background:var(--rojo);border-color:var(--rojo);color:#fff}
+
+/* 4) Posición fija de los botones al pie de una ventana: lo principal siempre a la derecha */
+html body .modal-pie .btn{order:0}
+html body .modal-pie .btn.primario,html body .modal-pie .btn.peligro{order:2}
+html body .modal-pie .btn.suave{order:0}
