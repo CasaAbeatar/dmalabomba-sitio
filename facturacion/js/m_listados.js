@@ -178,7 +178,7 @@ export default {
         Math.abs(sumaDesglose - (r.ventas_netas || 0)) > 0.005 ? h('p.lis-aviso', `Los desgloses de abajo suman ${money(sumaDesglose)} y las ventas netas ${money(r.ventas_netas)}. La diferencia puede venir de una venta anulada en un periodo distinto al de la venta, o de documentos que no tienen una venta de caja detrás. Las devoluciones parciales y las notas de débito por monto ya están incluidas en los desgloses.`) : null,
       ].filter(Boolean));
 
-      cuerpo.append(seccionDias(d), seccionHoras(d), seccionMedios(d), seccionServicio(d), seccionTarifas(d), seccionProductos(d));
+      cuerpo.append(...[seccionDias(d), seccionHoras(d), seccionMedios(d), seccionServicio(d), seccionTarifas(d), seccionProductos(d)].filter(Boolean)); // una sección sin datos devuelve null: append(null) escribiría la palabra «null» en la pantalla
       const extra = [seccionTurnos(d), seccionCajeros(d), rech.n > 0 ? seccionRechazados(rech) : null].filter(Boolean);
       if (extra.length) cuerpo.append(...extra);
       if (!est.demo) cuerpo.append(h('p.lis-pie', h('button.btn.suave.chico', { type: 'button', onclick: () => { est.demo = true; cargar(est.desde, est.hasta); } }, 'Ver un ejemplo con datos de muestra')));

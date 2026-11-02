@@ -18,6 +18,7 @@ export function crearFormularioApertura({ api, socId, terminal = 1, local = '', 
   const n = ++contador;
   const idLectura = 'apertura-lectura-' + n;
   let enviando = false;
+  let ceroConfirmado = false; // abrir con ₡0 pide un segundo toque; no dice nada del cierre anterior (el cierre es ciego)
 
   const fondo = h('input.campo.monto-grande', { type: 'text', inputmode: 'decimal', placeholder: '0', autocomplete: 'off', enterkeyhint: 'done',
     'aria-label': 'Efectivo con que abre la caja', 'aria-describedby': idLectura });
@@ -28,6 +29,7 @@ export function crearFormularioApertura({ api, socId, terminal = 1, local = '', 
   // Dice con palabras y en grande con cuánto se va a abrir, para que un cero de más o de menos se vea antes de tocar «Abrir caja»
   function mostrarLectura() {
     err.hidden = true;
+    ceroConfirmado = false; abrir.textContent = 'Abrir caja';
     const txt = fondo.value.trim();
     if (!txt) { lectura.textContent = 'Escriba cuánto efectivo hay en la caja al empezar. Si no hay efectivo, escriba 0.'; lectura.className = 'apertura-lectura'; return; }
     const v = leerNumero(txt);
@@ -45,6 +47,11 @@ export function crearFormularioApertura({ api, socId, terminal = 1, local = '', 
     const v = leerNumero(txt);
     if (!Number.isFinite(v) || v < 0) { fallo('Ese monto no es válido. Escriba solo números, por ejemplo 20000. Si no hay efectivo, escriba 0.'); return; }
     if (v > TOPE) { fallo('El monto es demasiado grande. El máximo es ' + money(TOPE) + '.'); return; }
+    if (v === 0 && !ceroConfirmado) {
+      ceroConfirmado = true; abrir.textContent = 'Sí, abrir con ₡0';
+      lectura.textContent = 'Va a abrir la caja con ₡0. Si hay billetes o monedas en la caja, cuéntelos y escriba el total. Si de verdad no hay efectivo, toque «Sí, abrir con ₡0».'; lectura.className = 'apertura-lectura mal';
+      return;
+    }
     enviando = true; // también mientras se espera la respuesta de la ventana de abajo: un segundo toque no abre otra
     abrir.disabled = true; abrir.setAttribute('aria-busy', 'true'); abrir.textContent = 'Abriendo la caja…';
     try {
@@ -58,7 +65,7 @@ export function crearFormularioApertura({ api, socId, terminal = 1, local = '', 
         ? 'No se pudo abrir la caja por la conexión. Revise internet y toque «Abrir caja» otra vez. Si la caja ya se había abierto, el sistema no abre otra.'
         : conPunto(textoError(e, 'No se pudo abrir la caja. Intente de nuevo; si sigue igual, avise a la persona encargada.')));
     } finally {
-      enviando = false; abrir.disabled = false; abrir.removeAttribute('aria-busy'); abrir.textContent = 'Abrir caja';
+      enviando = false; abrir.disabled = false; abrir.removeAttribute('aria-busy'); abrir.textContent = ceroConfirmado ? 'Sí, abrir con ₡0' : 'Abrir caja';
     }
   }
   abrir.addEventListener('click', hacer);
