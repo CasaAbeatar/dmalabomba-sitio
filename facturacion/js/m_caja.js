@@ -924,9 +924,6 @@ export default {
         i.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); i.blur(); } });
         i.addEventListener('focus', () => { llevarALaVista(i); if (i !== nota) setTimeout(() => { try { i.select(); } catch { /* sin selección */ } }, 0); }); // el número se reemplaza al escribir: 2 sobre «1» da 2, no 12
       });
-      const cambiarCant = (d) => { const v = r3(cantidad + d); if (v > 0) editar({ cantidad: v }); };
-      const menos = h('button.cant-paso', { type: 'button', disabled: cantidad <= 1, 'aria-label': 'Una menos de ' + l.descripcion, onclick: () => cambiarCant(-1) }, '−');
-      const mas = h('button.cant-paso', { type: 'button', 'aria-label': 'Una más de ' + l.descripcion, onclick: () => cambiarCant(1) }, '+');
       const tar = tarifaDeLinea(l);
       const nombreBase = prod && !prod.descripcion_libre ? (String(prod.nombre_venta || '').trim() || prod.nombre) : null; // lo que el catálogo manda al tiquete
       const detalleCambiado = !!prod && !prod.descripcion_libre && l.descripcion !== prod.nombre && l.descripcion !== nombreBase;
@@ -949,7 +946,7 @@ export default {
       const nombreBtn = h('button.linea-nombre', { type: 'button', 'aria-expanded': String(abierta), title: l.descripcion, 'aria-label': (abierta ? 'Cerrar las opciones de ' : 'Abrir las opciones de ') + l.descripcion, onclick: alternar }, corto);
       const quitar = h('button.linea-x', { type: 'button', 'aria-label': 'Quitar ' + l.descripcion + ' de la cuenta', title: 'Quitar de la cuenta', onclick: () => accion(async () => { cur = await api.lineaQuitar(l.id); lineasAbiertas.delete(l.id); repintar(); toast('Quitado: ' + l.descripcion); }) }, '×');
       return h('div.linea' + (editada ? '.editada' : '') + (detalleCambiado || tarifaCambiada ? '.personalizada' : '') + (abierta ? '.abierta' : ''), { 'data-linea': l.id },
-        nombreBtn, h('div.cant-ctl', menos, qty, mas), precio,
+        nombreBtn, qty, precio,
         h('div.linea-total', money(l.total_linea).replace(/,00$/, '')),
         quitar,
         marcas.length ? h('div.linea-sub', marcas) : null,
