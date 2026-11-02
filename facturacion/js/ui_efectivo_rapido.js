@@ -215,6 +215,7 @@ export function crearZonaEfectivo({ turnoId = null, alAbrirCaja, conPie = true, 
     if (enviando) return;
     cerrarTarjeta({ devolverFoco: false });
     abierta = tipo;
+    clearTimeout(timersOk[tipo]); cajas[tipo].ok.replaceChildren(); cajas[tipo].el.classList.remove('recien'); // el «Guardado» de la entrada anterior no se queda mientras se escribe otra
     const T = TIPOS[tipo];
     const n = ++contador;
     const idMsgMonto = 'efz-m-' + n, idMsgMotivo = 'efz-t-' + n;
