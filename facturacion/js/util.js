@@ -313,7 +313,7 @@ export function confirmar(texto, { si = 'Sí, continuar', no = 'No, volver', pel
 }
 
 // Pide un texto/número en una ventana. Devuelve string o null
-export function pedir({ titulo, etiqueta, valor = '', tipo = 'text', nota = '', boton = 'Aceptar', multilinea = false }) {
+export function pedir({ titulo, etiqueta, valor = '', tipo = 'text', nota = '', boton = 'Guardar', multilinea = false }) {
   return new Promise((ok) => {
     let hecho = false;
     const inp = multilinea ? h('textarea.campo', { rows: 3 }, valor) : h('input.campo', { type: tipo, value: valor, inputmode: tipo === 'number' ? 'decimal' : null });

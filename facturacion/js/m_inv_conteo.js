@@ -144,7 +144,7 @@ export async function abrirConteo(ctx, id, inicial = null) {
   }
 
   async function confirmar() {
-    if (sinGuardar()) return preguntar('Hay cantidades anotadas sin guardar. Guárdelas primero con «Guardar lo contado».', { si: 'Entendido', no: 'Volver' });
+    if (sinGuardar()) return preguntar('Hay cantidades anotadas sin guardar. Guárdelas primero con «Guardar lo contado».', { si: 'Cerrar', no: 'Seguir aquí' });
     const lineas = datos.lineas || [];
     const contadas = lineas.filter((l) => l.contado != null);
     const difs = contadas.filter((l) => Number(l.diferencia) !== 0);

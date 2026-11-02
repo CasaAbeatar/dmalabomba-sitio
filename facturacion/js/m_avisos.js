@@ -12,7 +12,7 @@ const lista = (x) => (Array.isArray(x) ? x.filter((i) => i && typeof i === 'obje
 
 export default {
   id: 'avisos',
-  titulo: 'Avisos',
+  titulo: 'Avisos de efectivo',
   async mount(root, app) {
     await cargarHoja('avisos.css');
     if (!app.admin) {

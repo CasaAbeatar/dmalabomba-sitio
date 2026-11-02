@@ -798,5 +798,5 @@ export function abrirAjustesImpresion() {
       h('p.fx-nota', 'En celular o tableta no hay forma de saltarse la ventanita: aparece la ventana de impresión del aparato y ahí se escoge la impresora.')));
 
   pintarEstadoAuto();
-  modal({ titulo: 'Ajustes de impresión', contenido, ancho: 680, botones: [{ texto: 'Listo', clase: 'primario', onclick: (c) => c() }] });
+  modal({ titulo: 'Ajustes de impresión', contenido, ancho: 680, botones: [{ texto: 'Cerrar', clase: 'primario', onclick: (c) => c() }] });
 }

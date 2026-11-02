@@ -61,14 +61,14 @@ export const MODULOS = [
   // Administración: su descripción sale de los módulos del grupo «admin» y su insignia es la primera que tenga alguno de ellos
   { id: 'admin', titulo: 'Administración', grupo: 'principal', ruta: 'admin', icono: 'ajustes', orden: 50, soloAdmin: true, pantalla: 'admin' },
   // Dentro de Administración
-  { id: 'productos', titulo: 'Productos', descripcion: 'Menú, precios, cajones de productos y CABYS', grupo: 'admin', ruta: 'admin/productos', icono: 'producto', orden: 10, soloAdmin: true, cargar: () => import('./m_productos.js') },
+  { id: 'productos', titulo: 'Productos', descripcion: 'Lo que se vende: nombres, precios y los botones de la caja', grupo: 'admin', ruta: 'admin/productos', icono: 'producto', orden: 10, soloAdmin: true, cargar: () => import('./m_productos.js') },
   { id: 'listados', titulo: 'Informes', descripcion: 'Ventas por hora y por día, por tarifa de IVA y por medio de pago', grupo: 'admin', ruta: 'admin/informes', icono: 'barras', orden: 20, soloAdmin: true, cargar: () => import('./m_listados.js') },
   { id: 'emitidas', alias: ['facturas-emitidas'], titulo: 'Facturas emitidas', descripcion: 'Buscar facturas y tiquetes de cualquier fecha y ver si Hacienda los aceptó', grupo: 'admin', ruta: 'admin/facturas-emitidas', icono: 'emitidas', orden: 25, soloAdmin: true, cargar: () => import('./m_facturas_emitidas.js') },
   { id: 'recepcion', titulo: 'Contable', descripcion: 'Facturas de proveedores y respuesta a Hacienda', grupo: 'admin', ruta: 'admin/contable', icono: 'libro', orden: 30, soloAdmin: true, insignia: insigniaContable, cargar: () => import('./m_recepcion.js') },
   { id: 'inventarios', titulo: 'Inventarios', descripcion: 'Bodega central y locales: lo que entra, lo que sale y lo que vence', grupo: 'admin', ruta: 'admin/inventarios', icono: 'bodega', orden: 35, soloAdmin: true, insignia: insigniaInventarios, cargar: () => import('./m_inventarios.js') },
-  { id: 'usuarios', titulo: 'Usuarios', descripcion: 'Usuarios, PIN y quién ingresó', grupo: 'admin', ruta: 'admin/usuarios', icono: 'usuario', orden: 40, soloAdmin: true, insignia: insigniaUsuarios, cargar: () => import('./m_usuarios.js') },
+  { id: 'usuarios', titulo: 'Usuarios', descripcion: 'Las personas que usan el sistema, su PIN y quién ingresó', grupo: 'admin', ruta: 'admin/usuarios', icono: 'usuario', orden: 40, soloAdmin: true, insignia: insigniaUsuarios, cargar: () => import('./m_usuarios.js') },
   { id: 'numeracion', titulo: 'Numeración', descripcion: 'En qué modo está el sistema, qué número sigue y qué falta para facturar de verdad', grupo: 'admin', ruta: 'admin/numeracion', icono: 'numeracion', orden: 45, soloAdmin: true, cargar: () => import('./m_numeracion.js') },
-  { id: 'avisos', titulo: 'Avisos', descripcion: 'Quién recibe los avisos de efectivo por WhatsApp y cómo van', grupo: 'admin', ruta: 'admin/avisos', icono: 'aviso', orden: 47, soloAdmin: true, cargar: () => import('./m_avisos.js') },
+  { id: 'avisos', titulo: 'Avisos de efectivo', descripcion: 'Quién recibe por WhatsApp el aviso cuando hay mucho efectivo en la caja, y si le llegó', grupo: 'admin', ruta: 'admin/avisos', icono: 'aviso', orden: 47, soloAdmin: true, cargar: () => import('./m_avisos.js') },
   { id: 'respaldos', titulo: 'Respaldos', descripcion: 'Estado de las copias de seguridad y de la última prueba', grupo: 'admin', ruta: 'admin/respaldos', icono: 'respaldo', orden: 50, soloAdmin: true, insignia: insigniaRespaldos, cargar: () => import('./m_respaldos.js') },
 ];
 

@@ -132,9 +132,9 @@ export default {
           h('div', h('h3', 'Por bodega o local'), porUbic.length ? barras(porUbic, 'ubicacion') : h('p.tenue', 'Todavía no hay existencias.')),
           h('div', h('h3', 'Por empresa de origen'), h('p.tenue.inv-chico', 'La empresa a cuyo nombre vino la factura de esa mercadería.'),
             porEmp.length ? barras(porEmp, 'sociedad_nombre', (f) => empresaChip(f.sociedad_nombre, (ctx.cat?.empresas || []).find((e) => e.id === f.sociedad_id)?.codigo)) : h('p.tenue', 'Todavía no hay existencias.')),
-          h('div', h('h3', 'Por rubro contable'), (v?.por_categoria || []).length ? barras((v.por_categoria || []).slice().sort((a, b) => Number(b.valor) - Number(a.valor)), 'categoria') : h('p.tenue', 'Todavía no hay existencias.')),
-          h('div', h('h3', 'Por bolsa de venta'), h('p.tenue.inv-chico', 'Solo agrupa los rubros para descontar por ventas.'),
-            (v?.por_grupo || []).length ? barras((v.por_grupo || []).map((g) => ({ valor: g.valor, nombre: GRUPOS[g.grupo] || 'Sin bolsa' })), 'nombre') : h('p.tenue', 'Todavía no hay existencias.'))),
+          h('div', h('h3', 'Por categoría'), (v?.por_categoria || []).length ? barras((v.por_categoria || []).slice().sort((a, b) => Number(b.valor) - Number(a.valor)), 'categoria') : h('p.tenue', 'Todavía no hay existencias.')),
+          h('div', h('h3', 'Por grupo de venta'), h('p.tenue.inv-chico', 'Solo agrupa las categorías para descontar por ventas.'),
+            (v?.por_grupo || []).length ? barras((v.por_grupo || []).map((g) => ({ valor: g.valor, nombre: GRUPOS[g.grupo] || 'Sin grupo' })), 'nombre') : h('p.tenue', 'Todavía no hay existencias.'))),
         porCabys(v));
     }
 
@@ -160,7 +160,7 @@ export default {
       const botones = h('div.inv-seg-grupo', { role: 'group', 'aria-label': 'Nivel del CABYS' }, NIVELES.map((x) => h('button.btn.inv-seg', { type: 'button', 'aria-pressed': String(x.n === nivel),
         onclick: (e) => { nivel = x.n; botones.querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed', String(b === e.currentTarget))); pintarNivel(); } }, x.t + ' (' + x.n + ' dígitos)')));
       pintarNivel();
-      return h('div.inv-cabys', h('h3', 'Por CABYS'), h('p.tenue.inv-chico', 'Los mismos artículos agrupados por los niveles del CABYS, para cuadrar con el IVA. Si un proveedor puso mal el código, el rubro de arriba es el que vale.'), botones, caja);
+      return h('div.inv-cabys', h('h3', 'Por CABYS'), h('p.tenue.inv-chico', 'Los mismos artículos agrupados por los niveles del CABYS, para cuadrar con el IVA. Si un proveedor puso mal el código, la categoría de arriba es la que vale.'), botones, caja);
     }
 
     // Después de cualquier cambio (recibir, sacar, contar) lo de hoy se vuelve a pedir, sin mover el foco

@@ -247,8 +247,11 @@ export async function abrirProductosProveedor(ctx, g, alCambiar) {
   let orden = null; // posición de cada producto: al volver de decidir uno, la lista no se reordena
   let filtroNivel = 'todos'; // el filtro puesto se conserva al volver
   const cuerpo = h('div.inv-productos', cargando('Leyendo las líneas de ' + plural(g.facturas.length, 'factura', 'facturas') + '…'));
-  ventana({ titulo: proveedorTxt(g.nombre) + ': por producto', volver: 'Por recibir', contenido: [cuerpo], alCerrar: () => { vivo = false; alCambiar?.(); } });
+  ventana({ titulo: proveedorTxt(g.nombre) + ': por producto', volver: 'la lista de facturas por recibir', contenido: [cuerpo], alCerrar: () => { vivo = false; alCambiar?.(); } });
   async function cargar() {
+    // Al volver de decidir un producto se conserva el lugar donde estaba la persona (además del orden y del filtro)
+    const scroller = cuerpo.closest('.modal-cuerpo'), yAntes = scroller ? scroller.scrollTop : 0;
+    const restaurarY = () => { if (scroller && yAntes) requestAnimationFrame(() => { scroller.scrollTop = yAntes; }); };
     poner(cuerpo, cargando('Leyendo las líneas de ' + plural(g.facturas.length, 'factura', 'facturas') + '…'));
     const facs = [];
     try {
@@ -350,7 +353,7 @@ export async function abrirProductosProveedor(ctx, g, alCambiar) {
       h('div.inv-prov-acciones', recibir),
       tabla,
       h('p.tenue.inv-chico', 'Cuando decide un producto nuevo y deja marcado «Recordarlo», las demás facturas de este proveedor lo toman igual y pasan a verde.'));
-    pintarResumen(); aplicarFiltro();
+    pintarResumen(); aplicarFiltro(); restaurarY();
   }
   await cargar();
 }
@@ -365,7 +368,7 @@ export async function abrirFactura(ctx, clave, { previa = null, recibirSugeridas
   let vivo = true;
   const cuerpo = h('div.inv-factura', cargando('Cargando la factura…'));
   const resultado = h('div.inv-resultado', { 'aria-live': 'polite' });
-  const mostrar = () => { if (!silencioso) return; silencioso = false; ventana({ titulo: 'Factura de proveedor', volver: 'Por recibir', contenido: [resultado, cuerpo], alCerrar: () => { vivo = false; } }); };
+  const mostrar = () => { if (!silencioso) return; silencioso = false; ventana({ titulo: 'Factura de proveedor', volver: 'la lista de facturas por recibir', contenido: [resultado, cuerpo], alCerrar: () => { vivo = false; } }); };
   if (!silencioso) { silencioso = true; mostrar(); }
   const recordados = new Map(); // línea -> sugerencia que trajo la lista (por si la consulta de la factura no la repite)
   (previa?.lineas || []).forEach((l) => recordados.set(l.linea, l.sugerencia));
@@ -422,7 +425,7 @@ export async function abrirFactura(ctx, clave, { previa = null, recibirSugeridas
     const nVerdes = () => formas.filter((x) => x.verde()).length;
     const marcarTodas = h('button.btn', { type: 'button', onclick: async () => { for (const x of formas.filter((y) => y.verde())) await x.marcarOCrear(); contar(); } }, 'Marcar las verdes');
     const resumenSem = h('p.tenue.inv-chico.inv-resumen-sem');
-    const pintarResumenSem = () => { const c = { verde: 0, ambar: 0, rojo: 0 }; formas.forEach((x) => { c[x.semaforo().nivel || 'rojo']++; }); resumenSem.textContent = c.verde + ' verdes (listas), ' + c.ambar + ' ámbar (revisar una por una), ' + c.rojo + ' rojas (falta algo o no tiene sentido).'; marcarTodas.disabled = !c.verde; marcarTodas.textContent = c.verde ? 'Marcar las ' + c.verde + ' verdes' : 'No hay líneas verdes'; };
+    const pintarResumenSem = () => { const c = { verde: 0, ambar: 0, rojo: 0 }; formas.forEach((x) => { c[x.semaforo().nivel || 'rojo']++; }); resumenSem.textContent = c.verde + ' verdes (listas, ya marcadas para recibir; desmarque la que no quiera), ' + c.ambar + ' ámbar (revisar una por una), ' + c.rojo + ' rojas (falta algo o no tiene sentido).'; const faltan = formas.filter((x) => x.verde() && !x.marcada()).length; marcarTodas.hidden = !faltan; marcarTodas.textContent = 'Volver a marcar ' + (faltan === 1 ? 'la línea verde' : 'las ' + faltan + ' líneas verdes'); };
     formas.forEach((x) => x.alCambiar(pintarResumenSem));
     const ignorarToda = h('button.btn', { type: 'button', onclick: () => pedirIgnorar(ctx, f, null, () => cargar()) }, 'Toda la factura no es de inventario');
     const contableAqui = f.sociedad_id && f.sociedad_id === ctx.app.socId;
@@ -441,7 +444,7 @@ export async function abrirFactura(ctx, clave, { previa = null, recibirSugeridas
         ? h('button.btn', { type: 'button', onclick: () => ctx.app.ir('recepcion', { clave: f.clave, buscar: numFactura(f.consecutivo) }) }, 'Ir a Contable (factura N.° ' + numFactura(f.consecutivo) + ')')
         : h('p.tenue.inv-chico', 'Esta factura es de ' + (f.sociedad_nombre || 'la otra empresa') + ': en Contable se responde desde una sesión de esa empresa.')),
       pend.length ? h('section.inv-grupo', h('h3', 'Líneas por recibir', h('span.inv-cuenta', String(pend.length))),
-        puede ? h('p.tenue.inv-chico', 'Toque la bolsa de cada línea. Lo que no es de inventario (costos, servicios) va en «No es de inventario».') : null,
+        puede ? h('p.tenue.inv-chico', 'Toque el grupo de cada línea. Lo que no es de inventario (costos, servicios) va en «No es de inventario».') : null,
         puede ? resumenSem : null,
         h('div.inv-lineas-acciones', puede ? marcarTodas : null, ignorarToda),
         h('div.inv-lineas', formas.map((x) => x.el)),
@@ -453,6 +456,8 @@ export async function abrirFactura(ctx, clave, { previa = null, recibirSugeridas
       (d.notas_proveedor || []).length ? h('section.inv-grupo', h('h3', 'Notas del proveedor sobre esta factura'),
         h('ul.inv-datos-lista', d.notas_proveedor.map((n) => h('li', h('span', tipoDocTxt(n.tipo) + ' N.° ' + numFactura(n.consecutivo) + ' del ' + dma(n.fecha)), h('strong', ({ por_revisar: 'Por revisar', devuelta: 'Mercadería devuelta', ignorada: 'No afecta el inventario' })[n.estado] || n.estado || '')))),
         h('button.btn', { type: 'button', onclick: () => ctx.abrir('notas') }, 'Abrir Notas de proveedor')) : null);
+    // Decisión única: las líneas verdes ya vienen marcadas; la persona solo desmarca lo que no quiera y toca «Recibir» (autoRecibir marca por su cuenta)
+    if (puede && !autoRecibir) formas.forEach((x) => x.premarcar());
     contar(); pintarResumenSem();
     // «Recibir todas las líneas» desde la lista: se marcan las que traen rubro sugerido y, si todo está en orden, se reciben; si algo falla se queda la ventana abierta para revisarlo
     if (autoRecibir && !puede) { autoRecibir = false; if (silencioso) { silencioso = false; vivo = false; toastMal('La factura de ' + proveedorTxt(f.proveedor_nombre) + ' no se puede recibir ahora.'); } alFin?.(); }
@@ -482,7 +487,7 @@ export async function abrirFactura(ctx, clave, { previa = null, recibirSugeridas
     if (!puede) {
       const el = h('article.inv-linea.bloqueada', { 'data-linea': l.linea }, h('div.inv-linea-cab', descLinea(l)),
         h('div.inv-linea-pie', h('button.btn', { type: 'button', onclick: () => pedirIgnorar(ctx, f, [l.linea], () => cargar()) }, 'No es de inventario')));
-      return { el, semaforo: () => ({ nivel: 'rojo' }), verde: () => false, sugerida: () => false, marcada: () => false, marcarSiTiene() {}, marcarOCrear: async () => {}, alCambiar() {}, problema: () => '', enfocarProblema() {}, datos: () => null };
+      return { el, semaforo: () => ({ nivel: 'rojo' }), verde: () => false, sugerida: () => false, marcada: () => false, marcarSiTiene() {}, premarcar() {}, marcarOCrear: async () => {}, alCambiar() {}, problema: () => '', enfocarProblema() {}, datos: () => null };
     }
     const sug = l.sugerencia || recordados.get(l.linea) || {};
     const avisarCambio = [];
@@ -495,15 +500,15 @@ export async function abrirFactura(ctx, clave, { previa = null, recibirSugeridas
     const nombreArt = h('strong.inv-art-nombre');
     const btnArt = h('button.btn', { type: 'button', onclick: () => escogerArticulo() }, 'Escoger artículo');
     // Rubro (de él salen la bolsa, dónde se guarda y cuánto dura) y nombre del artículo que se crea solo al marcar la línea
-    const rubro = h('select.campo', { 'aria-label': 'Rubro de la línea ' + l.linea }, h('option', { value: '' }, 'Escoja el rubro…'),
+    const rubro = h('select.campo', { 'aria-label': 'Grupo de la línea ' + l.linea }, h('option', { value: '' }, 'Escoja la categoría…'),
       ...(cat.categorias || []).filter((c) => c.activo !== false).map((c) => h('option', { value: c.id }, c.nombre)));
     rubro.value = (art && art.categoria_id) || sug.categoria_id || '';
     const nombreNuevo = h('input.campo', { type: 'text', maxlength: 120, autocomplete: 'off', 'aria-label': 'Nombre del artículo de la línea ' + l.linea, value: (sug.articulo || l.descripcion || '').slice(0, 120) });
     // Lo que la persona decide es el rubro, y de él sale la bolsa (comida preparada, unitario o suministro). El nombre interno del artículo se toma de la factura y solo se cambia en «Detalles».
     const bolsaEl = h('span.inv-bolsa-dice');
-    const pintarBolsa = () => { const c = (cat.categorias || []).find((x) => x.id === rubro.value); bolsaEl.textContent = c ? 'Va a la bolsa: ' + (GRUPOS[c.grupo] || 'sin bolsa') + (c.grupo === 'unitario' ? '' : ' (se lleva en colones)') : ''; filaNombre.hidden = !!art || !c || c.grupo !== 'unitario'; el.classList.toggle('por-valor', !!c && c.grupo !== 'unitario'); };
+    const pintarBolsa = () => { const c = (cat.categorias || []).find((x) => x.id === rubro.value); bolsaEl.textContent = c ? 'Va al grupo: ' + (GRUPOS[c.grupo] || 'sin grupo') + (c.grupo === 'unitario' ? '' : ' (se lleva en colones)') : ''; filaNombre.hidden = !!art || !c || c.grupo !== 'unitario'; el.classList.toggle('por-valor', !!c && c.grupo !== 'unitario'); };
     rubro.addEventListener('change', () => { errorRubro.textContent = ''; if (art && art.categoria_id !== rubro.value) { art = null; chk.checked = false; el.classList.remove('marcada'); pintarArticulo(true); rubro.value = rubro.value; cambio(); } pintarBolsa(); pintarBotones(); });
-    const filaRubro = h('div.inv-rubro-fila', h('label.etq', h('span', 'Rubro'), rubro), bolsaEl);
+    const filaRubro = h('div.inv-rubro-fila', h('label.etq', h('span', 'Categoría'), rubro), bolsaEl);
     const filaNombre = h('label.etq.inv-c-nombre', h('span', 'Nombre interno del artículo (sale de la factura; cámbielo solo si hace falta)'), nombreNuevo);
     const errorRubro = h('small.inv-eco.mal');
     const factor = h('input.campo.inv-num', { type: 'text', inputmode: 'decimal', autocomplete: 'off', 'aria-label': 'Cuántas unidades del artículo trae cada unidad de la factura' });
@@ -527,22 +532,22 @@ export async function abrirFactura(ctx, clave, { previa = null, recibirSugeridas
     // Dos decisiones por línea, las dos ya sugeridas: el rubro (por CABYS o memoria) y la categoría (la bolsa a la que pertenece ese rubro)
     const grupoDeRubro = (id) => (cat.categorias || []).find((x) => x.id === id)?.grupo || '';
     let bolsa = grupoDeRubro(rubro.value);
-    const selCat = h('select.campo', { 'aria-label': 'Categoría de la línea ' + l.linea }, ...['comida_preparada', 'unitario', 'suministro'].map((g) => h('option', { value: g }, GRUPOS[g])));
-    const llenarRubros = (g) => { const v = rubro.value; rubro.replaceChildren(h('option', { value: '' }, 'Escoja el rubro…'), ...(cat.categorias || []).filter((c) => c.activo !== false && c.grupo === g).map((c) => h('option', { value: c.id }, c.nombre))); rubro.value = grupoDeRubro(v) === g ? v : ''; if (!rubro.value) { const op = [...rubro.options].filter((o) => o.value); const sg = sug.categoria_id && op.find((o) => o.value === sug.categoria_id); rubro.value = sg ? sg.value : op[0]?.value || ''; } };
+    const selCat = h('select.campo', { 'aria-label': 'Grupo de la línea ' + l.linea }, ...['comida_preparada', 'unitario', 'suministro'].map((g) => h('option', { value: g }, GRUPOS[g])));
+    const llenarRubros = (g) => { const v = rubro.value; rubro.replaceChildren(h('option', { value: '' }, 'Escoja la categoría…'), ...(cat.categorias || []).filter((c) => c.activo !== false && c.grupo === g).map((c) => h('option', { value: c.id }, c.nombre))); rubro.value = grupoDeRubro(v) === g ? v : ''; if (!rubro.value) { const op = [...rubro.options].filter((o) => o.value); const sg = sug.categoria_id && op.find((o) => o.value === sug.categoria_id); rubro.value = sg ? sg.value : op[0]?.value || ''; } };
     const pintarBotones = () => { bolsa = grupoDeRubro(rubro.value) || bolsa; selCat.value = bolsa || ''; el.dataset.bolsa = bolsa; if (typeof buscar !== 'undefined') buscar.value = (cat.categorias || []).find((x) => x.id === rubro.value)?.nombre || ''; };
     selCat.addEventListener('change', () => { bolsa = selCat.value; errorRubro.textContent = ''; if (art && grupoDe(cat, art) !== bolsa) { art = null; pintarArticulo(true); } llenarRubros(bolsa); pintarBolsa(); pintarBotones(); });
-    filaRubro.append(h('label.etq', h('span', 'Categoría'), selCat));
+    filaRubro.append(h('label.etq', h('span', 'Grupo'), selCat));
     // Buscador del rubro: se escribe parte del nombre (ej. «snack») y sale la lista de todos los rubros; al escoger uno, la categoría se ajusta sola
     const idLista = 'rubros-' + String(f.clave).slice(-8) + '-' + l.linea;
     const datos = h('datalist', { id: idLista }, ...(cat.categorias || []).filter((c) => c.activo !== false).map((c) => h('option', { value: c.nombre, label: GRUPOS[c.grupo] || '' })));
-    const buscar = h('input.campo.inv-buscar-rubro', { type: 'text', list: idLista, autocomplete: 'off', placeholder: 'Escriba para buscar el rubro…', 'aria-label': 'Buscar el rubro de la línea ' + l.linea, onfocus: (e) => { e.target.dataset.prev = e.target.value; e.target.placeholder = e.target.value || 'Escriba para buscar el rubro…'; e.target.value = ''; }, onblur: (e) => { if (!e.target.value.trim()) e.target.value = nombreRubro(); } });
+    const buscar = h('input.campo.inv-buscar-rubro', { type: 'text', list: idLista, autocomplete: 'off', placeholder: 'Escriba para buscar la categoría…', 'aria-label': 'Buscar la categoría de la línea ' + l.linea, onfocus: (e) => { e.target.dataset.prev = e.target.value; e.target.placeholder = e.target.value || 'Escriba para buscar la categoría…'; e.target.value = ''; }, onblur: (e) => { if (!e.target.value.trim()) e.target.value = nombreRubro(); } });
     const nombreRubro = () => (cat.categorias || []).find((x) => x.id === rubro.value)?.nombre || '';
     buscar.addEventListener('change', () => {
       const t = norm(buscar.value);
       if (!t) { buscar.value = nombreRubro(); return; }
       const cs = (cat.categorias || []).filter((c) => c.activo !== false);
       const c = cs.find((x) => norm(x.nombre) === t) || (cs.filter((x) => norm(x.nombre).includes(t)).length === 1 ? cs.find((x) => norm(x.nombre).includes(t)) : null);
-      if (!c) { errorRubro.textContent = 'No hay un rubro con ese nombre: escoja uno de la lista.'; return; }
+      if (!c) { errorRubro.textContent = 'No hay una categoría con ese nombre: escoja una de la lista.'; return; }
       errorRubro.textContent = ''; bolsa = c.grupo; llenarRubros(c.grupo); rubro.value = c.id; rubro.dispatchEvent(new Event('change'));
     });
     rubro.hidden = true;
@@ -568,8 +573,8 @@ export async function abrirFactura(ctx, clave, { previa = null, recibirSugeridas
       const fv = leerFactor();
       const rojo = (razon, bloquea) => ({ nivel: 'rojo', razon, bloquea: !!bloquea });
       if (sug.no_inventario) return rojo('Parece que no es de inventario (' + (sug.fuente === 'memoria' ? 'así se marcó la vez pasada' : sug.fuente === 'servicio' ? 'parece un servicio' : 'por su CABYS') + '). Si no lo es, toque «No es de inventario».');
-      if (!art && !rubro.value) return rojo('Falta escoger el rubro.');
-      if (!art) return { nivel: 'ambar', razon: 'No hay un artículo igual todavía: al marcarla se crea uno nuevo en el rubro «' + (nombreRubro() || 'escogido') + '». Mire si no existe ya uno parecido.' };
+      if (!art && !rubro.value) return rojo('Falta escoger la categoría.');
+      if (!art) return { nivel: 'ambar', razon: 'No hay un artículo igual todavía: al marcarla se crea uno nuevo en la categoría «' + (nombreRubro() || 'escogido') + '». Mire si no existe ya uno parecido.' };
       if (!Number.isFinite(fv) || fv <= 0) return rojo('Revise la conversión: debe ser mayor que cero.');
       const rev = enColones() ? { aviso: '' } : revisarConversion({ descripcion: l.descripcion, subtotal: l.subtotal_crc, cantidad: l.cantidad, factorActual: fv }, (n) => money(n));
       if (rev.aviso) return rojo('El precio por unidad no tiene sentido con esta conversión. ' + rev.aviso, true);
@@ -656,7 +661,7 @@ export async function abrirFactura(ctx, clave, { previa = null, recibirSugeridas
       const g = grupoDe(cat, art);
       el.classList.toggle('inv-ver-ubic', !ubic.value);
       const donde = ubic.value ? (ubic.selectedOptions[0]?.textContent || '') : '';
-      resumen.textContent = !art ? '' : enColones() ? 'Entran ' + money(valorLinea()) + ' sin IVA a la bolsa ' + (GRUPOS[g] || '') + (donde ? ' · se guarda en ' + donde : '') + ' (referencia de la factura: ' + num(l.cantidad, 3) + ' ' + uFac(l) + ')' : 'Bolsa: ' + (GRUPOS[g] || 'sin bolsa') + (donde ? ' · se guarda en ' + donde : '') + (noVence.checked ? ' · no vence' : vence.value ? ' · vence el ' + dma(vence.value) : '');
+      resumen.textContent = !art ? '' : enColones() ? 'Entran ' + money(valorLinea()) + ' sin IVA al grupo ' + (GRUPOS[g] || '') + (donde ? ' · se guarda en ' + donde : '') + ' (referencia de la factura: ' + num(l.cantidad, 3) + ' ' + uFac(l) + ')' : 'Grupo: ' + (GRUPOS[g] || 'sin grupo') + (donde ? ' · se guarda en ' + donde : '') + (noVence.checked ? ' · no vence' : vence.value ? ' · vence el ' + dma(vence.value) : '');
     }
     function ubicacionPorOmision(a) {
       if (!a) return '';
@@ -734,7 +739,7 @@ export async function abrirFactura(ctx, clave, { previa = null, recibirSugeridas
     // Sin artículo todavía: se crea con el nombre y el rubro de esta línea (o se usa el que ya tenga ese nombre) y se llenan solos la bolsa, dónde se guarda y el vencimiento
     async function asegurarArticulo() {
       if (art) return true;
-      if (!rubro.value) { errorRubro.textContent = 'Escoja el rubro de la línea ' + l.linea + ' para poder recibirla.'; rubro.focus(); return false; }
+      if (!rubro.value) { errorRubro.textContent = 'Escoja la categoría de la línea ' + l.linea + ' para poder recibirla.'; rubro.focus(); return false; }
       const nombre = nombreNuevo.value.trim();
       const crPre = (cat.categorias || []).find((x) => x.id === rubro.value);
       if ((!crPre || crPre.grupo === 'unitario') && nombre.length < 2) { errorRubro.textContent = 'Escriba el nombre del artículo (al menos 2 letras).'; nombreNuevo.focus(); return false; }
@@ -795,6 +800,8 @@ export async function abrirFactura(ctx, clave, { previa = null, recibirSugeridas
       sugerida: () => !!rubro.value && !sug.no_inventario && sug.fuente !== 'servicio' && !!(sug.categoria_id || art),
       marcada: () => chk.checked,
       marcarSiTiene: () => { if (art) { chk.checked = true; el.classList.add('marcada'); } },
+      // Decisión única (lote 4): una línea verde ya viene marcada para recibirse. Solo si la persona no la tocó antes (si la desmarcó, queda desmarcada). No escribe nada en la base: recibir sigue siendo el botón de abajo.
+      premarcar: () => { if (sem.nivel === 'verde' && art && !memoria.has(l.linea) && !chk.checked) { chk.checked = true; el.classList.add('marcada'); pintarBotones(); cambio(); } },
       marcarOCrear: async () => { if (art || rubro.value) { if (await asegurarArticulo()) { chk.checked = true; el.classList.add('marcada'); pintarBotones(); } } },
       alCambiar: (fn) => avisarCambio.push(fn),
       problema() {

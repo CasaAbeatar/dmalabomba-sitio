@@ -145,7 +145,7 @@ function avisoCobroSinCaja(comp, app, aviso) {
       h('div.botones',
         h('button.btn.primario.grande', { type: 'button', onclick: () => imprimir(aj.formato === 'carta' ? 'carta' : 'tiquete') }, aj.formato === 'carta' ? 'Imprimir factura carta' : 'Imprimir tiquete'),
         h('button.btn', { type: 'button', onclick: () => app.ir('anular', comp.id ? { comprobante: String(comp.id) } : null) }, 'Ver en «Anular y reimprimir»'))),
-    botones: [{ texto: 'Listo', clase: 'primario', onclick: (c) => c() }] });
+    botones: [{ texto: 'Cerrar', clase: 'primario', onclick: (c) => c() }] });
   if (aj.auto) imprimir(aj.formato === 'carta' ? 'carta' : 'tiquete');
 }
 
@@ -1768,7 +1768,7 @@ export default {
       const a = avisoApertura; avisoApertura = null;
       if (!a || !barraAviso) return;
       if (a.ok) { toast(a.texto, 'ok', 8000); return; }
-      const cerrar = h('button.btn', { type: 'button', onclick: () => { n.remove(); requestAnimationFrame(midePegajosos); } }, 'Entendido');
+      const cerrar = h('button.btn', { type: 'button', onclick: () => { n.remove(); requestAnimationFrame(midePegajosos); } }, 'Cerrar');
       const n = h('div.aviso-red', { role: 'alert' }, h('div.aviso-red-txt', h('strong', 'No se pudo abrir la cuenta de la corrección. '), a.texto), h('div.fila', cerrar));
       barraAviso.prepend(n);
       requestAnimationFrame(midePegajosos);

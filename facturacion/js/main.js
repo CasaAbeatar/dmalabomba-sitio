@@ -329,7 +329,7 @@ function pantallaCambioPin({ pedirActual = false, aviso = '' } = {}) {
     h('label.etq', 'PIN nuevo', nuevo),
     h('label.etq', 'Repita el PIN nuevo', otra),
     err, ok,
-    h('button.btn.suave', { type: 'button', onclick: () => cerrarSesion() }, 'Salir'))));
+    h('button.btn.suave', { type: 'button', onclick: () => cerrarSesion() }, 'Cerrar sesión'))));
   if (aviso) mostrar(aviso);
   (actual || nuevo).focus();
 }
@@ -526,7 +526,7 @@ function abrirAyudaSinRed() {
         'Si ya no está, abra «Anular y reimprimir» y busque la venta: si aparece con su número, sí se cobró.',
         'Si la cuenta dice que el cobro quedó en duda, toque «Revisar si se cobró» en esa cuenta antes de volver a cobrar.',
       ])),
-    botones: [{ texto: 'Entendido', clase: 'primario', onclick: (c) => c() }],
+    botones: [{ texto: 'Cerrar', clase: 'primario', onclick: (c) => c() }],
   });
 }
 
@@ -558,7 +558,7 @@ function mostrarSesionVencida() {
       h('h2#sv-tit', 'Su sesión venció'),
       h('p', 'Por seguridad hay que volver a entrar con su PIN. Lo que tiene en pantalla no se cierra, y las cuentas que ya estaban guardadas siguen ahí.'),
       h('button.btn.primario.grande', { type: 'button', onclick: paso2 }, 'Entrar de nuevo'),
-      h('button.btn.suave', { type: 'button', onclick: () => { cerrar(); cerrarSesion(); } }, 'Cerrar sesión y salir'),
+      h('button.btn.suave', { type: 'button', onclick: () => { cerrar(); cerrarSesion(); } }, 'Cerrar sesión'),
       h('small.tenue', 'Si cierra la sesión, lo que escribió y todavía no se guardó se pierde.')));
     cuerpo.querySelector('.primario').focus();
   };
@@ -600,7 +600,7 @@ function mostrarSesionVencida() {
       h('h2#sv-tit', 'Escriba su PIN'),
       h('p.sub.sv-quien', h('span', 'Empresa: ', h('strong', emp.nombre || 'Su empresa')), h('span', 'Usuario: ', h('strong', nombre)), h('span', 'El PIN son 4 números.')),
       h('label.etq', 'PIN', pad.campo), estado, err, botonEntrar,
-      h('button.btn.suave', { type: 'button', onclick: () => { pad.limpiar(); mostrarError(''); paso1(); } }, 'Atrás')));
+      h('button.btn.suave', { type: 'button', onclick: () => { pad.limpiar(); mostrarError(''); paso1(); } }, 'Volver')));
     pad.enfocar(); // el botón que se tocó desaparece: el foco pasa al campo del PIN y no se pierde en la página
   }
   // Escape y Tab se atienden ANTES que la ventana de debajo (escucha en la fase de captura de window): Escape no la cierra y Tab no le mueve el foco a algo que está inerte.
@@ -897,7 +897,7 @@ async function arrancar(reciente = false) {
       h('h1', esTransitorio(e) ? 'Sin conexión por un momento' : 'No se pudo abrir el sistema'),
       h('p.sub', (e && typeof e.tipo === 'string' && e.message ? conPunto(e.message) + ' ' : '') + 'No se cerró su sesión.'),
       h('button.btn.primario.grande', { type: 'button', onclick: (ev) => conBoton(ev.currentTarget, () => arrancar()) }, 'Intentar de nuevo'),
-      h('button.btn.suave', { type: 'button', onclick: async () => { olvidarPinDeEntrada(); await salir().catch(() => {}); pantallaLogin(); } }, 'Salir'))));
+      h('button.btn.suave', { type: 'button', onclick: async () => { olvidarPinDeEntrada(); await salir().catch(() => {}); pantallaLogin(); } }, 'Cerrar sesión'))));
     return;
   }
   // El PIN de entrada solo se guarda en memoria para el cambio obligatorio: si no hay cambio pendiente, se olvida de una vez

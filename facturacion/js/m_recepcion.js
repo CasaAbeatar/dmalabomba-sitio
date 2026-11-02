@@ -493,7 +493,7 @@ export default {
         : env === 'error' ? `Hacienda no recibió el intento anterior${previo}${det ? ': ' + det : '.'} Puede intentarlo de nuevo.`
         : env === 'pendiente' ? `Un intento anterior${previo} quedó sin confirmar: todavía no se sabe si llegó a Hacienda. Antes de enviar otra respuesta, el sistema le pregunta a Hacienda por el anterior.` : '';
       const btnRevisar = env === 'pendiente' || env === 'error' ? h('button.btn', { type: 'button', onclick: tocable(() => conBoton(btnRevisar, async () => { const r = await consultarRespuesta(clave); await pintarDetalle(cuerpo, clave, avisoConsulta(r)); if (vivo) cargar(); })) }, 'Revisar si el intento anterior llegó a Hacienda') : null;
-      const bA = h('button.btn.primario.grande', { type: 'button', onclick: tocable(() => abrirRespuesta('aceptar')) }, 'Aceptar');
+      const bA = h('button.btn.primario.grande', { type: 'button', onclick: tocable(() => abrirRespuesta('aceptar')) }, 'Aceptar y enviar a Hacienda');
       const bP = h('button.btn.grande', { type: 'button', onclick: tocable(() => abrirRespuesta('parcial')) }, 'Aceptar parcialmente');
       const bR = h('button.btn.peligro.grande', { type: 'button', onclick: tocable(() => abrirRespuesta('rechazar')) }, 'Rechazar');
       const acciones = [bA, bP, bR];
@@ -507,9 +507,10 @@ export default {
         btnRevisar,
         h('div.rec-acciones', ...acciones), enCamino,
         h('ul.rec-ayuda',
-          h('li', h('strong', 'Aceptar: '), 'la compra llegó completa y la factura está correcta. Después se elige cómo se usa el IVA: todo como crédito fiscal, solo una parte, bien de capital o gasto.'),
+          h('li', h('strong', 'Aceptar y enviar a Hacienda: '), 'la compra llegó completa y la factura está correcta. En la misma ventana se elige cómo se usa el IVA (todo como crédito fiscal, solo una parte, bien de capital o gasto), se ve lo que recibirá Hacienda y se envía con un solo botón.'),
           h('li', h('strong', 'Aceptar parcialmente: '), 'solo una parte de la compra está correcta (por ejemplo, llegaron menos productos o un precio está mal). Se escribe el monto que sí acepta y el motivo; el proveedor tiene que hacer una nota de crédito por el resto.'),
           h('li', h('strong', 'Rechazar: '), 'la compra no es de la empresa o la factura está mal en todo. Se escribe el motivo; el proveedor tiene que anularla con una nota de crédito.')),
+        h('p.tenue.rec-base-legal', 'Si no responde dentro de 8 días hábiles, contados desde el primer día del mes siguiente, se presume que aceptó la factura completa. Esa aceptación presunta solo rige entre contribuyentes y no da crédito fiscal ni gasto deducible: para usar el IVA hay que aceptarla aquí (Resolución MH-DGT-RES-0027-2024, artículos 10 y 11).'),
         err].filter(Boolean));
 
       /* ----- ventana de respuesta: 1) datos, 2) revisar lo que se enviará, 3) enviando, 4) resultado ----- */
@@ -546,6 +547,7 @@ export default {
           return h('fieldset.rec-cond', h('legend', '¿Cómo se usa el IVA de esta compra?'), grupo, pctCaja);
         }
         function pintarDatos() {
+          if (tipo === 'aceptar') return pintarAceptar();
           paso = 'datos';
           const aviso = h('div.error-caja', { hidden: true });
           const partes = [];
@@ -632,8 +634,40 @@ export default {
           function mal(t) { aviso.textContent = t; aviso.hidden = false; aviso.scrollIntoView({ block: 'nearest' }); }
           poner(cuerpoV, ...partes, aviso, pie(bNo, bRev));
         }
-        function pintarConfirmacion(r, motivo, extra) {
-          paso = 'revisar';
+        // Aceptar completa en UN solo paso (lote 4): la condición del IVA, lo que recibirá Hacienda ya calculado y un único botón «Aceptar y enviar a Hacienda».
+        // Se vuelve a calcular solo cuando cambia la condición o el porcentaje; el botón espera a que el cálculo esté listo.
+        function pintarAceptar() {
+          paso = 'datos';
+          const aviso = h('div.error-caja', { hidden: true, role: 'alert' });
+          const zona = h('div.rec-un-paso', { 'aria-live': 'polite' });
+          const bNo = h('button.btn', { type: 'button', onclick: () => m.cerrar() }, 'Cancelar');
+          const bSi = h('button.btn.primario.grande', { type: 'button', disabled: true }, 'Aceptar y enviar a Hacienda');
+          let seq = 0, listo = null, listoEn = 0, tim = null;
+          const mal = (t) => { aviso.textContent = t; aviso.hidden = false; };
+          const extraAhora = () => {
+            const extra = { condicion_impuesto: valores.condicion };
+            if (valores.condicion === '02') { const v = Number(valores.proporcion); if (valores.proporcion === '' || !(v > 0 && v < 100)) return null; extra.proporcion = v; }
+            return extra;
+          };
+          async function recalcular() {
+            const mia = ++seq; listo = null; bSi.disabled = true; aviso.hidden = true;
+            const extra = extraAhora();
+            if (!extra) { poner(zona, h('p.tenue', 'Escriba el porcentaje del IVA que sí se usa como crédito (un número entre 1 y 99) para ver lo que recibirá Hacienda.')); return; }
+            poner(zona, h('p.tenue', 'Calculando lo que recibirá Hacienda…'));
+            let r;
+            try { r = await calcularRespuesta(clave, 'aceptar', '', extra); } catch (ex) { if (mia === seq && !cerrada) { poner(zona); mal(mensajeAmable(ex, 'No se pudo calcular la respuesta. Intente de nuevo.')); } return; }
+            if (mia !== seq || cerrada) return;
+            const { c, bloques } = bloquesDe(r);
+            poner(zona, ...(r.se_puede_enviar ? [] : [h('div.lis-aviso.rec-bloqueo', h('strong', 'Todavía no se puede enviar. '), r.bloqueo || '')]), ...bloques);
+            if (r.se_puede_enviar) { listo = { c, extra }; listoEn = Date.now() + 800; bSi.disabled = false; }
+          }
+          bSi.addEventListener('click', () => { if (enviando || paso !== 'datos' || !listo || Date.now() < listoEn) return; enviar(listo.c, '', listo.extra, bSi, bNo); });
+          const alCambiar = () => { clearTimeout(tim); tim = setTimeout(recalcular, 350); };
+          poner(cuerpoV, h('p', `Va a avisar a Hacienda que recibió conforme ${quien}, por ${montoTexto(total, mon)}.`), radioCondiciones(alCambiar), zona, aviso, pie(bNo, bSi));
+          recalcular();
+        }
+        // Lo que recibirá Hacienda, en palabras y cifras (lo usan «Aceptar y enviar a Hacienda» y la revisión de Aceptar parcialmente y Rechazar)
+        function bloquesDe(r) {
           const c = r.calculo || {}, cm = c.moneda || mon;
           const nombreMensaje = { 1: 'Aceptación de la factura completa (mensaje 1)', 2: 'Aceptación parcial (mensaje 2)', 3: 'Rechazo de la factura (mensaje 3)' }[c.mensaje] || 'Respuesta';
           const filaC = (t, v, cls = '') => h('div.rec-conf-fila' + cls, h('span', t), h('strong.cifra', v));
@@ -663,6 +697,11 @@ export default {
               h('div.rec-conf-det', h('span', 'Texto que recibe Hacienda'), h('q', c.detalle || ''))),
             c.mensaje === 3 ? h('p.tenue', 'Con un rechazo no se acredita IVA ni se registra gasto con esta factura. El proveedor tiene que anularla con una nota de crédito.') : null,
             c.mensaje === 2 ? h('p.tenue', 'El IVA y el gasto se registran por la factura completa; cuando llegue la nota de crédito del proveedor y la acepte, su IVA se resta. Así queda el monto real de la compra.') : null];
+          return { c, cm, bloques };
+        }
+        function pintarConfirmacion(r, motivo, extra) {
+          paso = 'revisar';
+          const { c, bloques } = bloquesDe(r);
           if (!r.se_puede_enviar) {
             poner(cuerpoV, h('div.lis-aviso.rec-bloqueo', h('strong', 'Todavía no se puede enviar. '), r.bloqueo || ''), ...bloques, pie(h('button.btn', { type: 'button', onclick: () => pintarDatos() }, 'Volver a cambiar'), h('button.btn.primario', { type: 'button', onclick: () => m.cerrar() }, 'Entendido, cerrar')));
             return;
@@ -703,7 +742,7 @@ export default {
       const desc = r.enviado?.descripcion || c?.descripcion || '';
       if (r.estado === 'rechazado') return { mal: true, texto: 'Hacienda revisó su respuesta y no la aceptó' + (r.detalle ? ': ' + r.detalle : '.') + ' Tiene que enviar una respuesta nueva.', reintentar: true };
       if (r.estado === 'aceptado') return { texto: `Hacienda recibió y aceptó su respuesta: «${desc}».`, extra: r.reenvio ? 'Era la misma respuesta de un intento anterior; no se gastó otro número.' : '' };
-      if (r.estado === 'enviado') return { texto: `Su respuesta llegó a Hacienda: «${desc}». Falta que Hacienda la confirme; vuelva a abrir esta factura en un momento para ver el resultado.` };
+      if (r.estado === 'enviado') return { texto: `Su respuesta llegó a Hacienda: «${desc}». Falta que Hacienda la confirme (tiene hasta 3 horas para validarla); vuelva a abrir esta factura en un momento para ver el resultado.` };
       return { mal: true, texto: r.error || 'Hacienda no respondió. Vuelva a intentar en un momento; no se perdió nada.', reintentar: true };
     }
     // Lo que dijo Hacienda al consultar (a): el rechazo no se esconde

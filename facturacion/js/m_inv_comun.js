@@ -137,7 +137,7 @@ export function ventana({ titulo, volver = 'Inventarios', contenido, alCerrar, c
   m.el.parentElement.classList.add('inv-fondo');
   m.el.classList.add('inv-ventana');
   const b = m.el.querySelector('.modal-tit .cerrar');
-  if (b) { b.textContent = '‹ ' + volver; b.setAttribute('aria-label', 'Volver a ' + volver); b.classList.add('inv-volver'); }
+  if (b) { b.textContent = '‹ Volver a ' + volver; b.setAttribute('aria-label', 'Volver a ' + volver); b.classList.add('inv-volver'); }
   // En celular o tableta la ventana no abre con el cursor en un campo (el teclado taparía la pantalla sin que se pida): el foco queda en «‹ Volver»
   if (window.matchMedia?.('(pointer:coarse)').matches && /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName || '')) b?.focus({ preventScroll: true });
   return { ...m, cuerpo };

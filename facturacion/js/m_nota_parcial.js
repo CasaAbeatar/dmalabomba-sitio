@@ -334,7 +334,7 @@ function avisoPersistente(texto, { boton, alBoton } = {}) {
   let c = document.getElementById('np-avisos');
   if (!c) { c = h('div#np-avisos'); document.body.append(c); }
   const a = h('div.np-aviso-pend', { role: 'alert' }, h('p', texto),
-    h('div.np-aviso-botones', boton ? h('button.btn', { type: 'button', onclick: () => alBoton?.() }, boton) : null, h('button.btn.primario', { type: 'button', onclick: () => a.remove() }, 'Entendido')));
+    h('div.np-aviso-botones', boton ? h('button.btn', { type: 'button', onclick: () => alBoton?.() }, boton) : null, h('button.btn.primario', { type: 'button', onclick: () => a.remove() }, 'Cerrar')));
   c.append(a);
   return a;
 }
@@ -499,7 +499,7 @@ function abrir(app, d, clase, { alTerminar, alVerNota } = {}) {
       h('p.np-previo-estado', { role: 'status' }, S.previoTexto || 'Comprobando si quedó hecha…')));
     pie.replaceChildren(...(S.previoAjena
       ? [h('button.btn.primario.grande', { type: 'button', 'data-previo-salir': '1', onclick: () => m.cerrar() }, 'Entendido, voy a revisar en Documentos')]
-      : [botonVolver('Salir'), h('button.btn.primario.grande', { type: 'button', 'data-previo': '1', disabled: S.previoOcupado, onclick: () => revisionPrevia() }, 'Revisar otra vez')]));
+      : [botonVolver('Volver'), h('button.btn.primario.grande', { type: 'button', 'data-previo': '1', disabled: S.previoOcupado, onclick: () => revisionPrevia() }, 'Revisar otra vez')]));
   }
   // Se comprueba con lo que se envió (reg), no con los saldos que se acaban de leer: esos pueden ser anteriores a que la base terminara de guardar
   async function revisionPrevia() {
@@ -840,7 +840,7 @@ function abrir(app, d, clase, { alTerminar, alVerNota } = {}) {
       if (S.enVuelo) return;
       // Sin saberse cómo quedó la nota no hay nada que cambiar: la salida es irse y revisar después, y eso se pregunta
       if (S.dudoso) {
-        const sale = await preguntar('Hay una nota que todavía no sabemos si quedó hecha. Si sale, podrá revisarlo al volver a abrir este documento.', { si: 'Salir', no: 'Seguir aquí' });
+        const sale = await preguntar('Hay una nota que todavía no sabemos si quedó hecha. Si sale, podrá revisarlo al volver a abrir este documento.', { si: 'Cerrar de todos modos', no: 'Seguir aquí' });
         if (sale && S.vivo) m.cerrar();
         return;
       }
