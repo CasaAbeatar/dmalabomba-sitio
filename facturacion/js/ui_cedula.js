@@ -62,16 +62,9 @@ export function tipoDetectado(d) {
   return '';
 }
 const LARGOS = { '01': [9, 9], '02': [10, 10], '03': [11, 12], '04': [10, 10] };
-// Tipos cuyo documento puede llevar letras (pasaportes y otros): 05 extranjero no domiciliado y 06 no contribuyente
-export const llevaLetras = (t) => t === '05' || t === '06';
-export const MAX_ID_LETRAS = 20;
-// El número como se guarda: en 05 y 06 letras y números (sin espacios, guiones ni signos; letras en mayúsculas, como hace la base), hasta 20.
-// En los demás tipos solo números; pero si la persona escribió letras se conservan (en mayúsculas) para avisarle en vez de borrarlas sin decir nada.
-export function limpiarNumeroId(s, tipo) {
-  const t = String(s ?? '').normalize('NFC');
-  if (llevaLetras(tipo) || /[A-Za-z]/.test(t)) return t.replace(/[^0-9A-Za-z]/g, '').toUpperCase().slice(0, MAX_ID_LETRAS);
-  return t.replace(/\D/g, '').slice(0, MAX_ID_LETRAS);
-}
+// Reglas puras de las identificaciones con letras (05, 06 y, apagada por ahora, la cédula jurídica alfanumérica): cedula_letras.js
+import { ajustesCedula, juridicaConLetras, llevaLetras, RE_JURIDICA_LETRAS, errorJuridicaLetras, MAX_ID_LETRAS, limpiarNumeroId } from './cedula_letras.js';
+export { ajustesCedula, juridicaConLetras, llevaLetras, RE_JURIDICA_LETRAS, errorJuridicaLetras, MAX_ID_LETRAS, limpiarNumeroId };
 const tieneLetras = (d) => /[A-Z]/.test(d);
 const MOTIVOS_RAPIDOS = ['Persona recién inscrita', 'Cliente de otro país', 'Hacienda no lo muestra en la consulta'];
 const MOTIVOS = {
@@ -141,12 +134,14 @@ export function crearCampoIdentificacion(opts = {}) {
   /* ---------- Reglas ---------- */
   function tipoActual() {
     if (r?.ok && /^0[1-4]$/.test(r.tipo || '')) return r.tipo;
-    return tipoManual || (tieneLetras(ident.value) ? '' : tipoDetectado(ident.value)); // con letras el largo no dice el tipo
+    return tipoManual || (tieneLetras(ident.value) ? (ajustesCedula.juridicaConLetras && RE_JURIDICA_LETRAS.test(ident.value) ? '02' : '') : tipoDetectado(ident.value)); // con letras el largo no dice el tipo (salvo la jurídica con letras, si está encendida)
   }
   // Problemas que se ven sin consultar a Hacienda. grave=false significa "todavía está escribiendo".
   function errorLocal() {
     const d = ident.value, n = d.length, t = tipoActual();
-    if (!n || llevaLetras(t)) return null;
+    if (!n) return null;
+    if (juridicaConLetras(t)) { const m = errorJuridicaLetras(d); return m ? { grave: tocado || n >= 10, titulo: 'Revise la cédula jurídica', detalle: m } : null; }
+    if (llevaLetras(t)) return null;
     if (tieneLetras(d)) return { grave: true, titulo: t ? TIPOS_ID[t] + ' lleva solo números' : 'Este número lleva letras',
       detalle: 'Una cédula física, una jurídica, un DIMEX y un NITE llevan solo números. Si es un pasaporte u otro documento con letras, toque «Cambiar tipo» y elija «'
         + TIPOS_ID['05'] + '» o «' + TIPOS_ID['06'] + '». Si fue un error al escribir, borre la letra.' };
