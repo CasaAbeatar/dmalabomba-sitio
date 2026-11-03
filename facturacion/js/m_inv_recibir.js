@@ -32,6 +32,7 @@ const DICCIONARIO = {
   confirmar: (s) => inv.diccionarioConfirmar(s.id),
   corregir: (s, significado) => inv.diccionarioCorregir(s.id, significado),
   rechazar: (s) => inv.diccionarioRechazar(s.id),
+  deshacer: (s) => inv.diccionarioDeshacer(s.id),
 };
 const siglasDe = (ia) => {
   if (!ia) return [];
@@ -808,7 +809,12 @@ export async function abrirFactura(ctx, clave, { previa = null, recibirSugeridas
       poner(siglaEl, ...ss.map((s) => {
         const msg = h('small.inv-eco'), editor = h('div.rc-sigla-ed', { hidden: true });
         const nuevo = h('input.campo', { type: 'text', maxlength: 120, 'aria-label': 'Qué significa ' + s.sigla, placeholder: 'Qué significa' });
-        const hecho = (t) => { msg.textContent = t; msg.className = 'inv-eco'; };
+        const hecho = (t) => {
+          msg.textContent = t; msg.className = 'inv-eco';
+          // «Deshacer» deja la sigla como estaba (pendiente, con el significado que propuso la IA)
+          const bD = h('button.btn.chico', { type: 'button', onclick: async () => { bD.disabled = true; try { const r = await DICCIONARIO.deshacer(s); s.confirmado = false; s.rechazada = false; if (r && r.significado) s.significado = r.significado; pintarSiglas(); } catch (e) { bD.disabled = false; msg.textContent = (e && e.message) || 'No se pudo deshacer.'; msg.className = 'inv-eco mal'; } } }, 'Deshacer');
+          msg.append(' ', bD);
+        };
         const bConf = h('button.btn.chico', { type: 'button', onclick: async () => { bConf.disabled = true; try { await DICCIONARIO.confirmar(s); hecho('Confirmada: «' + s.sigla + '» = ' + s.significado + '.'); s.confirmado = true; bCorr.hidden = bNo.hidden = true; bConf.hidden = true; } catch (e) { bConf.disabled = false; msg.textContent = (e && e.message) || 'No se pudo confirmar.'; msg.className = 'inv-eco mal'; } } }, 'Confirmar');
         const bGuardar = h('button.btn.chico.primario', { type: 'button', onclick: async () => { const t = nuevo.value.trim(); if (t.length < 2) { msg.textContent = 'Escriba qué significa (al menos 2 letras).'; msg.className = 'inv-eco mal'; return; } bGuardar.disabled = true; try { await DICCIONARIO.corregir(s, t); hecho('Corregida: «' + s.sigla + '» = ' + t + '.'); s.significado = t; s.confirmado = true; editor.hidden = true; bConf.hidden = bCorr.hidden = bNo.hidden = true; } catch (e) { bGuardar.disabled = false; msg.textContent = (e && e.message) || 'No se pudo corregir.'; msg.className = 'inv-eco mal'; } } }, 'Guardar el significado');
         editor.append(nuevo, bGuardar);

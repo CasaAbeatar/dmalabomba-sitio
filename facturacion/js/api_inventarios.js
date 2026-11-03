@@ -123,6 +123,7 @@ export const inv = {
   diccionarioConfirmar: (id) => escribir('fx_ia_diccionario_confirmar', { p_id: id }),
   diccionarioCorregir: (id, significado) => escribir('fx_ia_diccionario_corregir', { p_id: id, p_significado: significado }),
   diccionarioRechazar: (id) => escribir('fx_ia_diccionario_rechazar', { p_id: id }),
+  diccionarioDeshacer: (id) => escribir('fx_ia_diccionario_deshacer', { p_id: id }),
 };
 
 // Insignia del menú (main.js la pide con los avisos del encabezado, sin cargar el módulo). Si la función todavía no existe, no se vuelve a preguntar en 10 minutos.
