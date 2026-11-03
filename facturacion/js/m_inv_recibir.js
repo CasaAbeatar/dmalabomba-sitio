@@ -8,6 +8,7 @@
 // Una factura que Contable o Hacienda rechazaron no se puede recibir (puede_recibir = false): solo se puede marcar «No es de inventario».
 import { h, money, money0, num, fechaHora, horaCorta, debounce, campoBusqueda, sumaDias } from './util.js';
 import { inv, cant, dinero } from './api_inventarios.js';
+import { debeGuardarAlias } from './invclave.js';
 import { revisarConversion, unidadReal } from './inv_sentido.js';
 const uFac = (l) => unidadReal(l.cantidad, l.unidad).unidad; // «Unid» con decimales es peso: se muestra y se usa como kg
 import {
@@ -43,6 +44,8 @@ const CLASE_ESTADO = { aceptada: 'ok', parcial: 'espera', plazo_vencido: 'espera
 export const chipContable = (ec) => (ec ? h('span.chip.inv-contable' + (CLASE_ESTADO[ec.estado] ? '.' + CLASE_ESTADO[ec.estado] : ''), 'Contable: ' + (ec.texto || 'Sin dato')) : null);
 const FUENTES = {
   memoria: 'Lo mismo que se usó la vez pasada con este proveedor',
+  alias: 'Otro nombre que ya se le conoce a este artículo (alias guardado)',
+  nombre: 'Es el mismo nombre de un artículo del inventario (sin contar mayúsculas, tildes ni puntuación)',
   memoria_cabys: 'Con este proveedor y este CABYS se usó este artículo (revise la conversión)',
   articulo_cabys: 'Es el único artículo con este mismo CABYS',
   cabys: 'Por su CABYS',
@@ -56,8 +59,21 @@ const limpiaNombre = (n) => String(n || '').replace(/\s*\(en colones\)\s*/i, '')
 // Cantidad con su unidad; si la unidad es el colón es dinero y se escribe con ₡
 const cantR = (n, unidad) => (unidad === 'colon' ? money(n) : cantTxt(n, unidad));
 
+// Decidir un enlace de verdad guarda su alias (solo administración): el texto del proveedor queda como otra forma de nombrar ese artículo, para ese proveedor.
+// No se guarda alias si el texto solo difiere del nombre del artículo en mayúsculas, tildes, puntuación o espacios (eso es el mismo nombre, la base lo compara normalizado),
+// ni si el sistema ya lo conocía. Es un efecto secundario: si falla, la recepción ya quedó hecha y no se avisa como error.
+async function guardarAliases(ctx, f, infos) {
+  if (!ctx.esAdmin) return 0;
+  let n = 0;
+  for (const a of infos.filter((x) => x && debeGuardarAlias(x))) {
+    try { await inv.aliasGuardar({ descripcion: a.detalle, proveedor_cedula: f.proveedor_cedula || null, articulo_id: a.articuloId, factor: a.factor > 0 && a.factor !== 1 ? String(a.factor) : null, origen: 'decision', confirmado: true }); n++; }
+    catch { /* el alias es una ayuda para la próxima vez; nada que reintentar ahora */ }
+  }
+  return n;
+}
+
 /* ---------- Lector de presentación (empaque, peso, volumen) a partir del texto de la factura ---------- */
-// TODO(datos): el lector único de presentación será compartido con la base y la IA; mientras tanto esta es la lectura de la pantalla (solo para MOSTRAR; no decide nada).
+// Esta lectura es solo para MOSTRAR y no decide nada: la conversión y los factores los lee la base con fact.inv_leer_presentacion (la misma regla que usa la IA).
 // «GASEOSA LATA 355ML CAJA X24» -> { nombre: 'Gaseosa lata', texto: '355 mL · caja de 24' }
 const PEQUENAS = new Set(['de', 'la', 'el', 'en', 'con', 'sin', 'por', 'los', 'las', 'una', 'uno', 'al', 'del', 'para', 'y']);
 export function leerPresentacion(desc, unidadFactura = '') {
@@ -430,7 +446,9 @@ export async function abrirFactura(ctx, clave, { previa = null, recibirSugeridas
         if (faltan.length) { faltan[0].enfocarProblema(); throw new Error(faltan[0].problema() || 'No se pudo preparar una de las líneas seguras.'); }
         const mal = sel0.find((x) => x.problema());
         if (mal) { mal.enfocarProblema(); throw new Error(mal.problema()); }
-        return inv.recibir(sel0.map((x) => ({ ...x.datos(), recordar: recordar.checked })), idem);
+        const infos = sel0.map((x) => x.aliasInfo()), r = await inv.recibir(sel0.map((x) => ({ ...x.datos(), recordar: recordar.checked })), idem);
+        await guardarAliases(ctx, f, infos.map((i) => i && { ...i, recordar: recordar.checked }));
+        return r;
       },
       alFallar: (e) => { if (silencioso) { silencioso = false; vivo = false; toastMal('No se pudo recibir la factura de ' + proveedorTxt(f.proveedor_nombre) + ': ' + ((e && e.message) || 'intente de nuevo') + ' Toque «Revisar» en esa factura para verla.'); } },
       alTerminar: async (r, { repetida }) => {
@@ -506,7 +524,7 @@ export async function abrirFactura(ctx, clave, { previa = null, recibirSugeridas
       const zonaB = h('div.rc-zona');
       const { boton } = botonIgnorar(f, l, '', zonaB);
       const el = h('article.inv-linea.rc-lin.bloqueada', { 'data-linea': l.linea, role: 'listitem' }, h('div.rc-fila.rc-fila-simple', h('div.rc-c-leido', descLinea(l)), h('div.rc-c-acc', boton)), zonaB);
-      return { el, semaforo: () => ({ nivel: 'rojo' }), verde: () => false, segura: () => false, sugerida: () => false, porColones: () => false, tieneArticulo: () => false, preparar: async () => false, alCambiar() {}, problema: () => '', enfocarProblema() {}, datos: () => null };
+      return { el, semaforo: () => ({ nivel: 'rojo' }), verde: () => false, segura: () => false, sugerida: () => false, porColones: () => false, tieneArticulo: () => false, preparar: async () => false, alCambiar() {}, problema: () => '', enfocarProblema() {}, datos: () => null, aliasInfo: () => null };
     }
     const sug = l.sugerencia || recordados.get(l.linea) || {};
     const avisarCambio = [];
@@ -683,11 +701,14 @@ export async function abrirFactura(ctx, clave, { previa = null, recibirSugeridas
       celdaAcc);
     // Botones de acción: «Recibir esta línea» (una sola línea, una sola clave), «No es de inventario» (un toque) y «Cambiar» (abre la fila de una verde)
     const btnUna = h('button.btn.rc-recibir-una', { type: 'button' }, 'Recibir esta línea');
+    const aliasInfo = () => (art ? { detalle: l.descripcion, articuloNombre: art.nombre, articuloId: art.id, unidad: art.unidad, factor: Number(leerFactor()), sugerencia: sug } : null);
     const accUna = accionSegura({ boton: btnUna, zona, ocupado: 'Recibiendo…',
       hacer: async (idem) => {
         if (!(await asegurarArticulo())) throw new Error(errorRubro.textContent || 'Línea ' + l.linea + ': falta completar el rubro.');
         const p = problema(); if (p) { enfocarProblema(); throw new Error(p); }
-        return inv.recibir([{ ...datosLinea(), recordar: recordar.checked }], idem);
+        const info = aliasInfo(), r = await inv.recibir([{ ...datosLinea(), recordar: recordar.checked }], idem);
+        await guardarAliases(ctx, f, [{ ...info, recordar: recordar.checked }]);
+        return r;
       },
       alTerminar: async (r, { repetida }) => { mostrarResultado(r, repetida); ctx.articulos.olvidar(); await cargar(); } });
     btnUna.addEventListener('click', () => accUna.ejecutar());
@@ -960,6 +981,7 @@ export async function abrirFactura(ctx, clave, { previa = null, recibirSugeridas
       // Segura = lo que «Aceptar las líneas seguras» recibe: las verdes y la comida preparada o suministro con rubro sugerido (entran por su valor: no hay conversión que revisar)
       segura: () => sem.nivel === 'verde' || (sem.nivel === 'ambar' && !sug.no_inventario && !sem.bloquea && !!rubro.value && sug.fuente !== 'servicio' && !!(sug.categoria_id || art) && (grupoDeRubro(rubro.value) || (art && grupoDe(cat, art)) || '') !== 'unitario'),
       tieneArticulo: () => !!art,
+      aliasInfo,
       preparar: asegurarArticulo,
       alCambiar: (fn) => avisarCambio.push(fn),
       problema, enfocarProblema, datos: datosLinea,
