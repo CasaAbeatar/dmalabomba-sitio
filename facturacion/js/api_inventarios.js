@@ -102,6 +102,8 @@ export const inv = {
   recepcionDeshacer: (clave, linea, motivo, idem) => escribir('fx_inv_recepcion_deshacer', { p_clave: clave, p_linea: linea, p_motivo: motivo, p_idem: idem }),
   // Cualquier sesión: crea el artículo desde una línea de factura con solo el rubro (si ya existe uno con ese nombre, devuelve ese)
   articuloRapido: (nombre, categoria, cabys, unidad) => escribir('fx_inv_articulo_rapido', { p_nombre: nombre, p_categoria_id: categoria, p_cabys: cabys || null, p_unidad: unidad || null }),
+  // Administrador: agrega un producto al menú (Soda y Pollos, mismo código, precio abierto en ₡0 como el yogur) y devuelve el de la empresa pedida
+  productoCrear: (nombre, sociedad = null, cajon = '11') => escribir('fx_inv_producto_crear', { p_nombre: nombre, p_sociedad: sociedad, p_cajon_codigo: cajon }),
   // Administrador: el artículo que ya está enlazado a ese producto del menú, o uno nuevo con el nombre del producto, enlazado 1 a 1 (unitarios)
   productoArticulo: (producto, categoria, cabys, unidad) => escribir('fx_inv_producto_articulo', { p_producto: producto, p_categoria: categoria, p_cabys: cabys || null, p_unidad: unidad || null }),
   articuloGuardar: (p, idem) => escribir('fx_inv_articulo_guardar', { p, p_idem: idem }),

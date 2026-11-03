@@ -576,13 +576,25 @@ export async function abrirFactura(ctx, clave, { previa = null, recibirSugeridas
     // Mientras se escribe sale la lista de coincidencias para tocar una (nombre o parte del nombre, sin tildes ni mayúsculas)
     prodInput.addEventListener('input', async () => {
       prodEco.textContent = '';
-      const t = norm(prodInput.value);
+      const texto = prodInput.value.trim().replace(/\s+/g, ' ');
+      const t = norm(texto);
       if (t.length < 2) { prodRes.hidden = true; return; }
       const ps = (await cargarProductos()).filter((x) => norm(x.nombre).includes(t)).slice(0, 8);
-      if (!ps.length) { prodRes.hidden = true; return malProd('No hay un producto del menú con ese nombre. Pruebe con otra palabra.'); }
-      prodRes.replaceChildren(...ps.map((x) => h('button.btn.inv-prod-op', { type: 'button', role: 'option', onclick: () => emparentar(x) }, h('strong', x.nombre), h('small', (x.precio > 0 ? ' · ' + money(x.precio) + ' con IVA' : '') + (x.articulo ? ' · ya enlazado con «' + x.articulo + '»' : '')))));
+      const nombreNuevo2 = texto.charAt(0).toUpperCase() + texto.slice(1);
+      const agregar = h('button.btn.inv-prod-op.inv-prod-nuevo', { type: 'button', onclick: () => agregarProducto(nombreNuevo2) }, h('strong', '＋ Agregar «' + nombreNuevo2 + '» al menú'), h('small', ' · con precio pendiente, igual que el yogur; se agrega en Soda y en Pollos'));
+      prodRes.replaceChildren(...ps.map((x) => h('button.btn.inv-prod-op', { type: 'button', role: 'option', onclick: () => emparentar(x) }, h('strong', x.nombre), h('small', (x.precio > 0 ? ' · ' + money(x.precio) + ' con IVA' : ' · precio pendiente') + (x.articulo ? ' · ya enlazado con «' + x.articulo + '»' : '')))), agregar);
       prodRes.hidden = false;
     });
+    // El producto no está en el menú: se agrega en ese momento (cajón de gaseosas, tés y jugos, precio pendiente) y la línea se empareja con él
+    async function agregarProducto(nombre) {
+      prodRes.hidden = true; prodInput.disabled = true; prodEco.textContent = 'Agregando «' + nombre + '» al menú…'; prodEco.className = 'inv-eco';
+      try {
+        const nuevo = await inv.productoCrear(nombre, f.sociedad_id);
+        prodLista = null;
+        await emparentar({ id: nuevo.id, nombre });
+        if (nuevo.nuevo) prodEco.textContent = 'Se agregó «' + nombre + '» al menú (código ' + nuevo.codigo + ', precio pendiente: fíjelo en Productos) y la línea quedó emparentada con él.';
+      } catch (e) { malProd((e && e.message) || 'No se pudo agregar el producto. Intente de nuevo.'); prodInput.disabled = false; }
+    }
     // Buscador del rubro: se escribe parte del nombre (ej. «snack») y sale la lista de todos los rubros; al escoger uno, la categoría se ajusta sola
     const idLista = 'rubros-' + String(f.clave).slice(-8) + '-' + l.linea;
     const datos = h('datalist', { id: idLista }, ...(cat.categorias || []).filter((c) => c.activo !== false).map((c) => h('option', { value: c.nombre, label: GRUPOS[c.grupo] || '' })));

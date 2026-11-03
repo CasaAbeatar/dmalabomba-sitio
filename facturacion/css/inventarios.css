@@ -572,3 +572,4 @@ body:has(.inv-fondo) .cabecera:has(.cab-usuario.abierto){z-index:120}
 .inv-prod-fila .etq{display:flex;flex-direction:column;gap:.25rem}
 .inv-prod-res{display:flex;flex-direction:column;gap:.25rem;margin:.35rem 0}
 .inv-prod-op{text-align:left;min-height:48px;display:flex;flex-wrap:wrap;align-items:baseline;gap:.25rem}
+.inv-prod-nuevo{border-style:dashed}
