@@ -610,6 +610,7 @@ export async function abrirFactura(ctx, clave, { previa = null, recibirSugeridas
       const rojo = (razon, bloquea) => ({ nivel: 'rojo', razon, bloquea: !!bloquea });
       if (sug.no_inventario) return rojo('Parece que no es de inventario (' + (sug.fuente === 'memoria' ? 'así se marcó la vez pasada' : sug.fuente === 'servicio' ? 'parece un servicio' : 'por su CABYS') + '). Si no lo es, toque «No es de inventario».');
       if (!art && !rubro.value) return rojo('Falta escoger la categoría.');
+      if (!art && ia && ia.nivel === 'verde' && !sug.no_inventario) { const g0 = grupoDeRubro(rubro.value); if (g0 && g0 !== 'unitario') return { nivel: 'verde', razon: 'Entra por su valor en colones a «' + (nombreRubro() || 'la categoría') + '» (' + money(valorLinea()) + ' sin IVA). Claude la revisó: ' + ia.razon }; }
       if (!art) return { nivel: 'ambar', razon: 'No hay un artículo igual todavía: al marcarla se crea uno nuevo en la categoría «' + (nombreRubro() || 'escogido') + '». Mire si no existe ya uno parecido.' };
       if (!Number.isFinite(fv) || fv <= 0) return rojo('Revise la conversión: debe ser mayor que cero.');
       const rev = enColones() ? { aviso: '' } : revisarConversion({ descripcion: l.descripcion, subtotal: l.subtotal_crc, cantidad: l.cantidad, factorActual: fv }, (n) => money(n));
