@@ -218,7 +218,7 @@ export const api = {
   // Cierre: solo se cuenta el EFECTIVO. esperado = fondo + efectivo de ventas - salidas. Siempre deja cerrar; si no coincide queda discrepancia=true y diferencia_efectivo (contado - esperado).
   // El efectivo de ventas es lo que corresponde a cada venta (monto), nunca lo que entregó el cliente (recibido).
   turnoCerrar: (turno, c) => rpc('fx_turno_cerrar', { p_turno: turno, p_efectivo: c.efectivo, p_notas: c.notas ?? null, p_acepta_faltante: !!c.aceptaFaltante }),
-  // Cierre ciego: anota un conteo y devuelve solo { intento, faltante, recontar } (faltante vacío si no se le debe avisar; recontar=true si el conteo es menor o igual al piso: no coincide, sin monto y sin anotarse). Nunca devuelve cuánto debía haber. Es una escritura: no se repite sola.
+  // Cierre ciego: anota un conteo y devuelve solo { intento, recontar, puede_cerrar } (recontar=true si no coincide, igual si falta que si sobra; puede_cerrar=false si es menor o igual al piso: sin monto, sin anotarse y sin dejar cerrar). Nunca devuelve cuánto debía haber. Es una escritura: no se repite sola.
   turnoConteo: (turno, efectivo) => rpc('fx_turno_conteo', { p_turno: turno, p_efectivo: efectivo }),
   // Solo administración: cierres con su informe (esperado, diferencia, conteos, envío por correo y WhatsApp) y el texto completo de uno.
   turnoInformes: (soc, limite = 60) => rpc('fx_turno_informes', { p_soc: soc, p_limite: limite }),

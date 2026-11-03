@@ -1,5 +1,5 @@
 // Tiquetes de la caja para la impresora POS: apertura, cierre (copia de la cajera) y vales de entrada y salida de efectivo.
-// Regla del cierre ciego: nada de lo que sale aquí dice cuánto debía haber en la caja ni si sobró dinero. Solo lo que la persona escribió y, si faltó, el faltante que ya se le avisó.
+// Regla del cierre ciego: nada de lo que sale aquí dice cuánto debía haber en la caja, ni si faltó o sobró dinero. Solo lo que la persona escribió.
 // El informe completo (esperado, diferencia, sobrante) es solo para administración y no sale por esta vía.
 // Todos son comprobantes internos: no son facturas electrónicas.
 import { h, money, fechaHora, nombreLocal, toast } from './util.js';
@@ -84,12 +84,11 @@ export function nodoVale(soc, t, { tipo, monto, motivo, quien, cuando, id }, cop
     pie(copia));
 }
 
-// Copia de la cajera al cerrar. conteos: [{ n, monto, faltante }] (el faltante viene vacío cuando no se le avisó).
+// Copia de la cajera al cerrar. conteos: [{ n, monto }]. Nunca lleva lo esperado, ni faltante, ni sobrante: la diferencia es solo de administración.
 export function nodoCierreCajera(soc, est, copia = false) {
   const t = est.turno || {};
   const conteos = est.conteos || [];
-  const conAviso = conteos.some((c) => Number(c.faltante) > 0);
-  const falto = Number(t.faltante_reconocido) > 0 ? Number(t.faltante_reconocido) : 0;
+  const variosConteos = conteos.length > 1;
   const ORD = ['Primer', 'Segundo', 'Tercer', 'Cuarto', 'Quinto'];
   return h('div.tk',
     cabecera(soc, 'CIERRE DE CAJA', t),
@@ -104,10 +103,9 @@ export function nodoCierreCajera(soc, est, copia = false) {
     Number(est.total_salidas) > 0 ? fila('Salidas de efectivo', money(est.total_salidas)) : null,
     (est.salidas || []).map((s) => h('div.f.sal', h('span', '  ' + (s.motivo || '')), h('span', money(s.monto)))),
     h('hr'),
-    conAviso
-      ? conteos.map((c, i) => [fila((ORD[i] || (i + 1) + '.º') + ' conteo', money(c.monto)), Number(c.faltante) > 0 ? fila('Faltaban', money(c.faltante)) : null])
+    variosConteos
+      ? conteos.map((c, i) => fila((ORD[i] || (i + 1) + '.º') + ' conteo', money(c.monto)))
       : fila('Dinero contado', money(t.contado_efectivo ?? est.contado_efectivo ?? 0)),
-    falto > 0 ? h('div.c.g', 'Faltante reconocido ' + money(falto)) : h('div.c.g', 'Sin faltante'),
     t.notas ? h('div', 'Notas: ' + t.notas) : null,
     pie(copia));
 }
