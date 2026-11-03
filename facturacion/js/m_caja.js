@@ -702,7 +702,8 @@ export default {
     async function ponerEnEspera() {
       if (!cur) return;
       const v = cur.venta, id = v.id;
-      const ref = await dialogoNombre({ titulo: 'Poner en espera', boton: 'Poner en espera', inicial: v.referencia || '' });
+      // Si ya se eligió el cliente, su nombre es el nombre de la cuenta y no se pregunta nada
+      const ref = cur.cliente?.nombre ? String(cur.cliente.nombre).trim().slice(0, 60) : await dialogoNombre({ titulo: 'Poner en espera', boton: 'Poner en espera', inicial: v.referencia || '' });
       if (!ref) return;
       accion(async () => {
         cur = await api.ventaDatos(id, { tipo: 'espera', referencia: ref, telefono: v.telefono || '' });
@@ -1073,7 +1074,7 @@ export default {
       asideCuenta.replaceChildren(
         h('div.cuenta-cab',
           h('div', h('h2', (TIPOS_SERVICIO[v.tipo_servicio] || v.tipo_servicio) + ' ' + numCuenta(v.numero)), h('div.sub', detalle || (v.tipo_servicio === 'buffet' ? 'Cuenta nueva' : 'Falta el nombre'))),
-          v.tipo_servicio === 'buffet' ? h('button.btn.ambar', { type: 'button', disabled: !cur.lineas.length, onclick: seguro(ponerEnEspera) }, 'Poner en espera') : h('button.btn.chico', { type: 'button', onclick: seguro(cambiarNombre) }, 'Cambiar nombre')),
+          v.tipo_servicio === 'buffet' ? null : h('button.btn.chico', { type: 'button', onclick: seguro(cambiarNombre) }, 'Cambiar nombre')),
         lineas,
         h('div.cuenta-pie',
           v.estado === 'prefacturada' ? h('div.aviso-pref' + (v.prefactura_vigente === false ? '.vieja' : ''), h('strong', 'PREFACTURA N.° ' + (v.prefactura_numero || '') + (Number(v.prefactura_revision) > 1 ? ' · revisión ' + v.prefactura_revision : '')),
@@ -1081,7 +1082,8 @@ export default {
           pieDesgloseIva(),
           h('div.pie-cobro',
             h('div.total-fila', h('span.et', 'Total a pagar (IVA incluido)'), h('div.total-monto', { 'aria-live': 'polite' }, money(v.total))),
-            h('button.btn.primario.grande.btn-cobrar-aside', { type: 'button', disabled: !puede, onclick: seguro(abrirCobro) }, 'Cobrar')),
+            h('button.btn.primario.grande.btn-cobrar-aside', { type: 'button', disabled: !puede, onclick: seguro(abrirCobro) }, 'Cobrar'),
+            v.tipo_servicio === 'buffet' ? h('button.btn.ambar.grande.btn-espera', { type: 'button', disabled: !cur.lineas.length, onclick: seguro(ponerEnEspera) }, 'Poner en espera') : null),
           h('div.acciones-cuenta', prefBtn, h('button.btn.peligro' + (prefBtn ? '' : '.ancho'), { type: 'button', onclick: anularCuenta }, 'Anular esta cuenta'))));
       const nuevo = asideCuenta.querySelector('.cuenta-lineas');
       nuevo.scrollTop = irAlFinal ? nuevo.scrollHeight : scroll;
