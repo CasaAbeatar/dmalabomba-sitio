@@ -595,3 +595,35 @@
 .pie-cobro .btn-cobrar-aside[disabled]{opacity:1;cursor:default}
 /* Poner en espera: debajo de Cobrar, con otro color (decisión de Emil, 3 nov 2026) */
 .pie-cobro .btn-espera{flex:1 1 100%;width:100%}
+
+/* ---------- Pantalla ancha, pantalla baja y dedos (3 nov 2026) ----------
+   1) Ancho flexible: en la Caja todo (franja, cabecera, avisos y vista) usa el ancho de la pantalla en lugar de pararse a 1400 px con márgenes vacíos.
+      Los mosaicos se reparten solos (auto-fill), así que en monitor grande caben más cajones y productos por fila; la cuenta crece un poco, con tope.
+   2) Alto compacto: en pantallas bajas (POS de 15" y 15,6" a 1366×768) la cabecera y los avisos se adelgazan y el cuerpo puede ser más bajo,
+      para que «Cobrar» quede a la vista sin bajar la página.
+   3) Dedos: ningún mosaico ni botón de la Caja baja de 48 px de alto. */
+body.fx-caja main#vista,
+body.fx-caja .cab-fila,
+body.fx-caja .cab-franja-in,
+body.fx-caja .alerta-in,
+body.fx-caja .sin-red-in{max-width:2200px}
+@media(min-width:980px){
+  body.fx-caja .caja-cuerpo{grid-template-columns:minmax(0,1fr) clamp(480px,26vw,600px)}
+}
+@media(min-width:1500px){
+  .caja-catalogo{--mos-min:136px;--mos-h:60px}
+}
+@media(min-width:1900px){
+  .caja-catalogo{--mos-min:150px;--mos-h:64px}
+}
+.caja-catalogo .mos{min-height:max(var(--mos-h),48px)}
+@media(min-width:980px) and (max-height:800px){
+  body.fx-caja .cab-franja-in{min-height:22px}
+  body.fx-caja .cab-fila{padding-block:.15rem}
+  body.fx-caja .alerta-in{padding-block:.2rem}
+  body.fx-caja .alerta-texto strong{font-size:.92rem;line-height:1.2}
+  body.fx-caja .alerta-detalle{display:none}
+  body.fx-caja .sin-red-in{padding-block:.2rem}
+  body.fx-caja main#vista{padding-block:.5rem}
+  .caja-izq{min-height:420px}
+}
