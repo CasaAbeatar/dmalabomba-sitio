@@ -1210,8 +1210,8 @@ export default {
           : est === 'error' ? 'La nota de crédito que anuló el comprobante anterior no se pudo enviar a Hacienda. Esta venta se puede cobrar igual; conviene revisar esa nota en «Anular y reimprimir».'
             : est === 'enviado' || est === 'pendiente' ? 'La nota de crédito que anuló el comprobante anterior todavía está en camino a Hacienda. Esta venta se puede cobrar igual.' : '';
         avisoRep.replaceChildren(...[
-          h('strong', num0 ? `Esta venta reemplaza al comprobante N.° ${num0}` : 'Esta venta reemplaza a un comprobante anulado'),
-          h('div.tenue-linea', 'Al cobrarla, el comprobante nuevo quedará con la referencia al anterior («Sustituye comprobante electrónico»).'),
+          h('strong', reemplazo.sustituye_rechazado ? (num0 ? `Esta venta sustituye al comprobante N.° ${num0}, que Hacienda rechazó` : 'Esta venta sustituye a un comprobante que Hacienda rechazó') : num0 ? `Esta venta reemplaza al comprobante N.° ${num0}` : 'Esta venta reemplaza a un comprobante anulado'),
+          h('div.tenue-linea', reemplazo.sustituye_rechazado ? 'Al cobrarla, el comprobante nuevo quedará con la referencia al rechazado («Sustituye comprobante electrónico rechazado»).' : 'Al cobrarla, el comprobante nuevo quedará con la referencia al anterior («Sustituye comprobante electrónico»).'),
           nota ? h('div.tenue-linea.rep-nc' + (est === 'error' ? '.mal' : ''), nota) : null].filter(Boolean)); // replaceChildren escribiría «null» como texto
         avisoRep.hidden = false;
       }

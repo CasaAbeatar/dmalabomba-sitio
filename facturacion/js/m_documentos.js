@@ -822,7 +822,7 @@ export default {
         const [lead, queHace] = esNC
           ? (['01', '13'].includes(cod) ? [`Esta nota anula ${a} N.° ${num_}.`, 'Deja sin efecto todo el documento.']
             : cod === '06' ? [`Esta nota corrige ${a} N.° ${num_}.`, 'Devuelve una parte de ese documento.']
-              : cod === '02' ? [`Esta nota corrige ${a} N.° ${num_}.`, 'Corrige el monto: se había cobrado de más.'] : [`Esta nota corrige ${a} N.° ${num_}.`, ''])
+                : ['02', '14'].includes(cod) ? [`Esta nota corrige ${a} N.° ${num_}.`, 'Corrige el monto: se había cobrado de más.'] : [`Esta nota corrige ${a} N.° ${num_}.`, ''])
           : sobreNota ? [`Esta nota deja sin efecto la anulación de ${a} N.° ${num_}.`, 'El documento vuelve a valer.'] : [`Esta nota corrige ${a} N.° ${num_}.`, 'Corrige el monto: se había cobrado de menos.'];
         raiz.append(h('div.doc-aviso.ref', h('div', h('b', lead + ' '), queHace, tipoNotaTxt ? h('div.doc-motivo', 'Tipo de nota: ' + tipoNotaTxt + '.') : null, c.motivo ? h('div.doc-motivo', 'Motivo: ' + c.motivo) : null),
           h('button.btn', { type: 'button', onclick: () => { ctx.cerrar(); abrirDetalle(c.original.id); } }, sobreNota ? 'Ver la nota de crédito' : 'Ver el documento original')));
@@ -891,7 +891,7 @@ export default {
         h('div.doc-sumas',
           h('div.doc-fila-t', h('span', 'Subtotal sin IVA'), h('span', money(r2(total - iva)))),
           h('div.doc-fila-t', h('span', 'IVA'), h('span', money(iva))),
-          h('div.doc-fila-t.gran', h('span', esNC ? (cod === '06' ? 'Total que se devuelve' : cod === '02' ? 'Total que se corrige' : 'Total que se anula') : esND ? 'Total de la nota de débito' : 'Total'), h('b', money(total))))));
+          h('div.doc-fila-t.gran', h('span', esNC ? (cod === '06' ? 'Total que se devuelve' : ['02', '14'].includes(cod) ? 'Total que se corrige' : 'Total que se anula') : esND ? 'Total de la nota de débito' : 'Total'), h('b', money(total))))));
 
       raiz.append(acciones(c, nc, ctx, hechoHace));
       return raiz;

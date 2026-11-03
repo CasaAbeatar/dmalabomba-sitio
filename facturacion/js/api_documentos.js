@@ -157,7 +157,7 @@ export async function reemplazoInfo(ventaId) {
     if (!r || typeof r !== 'object') return { ok: false };
     if (!(r.reemplaza === true && r.original_id)) return { ok: true, reemplaza: false };
     const otro = r.otro_ambiente === true;
-    return { ok: true, reemplaza: true, original_id: r.original_id, consecutivo: r.consecutivo || '', estado_nota_credito: r.estado_nota_credito || '',
+    return { ok: true, reemplaza: true, original_id: r.original_id, consecutivo: r.consecutivo || '', estado_nota_credito: r.estado_nota_credito || '', sustituye_rechazado: r.sustituye_rechazado === true,
       otro_ambiente: otro, otro_ambiente_motivo: otro ? (String(r.otro_ambiente_motivo || '').trim() || MOTIVO_OTRO_AMBIENTE) : '' };
   } catch (e) {
     if (esPinObligatorio(e)) return { ok: false }; // «elija su PIN nuevo» no es una respuesta sobre esta cuenta

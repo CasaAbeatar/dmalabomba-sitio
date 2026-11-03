@@ -261,7 +261,7 @@ function nuevoRegistro({ app, d, clase, tipo, credito, orig, calc, razon, pagos,
 async function comprobar(reg) {
   let s;
   try { s = await conTope(saldosEstricto(reg.docId)); } catch { return { tipo: 'sinLectura' }; }
-  const cand = (s?.notas || []).filter((n) => !reg.antes.has(n.id) && n.tipo_doc === reg.tipo && String(n.codigo_referencia) === reg.codigo && n.viva !== false && n.estado !== 'rechazado' && aCent(n.total) === reg.total);
+  const cand = (s?.notas || []).filter((n) => !reg.antes.has(n.id) && n.tipo_doc === reg.tipo && (String(n.codigo_referencia) === reg.codigo || (reg.codigo === '02' && String(n.codigo_referencia) === '14')) && n.viva !== false && n.estado !== 'rechazado' && aCent(n.total) === reg.total);
   if (!cand.length) return { tipo: 'ninguna', saldos: s };
   if (cand.length > 1) return { tipo: 'ajena', texto: `${TEXTO_AJENA.varias} ${finDeAjena(reg)}` };
   let c = null;

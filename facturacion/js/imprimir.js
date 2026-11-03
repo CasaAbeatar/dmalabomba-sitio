@@ -221,7 +221,7 @@ function desgloseTipo(lineas) {
 const UNIDAD_LLANA = { Unid: 'Unidad', Sp: 'Servicio', Spe: 'Servicio', Os: 'Servicio' };
 const unidadDeLinea = (l) => { const u = String(l?.unidad ?? '').trim() || (l?.es_servicio ? 'Sp' : 'Unid'); return UNIDAD_LLANA[u] || u; };
 // Código de referencia de una nota o de un reemplazo, con la descripción oficial (Anexos v4.4, nota 9)
-const DESC_REF = { '01': 'Anula documento de referencia', '02': 'Corrige monto', '04': 'Referencia a otro documento', '06': 'Devolución de mercancía', '07': 'Sustituye comprobante electrónico' };
+const DESC_REF = { '01': 'Anula documento de referencia', '02': 'Corrige monto', '04': 'Referencia a otro documento', '06': 'Devolución de mercancía', '07': 'Sustituye comprobante electrónico', '13': 'Anula documento de referencia por error material', '14': 'Corrige monto por error material', '15': 'Sustituye comprobante electrónico por error material', '16': 'Sustituye comprobante electrónico rechazado' };
 // Qué dice el bloque de referencia de una nota de crédito o de débito. Lo que sale de la base manda: codigo_nombre (descripción oficial) y nombre_simple («Devolución», «Corrección de monto», «Anulación total»...).
 // Sin esas llaves queda como antes: una nota de crédito sin código se lee como anulación (código 01).
 function referenciaNota(m) {
@@ -235,7 +235,7 @@ function referenciaNota(m) {
     carta: anula ? 'Esta nota de crédito anula: ' : tipoNota + ' sobre el documento: ',
     oficial: m.codigoNombre || DESC_REF[cod] || '',
     simple: anula ? '' : (m.nombreSimple || ''), // en una anulación total el encabezado ya lo dice
-    sustituido: m.original?.codigo_referencia === '07' ? 'Ese documento había sustituido a otro que se anuló antes.' : '',
+    sustituido: ['07', '15'].includes(m.original?.codigo_referencia) ? 'Ese documento había sustituido a otro que se anuló antes.' : '',
   };
 }
 // Lo que se entregó y el vuelto de un pago en efectivo. Una nota de crédito nunca muestra Recibido ni Vuelto (no se recibe dinero).
@@ -370,12 +370,12 @@ function nodoTiquete(m, { papel, logo, copia }) {
     if (m.codigoRef && rf.oficial) raiz.append(h('div.dato', 'Código de referencia ' + m.codigoRef + ': ' + rf.oficial));
     if (rf.sustituido) raiz.append(h('div.dato', rf.sustituido));
     if (m.motivo) raiz.append(h('div.dato', 'Motivo: ' + m.motivo));
-  } else if (!pre && !nota && (m.reemplaza || m.codigoRef === '07')) {
+  } else if (!pre && !nota && (m.reemplaza || ['07', '15', '16'].includes(m.codigoRef))) {
     // Venta hecha de nuevo después de una anulación: dice cuál documento sustituye (código 07)
     raiz.append(linea());
     raiz.append(h('div.etq-chica', 'Sustituye al documento'));
     if (m.reemplaza?.consecutivo) raiz.append(h('div.dato', (NOMBRE_DOC[m.reemplaza.tipo_doc] || 'Comprobante') + ' N.° ' + numCorto(m.reemplaza.consecutivo)), h('div.mono', m.reemplaza.consecutivo));
-    raiz.append(h('div.dato', 'Código de referencia 07: ' + DESC_REF['07']));
+    raiz.append(h('div.dato', 'Código de referencia ' + (m.codigoRef || '07') + ': ' + (m.codigoNombre || DESC_REF[m.codigoRef || '07'])));
   }
   if (m.cliente) {
     raiz.append(linea());
@@ -489,11 +489,11 @@ function nodoCarta(m, { logo, copia }) {
       m.codigoRef && rf.oficial ? h('div', h('b', 'Código de referencia: '), m.codigoRef + ', ' + rf.oficial) : null,
       rf.sustituido ? h('div', rf.sustituido) : null,
       m.motivo ? h('div', h('b', 'Motivo: '), m.motivo) : null));
-  } else if (!nota && (m.reemplaza || m.codigoRef === '07')) {
+  } else if (!nota && (m.reemplaza || ['07', '15', '16'].includes(m.codigoRef))) {
     raiz.append(h('div.ct-ref',
       h('div', h('b', 'Este documento sustituye a: '), m.reemplaza?.consecutivo ? (NOMBRE_DOC[m.reemplaza.tipo_doc] || 'Comprobante') + ' N.° ' + numCorto(m.reemplaza.consecutivo) : 'un documento anulado'),
       m.reemplaza?.consecutivo ? h('div.mono', m.reemplaza.consecutivo) : null,
-      h('div', h('b', 'Código de referencia: '), '07, ' + (m.codigoNombre || DESC_REF['07']))));
+      h('div', h('b', 'Código de referencia: '), (m.codigoRef || '07') + ', ' + (m.codigoNombre || DESC_REF[m.codigoRef || '07']))));
   }
 
   // Líneas
