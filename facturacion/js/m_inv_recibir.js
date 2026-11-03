@@ -229,32 +229,33 @@ async function abrirLista(ctx) {
     } else {
       const conEmpresa = !est.sociedad;
       const filaDe = (f, conProveedor) => fila(f, infos.get(f.clave), conProveedor, conEmpresa);
-      let cuerpoLista;
+      let cuerpoLista, restan = 0;
       if (est.orden === 'recientes') {
         const orden = [...facs].sort((a, b) => String(b.llego || b.fecha).localeCompare(String(a.llego || a.fecha)));
-        cuerpoLista = [...orden.slice(0, est.mostrar).map((f) => filaDe(f, true))];
-        var restan = Math.max(0, orden.length - est.mostrar);
+        cuerpoLista = orden.slice(0, est.mostrar).map((f) => filaDe(f, true));
+        restan = Math.max(0, orden.length - est.mostrar);
       } else {
+        // Por proveedor: lo decidido en la primera factura de un proveedor ayuda a las siguientes. Un proveedor con varias facturas lleva su renglón de título;
+        // el que tiene una sola muestra su nombre en la misma fila (así una factura sigue siendo UNA fila).
         const grupos = agrupar(facs, infos);
-        const cuerpoG = []; let pintadas = 0, ult = null; let hechos = 0;
+        const cuerpoG = []; let pintadas = 0;
         const normales = grupos.filter((x) => !x.aparte), aparte = grupos.filter((x) => x.aparte);
         const poneGrupos = (gs, titulo) => {
-          if (!gs.length) return;
           let tituloPuesto = false;
           for (const gr of gs) {
             if (pintadas >= est.mostrar) break;
-            if (!tituloPuesto && titulo) { cuerpoG.push(h('h3.inv-grupo-tit', titulo, h('span.inv-cuenta', String(gs.length)))); tituloPuesto = true; }
-            cuerpoG.push(h('section.rc-prov', h('h3.rc-prov-cab', h('strong', proveedorTxt(gr.nombre)), h('span.rc-prov-datos', plural(gr.facturas.length, 'factura', 'facturas') + ' · ' + plural(gr.lineas, 'línea', 'líneas')), gr.aparte ? h('span.chip', 'Casi nunca es de inventario') : null),
-              ...gr.facturas.map((f) => filaDe(f, false))));
-            pintadas += gr.facturas.length; hechos += gr.facturas.length; ult = gr;
+            if (!tituloPuesto && titulo) { cuerpoG.push(h('h3.rc-sep', titulo, h('span.inv-cuenta', String(gs.length)))); tituloPuesto = true; }
+            if (gr.facturas.length > 1) cuerpoG.push(h('h3.rc-prov-cab', h('strong', proveedorTxt(gr.nombre)), h('span.rc-prov-datos', plural(gr.facturas.length, 'factura', 'facturas') + ' · ' + plural(gr.lineas, 'línea', 'líneas')), gr.aparte ? h('span.chip', 'Casi nunca es de inventario') : null));
+            gr.facturas.forEach((f) => cuerpoG.push(filaDe(f, gr.facturas.length === 1)));
+            pintadas += gr.facturas.length;
           }
         };
         poneGrupos(normales, normales.length && aparte.length ? 'Proveedores de mercadería' : '');
         poneGrupos(aparte, 'Ferretería, combustible y servicios');
         cuerpoLista = cuerpoG;
-        var restan = Math.max(0, facs.length - hechos);
+        restan = Math.max(0, facs.length - pintadas);
       }
-      poner(lista, ...cuerpoLista, restan ? h('button.btn.rc-pag', { type: 'button', onclick: () => { est.mostrar += PAGINA; persistir(); pintar(); } }, 'Ver ' + plural(Math.min(PAGINA, restan), 'factura más', 'facturas más') + ' (quedan ' + restan + ')') : null);
+      poner(lista, h('div.rc-filas', cuerpoLista), restan ? h('button.btn.rc-pag', { type: 'button', onclick: () => { est.mostrar += PAGINA; persistir(); pintar(); } }, 'Ver ' + plural(Math.min(PAGINA, restan), 'factura más', 'facturas más') + ' (quedan ' + restan + ')') : null);
     }
     if (scroller && yAntes) scroller.scrollTop = yAntes;
   }
@@ -469,7 +470,7 @@ export async function abrirFactura(ctx, clave, { previa = null, recibirSugeridas
         zonaRecibir,
         puede ? resumenSem : null,
         h('div.rc-tabla', { role: 'list' },
-          puede ? h('div.rc-encab', { 'aria-hidden': 'true' }, h('span', 'Estado'), h('span', 'Lo que entendí'), h('span', 'Cantidad y costo unitario sin IVA'), h('span', 'Rubro, categoría y dónde va'), h('span', 'Acción')) : null,
+          puede ? h('div.rc-encab', { 'aria-hidden': 'true' }, h('span', 'Estado'), h('span', 'Lo que entendí'), h('span', 'Cantidad y costo sin IVA'), h('span', 'Rubro, categoría y dónde va'), h('span', 'Acción')) : null,
           formas.map((x) => x.el)))
         : aviso('ok', h('p', 'Esta factura ya no tiene líneas por recibir.')),
       otras.length ? h('details.rc-decididas', { open: !pend.length }, h('summary', plural(otras.length, 'línea ya decidida', 'líneas ya decididas')), h('div.inv-lineas', otras.map((l) => lineaDecidida(f, l)))) : null,
@@ -720,14 +721,14 @@ export async function abrirFactura(ctx, clave, { previa = null, recibirSugeridas
     };
     const panel = h('div.rc-panel', { hidden: true },
       h('div.rc-razon-fila', razonL, verMas), masEl, siglaEl,
-      h('div.rc-campos', campoRubro, campoCat, artFila, campoConv, filaNombre, filaProd, errorRubro),
-      costoFila, costoAviso, relEl, mas, panelAcc, zona);
+      h('div.rc-campos', campoRubro, campoCat, artFila, campoConv, costoFila, filaNombre, filaProd, errorRubro),
+      costoAviso, relEl, mas, panelAcc, zona);
     let abierta = null, tocada = Boolean(memoria.get(l.linea)?.tocada2); // abierta: se abre sola si hay algo que revisar, salvo que la persona la haya abierto o cerrado
     if (memoria.has(l.linea) && memoria.get(l.linea).abierta != null) abierta = memoria.get(l.linea).abierta;
     function pintarSem() {
       sem = evaluarSem();
       el.dataset.semaforo = sem.nivel;
-      if (!tocada) abierta = sem.nivel !== 'verde';
+      if (!tocada) abierta = sem.nivel === 'ambar' || (sem.nivel === 'rojo' && !sug.no_inventario);
       razonL.textContent = frase(sem.razon);
       // Lo largo (la razón completa, lo que sugiere el sistema, la propuesta de Claude) queda detrás de «ver más»
       const completa = sem.razon.length > frase(sem.razon).length;

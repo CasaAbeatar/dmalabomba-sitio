@@ -22,14 +22,15 @@
 .rc-leyenda{display:block}
 
 /* ---------- Lista: proveedor y, debajo, una fila compacta por factura ---------- */
-.rc-lista{display:flex;flex-direction:column;gap:.55rem}
-.rc-prov{border:1px solid var(--linea2);border-radius:12px;background:#fff;overflow:hidden}
-.rc-prov-cab{display:flex;align-items:baseline;flex-wrap:wrap;gap:.1rem .8rem;margin:0;padding:.5rem .9rem;background:#fcfaf5;border-bottom:1px solid var(--linea);font-size:1rem;font-weight:400}
+.rc-lista{display:flex;flex-direction:column;gap:.7rem}
+.rc-filas{display:flex;flex-direction:column;border:1px solid var(--linea2);border-radius:12px;background:#fff;overflow:hidden}
+.rc-sep{margin:0;padding:.5rem .9rem;font-size:.82rem;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--tinta2);background:var(--fondo);border-top:1px solid var(--linea2);border-bottom:1px solid var(--linea)}
+.rc-filas>.rc-sep:first-child{border-top:0}
+.rc-prov-cab{display:flex;align-items:baseline;flex-wrap:wrap;gap:.1rem .8rem;margin:0;padding:.4rem .9rem;background:#fcfaf5;border-bottom:1px solid var(--linea);font-size:.98rem;font-weight:400}
 .rc-prov-cab strong{font-weight:600;overflow-wrap:anywhere}
 .rc-prov-datos{font-size:.86rem;color:var(--tinta2)}
 .inv-fac.rc-fac{display:flex;flex-direction:row;flex-wrap:wrap;align-items:center;gap:.2rem .9rem;padding:.3rem .9rem;border:0;border-bottom:1px solid var(--linea);border-radius:0;background:#fff;min-height:52px}
-.rc-prov .rc-fac:last-child{border-bottom:0}
-.rc-lista>.rc-fac{border:1px solid var(--linea2);border-radius:12px}
+.rc-filas>.rc-fac:last-child{border-bottom:0}
 .inv-fac.rc-fac.rechazada{border-left:3px solid var(--rojo)}
 .rc-fac-abrir{flex:1 1 15rem;min-width:0;display:flex;flex-direction:column;align-items:flex-start;justify-content:center;gap:0;min-height:48px;padding:.1rem 0;border:0;background:none;text-align:left;cursor:pointer;color:inherit;line-height:1.25}
 .rc-fac-abrir:hover .rc-fac-doc,.rc-fac-abrir:hover .rc-fac-prov{text-decoration:underline}
@@ -121,7 +122,11 @@
 .rc-sigla-ed[hidden]{display:none}
 .rc-sigla .inv-eco{flex:1 1 100%}
 .rc-campos{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.6rem 1rem;align-items:start;margin:.3rem 0 .4rem}
-.rc-f-conv{grid-column:span 2}
+.rc-f-conv{grid-column:1/-1}
+.rc-f-conv .inv-con-unidad{display:flex;align-items:center;gap:.5rem;flex-wrap:wrap}
+.rc-f-conv .inv-con-unidad input{width:7rem;flex:0 0 auto}
+.rc-f-conv small{grid-column:auto}
+.rc-campos label.etq>span:first-child{font-size:.8rem;color:var(--tinta2)}
 .rc-f-ancho,.rc-campos>.inv-eco{grid-column:1/-1}
 .rc-f-ancho[hidden]{display:none}
 .rc-campos .inv-art-fila{min-height:48px}
@@ -167,3 +172,29 @@
   .inv-linea.rc-dec.decidida{grid-template-columns:auto minmax(0,1fr);padding:.5rem .7rem}
   .rc-dec-acc{grid-column:1/-1;align-items:stretch}
 }
+
+.rc-panel .inv-costo-fila{padding:0}
+.rc-mas-campos>summary{min-height:44px}
+.rc-panel-acc{margin-top:.3rem}
+.rc-campos>.rc-f-rubro,.rc-campos>.rc-f-cat,.rc-campos>.rc-f-art{grid-column:auto;margin:0}
+.rc-campos>.rc-f-art{display:flex;flex-direction:column;gap:.15rem}
+.rc-campos>.rc-f-art>.etq{font-size:.8rem;color:var(--tinta2);font-weight:600}
+.rc-campos>.rc-f-art .inv-art-fila{padding:.2rem .3rem .2rem .6rem}
+.rc-campos>.rc-f-art .btn{padding-inline:.6rem;white-space:nowrap}
+.rc-campos>.rc-f-conv{grid-column:1/-1}
+.rc-campos>.rc-f-conv .inv-eco{display:inline}
+@media (max-width:860px){.rc-campos>.rc-f-rubro,.rc-campos>.rc-f-cat,.rc-campos>.rc-f-art,.rc-campos>.rc-f-conv{grid-column:1/-1}}
+
+.rc-campos>.rc-f-conv{grid-column:span 2}
+.rc-campos>.rc-costo{grid-column:auto;align-self:end;padding-bottom:.6rem;border:0}
+.rc-f-conv .inv-eco:not(.mal){display:none}
+@media (max-width:860px){.rc-campos>.rc-f-conv,.rc-campos>.rc-costo{grid-column:1/-1;padding-bottom:0}}
+.inv-fac.rc-fac{padding-block:.1rem;min-height:50px}
+.rc-fac-abrir{min-height:46px;padding:0}
+@media (max-width:760px){
+  .rc-fac-estado{flex:1 1 0;min-width:0;order:3;justify-content:flex-start}
+  .rc-fac-emp{flex:0 0 auto;order:4;margin-left:auto}
+  .rc-fac-acc{order:5}
+  .inv-fac.rc-fac{row-gap:0}
+}
+@media (min-width:761px){.rc-fac-abrir{flex:1 1 9rem}.rc-fac-estado{flex-wrap:nowrap}.inv-fac.rc-fac{gap:.1rem .7rem}}
