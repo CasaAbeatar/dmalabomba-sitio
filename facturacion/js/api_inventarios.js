@@ -58,6 +58,8 @@ export const inv = {
   productosMenu: (sociedad = null, q = '') => leer('fx_inv_productos_menu', { p_sociedad: sociedad, p_q: q }),
   iaPropuestas: (clave) => leer('fx_ia_propuestas', { p_clave: clave }),
   costoReferencia: (articulo) => leer('fx_inv_costo_referencia', { p_articulo: articulo }),
+  aliases: (articulo = null, q = '') => leer('fx_inv_aliases', { p_articulo: articulo, p_q: q }),
+  diccionario: (estado = 'pendiente', proveedor = null, q = '', limite = 200) => leer('fx_ia_diccionario', { p_estado: estado, p_proveedor: proveedor, p_q: q || null, p_limite: limite }),
   cabysSugerencia: (cabys) => leer('fx_inv_cabys_sugerencia', { p_cabys: cabys }),
   pendientes: (sociedad = null, q = '', limite = 100) => leer('fx_inv_pendientes', { p_sociedad: sociedad, p_q: q, p_limite: limite }),
   factura: (clave) => leer('fx_inv_factura', { p_clave: clave }),
@@ -114,6 +116,13 @@ export const inv = {
   decidirProducto: (p) => escribir('fx_inv_decidir_producto', { p }),
   equivalenciaGuardar: (p) => escribir('fx_inv_equivalencia_guardar', { p }),
   configGuardar: (p) => escribir('fx_inv_config_guardar', { p }),
+  // Alias de producto (el mismo producto con el nombre que le pone un proveedor): solo administración. NO se guarda alias entre nombres que difieren solo en mayúsculas, tildes o puntuación.
+  aliasGuardar: (p) => escribir('fx_inv_alias_guardar', { p }),
+  aliasQuitar: (id) => escribir('fx_inv_alias_quitar', { p_id: id }),
+  // Diccionario de siglas de la IA (solo administración): confirmar, corregir el significado o rechazar una sigla
+  diccionarioConfirmar: (id) => escribir('fx_ia_diccionario_confirmar', { p_id: id }),
+  diccionarioCorregir: (id, significado) => escribir('fx_ia_diccionario_corregir', { p_id: id, p_significado: significado }),
+  diccionarioRechazar: (id) => escribir('fx_ia_diccionario_rechazar', { p_id: id }),
 };
 
 // Insignia del menú (main.js la pide con los avisos del encabezado, sin cargar el módulo). Si la función todavía no existe, no se vuelve a preguntar en 10 minutos.

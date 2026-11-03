@@ -18,29 +18,24 @@ import {
 /* =====================================================================================================================
    Ajustes y ganchos (lo que el agente de datos entrega después)
    ===================================================================================================================== */
-// TODO(datos): banda costo/precio ÚNICA. El agente de datos la guarda en fact.inv_config como costo_precio_min y costo_precio_max y llegan en cat.config
-// (fx_inv_catalogos). Mientras no lleguen se usa esta constante, que es el ÚNICO lugar del código con 15 y 110. Cuando lleguen, esta constante deja de usarse.
-const BANDA_COSTO_PRECIO_POR_OMISION = { min: 15, max: 110 };
+// Banda costo/precio ÚNICA: la fija la base (fact.inv_config: costo_precio_min y costo_precio_max) y llega en fx_inv_catalogos().config. No hay valor de respaldo en la pantalla:
+// si la base no la trae, la pantalla no juzga el costo contra el precio (se muestra la relación sin decir «normal» o «fuera de lo normal»).
 const bandaCostoPrecio = (cat) => {
   const c = (cat && cat.config) || {}, mn = Number(c.costo_precio_min), mx = Number(c.costo_precio_max);
-  return Number.isFinite(mn) && Number.isFinite(mx) && mn > 0 && mx > mn ? { min: mn, max: mx } : BANDA_COSTO_PRECIO_POR_OMISION;
+  return Number.isFinite(mn) && Number.isFinite(mx) && mn > 0 && mx > mn ? { min: mn, max: mx } : null;
 };
 
-// TODO(datos): gancho del diccionario de siglas. El agente de datos crea en fact las funciones para confirmar y corregir una sigla (fact.ia_diccionario tiene la marca
-// «confirmado»; hoy 245 de 245 sin confirmar). Cuando existan, basta escribir en api_inventarios.js dos funciones con estos nombres y esta pantalla las usa sola:
-//   inv.diccionarioConfirmar(id, sigla)                 -> marca la sigla como confirmada
-//   inv.diccionarioCorregir(id, sigla, significado)     -> guarda el significado correcto (y lo marca confirmado)
-// Mientras no existan, los botones «Confirmar» y «Corregir» se ven pero dicen con palabras que todavía no se puede guardar (no escriben nada).
-// Qué trae la propuesta de la IA para mostrar la sigla (acordar con el agente de datos): ia.siglas = [{ id, sigla, significado, confirmado }] o ia.sigla + ia.sigla_significado.
+// Diccionario de siglas de la IA (fact.ia_diccionario). La propuesta de la IA trae ia.siglas = [{ id, sigla, significado, confirmado }] (fx_ia_propuestas, solo las del proveedor que aparecen en la línea).
+// «Confirmar» marca la sigla como confirmada por Emil, «Corregir» guarda el significado correcto (y la confirma) y «No es correcta» la rechaza: la IA deja de usarla.
 const DICCIONARIO = {
-  listo: () => typeof inv.diccionarioConfirmar === 'function' && typeof inv.diccionarioCorregir === 'function',
-  confirmar: (s) => inv.diccionarioConfirmar(s.id || null, s.sigla),
-  corregir: (s, significado) => inv.diccionarioCorregir(s.id || null, s.sigla, significado),
+  confirmar: (s) => inv.diccionarioConfirmar(s.id),
+  corregir: (s, significado) => inv.diccionarioCorregir(s.id, significado),
+  rechazar: (s) => inv.diccionarioRechazar(s.id),
 };
 const siglasDe = (ia) => {
   if (!ia) return [];
-  const bruto = Array.isArray(ia.siglas) ? ia.siglas : ia.sigla ? [{ id: ia.sigla_id, sigla: ia.sigla, significado: ia.sigla_significado || ia.significado, confirmado: ia.sigla_confirmada }] : [];
-  return bruto.filter((s) => s && s.sigla && s.significado && !s.confirmado);
+  const bruto = Array.isArray(ia.siglas) ? ia.siglas : [];
+  return bruto.filter((s) => s && s.id && s.sigla && s.significado && !s.confirmado && !s.rechazada);
 };
 
 // Estado contable (contrato 3.2) a color: verde aceptada, ámbar con aviso, rojo no entra
@@ -711,12 +706,12 @@ export async function abrirFactura(ctx, clave, { previa = null, recibirSugeridas
         const msg = h('small.inv-eco'), editor = h('div.rc-sigla-ed', { hidden: true });
         const nuevo = h('input.campo', { type: 'text', maxlength: 120, 'aria-label': 'Qué significa ' + s.sigla, placeholder: 'Qué significa «' + s.sigla + '»' });
         const hecho = (t) => { msg.textContent = t; msg.className = 'inv-eco'; };
-        const sinGancho = () => { msg.textContent = 'Todavía no se puede guardar en el diccionario; la sigla queda como está.'; msg.className = 'inv-eco mal'; };
-        const bConf = h('button.btn.chico', { type: 'button', onclick: async () => { if (!DICCIONARIO.listo()) return sinGancho(); bConf.disabled = true; try { await DICCIONARIO.confirmar(s); hecho('Confirmada: «' + s.sigla + '» = ' + s.significado + '.'); s.confirmado = true; } catch (e) { bConf.disabled = false; msg.textContent = (e && e.message) || 'No se pudo confirmar.'; msg.className = 'inv-eco mal'; } } }, 'Confirmar');
-        const bGuardar = h('button.btn.chico.primario', { type: 'button', onclick: async () => { const t = nuevo.value.trim(); if (t.length < 2) { msg.textContent = 'Escriba qué significa (al menos 2 letras).'; msg.className = 'inv-eco mal'; return; } if (!DICCIONARIO.listo()) return sinGancho(); bGuardar.disabled = true; try { await DICCIONARIO.corregir(s, t); hecho('Corregida: «' + s.sigla + '» = ' + t + '.'); editor.hidden = true; } catch (e) { bGuardar.disabled = false; msg.textContent = (e && e.message) || 'No se pudo corregir.'; msg.className = 'inv-eco mal'; } } }, 'Guardar el significado');
+        const bConf = h('button.btn.chico', { type: 'button', onclick: async () => { bConf.disabled = true; try { await DICCIONARIO.confirmar(s); hecho('Confirmada: «' + s.sigla + '» = ' + s.significado + '.'); s.confirmado = true; bCorr.hidden = bNo.hidden = true; bConf.hidden = true; } catch (e) { bConf.disabled = false; msg.textContent = (e && e.message) || 'No se pudo confirmar.'; msg.className = 'inv-eco mal'; } } }, 'Confirmar');
+        const bGuardar = h('button.btn.chico.primario', { type: 'button', onclick: async () => { const t = nuevo.value.trim(); if (t.length < 2) { msg.textContent = 'Escriba qué significa (al menos 2 letras).'; msg.className = 'inv-eco mal'; return; } bGuardar.disabled = true; try { await DICCIONARIO.corregir(s, t); hecho('Corregida: «' + s.sigla + '» = ' + t + '.'); s.significado = t; s.confirmado = true; editor.hidden = true; bConf.hidden = bCorr.hidden = bNo.hidden = true; } catch (e) { bGuardar.disabled = false; msg.textContent = (e && e.message) || 'No se pudo corregir.'; msg.className = 'inv-eco mal'; } } }, 'Guardar el significado');
         editor.append(nuevo, bGuardar);
         const bCorr = h('button.btn.chico', { type: 'button', onclick: () => { editor.hidden = !editor.hidden; if (!editor.hidden) nuevo.focus(); } }, 'Corregir');
-        return h('div.rc-sigla', h('span.rc-sigla-txt', h('strong', s.sigla), ' = ', s.significado), h('span.rc-sigla-bot', bConf, bCorr), editor, msg);
+        const bNo = h('button.btn.chico', { type: 'button', onclick: async () => { bNo.disabled = true; try { await DICCIONARIO.rechazar(s); hecho('Rechazada: la IA ya no usará «' + s.sigla + '» = ' + s.significado + '.'); s.rechazada = true; bConf.hidden = bCorr.hidden = bNo.hidden = true; editor.hidden = true; } catch (e) { bNo.disabled = false; msg.textContent = (e && e.message) || 'No se pudo rechazar.'; msg.className = 'inv-eco mal'; } } }, 'No es correcta');
+        return h('div.rc-sigla', h('span.rc-sigla-txt', h('strong', s.sigla), ' = ', s.significado), h('span.rc-sigla-bot', bConf, bCorr, bNo), editor, msg);
       }));
     };
     const panel = h('div.rc-panel', { hidden: true },
@@ -866,11 +861,11 @@ export async function abrirFactura(ctx, clave, { previa = null, recibirSugeridas
       if (!r || !r.hay) return;
       let t = '';
       const v = Number(r.precio_venta_sin_iva);
-      if (v > 0) { const pc = c / v * 100; relEl.textContent = 'Se vende a ' + money(v) + ' sin IVA y entra a ' + money(c) + ' sin IVA: el costo es el ' + num(pc, 0) + ' % del precio de venta' + (pc >= banda.min && pc <= banda.max ? ' (relación normal).' : ' (fuera de lo normal, revise).'); relEl.hidden = false; }
+      if (v > 0) { const pc = c / v * 100; relEl.textContent = 'Se vende a ' + money(v) + ' sin IVA y entra a ' + money(c) + ' sin IVA: el costo es el ' + num(pc, 0) + ' % del precio de venta' + (!banda ? '.' : pc >= banda.min && pc <= banda.max ? ' (relación normal).' : ' (fuera de lo normal, revise).'); relEl.hidden = false; }
       const hist = Number(r.costo_medio_anterior);
       if (v > 0) {
         const pct = c / v * 100;
-        if (pct < banda.min || pct > banda.max) t = 'Este costo es el ' + num(pct, 0) + ' % del precio de venta sin IVA (' + money(v) + '). Lo normal está entre ' + num(banda.min, 0) + ' % y ' + num(banda.max, 0) + ' %. Revise cuántas unidades trae cada «' + (uFac(l) || 'unidad') + '» de la factura: casi seguro la conversión está mal.';
+        if (banda && (pct < banda.min || pct > banda.max)) t = 'Este costo es el ' + num(pct, 0) + ' % del precio de venta sin IVA (' + money(v) + '). Lo normal está entre ' + num(banda.min, 0) + ' % y ' + num(banda.max, 0) + ' %. Revise cuántas unidades trae cada «' + (uFac(l) || 'unidad') + '» de la factura: casi seguro la conversión está mal.';
       }
       if (!t && hist > 0 && Number(r.lotes_anteriores) >= 1) {
         const razon = c / hist;
