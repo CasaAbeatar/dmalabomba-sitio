@@ -868,7 +868,7 @@ export async function abrirFactura(ctx, clave, { previa = null, recibirSugeridas
     if (!s || !s.fuente) return null;
     if (s.no_inventario) return (s.fuente === 'memoria' ? 'la vez pasada esto se marcó «No es de inventario»' : s.fuente === 'servicio' ? 'parece un servicio: normalmente no es de inventario' : 'por su CABYS normalmente no es de inventario') + (s.motivo ? ' (' + s.motivo + ')' : '') + '. Si es así, toque «No es de inventario».';
     if (s.articulo) return s.articulo + ' (' + FUENTES[s.fuente] + (s.factor != null && s.fuente === 'memoria' ? ', cada una trae ' + num(s.factor, 6) + ' ' + unidadTxt(s.unidad, s.factor) : s.factor_sugerido != null ? ', por el nombre parece que cada una trae ' + num(s.factor_sugerido, 6) + ' ' + unidadTxt(s.unidad, s.factor_sugerido) : '') + '). Revíselo antes de marcar la línea.';
-    if (s.categoria) return 'por su CABYS parece de la categoría «' + s.categoria + '». ' + (ctx.esAdmin ? 'Toque «Escoger artículo» para escogerlo o crearlo.' : 'Escoja el artículo; si no existe, un administrador lo puede crear en «Catálogo».');
+    if (s.categoria) return 'por su CABYS parece de la categoría «' + s.categoria + '». Márquela y el artículo se crea solo en esa categoría (en unitarios, escoja primero el producto del menú que se vende; si ya existe un artículo, está en «Detalles»).';
     return null;
   }
 
