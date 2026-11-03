@@ -564,3 +564,5 @@ body:has(.inv-fondo) .cabecera:has(.cab-usuario.abierto){z-index:120}
 .inv-prod-acc{display:flex;flex-wrap:wrap;gap:.4rem;align-items:center}
 .inv-filtro{align-items:center;gap:.35rem}.inv-filtro .btn[aria-pressed="true"]{border-color:#111;font-weight:600}
 .inv-prod[hidden]{display:none}
+.inv-costo-rel{margin:.3rem 0 0;font-size:.92rem;line-height:1.35;color:var(--tinta,#222)}
+.inv-costo-rel[hidden]{display:none}
