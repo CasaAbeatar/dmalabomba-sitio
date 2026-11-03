@@ -94,7 +94,7 @@ function crearCampoPin({ antes, alCompletar, boton = null }) {
   };
 }
 
-// Texto del error de acceso. El ingreso NUNCA se bloquea: no hay esperas, ni hora de desbloqueo, ni intentos que se acaban; siempre se puede probar de nuevo en seguida.
+// Texto del error de acceso. El ingreso NUNCA se bloquea: no hay hora de desbloqueo ni intentos que se acaban. Tras un PIN equivocado solo hay una espera corta y fija (máximo 2 segundos, decisión de Emil del 3 nov 2026); nunca crece.
 // Un usuario o un PIN que no coinciden se dicen con palabras claras (sin revelar cuál de los dos falló). cambiarEmpresa = false en la ventana «Su sesión venció», donde la empresa y el usuario no se cambian.
 function textoErrorAcceso(e, { cambiarEmpresa = true } = {}) {
   if (e && (e.motivo === 'empresa_desconocida' || e.motivo === 'empresa_no_habilitada')) return conPunto(e.message);
@@ -102,7 +102,7 @@ function textoErrorAcceso(e, { cambiarEmpresa = true } = {}) {
   if (e && e.estado === 401) {
     return cambiarEmpresa
       ? 'Usuario o PIN incorrecto. Intente de nuevo.' // corto a propósito: de una sola línea para que la pantalla de entrada quepa sin deslizar
-      : 'El PIN no coincide. Escríbalo otra vez con cuidado; puede intentarlo de nuevo ahora mismo.';
+      : 'El PIN no coincide. Escríbalo otra vez con cuidado; puede intentarlo de nuevo en un par de segundos.';
   }
   return conPunto((e && e.message) || 'No se pudo entrar. Revise la conexión e intente de nuevo.');
 }
@@ -213,7 +213,7 @@ function pantallaUsuario(emp, mensaje) {
   });
   const cambiar = h('button.btn.emp-cambiar', { type: 'button', onclick: () => { if (!ocupado) pantallaCodigo({ codigo: emp.codigo }); } }, 'Cambiar de empresa'); // vuelve a los dos botones de empresa, con la actual ya enfocada
   const bloquear = (si) => { ocupado = si; pad.bloquear(si); usuario.disabled = si; cambiar.disabled = si; };
-  // Cuenta regresiva cuando el servidor pide esperar (demora acotada del ingreso, nunca un bloqueo). No borra lo digitado; al llegar a 0 vuelve a habilitar los campos.
+  // Cuenta regresiva cuando el servidor pide esperar (la espera corta y fija tras un PIN equivocado: 1 o 2 segundos, nunca un bloqueo). No borra lo digitado; al llegar a 0 vuelve a habilitar los campos.
   let relojEspera = null;
   function cuentaEspera(seg) {
     if (relojEspera) clearInterval(relojEspera);
@@ -246,7 +246,7 @@ function pantallaUsuario(emp, mensaje) {
       if (!esErrorEsperado(e)) console.error(e);
       // La empresa dejó de existir o de estar habilitada entre el paso 1 y ahora: se vuelve al código con el mensaje
       if (e && (e.motivo === 'empresa_desconocida' || e.motivo === 'empresa_no_habilitada')) { pantallaCodigo({ codigo: emp.codigo, [e.motivo === 'empresa_no_habilitada' ? 'aviso' : 'error']: textoErrorAcceso(e) }); return; }
-      // El servidor pide esperar unos segundos (hubo muchos intentos desde esta conexión o con este usuario): cuenta regresiva, sin borrar el PIN ya escrito
+      // El servidor pide esperar 1 o 2 segundos (hubo un PIN equivocado hace un instante desde esta conexión o con este usuario): cuenta regresiva, sin borrar el PIN ya escrito
       if (e && e.motivo === 'espera') { mostrarEstado(''); cuentaEspera(Math.max(1, Number(e.espera) || 5)); return; }
       pad.limpiar();
       alertar(e);

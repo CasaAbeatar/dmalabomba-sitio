@@ -364,7 +364,7 @@ async function conReintento(hacer, alReintentar) {
 }
 // El estado que se anota en el error: el del servidor; si contestó 200 con ok:false, el que corresponde al motivo (así un rechazo esperado nunca se toma por una falla)
 const ESTADO_DE_MOTIVO = { falta_empresa: 400, empresa_desconocida: 404, empresa_no_habilitada: 403 };
-// El ingreso NUNCA se bloquea (decisión de Emil): no hay «intentos restantes», ni hora de desbloqueo, ni espera. Un PIN o un usuario que no coinciden dicen eso y se puede intentar de inmediato.
+// El ingreso NUNCA se bloquea (decisión de Emil): no hay «intentos restantes» ni hora de desbloqueo. Un PIN o un usuario que no coinciden dicen eso; tras un PIN equivocado solo hay una espera corta y fija de 1 o 2 segundos (3 nov 2026), que no crece.
 // Un 5xx o un 429 del servicio (saturado) es una falla transitoria; todo lo demás es una respuesta clara del acceso y no se repite sola.
 // Un 429 sigue siendo transitorio (en el primer paso deja usar la empresa de respaldo, así nadie queda sin poder llegar al usuario y al PIN) pero conReintento no lo repite
 // y su texto no promete una espera: dice que hay mucho movimiento y que se puede intentar otra vez.
@@ -373,7 +373,7 @@ const MSG_ACCESO_MUCHOS = 'Hay mucho movimiento en este momento y no se pudo ent
 function errorDeAcceso(r, j) {
   const estado = r.ok ? (ESTADO_DE_MOTIVO[j.motivo] || 400) : r.status;
   const motivo = j.motivo || '';
-  // Ronda 5: el servidor pide esperar unos segundos (demora acotada, no bloqueo). No se repite solo (tipo negocio); la pantalla muestra una cuenta regresiva y vuelve a habilitar el botón.
+  // El servidor pide esperar 1 o 2 segundos (espera corta y fija, no bloqueo). No se repite solo (tipo negocio); la pantalla muestra una cuenta regresiva y vuelve a habilitar el botón.
   if (r.status === 429 && motivo === 'espera') {
     const s = Math.max(1, Math.min(60, Number(j.espera) || 5));
     const e = new ErrorApi(typeof j.error === 'string' && j.error.trim() ? j.error : `Espere ${s} segundos e intente de nuevo.`, { tipo: 'negocio', estado: 429, motivo: 'espera' });
@@ -450,7 +450,7 @@ export async function salir() {
     faltoCerrar = !!res?.error; // sin conexión, error del servidor o tiempo agotado; un 401/403/404 no cuenta: esa sesión ya no existe
   } catch { faltoCerrar = true; /* sin conexión: se borra solo aquí */ }
   // Solo se anota el código de acceso (y la hora): el código de refresco NO se guarda, porque serviría para pedir sesiones nuevas mientras el cierre no llegue al servidor.
-  // Si el de acceso ya venció cuando vuelva la conexión, esa sesión queda sin nadie que pueda renovarla y se cierra sola por su tope del servidor.
+  // Si el de acceso ya venció cuando vuelva la conexión, esa sesión queda sin nadie que pueda renovarla (el código de refresco no se guarda aquí), así que no la puede usar nadie.
   if (faltoCerrar && guardada) { guardarSalidas([...leerSalidas().filter((x) => x.a !== guardada.a), { a: guardada.a, t: Date.now() }]); vigilarSalidas(); }
   try { localStorage.removeItem('sb-facturador'); localStorage.removeItem('sb-facturador-code-verifier'); } catch { /* sin almacenamiento */ }
   invalidarCatalogo();
@@ -459,7 +459,7 @@ export async function salir() {
 
 /* ---------- Cierres de sesión pendientes ---------- */
 // Cuando el cierre de sesión no llega al servidor (sin internet, servidor caído o tiempo agotado), la sesión de ESTE aparato se borra igual, pero la del servidor sigue viva
-// hasta su tope de 16 horas. Para no dejarla abierta, el cierre se anota en una cola corta de este aparato (máximo 3 anotaciones, que se descartan a las 16 horas) y se repite
+// hasta que alguien la cierre: la sesión de caja no caduca por tiempo (decisión de Emil, 3 nov 2026). Para no dejarla abierta, el cierre se anota en una cola corta de este aparato (máximo 3 anotaciones, que se descartan a las 16 horas) y se repite
 // cuando vuelve la conexión, al abrir la página, después de entrar y cada minuto mientras haya algo pendiente. De cada sesión solo se anota su código de acceso y la hora
 // (nunca el de refresco: ese sí serviría para pedir sesiones nuevas); se borra apenas el servidor confirma (o contesta que esa sesión ya no existe).
 // El código de acceso dura poco y solo sirve para cerrar esa sesión. Una anotación vieja de versiones anteriores puede traer también el de refresco: se usa una vez para
