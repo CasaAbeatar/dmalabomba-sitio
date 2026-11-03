@@ -6,6 +6,7 @@ import { cargarHoja } from './ui_hojas.js';
 
 // Orden de las pestañas. Cada fase agrega la suya aquí.
 const PESTANAS = [
+  () => import('./c_recibidas.js'),
   () => import('./c_libro.js'),
   () => import('./c_compras.js'),
   () => import('./c_formularios.js'),
@@ -49,7 +50,8 @@ export default {
       botones.set(m.id, b); barra.append(b);
     }
     root.append(h('div.con-raiz', h('p.tenue', 'Libros contables de ', h('strong', soc?.nombre_comercial || soc?.nombre || 'la empresa'), '. Las cifras salen de las facturas, los cierres de caja y los comprobantes de la CCSS que usted cargue; nada se digita dos veces.'), barra, panel));
-    const guardada = leer('con-pestana');
+    // Si otra pantalla pidió una factura (p. ej. «Ir a Contabilidad» desde Inventarios), se abre «Recibidas»; main.js borra el pedido al terminar mount
+    const guardada = app.pedido && typeof app.pedido === 'object' && app.pedido.clave ? 'recibidas' : leer('con-pestana');
     await ir(mods.some((m) => m.id === guardada) ? guardada : mods[0].id);
     return () => { vivo = false; if (typeof limpiar === 'function') { try { limpiar(); } catch { /* ya no está */ } } };
   },

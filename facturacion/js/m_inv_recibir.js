@@ -441,7 +441,7 @@ export async function abrirFactura(ctx, clave, { previa = null, recibirSugeridas
           lineas.some((l) => l.estado === 'recibida') ? h('p', 'Lo que ya se recibió sigue en la bodega: rechazar la factura en Contable no lo saca. Para corregirlo, use «Deshacer la recepción» en cada línea (solo una persona administradora, y solo si ese lote todavía no se ha tocado) o registre una salida como «Devolución a proveedor», en «Salidas y mermas».') : null)
         : (f.aviso || ec.aviso) ? aviso('espera', h('p', f.aviso || ec.aviso)) : null,
       h('div.inv-enlaces', contableAqui
-        ? h('button.btn', { type: 'button', onclick: () => ctx.app.ir('recepcion', { clave: f.clave, buscar: numFactura(f.consecutivo) }) }, 'Ir a Contable (factura N.° ' + numFactura(f.consecutivo) + ')')
+        ? h('button.btn', { type: 'button', onclick: () => ctx.app.ir('contabilidad', { clave: f.clave, buscar: numFactura(f.consecutivo) }) }, 'Ir a Contabilidad (factura N.° ' + numFactura(f.consecutivo) + ')')
         : h('p.tenue.inv-chico', 'Esta factura es de ' + (f.sociedad_nombre || 'la otra empresa') + ': en Contable se responde desde una sesión de esa empresa.')),
       pend.length ? h('section.inv-grupo', h('h3', 'Líneas por recibir', h('span.inv-cuenta', String(pend.length))),
         puede ? h('p.tenue.inv-chico', 'Toque el grupo de cada línea. Lo que no es de inventario (costos, servicios) va en «No es de inventario».') : null,
