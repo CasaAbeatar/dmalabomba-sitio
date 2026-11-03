@@ -376,7 +376,8 @@ function pintarCabecera() {
   iconoPestana(codigoReal);
   const et = cab.querySelector('.estado-turno');
   et.className = 'estado-turno ' + (t ? 'abierto' : 'cerrado');
-  et.textContent = t ? 'Caja abierta desde las ' + new Date(t.abierto_en).toLocaleTimeString('es-CR', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Costa_Rica' }) : 'Caja cerrada';
+  if (t) { et.replaceChildren('Caja abierta ', h('span.est-desde', 'desde las '), new Date(t.abierto_en).toLocaleTimeString('es-CR', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Costa_Rica' })); }
+  else et.textContent = 'Caja cerrada';
   const amb = cab.querySelector('.amb');
   amb.textContent = s.ambiente === 'produccion' ? 'Facturas reales' : 'Modo de pruebas';
   amb.className = 'amb ' + (s.ambiente === 'produccion' ? 'amb-prod' : 'amb-prueba');
@@ -412,6 +413,8 @@ const sinAvisoUbicacion = (t) => String(t || '').replace(/\s*La ubicaci[oó]n de
 function aplicarAlertas(a) {
   app.alertas.datos = a;
   if (!alertaEl) return;
+  // El aviso rojo es solo para administración: la persona de caja no puede resolverlo y no debe verlo (3 nov 2026). A Emil le llega aparte, por el panel.
+  if (!app.admin) { alertaEl.hidden = true; sincronizarAlturas(); document.dispatchEvent(new CustomEvent('app:alertas-cambio', { detail: a })); return; }
   const r = a ? a.rechazados : 0, p = a ? a.pendientes : 0;
   if (!r && !p) { alertaEl.hidden = true; sincronizarAlturas(); document.dispatchEvent(new CustomEvent('app:alertas-cambio', { detail: a })); return; }
   const docs = (n) => (n === 1 ? '1 documento' : n + ' documentos');
@@ -793,8 +796,8 @@ function armarApp(reciente = false) {
   menuEl = h('div.cab-usuario',
     h('button.btn.cab-menu', { type: 'button', 'aria-haspopup': 'true', 'aria-expanded': 'false', 'aria-controls': 'cab-panel', onclick: () => abrirMenu(!menuEl.classList.contains('abierto')) }, 'Menú ▾'),
     h('div#cab-panel.cab-panel',
-      h('span.cab-sesion', 'Sesión de ', h('strong', app.ctx.nombre || app.usuario)),
-      app.admin ? h('button.btn.chico', { type: 'button', onclick: async () => { abrirMenu(false); (await import('./claude_ayuda.js')).abrirPreguntaClaude(app); } }, 'Preguntar a Claude') : null,
+      h('span.cab-sesion', h('span.cab-sesion-pre', 'Sesión de '), h('strong', app.ctx.nombre || app.usuario)),
+      app.admin ? h('button.btn.chico.btn-claude', { type: 'button', onclick: async () => { abrirMenu(false); (await import('./claude_ayuda.js')).abrirPreguntaClaude(app); } }, 'Preguntar a Claude') : null,
       h('button.btn.chico', { type: 'button', onclick: () => { abrirMenu(false); cerrarSesion(); } }, 'Cerrar sesión')));
   volverEl = h('button.btn.cab-volver', { type: 'button' });
   inicioEl = h('button.btn.cab-inicio', { type: 'button', onclick: () => subir('inicio') }, 'Inicio');

@@ -229,5 +229,5 @@
   .mt-item .mt-btns{flex-wrap:nowrap;justify-content:stretch}
   .mt-item .mt-btns .btn{flex:1 1 0;min-width:0;white-space:nowrap}
   .mt-item .mt-nombre,.mt-item .mt-sub{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
-  .mt-item .mt-sub{-webkit-line-clamp:1}
+  .mt-item .mt-sub{-webkit-line-clamp:3} /* el aviso se lee completo; la fila crece solo si hace falta */
 }

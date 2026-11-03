@@ -80,6 +80,10 @@
 .mos>*{flex-shrink:0}
 .cajon-btn.mos{justify-content:flex-start;white-space:normal}
 .cajon-btn.mos .mos-nombre{-webkit-line-clamp:3}
+/* Pantalla ancha: el nombre se lee completo (hasta 4 líneas) y el mosaico crece hacia abajo en lugar de cortarlo con «…» (3 nov 2026) */
+@media(min-width:980px){
+  .mos-nombre,.prod-nombre,.cajon-btn.mos .mos-nombre{-webkit-line-clamp:4}
+}
 .cajon-btn[aria-pressed=true]{background:var(--niv1);border-color:var(--niv1);border-top-color:var(--niv1-osc);color:#fff;box-shadow:var(--sombra)}
 .cajon-btn[aria-pressed=true] .mos-num{background:#fff;color:var(--niv1)}
 /* Un producto con opciones parece una pila de tarjetas y queda relleno de ámbar mientras su panel de opciones está abierto: el ojo une los dos */
@@ -87,7 +91,9 @@
 .prod-grupo[aria-pressed=true]{background:var(--niv2);border-color:var(--niv2);border-top-color:var(--niv2-osc);color:#2b1a00;box-shadow:var(--sombra)}
 .prod-grupo[aria-pressed=true] .mos-num{background:#2b1a00;color:#fff}
 .prod-grupo[aria-pressed=true] .prod-precio,.prod-grupo[aria-pressed=true] .prod-opciones{color:#2b1a00}
-.prod-pie{display:flex;justify-content:space-between;align-items:baseline;gap:.3rem;min-height:16px;white-space:nowrap}
+.prod-pie{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:baseline;gap:0 .3rem;min-height:16px} /* si el código y el precio no caben juntos, el precio baja a otra línea en lugar de cortarse */
+.prod-pie>*{min-width:0}
+.prod-pie .prod-precio:only-child,.prod-pie .prod-precio:last-child{margin-left:auto;text-align:right}
 .prod-grupo .prod-pie{justify-content:flex-end}
 .prod-precio{font-variant-numeric:tabular-nums;color:var(--c-osc,var(--rojo-osc));font-weight:700;font-size:.86rem}
 .prod-precio.abierto{color:#8a5a00}
@@ -626,3 +632,8 @@ body.fx-caja .sin-red-in{max-width:2200px}
   body.fx-caja main#vista{padding-block:.5rem}
   .caja-izq{min-height:420px}
 }
+
+/* En la pantalla de Facturación no va el aviso rojo de Hacienda: no es de quien cobra (decisión de Emil, 3 nov 2026). En las demás pantallas lo ve el administrador. */
+.cabecera[data-vista=facturar] .alerta-cab{display:none}
+/* «Preguntar a Claude» no va en la pantalla de Facturación (decisión de Emil, 3 nov 2026): se queda en las demás pantallas de administración */
+.cabecera[data-vista=facturar] .btn-claude{display:none}
