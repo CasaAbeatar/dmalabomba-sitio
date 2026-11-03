@@ -585,3 +585,6 @@ body:has(.inv-fondo) .cabecera:has(.cab-usuario.abierto){z-index:120}
 .inv-resultado .rc-res-det summary::-webkit-details-marker{display:none}
 .inv-resultado .rc-res-det summary::before{content:'▸';margin-right:.35rem;text-decoration:none;display:inline-block}
 .inv-resultado .rc-res-det[open] summary::before{content:'▾'}
+
+/* Nota informativa (no error): la conversión se ajustó sola y el precio cuadra */
+.inv-costo-aviso.nota{border-color:var(--borde-ok,#2f7d57);background:var(--verde-suave,#e7f3ec);color:#14583a;font-weight:500}

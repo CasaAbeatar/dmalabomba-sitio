@@ -653,7 +653,7 @@ export async function abrirFactura(ctx, clave, { previa = null, recibirSugeridas
     let bolsa = grupoDeRubro(rubro.value);
     const selCat = h('select.campo', { 'aria-label': 'Categoría de la línea ' + l.linea }, ...['comida_preparada', 'unitario', 'suministro'].map((g) => h('option', { value: g }, GRUPOS[g])));
     const llenarRubros = (g) => { const v = rubro.value; rubro.replaceChildren(h('option', { value: '' }, 'Escoja el rubro…'), ...(cat.categorias || []).filter((c) => c.activo !== false && c.grupo === g).map((c) => h('option', { value: c.id }, c.nombre))); rubro.value = grupoDeRubro(v) === g ? v : ''; if (!rubro.value) { const op = [...rubro.options].filter((o) => o.value); const sg = sug.categoria_id && op.find((o) => o.value === sug.categoria_id); rubro.value = sg ? sg.value : op[0]?.value || ''; } };
-    const pintarBotones = () => { bolsa = grupoDeRubro(rubro.value) || bolsa; selCat.value = bolsa || ''; el.dataset.bolsa = bolsa; if (typeof buscar !== 'undefined') buscar.value = (cat.categorias || []).find((x) => x.id === rubro.value)?.nombre || ''; };
+    const pintarBotones = () => { bolsa = grupoDeRubro(rubro.value) || bolsa; selCat.value = bolsa || ''; el.dataset.bolsa = bolsa; if (typeof buscar !== 'undefined') buscar.value = rubro.value || ''; };
     selCat.addEventListener('change', () => { bolsa = selCat.value; errorRubro.textContent = ''; if (art && grupoDe(cat, art) !== bolsa) { art = null; pintarArticulo(true); } llenarRubros(bolsa); pintarBolsa(); pintarBotones(); pintarSem(); cambio(); });
     // Unitarios (gaseosas, bebidas): la línea se empareja con el producto del menú que se vende, 1 a 1. Cualquier nombre que el proveedor use después para eso se recuerda y entra al mismo producto.
     const prodInput = h('input.campo', { type: 'text', autocomplete: 'off', placeholder: 'Escriba para buscar el producto que usted vende (ej. fresca, coca)…', 'aria-label': 'Producto del menú que se vende, línea ' + l.linea });
@@ -712,20 +712,20 @@ export async function abrirFactura(ctx, clave, { previa = null, recibirSugeridas
         if (nuevo.nuevo) prodEco.textContent = 'Se agregó «' + nombre + '» al menú (código ' + nuevo.codigo + ', precio pendiente: fíjelo en Productos) y la línea quedó emparentada con él.';
       } catch (e) { malProd((e && e.message) || 'No se pudo agregar el producto. Intente de nuevo.'); prodInput.disabled = false; }
     }
-    // Buscador del rubro: se escribe parte del nombre (ej. «snack») y sale la lista de todos los rubros; al escoger uno, la categoría se ajusta sola
-    const idLista = 'rubros-' + String(f.clave).slice(-8) + '-' + l.linea;
-    const datos = h('datalist', { id: idLista }, ...(cat.categorias || []).filter((c) => c.activo !== false).map((c) => h('option', { value: c.nombre, label: GRUPOS[c.grupo] || '' })));
+    // Rubro: una lista visible con TODOS los rubros, agrupados por cómo se llevan (uno a uno, o bolsa por monto). Al escoger uno, la categoría se ajusta sola.
+    const GRUPO_LISTA = { unitario: 'Unitarios · uno a uno (gaseosas, bebidas, confitería)', comida_preparada: 'Comida preparada · bolsa por monto (incluye Pulpería: snacks, caramelos, helados)', suministro: 'Suministros · bolsa por monto' };
     const nombreRubro = () => (cat.categorias || []).find((x) => x.id === rubro.value)?.nombre || '';
-    const buscar = h('input.campo.inv-buscar-rubro', { type: 'text', list: idLista, autocomplete: 'off', placeholder: 'Escriba para buscar el rubro…', 'aria-label': 'Buscar el rubro de la línea ' + l.linea, onfocus: (e) => { e.target.dataset.prev = e.target.value; e.target.placeholder = e.target.value || 'Escriba para buscar el rubro…'; e.target.value = ''; }, onblur: (e) => { if (!e.target.value.trim()) e.target.value = nombreRubro(); } });
+    const buscar = h('select.campo.inv-buscar-rubro', { 'aria-label': 'Rubro de la línea ' + l.linea },
+      h('option', { value: '' }, 'Escoja el rubro…'),
+      ...['unitario', 'comida_preparada', 'suministro'].map((g) => h('optgroup', { label: GRUPO_LISTA[g] },
+        ...(cat.categorias || []).filter((c) => c.activo !== false && c.grupo === g).sort((x, y) => String(x.nombre).localeCompare(String(y.nombre), 'es')).map((c) => h('option', { value: c.id }, c.nombre)))));
+    buscar.value = rubro.value || '';
     buscar.addEventListener('change', () => {
-      const t = norm(buscar.value);
-      if (!t) { buscar.value = nombreRubro(); return; }
-      const cs = (cat.categorias || []).filter((c) => c.activo !== false);
-      const c = cs.find((x) => norm(x.nombre) === t) || (cs.filter((x) => norm(x.nombre).includes(t)).length === 1 ? cs.find((x) => norm(x.nombre).includes(t)) : null);
-      if (!c) { errorRubro.textContent = 'No hay un rubro con ese nombre: escoja uno de la lista.'; return; }
+      const c = (cat.categorias || []).find((x) => x.id === buscar.value);
+      if (!c) { rubro.value = ''; rubro.dispatchEvent(new Event('change')); return; }
       errorRubro.textContent = ''; bolsa = c.grupo; llenarRubros(c.grupo); rubro.value = c.id; rubro.dispatchEvent(new Event('change'));
     });
-    const campoRubro = h('label.etq.rc-f-rubro', h('span', 'Rubro'), buscar, datos);
+    const campoRubro = h('label.etq.rc-f-rubro', h('span', 'Rubro'), buscar);
     const campoCat = h('label.etq.rc-f-cat', h('span', 'Categoría'), selCat);
     const artFila = h('div.inv-campo-art.rc-f-art', h('span.etq', 'Artículo del inventario'), h('div.inv-art-fila', nombreArt, btnArt));
     const campoConv = h('label.etq.inv-c-conv.rc-f-conv', h('span', 'Presentación y conversión de unidades'), h('span.inv-con-unidad', h('span.inv-pre', 'Cada «' + (uFac(l) || 'unidad') + '» de la factura trae'), factor, h('span.inv-unidad.inv-u-art')), factorEco, avisoConv);
@@ -754,7 +754,7 @@ export async function abrirFactura(ctx, clave, { previa = null, recibirSugeridas
       if (sug.fuente !== 'memoria') motivos.push(sug.fuente ? 'Es una sugerencia del sistema, no una compra anterior de este proveedor (' + String(FUENTES[sug.fuente] || 'por parecido').replace(/^./, (c) => c.toLowerCase()) + ').' : 'No hay una compra anterior de este proveedor con lo mismo.');
       else if (sug.articulo_id && sug.articulo_id !== art.id) motivos.push('Se cambió el artículo que recordaba el sistema.');
       if (sug.fuente === 'memoria' && sug.factor != null && Number(sug.factor) !== fv) motivos.push('La conversión es distinta a la de la vez pasada (' + num(sug.factor, 6) + ').');
-      if (notaAuto && fv === 1) motivos.push('La conversión se ajustó sola porque la del nombre daba un precio sin sentido.');
+      if (notaAuto && fv === 1) motivos.push('La conversión quedó en 1 porque el precio de la factura cuadra con unidades sueltas.');
       if (ia) {
         if (ia.nivel !== 'verde') motivos.push('Claude pide revisarla.');
         if (!enColones() && ia.factor != null && Number(ia.factor) !== fv) motivos.push('Claude propone una conversión de ' + num(ia.factor, 6) + ' y aquí hay ' + num(fv, 6) + '.');
@@ -940,7 +940,7 @@ export async function abrirFactura(ctx, clave, { previa = null, recibirSugeridas
       factorEco.className = 'inv-eco';
       const rev = enColones() ? { aviso: '' } : revisarConversion({ descripcion: l.descripcion, subtotal: l.subtotal_crc, cantidad: l.cantidad, factorActual: fv }, (n) => money(n));
       // Si la persona escribió una conversión creíble no se le dice nada; si no lo es, se le explica con la cifra (no se cambia lo que escribió)
-      avisoConv.textContent = rev.aviso && !rev.cambiado ? rev.aviso : (fv === 1 ? notaAuto : ''); avisoConv.hidden = !avisoConv.textContent;
+      const soloNota = !(rev.aviso && !rev.cambiado); avisoConv.textContent = rev.aviso && !rev.cambiado ? rev.aviso : (fv === 1 ? notaAuto : ''); avisoConv.classList.toggle('nota', soloNota && !!avisoConv.textContent); avisoConv.hidden = !avisoConv.textContent;
       factorEco.textContent = 'La factura dice ' + num(l.cantidad, 3) + ' × ' + num(fv, 6) + ' = ' + (art ? cantR(Math.round(Number(l.cantidad) * fv * 1000) / 1000, art.unidad) : num(Number(l.cantidad) * fv, 3)) + '. Si llegó menos, corrija la cantidad.';
       pintarSem();
     }
