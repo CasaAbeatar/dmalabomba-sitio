@@ -116,7 +116,7 @@ let RESPALDO_LISTA = {};
 const leerLista = () => { try { const t = sessionStorage.getItem(LLAVE_LISTA); const o = t ? JSON.parse(t) : null; if (o && typeof o === 'object') return o; } catch { /* sin almacenamiento */ } return RESPALDO_LISTA; };
 const guardarLista = (o) => { RESPALDO_LISTA = o; try { sessionStorage.setItem(LLAVE_LISTA, JSON.stringify(o)); } catch { /* sin almacenamiento: la lista funciona igual */ } };
 const PAGINA = 30; // facturas que se pintan de una vez; «Ver más facturas» agrega otras tantas
-const ESTADOS = [['todas', 'Todas'], ['rechazadas', 'Rechazadas (no entran)']];
+const ESTADOS = [['todas', 'Todas, por etapas'], ['verde', 'Solo verdes'], ['ambar', 'Solo ámbar'], ['rojo', 'Solo rojas'], ['rechazadas', 'Rechazadas (no entran)']];
 const ORDENES = [['proveedor', 'Por proveedor'], ['recientes', 'Más recientes primero'], ['lineas', 'Todas las líneas']];
 const dm = (x) => { const d = ymdCR(x); return d ? d.split('-').reverse().slice(0, 2).join('/') : ''; };
 
@@ -147,7 +147,7 @@ async function abrirLista(ctx) {
   const campo = (txt, ctl) => h('label.etq.rc-filtro', h('span', txt), ctl);
   const contenido = [
     h('div.rc-filtros', filtroEmp,
-      h('div.rc-filtros-fila', h('label.etq.inv-buscar.rc-filtro.rc-f-buscar', h('span', 'Buscar'), campoBusqueda(buscar, () => { est.q = ''; est.mostrar = PAGINA; persistir(); cargar(); })), campo('Proveedor', selProv), campo('Estado', selEstado), campo('Orden', selOrden))),
+      h('div.rc-filtros-fila', h('label.etq.inv-buscar.rc-filtro.rc-f-buscar', h('span', 'Buscar'), campoBusqueda(buscar, () => { est.q = ''; est.mostrar = PAGINA; persistir(); cargar(); })), campo('Proveedor', selProv), campo('Semáforo', selEstado), campo('Orden', selOrden))),
     resumen, otraNota, deshechos, lista];
   const alCambio = () => { if (vivo) { est.otraVieja = true; cargar(); } };
   ventana({ titulo: 'Por recibir', contenido, alCerrar: () => { vivo = false; document.removeEventListener('inv:cambio', alCambio); } }).el.classList.add('rc-vent');
@@ -213,7 +213,8 @@ async function abrirLista(ctx) {
   // Etapas por factura: primero se ven las verdes; al aceptarlas aparecen las ámbar; al resolverlas, las rojas
   const nivelEtapa = (l) => { const v = nivelRapido(l); return v === 'verde' ? 'verde' : v === 'ambar' ? 'ambar' : 'rojo'; };
   function etapaDe(inf) {
-    for (const nivel of ['verde', 'ambar', 'rojo']) {
+    const forzado = ['verde', 'ambar', 'rojo'].includes(est.estado) ? [est.estado] : ['verde', 'ambar', 'rojo']; // con un color escogido solo se ve ese color
+    for (const nivel of forzado) {
       const ls = inf.ls.filter((l) => nivelEtapa(l) === nivel);
       if (ls.length) return { nivel, ls, recibibles: nivel === 'rojo' ? [] : ls.filter(esSegura) };
     }
@@ -235,8 +236,7 @@ async function abrirLista(ctx) {
     const pasa = (f) => {
       const i = infos.get(f.clave);
       if (est.proveedor && claveProv(f) !== est.proveedor) return false;
-      if (est.estado === 'seguras') return i.puede && i.seguras > 0;
-      if (est.estado === 'revisar') return i.puede && i.n > i.seguras;
+      if (['verde', 'ambar', 'rojo'].includes(est.estado)) return i.puede && i.ls.some((l) => nivelEtapa(l) === est.estado);
       if (est.estado === 'rechazadas') return !i.puede;
       return true;
     };
@@ -288,7 +288,7 @@ async function abrirLista(ctx) {
   const nivelVista = (l) => { const n = nivelRapido(l); return n === 'verde' ? 'verde' : (esSegura(l) ? 'segura' : n); };
   function vistaLineas(facs, infos, conEmpresa) {
     const todas = [];
-    for (const f of facs) { const inf = infos.get(f.clave); if (!inf.puede) continue; for (const l of inf.ls) todas.push({ f, l, v: nivelVista(l) }); }
+    for (const f of facs) { const inf = infos.get(f.clave); if (!inf.puede) continue; for (const l of inf.ls) { const v = nivelVista(l); if (['verde', 'ambar', 'rojo'].includes(est.estado) && nivelEtapa(l) !== est.estado) continue; todas.push({ f, l, v }); } }
     todas.sort((a, b) => ORD_NIVEL[a.v] - ORD_NIVEL[b.v] || String(a.f.proveedor_nombre).localeCompare(String(b.f.proveedor_nombre), 'es') || String(a.f.consecutivo).localeCompare(String(b.f.consecutivo)) || a.l.linea - b.l.linea);
     const marcada = (f, l) => !!est.sel.get(f.clave)?.has(l.linea);
     const poner1 = (f, l, si) => { let s = est.sel.get(f.clave); if (!s) est.sel.set(f.clave, (s = new Set())); si ? s.add(l.linea) : s.delete(l.linea); if (!s.size) est.sel.delete(f.clave); };
