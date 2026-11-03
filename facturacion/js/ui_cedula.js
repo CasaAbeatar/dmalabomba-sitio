@@ -249,7 +249,7 @@ export function crearCampoIdentificacion(opts = {}) {
     const d = ident.value, t = tipoActual();
     clearTimeout(tim); tim = null;
     if (!d) fase = 'vacio';
-    else if (llevaLetras(t)) fase = 'otro';
+    else if (llevaLetras(t) && !(juridicaConLetras(t) && /^\d+$/.test(d) && !errorLocal())) fase = 'otro'; // una jurídica de solo números se consulta en Hacienda como siempre; solo la que lleva letras no se consulta
     else if (errorLocal()) fase = 'local';
     else { fase = 'consultando'; tim = setTimeout(() => { tim = null; consultar(false); }, 500); }
     pintar();
@@ -349,7 +349,7 @@ export function crearCampoIdentificacion(opts = {}) {
 
     // Ayuda bajo el número
     const conLetras = llevaLetras(t);
-    ayuda.textContent = conLetras ? 'Escriba el número del documento como aparece en él: letras y números, hasta ' + MAX_ID_LETRAS + '. Los espacios y guiones se quitan solos.'
+    ayuda.textContent = juridicaConLetras(t) ? 'Cédula jurídica: 10 entre números y letras. Los espacios y guiones se quitan solos.' : conLetras ? 'Escriba el número del documento como aparece en él: letras y números, hasta ' + MAX_ID_LETRAS + '. Los espacios y guiones se quitan solos.'
       : !n ? 'Escriba solo los números, sin guiones ni espacios. Si pega la cédula con guiones, el sistema los quita.'
       : 'Cédula física: 9 números. Jurídica: 10 números y empieza con 3. DIMEX: 11 o 12 números.';
     // Teclado del celular: de números para las cédulas; normal (con letras) para pasaportes y otros documentos, o si ya se escribieron letras
@@ -401,6 +401,7 @@ export function crearCampoIdentificacion(opts = {}) {
     else if (fase === 'servicio') nodo = caja('gris', '-', 'Hacienda no responde en este momento',
       'Puede seguir: el cliente se guarda marcado como «sin verificar» y se confirma después. Revise bien el número, porque Hacienda rechaza las facturas con un número que no existe.' + (r?.mensaje ? ' ' + r.mensaje : ''), btnVolver());
     else if (fase === 'sesion') nodo = caja('rojo', '✕', 'Su sesión venció', 'Entre de nuevo con su usuario y PIN para poder consultar a Hacienda.');
+    else if (fase === 'otro' && juridicaConLetras(t)) nodo = caja('gris', '-', 'Esta cédula jurídica lleva letras y no se consulta en Hacienda', 'Tiene 10 entre números y letras. Escriba el nombre completo a mano y revise bien el número.');
     else if (fase === 'otro') nodo = caja('gris', '-', 'Este tipo de documento no se consulta en Hacienda', 'El número puede llevar letras y números (hasta ' + MAX_ID_LETRAS + '). Escriba el nombre completo a mano.');
     estado._k = claveEstado;
     estado.replaceChildren(...(nodo ? [nodo] : []));
