@@ -18,6 +18,9 @@ const fechaPartida = (d) => (d ? [h('span.nw', fechaCorta(d) + ','), ' ', h('spa
 const montoDelMensaje = (m) => { const x = /₡\s*([\d\s\u00a0.]+(?:,\d+)?)/.exec(String(m || '')); return x ? Number(x[1].replace(/[\s\u00a0.]/g, '').replace(',', '.')) || 0 : 0; };
 const rechazoPorCuentas = (e) => !!e && !esTransitorio(e) && (e.hint === 'cuentas_abiertas' || /cuentas? abiertas?/i.test(e.message || ''));
 const faltaDe = (e) => !!e && !esTransitorio(e) && e.hint === 'faltante';
+const conteoBajoDe = (e) => !!e && !esTransitorio(e) && e.hint === 'conteo_bajo';
+// Decisión de Emil (3 nov 2026): si lo contado es muy bajo (no pasa de lo que ya había al abrir, más entradas, menos salidas), el servidor solo dice que no coincide. Nunca se muestra un monto aquí.
+const TXT_RECONTAR = 'El conteo no coincide. Vuelva a contar el efectivo de la caja y escriba el total otra vez.';
 
 export async function montarCajera(root, app) {
   const api = app.api, socId = app.soc.id, soc = app.soc;
@@ -169,8 +172,9 @@ export async function montarCajera(root, app) {
     const [fresco, lista] = await Promise.all([api.turnoEstado(turnoVisto), api.ventasAbiertas(socId)]);
     if (fresco?.turno?.cerrado_en) { await terminar(fresco, true); return; }
     if ((lista || []).length) { abiertas = lista; pintar(); toast('Hay cuentas abiertas. Cóbrelas o anúlelas antes de cerrar la caja.', 'error', 9000); return; }
-    // El servidor compara y solo contesta cuánto falta (si falta). Nunca dice cuánto debía haber.
+    // El servidor compara y solo contesta cuánto falta (si falta). Nunca dice cuánto debía haber. Si el conteo es demasiado bajo, solo dice que no coincide (sin monto) y no deja cerrar.
     const r = await api.turnoConteo(turnoVisto, contado);
+    if (r?.recontar) { mensaje = TXT_RECONTAR; toast(TXT_RECONTAR, 'error', 9000); pintar(); return; }
     const falta = Number(r?.faltante) > 0 ? Number(r.faltante) : 0;
     if (falta > 0) { preguntarFaltante(falta, contado); return; }
     await cerrar(contado, false);
@@ -195,6 +199,7 @@ export async function montarCajera(root, app) {
       try { res = await api.turnoCerrar(turnoVisto, { efectivo: contado, notas: notas.trim() || null, aceptaFaltante: acepta }); }
       catch (e) {
         if (faltaDe(e)) { preguntarFaltante(montoDelMensaje(e.message), contado); return; }
+        if (conteoBajoDe(e)) { mensaje = TXT_RECONTAR; toast(TXT_RECONTAR, 'error', 9000); pintar(); return; }
         if (rechazoPorCuentas(e)) { toast('Hay cuentas abiertas. Cóbrelas o anúlelas antes de cerrar la caja.', 'error', 9000); await cargar(); return; }
         let cerrada = null;
         if (/ya est[aá] cerrado/i.test(e.message || '') || esTransitorio(e)) { try { const t = await api.turnoEstado(turnoVisto); if (t?.turno?.cerrado_en) cerrada = t; } catch { /* sin conexión */ } }
