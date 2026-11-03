@@ -115,8 +115,8 @@ let RESPALDO_LISTA = {};
 const leerLista = () => { try { const t = sessionStorage.getItem(LLAVE_LISTA); const o = t ? JSON.parse(t) : null; if (o && typeof o === 'object') return o; } catch { /* sin almacenamiento */ } return RESPALDO_LISTA; };
 const guardarLista = (o) => { RESPALDO_LISTA = o; try { sessionStorage.setItem(LLAVE_LISTA, JSON.stringify(o)); } catch { /* sin almacenamiento: la lista funciona igual */ } };
 const PAGINA = 30; // facturas que se pintan de una vez; «Ver más facturas» agrega otras tantas
-const ESTADOS = [['todas', 'Todas'], ['seguras', 'Con líneas seguras'], ['revisar', 'Con líneas por revisar'], ['rechazadas', 'Rechazadas (no entran)']];
-const ORDENES = [['proveedor', 'Por proveedor'], ['recientes', 'Más recientes primero']];
+const ESTADOS = [['todas', 'Todas'], ['rechazadas', 'Rechazadas (no entran)']];
+const ORDENES = [['proveedor', 'Por proveedor'], ['recientes', 'Más recientes primero'], ['lineas', 'Todas las líneas']];
 const dm = (x) => { const d = ymdCR(x); return d ? d.split('-').reverse().slice(0, 2).join('/') : ''; };
 
 async function abrirLista(ctx) {
@@ -126,7 +126,7 @@ async function abrirLista(ctx) {
   const empresaGuardada = 'sociedad' in g ? (g.sociedad === 'todas' ? null : (cat.empresas || []).some((e) => e.id === g.sociedad) ? g.sociedad : propia) : propia;
   const est = {
     sociedad: empresaGuardada, q: String(g.q || ''), proveedor: String(g.proveedor || ''),
-    estado: ESTADOS.some(([v]) => v === g.estado) ? g.estado : 'todas', orden: g.orden === 'recientes' ? 'recientes' : 'proveedor',
+    estado: ESTADOS.some(([v]) => v === g.estado) ? g.estado : 'todas', orden: g.orden === 'recientes' || g.orden === 'lineas' ? g.orden : 'proveedor', sel: new Map(), mostrarL: 120,
     mostrar: Number(g.mostrar) >= PAGINA ? Number(g.mostrar) : PAGINA, datos: null, otra: null, otraVieja: true,
   };
   const persistir = () => guardarLista({ sociedad: est.sociedad || 'todas', q: est.q, proveedor: est.proveedor, estado: est.estado, orden: est.orden, mostrar: est.mostrar });
@@ -209,9 +209,19 @@ async function abrirLista(ctx) {
     ls.forEach((l) => { niv[nivelRapido(l)]++; });
     return { ls, puede, n: ls.length, niv, seguras: puede ? ls.filter(esSegura).length : 0, todasNoInv: ls.length > 0 && ls.every((l) => (l.sugerencia || {}).no_inventario) };
   };
+  // Etapas por factura: primero se ven las verdes; al aceptarlas aparecen las ámbar; al resolverlas, las rojas
+  const nivelEtapa = (l) => { const v = nivelRapido(l); return v === 'verde' ? 'verde' : v === 'ambar' ? 'ambar' : 'rojo'; };
+  function etapaDe(inf) {
+    for (const nivel of ['verde', 'ambar', 'rojo']) {
+      const ls = inf.ls.filter((l) => nivelEtapa(l) === nivel);
+      if (ls.length) return { nivel, ls, recibibles: nivel === 'rojo' ? [] : ls.filter(esSegura) };
+    }
+    return { nivel: null, ls: [], recibibles: [] };
+  }
   const claveProv = (f) => f.proveedor_cedula || f.proveedor_nombre || 'sin dato';
 
   function pintar() {
+    if (!est.datos) return;
     const d = est.datos, todas = d.facturas || [];
     const scroller = lista.closest('.modal-cuerpo'), yAntes = scroller ? scroller.scrollTop : 0;
     const infos = new Map(todas.map((f) => [f.clave, infoFactura(f)]));
@@ -241,7 +251,9 @@ async function abrirLista(ctx) {
       const conEmpresa = !est.sociedad;
       const filaDe = (f, conProveedor) => fila(f, infos.get(f.clave), conProveedor, conEmpresa);
       let cuerpoLista, restan = 0;
-      if (est.orden === 'recientes') {
+      if (est.orden === 'lineas') {
+        cuerpoLista = [vistaLineas(facs, infos, conEmpresa)];
+      } else if (est.orden === 'recientes') {
         const orden = [...facs].sort((a, b) => String(b.llego || b.fecha).localeCompare(String(a.llego || a.fecha)));
         cuerpoLista = orden.slice(0, est.mostrar).map((f) => filaDe(f, true));
         restan = Math.max(0, orden.length - est.mostrar);
@@ -266,9 +278,61 @@ async function abrirLista(ctx) {
         cuerpoLista = cuerpoG;
         restan = Math.max(0, facs.length - pintadas);
       }
-      poner(lista, h('div.rc-filas', cuerpoLista), restan ? h('button.btn.rc-pag', { type: 'button', onclick: () => { est.mostrar += PAGINA; persistir(); pintar(); } }, 'Ver ' + plural(Math.min(PAGINA, restan), 'factura más', 'facturas más') + ' (quedan ' + restan + ')') : null);
+      poner(lista, est.orden === 'lineas' ? cuerpoLista[0] : h('div.rc-filas', cuerpoLista), restan ? h('button.btn.rc-pag', { type: 'button', onclick: () => { est.mostrar += PAGINA; persistir(); pintar(); } }, 'Ver ' + plural(Math.min(PAGINA, restan), 'factura más', 'facturas más') + ' (quedan ' + restan + ')') : null);
     }
     if (scroller && yAntes) scroller.scrollTop = yAntes;
+  }
+  /* ---- Vista «Todas las líneas»: cada línea de todas las facturas, las verdes primero; se marcan y se reciben juntas ---- */
+  const ORD_NIVEL = { verde: 0, segura: 1, ambar: 2, rojo: 3 };
+  const nivelVista = (l) => { const n = nivelRapido(l); return n === 'verde' ? 'verde' : (esSegura(l) ? 'segura' : n); };
+  function vistaLineas(facs, infos, conEmpresa) {
+    const todas = [];
+    for (const f of facs) { const inf = infos.get(f.clave); if (!inf.puede) continue; for (const l of inf.ls) todas.push({ f, l, v: nivelVista(l) }); }
+    todas.sort((a, b) => ORD_NIVEL[a.v] - ORD_NIVEL[b.v] || String(a.f.proveedor_nombre).localeCompare(String(b.f.proveedor_nombre), 'es') || String(a.f.consecutivo).localeCompare(String(b.f.consecutivo)) || a.l.linea - b.l.linea);
+    const marcada = (f, l) => !!est.sel.get(f.clave)?.has(l.linea);
+    const poner1 = (f, l, si) => { let s = est.sel.get(f.clave); if (!s) est.sel.set(f.clave, (s = new Set())); si ? s.add(l.linea) : s.delete(l.linea); if (!s.size) est.sel.delete(f.clave); };
+    const marcarSegun = (ok) => { est.sel.clear(); todas.forEach((x) => { if (ok(x.v)) poner1(x.f, x.l, true); }); pintar(); };
+    const nMarc = [...est.sel.values()].reduce((a, s) => a + s.size, 0);
+    const totMarc = todas.filter((x) => marcada(x.f, x.l)).reduce((a, x) => a + (Number(x.l.subtotal_crc) || 0), 0);
+    const cuenta = { verde: 0, segura: 0, ambar: 0, rojo: 0 }; todas.forEach((x) => { cuenta[x.v]++; });
+    const barra = h('div.rc-sel-barra',
+      h('div.rc-sel-botones',
+        h('button.btn', { type: 'button', disabled: !cuenta.verde, onclick: () => marcarSegun((v) => v === 'verde') }, 'Marcar las ' + cuenta.verde + ' verdes'),
+        h('button.btn', { type: 'button', disabled: !(cuenta.verde + cuenta.segura), onclick: () => marcarSegun((v) => v === 'verde' || v === 'segura') }, 'Marcar verdes y ámbar seguras (' + (cuenta.verde + cuenta.segura) + ')'),
+        h('button.btn', { type: 'button', disabled: !nMarc, onclick: () => { est.sel.clear(); pintar(); } }, 'Quitar las marcas')),
+      h('p.tenue.inv-chico.rc-sel-leyenda', 'Se marcan solo las que se pueden recibir sin revisar. Las ámbar con duda y las rojas se abren con «Revisar».'));
+    const hasta = Math.min(todas.length, est.mostrarL);
+    const filas = todas.slice(0, hasta).map(({ f, l, v }) => {
+      const sg = l.sugerencia || {};
+      const destino = sg.articulo ? limpiaNombre(sg.articulo) : (sg.categoria ? 'rubro «' + sg.categoria + '»' : 'sin artículo');
+      const puedeMarcar = v === 'verde' || v === 'segura';
+      const caja = puedeMarcar ? h('input', { type: 'checkbox', checked: marcada(f, l), 'aria-label': 'Marcar la línea ' + l.linea + ' de la factura N.° ' + numFactura(f.consecutivo), onchange: (e) => { poner1(f, l, e.target.checked); pintar(); } }) : h('span.rc-sel-vacio');
+      return h('div.rc-lin' + (marcada(f, l) ? '.marcada' : ''),
+        caja, h('i.rc-lin-punto.' + (v === 'segura' ? 'ambar' : v), { 'aria-hidden': 'true', title: v === 'verde' ? 'Verde' : v === 'segura' ? 'Ámbar segura' : v === 'ambar' ? 'Ámbar: revisar' : 'Roja' }),
+        h('span.rc-lin-doc', h('strong', proveedorTxt(f.proveedor_nombre)), h('small', 'N.° ' + numFactura(f.consecutivo) + ' · línea ' + l.linea + (conEmpresa ? ' · ' + (f.sociedad_nombre || '') : ''))),
+        h('span.rc-lin-art', h('span.rc-seg-desc', l.descripcion || ''), h('span.rc-seg-flecha', { 'aria-hidden': 'true' }, '→'), h('span.rc-seg-art', destino)),
+        h('span.rc-seg-cant.cifra', num(Number(l.cantidad) || 0, 3)),
+        h('span.rc-lin-imp.cifra', money0(l.subtotal_crc)),
+        puedeMarcar ? h('span.rc-lin-acc') : h('button.btn.chico', { type: 'button', onclick: () => abrirFactura(ctx, f.clave, { previa: f }) }, 'Revisar'));
+    });
+    const btnRecibir = h('button.btn.primario.grande', { type: 'button', disabled: !nMarc }, nMarc ? 'Recibir ' + (nMarc === 1 ? 'la línea marcada' : 'las ' + nMarc + ' líneas marcadas') + ' · ' + money0(totMarc) : 'Marque las líneas que quiere recibir');
+    btnRecibir.addEventListener('click', async () => {
+      if (btnRecibir.disabled) return;
+      btnRecibir.disabled = true;
+      const grupos = [...est.sel.entries()];
+      let i = 0;
+      for (const [clave, set] of grupos) {
+        i++; btnRecibir.textContent = 'Recibiendo ' + i + ' de ' + grupos.length + '…';
+        const f = facs.find((x) => x.clave === clave);
+        await new Promise((res) => { abrirFactura(ctx, clave, { previa: f, recibirSugeridas: true, soloLineas: new Set(set), alFin: res }).catch(res); });
+      }
+      est.sel.clear();
+      if (vivo) { est.otraVieja = true; cargar(); }
+    });
+    return h('div.rc-lineas', barra, h('div.rc-lin-cab', h('span'), h('span'), h('span', 'Proveedor y factura'), h('span', 'Línea → artículo'), h('span.cifra', 'Cantidad'), h('span.cifra', 'Importe'), h('span')),
+      h('div.rc-lin-filas', filas),
+      hasta < todas.length ? h('button.btn.rc-pag', { type: 'button', onclick: () => { est.mostrarL += 120; pintar(); } }, 'Ver ' + Math.min(120, todas.length - hasta) + ' líneas más (quedan ' + (todas.length - hasta) + ')') : null,
+      h('div.rc-sel-pie', btnRecibir));
   }
   // Lo que casi nunca es de inventario (ferretería, combustible, servicios) va al final
   const SIN_INVENTARIO = /ferreter|materiales|constru|combustible|gasolin|servicentro|estaci[oó]n de servicio|repuesto|el[eé]ctric|seguro|alquiler|internet|telecom|municipalidad/i;
@@ -290,6 +354,7 @@ async function abrirLista(ctx) {
 
   // Una fila compacta por factura: documento, proveedor, líneas, semáforo, total y las acciones, todo en una sola línea (en celular baja a dos)
   function fila(f, inf, conProveedor, conEmpresa) {
+    const et = etapaDe(inf);
     const ec = f.estado_contable || {};
     const hoyLlego = f.llego && ymdCR(f.llego) === (est.datos.hoy || ctx.hoy);
     const cuando = hoyLlego ? 'hoy ' + horaCorta(f.llego) : dm(f.llego || f.fecha);
@@ -298,17 +363,19 @@ async function abrirLista(ctx) {
     if (!inf.puede) botones.push(h('button.btn', { type: 'button', onclick: ver }, 'Ver la factura'));
     else {
       if (inf.todasNoInv) botones.push(h('button.btn.primario', { type: 'button', onclick: () => pedirIgnorar(ctx, f, null, (r) => { quitarDeLista(f, r); }) }, 'Toda la factura no es de inventario'));
-      else if (inf.seguras > 0) {
-        const bs = h('button.btn.primario', { type: 'button' }, inf.seguras === 1 ? 'Recibir la línea segura' : 'Recibir las ' + inf.seguras + ' líneas seguras');
+      else if (et.recibibles.length > 0) {
+        const nR = et.recibibles.length, solo = new Set(et.recibibles.map((l) => l.linea));
+        const rotulo = et.nivel === 'verde' ? (nR === 1 ? 'Recibir la línea verde' : 'Recibir las ' + nR + ' verdes') : (nR === 1 ? 'Recibir la ámbar segura' : 'Recibir las ' + nR + ' ámbar seguras');
+        const bs = h('button.btn.primario', { type: 'button' }, rotulo);
         bs.addEventListener('click', async () => {
           if (bs.disabled) return;
           bs.disabled = true; bs.textContent = 'Recibiendo…';
-          await new Promise((res) => { abrirFactura(ctx, f.clave, { previa: f, recibirSugeridas: true, alFin: res }).catch(res); });
-          if (bs.isConnected) { bs.disabled = false; bs.textContent = inf.seguras === 1 ? 'Recibir la línea segura' : 'Recibir las ' + inf.seguras + ' líneas seguras'; }
+          await new Promise((res) => { abrirFactura(ctx, f.clave, { previa: f, recibirSugeridas: true, soloLineas: solo, alFin: res }).catch(res); });
+          if (bs.isConnected) { bs.disabled = false; bs.textContent = rotulo; }
         });
         botones.push(bs);
       }
-      const porRevisar = inf.n - inf.seguras;
+      const porRevisar = inf.n - et.recibibles.length;
       botones.push(h('button.btn', { type: 'button', onclick: ver }, porRevisar > 0 && !inf.todasNoInv ? 'Revisar ' + plural(porRevisar, 'línea', 'líneas') : 'Ver la factura'));
     }
     return h('article.inv-fac.rc-fac' + (inf.puede ? '' : '.rechazada'), { 'data-clave': f.clave },
@@ -321,17 +388,20 @@ async function abrirLista(ctx) {
         inf.puede ? h('span.rc-pills', pill('verde', inf.niv.verde, 'verde', 'verdes'), pill('ambar', inf.niv.ambar, 'ámbar', 'ámbar'), pill('rojo', inf.niv.rojo, 'roja', 'rojas')) : h('span.chip.mal.rc-fac-rech', ec.texto || 'Rechazada, no entra')),
       h('span.rc-fac-total.cifra', { title: 'Total con IVA' }, money0(f.total)),
       h('div.rc-fac-acc', botones)),
-     listaSeguras(inf));
+     listaEtapa(inf, et));
   }
-  // Lo que se va a aceptar, a la vista: cada línea segura con su artículo (o rubro) y la cantidad que trae la factura
-  function listaSeguras(inf) {
-    if (!inf.puede || inf.todasNoInv || !inf.seguras) return null;
-    const ls = inf.ls.filter(esSegura);
-    return h('ul.rc-seguras', { 'aria-label': 'Líneas que se recibirían' }, ...ls.map((l) => {
-      const sg = l.sugerencia || {};
-      const destino = sg.articulo ? limpiaNombre(sg.articulo) : (sg.categoria ? 'rubro «' + sg.categoria + '»' : 'sin artículo');
-      return h('li', h('span.rc-seg-desc', l.descripcion || ('Línea ' + l.linea)), h('span.rc-seg-flecha', { 'aria-hidden': 'true' }, '→'), h('span.rc-seg-art', destino), h('span.rc-seg-cant.cifra', num(Number(l.cantidad) || 0, 3)));
-    }));
+  // Lo que toca decidir ahora, a la vista: solo la etapa actual de la factura (verdes, luego ámbar, luego rojas), cada línea con su artículo y cantidad
+  function listaEtapa(inf, et) {
+    if (!inf.puede || inf.todasNoInv || !et.nivel) return null;
+    const rot = { verde: 'Verdes', ambar: 'Ámbar', rojo: 'Rojas' }[et.nivel];
+    const resto = inf.ls.length - et.ls.length;
+    return h('div.rc-etapa',
+      h('p.rc-etapa-tit', h('i.rc-lin-punto.' + et.nivel, { 'aria-hidden': 'true' }), h('strong', rot + ' (' + et.ls.length + ')'), resto ? h('span.tenue', ' · después ' + (et.nivel === 'verde' ? 'siguen las ámbar y rojas' : 'siguen las rojas') + ' (' + resto + ')') : null),
+      h('ul.rc-seguras', ...et.ls.map((l) => {
+        const sg = l.sugerencia || {};
+        const destino = sg.articulo ? limpiaNombre(sg.articulo) : (sg.categoria ? 'rubro «' + sg.categoria + '»' : 'sin artículo');
+        return h('li', h('span.rc-seg-desc', l.descripcion || ('Línea ' + l.linea)), h('span.rc-seg-flecha', { 'aria-hidden': 'true' }, '→'), h('span.rc-seg-art', destino), h('span.rc-seg-cant.cifra', num(Number(l.cantidad) || 0, 3)));
+      })));
   }
   // La factura entera quedó «No es de inventario»: sale de la lista y deja un aviso con «Deshacer»
   function quitarDeLista(f, r) {
@@ -385,7 +455,7 @@ export function pedirIgnorar(ctx, f, lineas, alTerminar) {
 /* =====================================================================================================================
    Ventana de una factura: recibir sus líneas
    ===================================================================================================================== */
-export async function abrirFactura(ctx, clave, { previa = null, recibirSugeridas = false, alRecibir = null, alFin = null } = {}) {
+export async function abrirFactura(ctx, clave, { previa = null, recibirSugeridas = false, soloLineas = null, alRecibir = null, alFin = null } = {}) {
   let autoRecibir = recibirSugeridas;
   let silencioso = recibirSugeridas; // «Recibir las N líneas seguras» desde la lista: no se abre la ventana salvo que algo necesite revisarse
   const cat = ctx.cat;
@@ -439,7 +509,7 @@ export async function abrirFactura(ctx, clave, { previa = null, recibirSugeridas
     const formas = pend.map((l) => formaLinea(f, l, puede));
     const zonaRecibir = h('div.rc-zona');
     const btnRecibir = h('button.btn.primario.grande.rc-aceptar', { type: 'button' }, 'Aceptar las líneas seguras');
-    const seguras = () => formas.filter((x) => x.segura());
+    const seguras = () => formas.filter((x) => x.segura() && (!soloLineas || soloLineas.has(x.linea)));
     const resumenSem = h('p.tenue.inv-chico.rc-sem-resumen');
     const pintarBarra = () => {
       const n = seguras().length;
@@ -996,7 +1066,7 @@ export async function abrirFactura(ctx, clave, { previa = null, recibirSugeridas
       aliasInfo,
       preparar: asegurarArticulo,
       alCambiar: (fn) => avisarCambio.push(fn),
-      problema, enfocarProblema, datos: datosLinea,
+      linea: l.linea, problema, enfocarProblema, datos: datosLinea,
     };
   }
   function sugerenciaTxt(s) {

@@ -228,3 +228,35 @@
 .rc-seg-art{color:var(--tinta);font-weight:600}
 .rc-seg-cant{text-align:right;white-space:nowrap}
 @media (max-width:700px){.rc-seguras li{grid-template-columns:minmax(0,1fr) 1.2rem minmax(0,1fr) 3.5rem}}
+
+/* Vista «Todas las líneas»: una columna por dato, iguales en todas las filas */
+.rc-sel-barra{display:flex;flex-direction:column;gap:.4rem;padding:.5rem 0}
+.rc-sel-botones{display:flex;flex-wrap:wrap;gap:.5rem}
+.rc-sel-botones .btn{min-height:48px}
+.rc-sel-leyenda{margin:0}
+.rc-lin-cab,.rc-lin{display:grid;grid-template-columns:2rem .8rem minmax(0,1.1fr) minmax(0,2fr) 4.5rem 6.5rem 6rem;gap:.5rem .7rem;align-items:center;padding:.35rem .9rem}
+.rc-lin-cab{font-size:.78rem;text-transform:uppercase;letter-spacing:.04em;color:var(--tinta2);border-bottom:1px solid var(--linea);background:#fff}
+.rc-lin-cab .cifra,.rc-lin .cifra{text-align:right}
+.rc-lin-filas{background:#fff;border:1px solid var(--linea);border-top:0;border-radius:0 0 10px 10px}
+.rc-lin{min-height:52px;border-bottom:1px solid var(--linea)}
+.rc-lin:last-child{border-bottom:0}
+.rc-lin.marcada{background:#f4faf6}
+.rc-lin input[type=checkbox]{width:1.5rem;height:1.5rem;margin:0}
+.rc-sel-vacio{display:block;width:1.5rem}
+.rc-lin-punto{display:block;width:.7rem;height:.7rem;border-radius:50%;background:var(--tinta2)}
+.rc-lin-punto.verde{background:#1e7a4f}.rc-lin-punto.ambar{background:#e8a531}.rc-lin-punto.rojo{background:var(--rojo)}
+.rc-lin-doc{display:flex;flex-direction:column;min-width:0;line-height:1.25}
+.rc-lin-doc strong{overflow-wrap:anywhere}.rc-lin-doc small{color:var(--tinta2)}
+.rc-lin-art{display:grid;grid-template-columns:minmax(0,1.3fr) 1.2rem minmax(0,1fr);gap:.4rem;align-items:baseline;min-width:0;font-size:.9rem}
+.rc-sel-pie{position:sticky;bottom:0;display:flex;justify-content:flex-end;padding:.6rem .9rem;background:linear-gradient(to top,var(--fondo,#fff) 70%,transparent)}
+@media (max-width:900px){
+  .rc-lin-cab{display:none}
+  .rc-lin{grid-template-columns:2rem .8rem minmax(0,1fr) auto;grid-template-areas:"c p d i" ". . a a" ". . n b"}
+  .rc-lin>:nth-child(1){grid-area:c}.rc-lin>:nth-child(2){grid-area:p}.rc-lin>:nth-child(3){grid-area:d}.rc-lin>:nth-child(4){grid-area:a}
+  .rc-lin>:nth-child(5){grid-area:n;text-align:left}.rc-lin>:nth-child(6){grid-area:i}.rc-lin>:nth-child(7){grid-area:b;justify-self:end}
+}
+
+.rc-etapa{padding:.2rem 0 .4rem;border-top:1px dashed var(--linea)}
+.rc-etapa .rc-seguras{border-top:0;padding:0}
+.rc-etapa-tit{display:flex;align-items:center;gap:.4rem;margin:.1rem 0 .15rem;font-size:.86rem}
+.rc-etapa-tit .tenue{color:var(--tinta2)}
