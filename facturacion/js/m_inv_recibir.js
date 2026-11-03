@@ -149,7 +149,7 @@ async function abrirLista(ctx) {
       h('div.rc-filtros-fila', h('label.etq.inv-buscar.rc-filtro.rc-f-buscar', h('span', 'Buscar'), campoBusqueda(buscar, () => { est.q = ''; est.mostrar = PAGINA; persistir(); cargar(); })), campo('Proveedor', selProv), campo('Estado', selEstado), campo('Orden', selOrden))),
     resumen, otraNota, deshechos, lista];
   const alCambio = () => { if (vivo) { est.otraVieja = true; cargar(); } };
-  ventana({ titulo: 'Por recibir', contenido, alCerrar: () => { vivo = false; document.removeEventListener('inv:cambio', alCambio); } });
+  ventana({ titulo: 'Por recibir', contenido, alCerrar: () => { vivo = false; document.removeEventListener('inv:cambio', alCambio); } }).el.classList.add('rc-vent');
   document.addEventListener('inv:cambio', alCambio);
   if (est.q) buscar.dispatchEvent(new Event('input'));
   buscar.addEventListener('input', debounce(() => { est.q = buscar.value.trim(); est.mostrar = PAGINA; persistir(); cargar(); }, 350));
@@ -381,7 +381,7 @@ export async function abrirFactura(ctx, clave, { previa = null, recibirSugeridas
   let vivo = true;
   const cuerpo = h('div.inv-factura.rc-factura', cargando('Cargando la factura…'));
   const resultado = h('div.inv-resultado', { 'aria-live': 'polite' });
-  const mostrar = () => { if (!silencioso) return; silencioso = false; ventana({ titulo: 'Factura de proveedor', volver: 'Por recibir', contenido: [resultado, cuerpo], alCerrar: () => { vivo = false; } }); };
+  const mostrar = () => { if (!silencioso) return; silencioso = false; ventana({ titulo: 'Factura de proveedor', volver: 'Por recibir', contenido: [resultado, cuerpo], alCerrar: () => { vivo = false; } }).el.classList.add('rc-vent'); };
   if (!silencioso) { silencioso = true; mostrar(); }
   const recordados = new Map(); // línea -> sugerencia que trajo la lista (por si la consulta de la factura no la repite)
   (previa?.lineas || []).forEach((l) => recordados.set(l.linea, l.sugerencia));

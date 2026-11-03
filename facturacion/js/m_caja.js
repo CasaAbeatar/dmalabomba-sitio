@@ -105,12 +105,6 @@ function describirCobro(estado, mensaje) {
 // Firma de una cuenta (para saber si un cambio que falló por la red sí llegó al servidor)
 const firmaCuenta = (c) => JSON.stringify([c.venta.total, c.venta.estado, (c.lineas || []).map((l) => [l.id, Number(l.cantidad), cents(l.precio_final), l.nota || '', l.producto_id, l.descripcion, l.codigo_tarifa_iva || '', Number(l.tarifa_iva)])]);
 
-const AYUDA_TIPO = {
-  buffet: 'Cuenta rápida, sin datos del cliente',
-  espera: 'Cliente que regresa a pagar',
-  llevar: 'Pedido para llevar: nombre y teléfono',
-  express: 'Pedido express: nombre y teléfono',
-};
 const RAPIDOS = [1000, 2000, 5000, 10000, 20000];
 
 // Cuentas con un cobro en camino ahora mismo. Vale para todo el módulo (no solo para una ventana): así ninguna ventana nueva, ni la Caja montada otra vez,
@@ -673,57 +667,56 @@ export default {
       });
     }
 
-    /* ---------- Ventana de datos de cuenta ---------- */
-    function dialogoCuenta({ titulo, boton, inicial }) {
+    /* ---------- Cuenta nueva, poner en espera y cambiar nombre ---------- */
+    // Decisión de Emil (3 nov 2026): la cuenta nueva no pregunta nada (se factura de una vez). Al final, «Poner en espera» pide solo un nombre
+    // (Emil, Express, lo que sea) y la cuenta queda en la lista de arriba. Ya no se elige buffet / para llevar / express al abrir.
+    function dialogoNombre({ titulo, boton, inicial }) {
       return new Promise((ok) => {
-        let tipo = inicial?.tipo || 'buffet';
         let hecho = false;
-        const nombre = h('input.campo', { type: 'text', maxlength: 60, value: inicial?.referencia || '', autocomplete: 'off' });
-        const tel = h('input.campo', { type: 'tel', inputmode: 'tel', maxlength: 20, value: inicial?.telefono || '', autocomplete: 'off' });
-        const lblNombre = h('span');
-        const filaTel = h('label.etq', 'Teléfono', tel);
+        const nombre = h('input.campo', { type: 'text', maxlength: 60, value: inicial || '', autocomplete: 'off', placeholder: 'Ej. Emil, Express, mesa 3' });
         const err = h('div.error-caja', { hidden: true });
-        const btnsTipo = Object.entries(TIPOS_SERVICIO).map(([k, v]) => h('button.tipo-btn', { type: 'button', dataset: { tipo: k }, onclick: () => { tipo = k; pintar(); } }, h('b', v), h('small', AYUDA_TIPO[k])));
-        function pintar() {
-          btnsTipo.forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.tipo === tipo)));
-          lblNombre.textContent = tipo === 'buffet' ? 'Nombre o número (opcional)' : 'Nombre del cliente';
-          filaTel.hidden = !(tipo === 'llevar' || tipo === 'express');
-        }
         const enviar = (cerrar) => {
-          const ref = nombre.value.trim(), t = tel.value.trim();
-          err.hidden = true;
-          if (tipo !== 'buffet' && !ref) { err.textContent = 'Escriba el nombre del cliente.'; err.hidden = false; nombre.focus(); return; }
-          if ((tipo === 'llevar' || tipo === 'express') && t.replace(/\D/g, '').length < 8) { err.textContent = 'Escriba el teléfono del cliente (8 números).'; err.hidden = false; tel.focus(); return; }
-          hecho = true; cerrar(); ok({ tipo, referencia: ref, telefono: (tipo === 'llevar' || tipo === 'express') ? t : '' });
+          const ref = nombre.value.trim();
+          if (!ref) { err.textContent = 'Escriba un nombre para encontrar la cuenta después.'; err.hidden = false; nombre.focus(); return; }
+          hecho = true; cerrar(); ok(ref);
         };
         let cerrarFn;
-        const m = modal({ titulo, ancho: 520, alCerrar: () => { if (!hecho) ok(null); },
-          contenido: h('div.col', h('div.tipos-cuenta', btnsTipo), h('label.etq', lblNombre, nombre), filaTel, err),
+        const m = modal({ titulo, ancho: 460, alCerrar: () => { if (!hecho) ok(null); },
+          contenido: h('div.col', h('label.etq', 'Nombre de la cuenta', nombre), err),
           botones: [{ texto: 'Cancelar', onclick: (c) => c() }, { texto: boton, clase: 'primario', onclick: (c) => enviar(c) }] });
         cerrarFn = m.cerrar;
-        [nombre, tel].forEach((i) => i.addEventListener('keydown', (e) => { if (e.key === 'Enter') enviar(cerrarFn); }));
-        pintar();
+        nombre.addEventListener('keydown', (e) => { if (e.key === 'Enter') enviar(cerrarFn); });
+        setTimeout(() => nombre.focus(), 60);
       });
     }
 
     async function nuevaCuenta() {
-      const d = await dialogoCuenta({ titulo: 'Nueva cuenta', boton: 'Crear cuenta' });
-      if (!d) return;
       await accion(async () => {
-        const v = await api.ventaCrear(socId, d.tipo, d.referencia || null, d.telefono || null, app.terminal);
-        cur = ventaVacia(v); guardarActiva();
+        await crearCuentaBuffet();
         repintar();
-        toast('Cuenta creada: ' + TIPOS_SERVICIO[d.tipo] + (d.referencia ? ' de ' + d.referencia : '') + '.');
+        toast('Cuenta nueva.');
       });
       cambiarVista('productos');
       if (fino()) buscador.inp.focus();
     }
-    async function editarDatos() {
+    async function ponerEnEspera() {
       if (!cur) return;
       const v = cur.venta, id = v.id;
-      const d = await dialogoCuenta({ titulo: 'Datos de la cuenta', boton: 'Guardar', inicial: { tipo: v.tipo_servicio, referencia: v.referencia, telefono: v.telefono } });
-      if (!d) return;
-      accion(async () => { cur = await api.ventaDatos(id, { tipo: d.tipo, referencia: d.referencia, telefono: d.telefono }); repintar(); toast('Datos guardados.'); });
+      const ref = await dialogoNombre({ titulo: 'Poner en espera', boton: 'Poner en espera', inicial: v.referencia || '' });
+      if (!ref) return;
+      accion(async () => {
+        cur = await api.ventaDatos(id, { tipo: 'espera', referencia: ref, telefono: v.telefono || '' });
+        sincronizarBarra(); cur = null; repintar();
+        toast('En espera: ' + ref + '. Toque su nombre arriba para seguir con ella.');
+        cambiarVista('productos');
+      });
+    }
+    async function cambiarNombre() {
+      if (!cur) return;
+      const v = cur.venta, id = v.id;
+      const ref = await dialogoNombre({ titulo: 'Nombre de la cuenta', boton: 'Guardar', inicial: v.referencia || '' });
+      if (!ref) return;
+      accion(async () => { cur = await api.ventaDatos(id, { tipo: v.tipo_servicio === 'buffet' ? 'espera' : v.tipo_servicio, referencia: ref, telefono: v.telefono || '' }); repintar(); toast('Nombre guardado.'); });
     }
     function anularCuenta() {
       if (!cur) return;
@@ -1079,8 +1072,8 @@ export default {
         h('div.cuenta-items', cur.lineas.length ? [h('div.lineas-cab', { 'aria-hidden': 'true' }, h('span', 'Producto'), h('span', 'Cant.'), h('span', 'Precio'), h('span', 'Total'), h('span')), ...cur.lineas.map(filaLinea)] : h('div.vacio', { style: 'margin:.8rem 0' }, 'La cuenta está vacía. Toque un producto o búsquelo arriba.')));
       asideCuenta.replaceChildren(
         h('div.cuenta-cab',
-          h('div', h('h2', (TIPOS_SERVICIO[v.tipo_servicio] || v.tipo_servicio) + ' ' + numCuenta(v.numero)), h('div.sub', detalle || (v.tipo_servicio === 'buffet' ? 'Sin nombre' : 'Falta el nombre'))),
-          h('button.btn.chico', { type: 'button', onclick: editarDatos }, 'Cambiar datos de la cuenta')),
+          h('div', h('h2', (TIPOS_SERVICIO[v.tipo_servicio] || v.tipo_servicio) + ' ' + numCuenta(v.numero)), h('div.sub', detalle || (v.tipo_servicio === 'buffet' ? 'Cuenta nueva' : 'Falta el nombre'))),
+          v.tipo_servicio === 'buffet' ? h('button.btn.ambar', { type: 'button', disabled: !cur.lineas.length, onclick: seguro(ponerEnEspera) }, 'Poner en espera') : h('button.btn.chico', { type: 'button', onclick: seguro(cambiarNombre) }, 'Cambiar nombre')),
         lineas,
         h('div.cuenta-pie',
           v.estado === 'prefacturada' ? h('div.aviso-pref' + (v.prefactura_vigente === false ? '.vieja' : ''), h('strong', 'PREFACTURA N.° ' + (v.prefactura_numero || '') + (Number(v.prefactura_revision) > 1 ? ' · revisión ' + v.prefactura_revision : '')),

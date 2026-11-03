@@ -2,12 +2,13 @@
    Una sola familia tipográfica (la de la aplicación) y líneas finas; el símbolo ₡ y los números heredan el mismo estilo y grosor del texto que los acompaña.
    Lo que se toca mide 48 px o más (simetria.css), las filas de la lista unos 52 px y cada línea de una factura una sola fila. */
 
-/* ---------- Título de la ventana de la factura: ya no se parte letra por letra en celular ---------- */
-.inv-ventana:has(.rc-lista,.rc-factura) .modal-tit{flex-wrap:wrap;gap:.4rem .9rem}
-.inv-ventana:has(.rc-lista,.rc-factura) .modal-tit h2{flex:1 1 9rem;min-width:0;overflow-wrap:break-word;word-break:normal}
-@media (max-width:560px){
-  .inv-ventana:has(.rc-lista,.rc-factura) .modal-tit h2{flex-basis:100%;order:1}
-  .inv-ventana:has(.rc-lista,.rc-factura) .modal-tit .cerrar.inv-volver{order:0}
+/* ---------- Título de la ventana de la factura: en celular el botón «Volver» va arriba y el título abajo, a todo el ancho ----------
+   La clase rc-vent la pone el JS en la ventana (no depende de :has ni de que el contenido ya esté cargado). */
+.inv-ventana.rc-vent .modal-tit{flex-wrap:wrap;gap:.4rem .9rem}
+.inv-ventana.rc-vent .modal-tit h2{flex:1 1 9rem;min-width:0;overflow-wrap:break-word;word-break:normal}
+@media (max-width:640px){
+  .inv-ventana.rc-vent .modal-tit h2{flex:1 1 100%;order:1;width:100%}
+  .inv-ventana.rc-vent .modal-tit .cerrar.inv-volver{order:0;max-width:100%;white-space:normal;text-align:left}
 }
 
 /* ---------- Filtros y resumen de la lista ---------- */
@@ -146,12 +147,18 @@
 .rc-decididas{border:1px solid var(--linea2);border-radius:12px;background:#fff;overflow:hidden}
 .rc-decididas>summary{padding:.2rem .9rem;font-weight:600;cursor:pointer;display:flex;align-items:center}
 .rc-decididas .inv-lineas{gap:0;border-top:1px solid var(--linea)}
-.inv-linea.rc-dec.decidida{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:.2rem .8rem;align-items:center;padding:.45rem .9rem;border:0;border-left:3px solid var(--linea2);border-bottom:1px solid var(--linea);border-radius:0;background:#fff}
+.rc-decididas,.rc-decididas .inv-lineas{height:auto;min-height:0;flex:none}
+/* Una línea decidida es compacta: nombre y estado en una fila, lo recibido debajo y el botón al final; nada de alturas mínimas ni estirado */
+.inv-linea.rc-dec.decidida{display:grid;grid-template-columns:minmax(0,1fr) auto;grid-auto-rows:auto;align-content:start;align-items:center;gap:.15rem .7rem;height:auto;min-height:0;padding:.5rem .9rem;border:0;border-left:3px solid var(--linea2);border-bottom:1px solid var(--linea);border-radius:0;background:#fff}
 .inv-linea.rc-dec.decidida:last-child{border-bottom:0}
 .inv-linea.rc-dec.recibida{border-left-color:var(--borde-ok)}
-.rc-dec-txt{display:flex;flex-direction:column;min-width:0}
-.rc-dec-txt small{color:var(--tinta2);overflow-wrap:anywhere}
-.rc-dec-acc{display:flex;flex-direction:column;align-items:flex-end;gap:.3rem}
+.inv-linea.rc-dec .chip{grid-column:2;grid-row:1;justify-self:end;align-self:center;margin:0}
+.rc-dec-txt{display:contents}
+.rc-dec-txt strong{grid-column:1;grid-row:1;min-width:0;overflow-wrap:anywhere}
+.rc-dec-txt small{grid-column:1/-1;color:var(--tinta2);overflow-wrap:anywhere;margin:0}
+.rc-dec-acc{grid-column:1/-1;display:flex;flex-direction:row;flex-wrap:wrap;align-items:center;gap:.3rem .6rem;margin-top:.2rem}
+.rc-dec-acc:empty,.rc-zona:empty{display:none}
+.rc-dec-acc .rc-zona{flex:1 1 100%}
 .rc-res-det{margin:.3rem 0 0}
 .rc-res-det>summary{cursor:pointer;min-height:44px;display:flex;align-items:center;font-weight:600}
 
@@ -169,8 +176,8 @@
   .rc-razon{white-space:normal;flex:1 1 auto}
   .rc-razon-fila{flex-wrap:wrap}
   .rc-panel-acc .btn{flex:1 1 100%}
-  .inv-linea.rc-dec.decidida{grid-template-columns:auto minmax(0,1fr);padding:.5rem .7rem}
-  .rc-dec-acc{grid-column:1/-1;align-items:stretch}
+  .inv-linea.rc-dec.decidida{padding:.5rem .7rem}
+  .rc-dec-acc .btn{flex:1 1 100%}
 }
 
 .rc-panel .inv-costo-fila{padding:0}
