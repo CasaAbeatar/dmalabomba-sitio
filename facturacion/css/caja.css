@@ -635,5 +635,3 @@ body.fx-caja .sin-red-in{max-width:2200px}
 
 /* En la pantalla de Facturación no va el aviso rojo de Hacienda: no es de quien cobra (decisión de Emil, 3 nov 2026). En las demás pantallas lo ve el administrador. */
 .cabecera[data-vista=facturar] .alerta-cab{display:none}
-/* «Preguntar a Claude» no va en la pantalla de Facturación (decisión de Emil, 3 nov 2026): se queda en las demás pantallas de administración */
-.cabecera[data-vista=facturar] .btn-claude{display:none}
