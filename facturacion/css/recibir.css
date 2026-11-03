@@ -30,7 +30,8 @@
 .rc-prov-cab{display:flex;align-items:baseline;flex-wrap:wrap;gap:.1rem .8rem;margin:0;padding:.4rem .9rem;background:#fcfaf5;border-bottom:1px solid var(--linea);font-size:.98rem;font-weight:400}
 .rc-prov-cab strong{font-weight:600;overflow-wrap:anywhere}
 .rc-prov-datos{font-size:.86rem;color:var(--tinta2)}
-.inv-fac.rc-fac{display:flex;flex-direction:row;flex-wrap:wrap;align-items:center;gap:.2rem .9rem;padding:.3rem .9rem;border:0;border-bottom:1px solid var(--linea);border-radius:0;background:#fff;min-height:52px}
+.inv-fac.rc-fac{display:block;padding:.3rem .9rem;border:0;border-bottom:1px solid var(--linea);border-radius:0;background:#fff;min-height:52px}
+.rc-fac-fila{display:flex;flex-direction:row;flex-wrap:wrap;align-items:center;gap:.2rem .9rem}
 .rc-filas>.rc-fac:last-child{border-bottom:0}
 .inv-fac.rc-fac.rechazada{border-left:3px solid var(--rojo)}
 .rc-fac-abrir{flex:1 1 15rem;min-width:0;display:flex;flex-direction:column;align-items:flex-start;justify-content:center;gap:0;min-height:48px;padding:.1rem 0;border:0;background:none;text-align:left;cursor:pointer;color:inherit;line-height:1.25}
@@ -48,6 +49,20 @@
 .rc-fac-acc{display:flex;gap:.5rem;margin-left:auto}
 .rc-fac-rech{white-space:normal}
 .rc-pag{align-self:center;min-width:16rem}
+/* Pantalla de 15 pulgadas o más: cada pieza de la fila tiene siempre el mismo ancho, así los totales, los semáforos y los botones quedan en columnas rectas
+   (antes cada botón medía lo que decía su texto y todo se corría de fila en fila) */
+@media (min-width:1200px){
+  .rc-fac-fila{flex-wrap:nowrap;gap:.2rem .8rem}
+  .rc-fac-abrir{flex:1 1 0;min-width:7.5rem}
+  .rc-fac-emp{flex:0 0 8.5rem}
+  .rc-fac-estado{flex:0 0 21rem;justify-content:flex-end;flex-wrap:nowrap;gap:.2rem .6rem}
+  .rc-pills{gap:.1rem .6rem}
+  .rc-fac-total{flex:0 0 6rem}
+  .rc-fac-acc{flex:0 0 25rem;display:grid;grid-template-columns:minmax(0,1fr) 10rem;gap:.5rem;margin-left:0}
+  .rc-fac-acc .btn{min-width:0;padding-inline:.5rem;line-height:1.15}
+  .rc-fac-acc>.btn:only-child{grid-column:2}
+  .rc-fac-acc>.btn.primario:only-child{grid-column:1/-1}
+}
 @media (max-width:760px){
   .inv-fac.rc-fac{padding:.35rem .7rem;gap:.1rem .6rem}
   .rc-fac-abrir{flex:1 1 0}
@@ -205,3 +220,11 @@
   .inv-fac.rc-fac{row-gap:0}
 }
 @media (min-width:761px){.rc-fac-abrir{flex:1 1 9rem}.rc-fac-estado{flex-wrap:nowrap}.inv-fac.rc-fac{gap:.1rem .7rem}}
+
+/* Líneas seguras a la vista: columnas fijas para que todas las filas queden alineadas */
+.rc-seguras{list-style:none;margin:0;padding:.2rem 0 .4rem;display:grid;gap:.1rem;font-size:.86rem;color:var(--tinta2);border-top:1px dashed var(--linea)}
+.rc-seguras li{display:grid;grid-template-columns:minmax(0,1.3fr) 1.2rem minmax(0,1fr) 4.5rem;gap:.5rem;align-items:baseline;min-width:0}
+.rc-seg-desc,.rc-seg-art{overflow-wrap:anywhere}
+.rc-seg-art{color:var(--tinta);font-weight:600}
+.rc-seg-cant{text-align:right;white-space:nowrap}
+@media (max-width:700px){.rc-seguras li{grid-template-columns:minmax(0,1fr) 1.2rem minmax(0,1fr) 3.5rem}}

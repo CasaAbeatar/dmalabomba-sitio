@@ -312,6 +312,7 @@ async function abrirLista(ctx) {
       botones.push(h('button.btn', { type: 'button', onclick: ver }, porRevisar > 0 && !inf.todasNoInv ? 'Revisar ' + plural(porRevisar, 'línea', 'líneas') : 'Ver la factura'));
     }
     return h('article.inv-fac.rc-fac' + (inf.puede ? '' : '.rechazada'), { 'data-clave': f.clave },
+     h('div.rc-fac-fila',
       h('button.rc-fac-abrir', { type: 'button', onclick: ver, 'aria-label': 'Abrir la factura N.° ' + numFactura(f.consecutivo) + ' de ' + proveedorTxt(f.proveedor_nombre) },
         conProveedor ? h('strong.rc-fac-prov', proveedorTxt(f.proveedor_nombre)) : null,
         h('span.rc-fac-doc', 'N.° ' + numFactura(f.consecutivo) + ' · ' + cuando)),
@@ -319,7 +320,18 @@ async function abrirLista(ctx) {
       h('span.rc-fac-estado', h('span.rc-fac-lineas', plural(inf.n, 'línea', 'líneas')),
         inf.puede ? h('span.rc-pills', pill('verde', inf.niv.verde, 'verde', 'verdes'), pill('ambar', inf.niv.ambar, 'ámbar', 'ámbar'), pill('rojo', inf.niv.rojo, 'roja', 'rojas')) : h('span.chip.mal.rc-fac-rech', ec.texto || 'Rechazada, no entra')),
       h('span.rc-fac-total.cifra', { title: 'Total con IVA' }, money0(f.total)),
-      h('div.rc-fac-acc', botones));
+      h('div.rc-fac-acc', botones)),
+     listaSeguras(inf));
+  }
+  // Lo que se va a aceptar, a la vista: cada línea segura con su artículo (o rubro) y la cantidad que trae la factura
+  function listaSeguras(inf) {
+    if (!inf.puede || inf.todasNoInv || !inf.seguras) return null;
+    const ls = inf.ls.filter(esSegura);
+    return h('ul.rc-seguras', { 'aria-label': 'Líneas que se recibirían' }, ...ls.map((l) => {
+      const sg = l.sugerencia || {};
+      const destino = sg.articulo ? limpiaNombre(sg.articulo) : (sg.categoria ? 'rubro «' + sg.categoria + '»' : 'sin artículo');
+      return h('li', h('span.rc-seg-desc', l.descripcion || ('Línea ' + l.linea)), h('span.rc-seg-flecha', { 'aria-hidden': 'true' }, '→'), h('span.rc-seg-art', destino), h('span.rc-seg-cant.cifra', num(Number(l.cantidad) || 0, 3)));
+    }));
   }
   // La factura entera quedó «No es de inventario»: sale de la lista y deja un aviso con «Deshacer»
   function quitarDeLista(f, r) {
