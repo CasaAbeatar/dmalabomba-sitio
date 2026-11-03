@@ -7,14 +7,15 @@ import { inv, claveNueva } from './api_inventarios.js';
 let cssListo = null;
 export function cargarCss() {
   if (cssListo) return cssListo;
-  const href = new URL('../css/inventarios.css', import.meta.url).href;
-  cssListo = new Promise((ok) => {
+  // inventarios.css y, después, recibir.css (la pantalla «Por recibir»: todo con prefijo rc-); el orden importa porque la segunda ajusta a la primera
+  const hrefs = ['../css/inventarios.css', '../css/recibir.css'].map((r) => new URL(r, import.meta.url).href);
+  cssListo = Promise.all(hrefs.map((href) => new Promise((ok) => {
     if ([...document.querySelectorAll('link[rel=stylesheet]')].some((l) => l.href === href)) return ok();
     const l = h('link', { rel: 'stylesheet', href, 'data-fx-inventarios': '1' });
     l.addEventListener('load', () => ok()); l.addEventListener('error', () => ok());
     document.head.append(l);
     setTimeout(ok, 2500);
-  });
+  })));
   return cssListo;
 }
 
@@ -27,7 +28,8 @@ export const plural = (n, uno, varios) => `${num(n, 0)} ${Math.abs(Number(n)) ==
 const UNIDADES = { kg: ['kg', 'kg'], g: ['g', 'g'], ml: ['ml', 'ml'], litro: ['litro', 'litros'], unidad: ['unidad', 'unidades'], caja: ['caja', 'cajas'], bolsa: ['bolsa', 'bolsas'], paquete: ['paquete', 'paquetes'], lata: ['lata', 'latas'], colon: ['colón', 'colones'], botella: ['botella', 'botellas'] };
 // «1 unidad», «3 unidades», «12,5 kg». Una unidad que no está en la lista corta sale con su código.
 export function unidadTxt(codigo, n = 2) { const u = UNIDADES[codigo]; return u ? (Math.abs(Number(n)) === 1 ? u[0] : u[1]) : String(codigo || ''); }
-export const cantTxt = (n, unidad) => `${num(n, 3)} ${unidadTxt(unidad, n)}`.trim();
+// Dinero siempre con ₡: si la unidad es el colón (comida preparada y suministros se llevan por su valor) la cantidad es un monto, no «12 000 colones»
+export const cantTxt = (n, unidad) => (unidad === 'colon' ? money(n) : `${num(n, 3)} ${unidadTxt(unidad, n)}`.trim());
 export const dinero = (n) => money(n);
 // Costo por unidad: hasta 5 decimales cuando los tiene (₡1 234,56789), si no 2
 export function costoTxt(n) {
