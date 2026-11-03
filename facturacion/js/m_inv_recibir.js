@@ -532,6 +532,8 @@ export async function abrirFactura(ctx, clave, { previa = null, recibirSugeridas
     const zona = h('div');
     const ignorarBtn = h('button.btn' + (sug.no_inventario ? '.ambar' : ''), { type: 'button', onclick: () => pedirIgnorar(ctx, f, [l.linea], () => cargar()) }, 'No es de inventario');
     // Dos decisiones por línea, las dos ya sugeridas: el rubro (por CABYS o memoria) y la categoría (la bolsa a la que pertenece ese rubro)
+    // A qué cajón del menú va un producto nuevo según la categoría del inventario: confitería y snacks a Pulpería, energéticas y maltas a Deportivas y energéticas, aguas y yogures a Refrescos, batidos, aguas; lo demás a Gaseosas, tés y jugos
+    const cajonDeRubro = (nom) => (/confiter|snack/i.test(nom) ? '17' : /energ|malta/i.test(nom) ? '12' : /agua|yogur|l[aá]cteo/i.test(nom) ? '13' : '11');
     const grupoDeRubro = (id) => (cat.categorias || []).find((x) => x.id === id)?.grupo || '';
     let bolsa = grupoDeRubro(rubro.value);
     const selCat = h('select.campo', { 'aria-label': 'Grupo de la línea ' + l.linea }, ...['comida_preparada', 'unitario', 'suministro'].map((g) => h('option', { value: g }, GRUPOS[g])));
@@ -589,7 +591,8 @@ export async function abrirFactura(ctx, clave, { previa = null, recibirSugeridas
     async function agregarProducto(nombre) {
       prodRes.hidden = true; prodInput.disabled = true; prodEco.textContent = 'Agregando «' + nombre + '» al menú…'; prodEco.className = 'inv-eco';
       try {
-        const nuevo = await inv.productoCrear(nombre, f.sociedad_id);
+        const nombreCat = ((cat.categorias || []).find((x) => x.id === rubro.value)?.nombre) || '';
+        const nuevo = await inv.productoCrear(nombre, f.sociedad_id, cajonDeRubro(nombreCat));
         prodLista = null;
         await emparentar({ id: nuevo.id, nombre });
         if (nuevo.nuevo) prodEco.textContent = 'Se agregó «' + nombre + '» al menú (código ' + nuevo.codigo + ', precio pendiente: fíjelo en Productos) y la línea quedó emparentada con él.';
