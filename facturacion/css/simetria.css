@@ -25,3 +25,50 @@ html body .per-btn[aria-pressed=true],html body .doc-rango .btn[aria-pressed=tru
 html body .modal-pie .btn{order:0}
 html body .modal-pie .btn.primario,html body .modal-pie .btn.peligro{order:2}
 html body .modal-pie .btn.suave{order:0}
+
+/* 5) Filtros de Anular y reimprimir: botones del mismo ancho en columnas parejas (2 en celular, los que quepan en pantalla ancha); si queda uno solo en la última fila ocupa todo el ancho */
+html body .doc-filtros{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.5rem}
+html body .doc-filtros .btn{min-width:0;width:100%;padding-inline:.5rem;line-height:1.15;text-align:center}
+html body .doc-filtros .btn:last-of-type:nth-of-type(odd){grid-column:1/-1}
+html body .doc-filtros .doc-tarifa,html body .doc-filtros .doc-aviso-filtro{grid-column:1/-1}
+@media(min-width:760px){html body .doc-filtros{grid-template-columns:repeat(auto-fit,minmax(11rem,1fr))}html body .doc-filtros .btn:last-of-type:nth-of-type(odd){grid-column:auto}}
+
+/* 6) Grupos de botones parejos en el resto de pantallas: mismo ancho, columnas fijas, sin una fila a medias ni un botón gigante solo */
+html body .mt-herr,html body .lis-orden,html body .con-tabs,html body .rec-vistas,html body .inv-seg-grupo,html body .av-persona-btns{display:grid;gap:.5rem;align-items:stretch}
+html body .mt-herr>.btn,html body .lis-orden>.btn,html body .con-tabs>*,html body .rec-vistas>*,html body .inv-seg-grupo>*,html body .av-persona-btns>*{min-width:0;width:100%;text-align:center;line-height:1.15;padding-inline:.5rem}
+html body .mt-herr{grid-template-columns:repeat(2,minmax(0,1fr))}
+html body .mt-herr>.rotulo,html body .lis-orden>.tenue{grid-column:1/-1;margin:0}
+html body .lis-orden{grid-template-columns:repeat(3,minmax(0,1fr))}
+html body .inv-seg-grupo{grid-template-columns:repeat(3,minmax(0,1fr))}
+html body .con-tabs,html body .rec-vistas{grid-template-columns:repeat(2,minmax(0,1fr))}
+html body .av-persona-btns{grid-template-columns:minmax(0,1fr)}
+html body .fx-seg{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr)}
+html body .fx-seg button{flex:none;min-width:0}
+@media(min-width:760px){
+  html body .mt-herr{grid-template-columns:repeat(4,minmax(0,1fr))}
+  html body .con-tabs{grid-template-columns:repeat(auto-fit,minmax(7.5rem,1fr))}
+  html body .rec-vistas{grid-template-columns:repeat(4,minmax(0,1fr))}
+  html body .av-persona-btns{grid-template-columns:repeat(3,minmax(0,1fr))}
+}
+
+/* 7) Pares de botones: mismo ancho, lado a lado */
+html body .mt-btns,html body .mt-acciones,html body .acc,html body .inv-hoy-extras,html body .fila:has(>.btn:first-child:nth-last-child(2)):has(>.btn:last-child){display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.5rem;align-items:stretch}
+html body .mt-btns>.btn,html body .mt-acciones>.btn,html body .acc>.btn,html body .inv-hoy-extras>.btn,html body .fila:has(>.btn:first-child:nth-last-child(2)):has(>.btn:last-child)>.btn{min-width:0;width:100%;text-align:center;line-height:1.15;padding-inline:.5rem}
+html body .mt-resumen{display:grid;grid-template-columns:minmax(0,1fr);gap:.5rem}
+html body .mt-resumen>*{width:100%;text-align:center}
+@media(max-width:559px){html body .inv-hoy-extras{grid-template-columns:minmax(0,1fr)}}
+
+/* 8) Informes «Vista» (2 botones bajo su rótulo) e Inventarios (8 tarjetas: 4 + 4 en pantalla ancha, 2 en las demás) */
+html body .lis-vista{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.5rem}
+html body .lis-vista>.tenue{grid-column:1/-1}
+html body .lis-vista>.btn{min-width:0;width:100%;text-align:center;line-height:1.15;padding-inline:.5rem}
+html body .inv-menu{grid-template-columns:repeat(2,minmax(0,1fr))}
+@media(min-width:900px){html body .inv-menu{grid-template-columns:repeat(4,minmax(0,1fr))}}
+@media(max-width:520px){html body .inv-menu{grid-template-columns:minmax(0,1fr)}}
+
+/* 9) Descargar + Imprimir en Informes: mismos anchos (uno bajo otro en celular, lado a lado desde 560 px) */
+html body .par-botones{display:grid;grid-template-columns:minmax(0,1fr);gap:.5rem}
+html body .par-botones>*{min-width:0;width:100%}
+html body .par-botones .btn{width:100%;text-align:center;justify-content:center}
+@media(min-width:560px){html body .par-botones{grid-template-columns:repeat(2,minmax(0,1fr))}}
+html body .par-botones{width:100%;max-width:none}

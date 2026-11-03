@@ -39,7 +39,7 @@ export default {
 
     root.append(
       h('div.lis-cab', h('div', h('p.tenue', 'Ventas ya facturadas de ', h('strong', nomSoc), '. Las cifras vienen de las facturas y tiquetes emitidos; las notas de crédito se restan.')),
-        h('div.fila', crearDescarga(() => informeCompleto(), { texto: 'Descargar todo el informe', etiqueta: 'Descargar todo el informe de ventas, con una hoja por tabla' }),
+        h('div.fila.par-botones', crearDescarga(() => informeCompleto(), { texto: 'Descargar todo el informe', etiqueta: 'Descargar todo el informe de ventas, con una hoja por tabla' }),
           h('button.btn', { type: 'button', onclick: (e) => imprimir(e.currentTarget) }, 'Imprimir resumen'))),
       h('div.tarjeta.lis-filtros', periodo.el, turnoCaja),
       demoBanner, rotulo, ambienteEl, resumenEl, cuerpo);
@@ -533,8 +533,8 @@ export default {
       const bOrden = (id, t) => h('button.btn.chico.seg', { type: 'button', 'data-o': id, 'aria-pressed': String(est.orden === id), onclick: () => { est.orden = id; pintarProd(); } }, t);
       const barra = h('div.fila.lis-prod-barra');
       function pintarProd() {
-        barra.replaceChildren(h('div.fila', h('span.tenue', 'Vista:'), bVista('arbol', 'Por cajón y producto'), bVista('lista', 'Lista de más vendidos')),
-          est.vista === 'arbol' ? h('div.fila', h('span.tenue', 'Ordenar por:'), bOrden('monto', 'Monto'), bOrden('cantidad', 'Cantidad'), bOrden('codigo', 'Código')) : null);
+        barra.replaceChildren(h('div.fila.lis-vista', h('span.tenue', 'Vista:'), bVista('arbol', 'Por cajón y producto'), bVista('lista', 'Lista de más vendidos')),
+          est.vista === 'arbol' ? h('div.fila.lis-orden', h('span.tenue', 'Ordenar por:'), bOrden('monto', 'Monto'), bOrden('cantidad', 'Cantidad'), bOrden('codigo', 'Código')) : null);
         cuerpoProd.replaceChildren(est.vista === 'arbol' ? vistaArbol() : vistaLista());
       }
       const dibujarFila = (cls, nivelTxt, nombre, cant, tot, base, abrible, id, abierto, codigo) => {
