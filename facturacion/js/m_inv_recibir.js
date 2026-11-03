@@ -725,7 +725,7 @@ export async function abrirFactura(ctx, clave, { previa = null, recibirSugeridas
       siglaEl.hidden = !ss.length;
       poner(siglaEl, ...ss.map((s) => {
         const msg = h('small.inv-eco'), editor = h('div.rc-sigla-ed', { hidden: true });
-        const nuevo = h('input.campo', { type: 'text', maxlength: 120, 'aria-label': 'Qué significa ' + s.sigla, placeholder: 'Qué significa «' + s.sigla + '»' });
+        const nuevo = h('input.campo', { type: 'text', maxlength: 120, 'aria-label': 'Qué significa ' + s.sigla, placeholder: 'Qué significa' });
         const hecho = (t) => { msg.textContent = t; msg.className = 'inv-eco'; };
         const bConf = h('button.btn.chico', { type: 'button', onclick: async () => { bConf.disabled = true; try { await DICCIONARIO.confirmar(s); hecho('Confirmada: «' + s.sigla + '» = ' + s.significado + '.'); s.confirmado = true; bCorr.hidden = bNo.hidden = true; bConf.hidden = true; } catch (e) { bConf.disabled = false; msg.textContent = (e && e.message) || 'No se pudo confirmar.'; msg.className = 'inv-eco mal'; } } }, 'Confirmar');
         const bGuardar = h('button.btn.chico.primario', { type: 'button', onclick: async () => { const t = nuevo.value.trim(); if (t.length < 2) { msg.textContent = 'Escriba qué significa (al menos 2 letras).'; msg.className = 'inv-eco mal'; return; } bGuardar.disabled = true; try { await DICCIONARIO.corregir(s, t); hecho('Corregida: «' + s.sigla + '» = ' + t + '.'); s.significado = t; s.confirmado = true; editor.hidden = true; bConf.hidden = bCorr.hidden = bNo.hidden = true; } catch (e) { bGuardar.disabled = false; msg.textContent = (e && e.message) || 'No se pudo corregir.'; msg.className = 'inv-eco mal'; } } }, 'Guardar el significado');
