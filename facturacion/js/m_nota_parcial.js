@@ -300,7 +300,7 @@ function mostrarResultado({ clase, credito, orig: o, nota, pagos, totalCalc, tur
     h('div.an-dinero', h('div.an-etq', 'Con el cliente'), h('p', 'Solo si cuando se anuló se le había devuelto dinero al cliente: cóbreselo otra vez:'), h('ul', cobrarTxt(pagosNum, { cierre: false })))]
     : [credito ? h('div.an-dinero', h('div.an-etq', 'Qué hacer con el dinero'), h('p', 'Devuélvale al cliente lo que corresponde:'), h('ul', lineasDevolver(pagosNum, { cierre: abierto })))
       : h('div.an-dinero', h('div.an-etq', 'Qué hacer con el dinero'), h('p', 'Cóbrele al cliente la diferencia:'), h('ul', cobrarTxt(pagosNum, { cierre: abierto })))];
-  const imp = nota?.id ? h('button.btn', { type: 'button', onclick: () => { reimprimirComprobante(nota.id); } }, 'Imprimir la nota') : null;
+  const imp = nota?.id ? h('button.btn', { type: 'button', onclick: () => { reimprimirComprobante(nota.id, { admin: app.admin }); } }, 'Imprimir la nota') : null;
   const ver = alVerNota && nota?.id ? h('button.btn', { type: 'button', onclick: () => { r.cerrar(); alVerNota(nota); } }, 'Ver la nota') : null;
   const r = modal({ titulo, ancho: 600, contenido: h('div.an-dlg',
     h('div.an-ok', h('b', nota ? `${credito ? 'Nota de crédito' : 'Nota de débito'} N.° ${numeroCorto(nota.consecutivo)}` : (credito ? 'Nota de crédito' : 'Nota de débito')), h('div', queHace),

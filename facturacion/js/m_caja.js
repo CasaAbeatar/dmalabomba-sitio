@@ -1713,7 +1713,7 @@ export default {
         h('div.estado-caja', chip), msgEstado, impEstado,
         h('div.botones',
           // Si la impresión automática está apagada (su valor de fábrica en el celular), lo primero es entregar el comprobante: «Imprimir» va primero y destacado, y «Nueva cuenta» pasa a segundo
-          ...(aj.auto ? [btnNueva, btnImprimir, btnOtroFormato] : [btnImprimir, btnNueva, btnOtroFormato]),
+          ...(aj.auto ? [btnNueva, btnImprimir] : [btnImprimir, btnNueva]), ...(app.admin ? [btnOtroFormato] : []), // la cajera solo imprime tiquete; la factura carta es del administrador
           h('button.btn.suave', { type: 'button', onclick: () => cerrarM() }, 'Listo, cerrar'),
           h('button.btn.peligro', { type: 'button', onclick: () => { cerrarM(); app.ir('anular', comp.id ? { comprobante: String(comp.id) } : null); } }, 'Me equivoqué: anular esta factura')));
       const mo = modal({ titulo: 'Cobro listo', contenido, ancho: 520, alCerrar: () => { abierto = false; dejarDeVigilar(); if (vivo && buscador && fino()) buscador.inp.focus(); } });

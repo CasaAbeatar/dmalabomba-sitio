@@ -697,7 +697,7 @@ export default {
       const quien = `${tipo.toLowerCase()} número ${numeroCorto(d.consecutivo)} por ${money(d.total)}`;
       const nDev = Number(d.parciales_n) || 0, nDeb = Number(d.debitos_n) || 0;
       const notasTxt = (n) => (n > 1 ? ` (${n} notas)` : '');
-      const reimprimir = h('button.btn.doc-bot', { type: 'button', 'aria-label': 'Reimprimir ' + quien, onclick: () => reimprimirComprobante(d.id) }, 'Reimprimir');
+      const reimprimir = h('button.btn.doc-bot', { type: 'button', 'aria-label': 'Reimprimir ' + quien, onclick: () => reimprimirComprobante(d.id, { admin: app.admin }) }, 'Reimprimir');
       // Orden fijo de la fila: Anular, Reimprimir, Reenviar al correo. Después, solo si hace falta: Ver y atender / Ver detalle (Hacienda no lo aceptó). Siempre en una sola línea.
       const anularBtn = (motivo, onclick) => h('button.btn.peligro.doc-bot', onclick ? { type: 'button', 'aria-label': 'Anular ' + quien, onclick } : { type: 'button', disabled: true, 'aria-label': `Anular ${quien}. No disponible: ${motivo}` }, 'Anular');
       let primero = null, extra = null;
@@ -970,7 +970,7 @@ export default {
       const puedeCorreo = correoActivo(app) && !!c.cliente_snapshot && c.estado === 'aceptado';
       const reenviar = boton('Reenviar al correo', '', () => reenviarPorCorreo(c, ctx),
         puedeCorreo ? '' : !correoActivo(app) ? 'el correo todavía no está activo' : !c.cliente_snapshot ? 'no tiene cliente' : 'Hacienda todavía no lo acepta');
-      const reimprimir = boton('Reimprimir', '', () => reimprimirComprobante(c.id), '');
+      const reimprimir = boton('Reimprimir', '', () => reimprimirComprobante(c.id, { admin: app.admin }), '');
       return h('div.doc-barra', { role: 'group', 'aria-label': 'Acciones rápidas del documento' },
         h('div.doc-barra-bot', anular, reimprimir, reenviar),
         motivos.length ? h('small.doc-barra-motivo', motivos.join(' ')) : null);

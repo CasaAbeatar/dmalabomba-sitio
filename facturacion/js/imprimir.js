@@ -692,9 +692,17 @@ export async function imprimirComprobante(comprobanteId, { formato, copias } = {
   await imprimirNodos(nodos, { tipo: formato, papel: aj.papel, hoja: aj.hoja, titulo: nombre, fuentes: formato === 'carta' });
 }
 
-// Para reimprimir un comprobante ya emitido: pregunta si se quiere el tiquete de rollo o la factura carta y lo imprime.
+// Para reimprimir un comprobante ya emitido.
+// Cajera (admin=false): sale directo el tiquete de rollo, sin preguntar nada: la caja no está conectada a una computadora normal.
+// Administrador (admin=true): pregunta si se quiere el tiquete de rollo o la factura carta, porque se conecta desde cualquier parte.
 // Lo pueden usar otras pantallas (Documentos del día, Anular factura) en lugar de tener botones sueltos.
-export function reimprimirComprobante(comprobanteId, { copias } = {}) {
+export function reimprimirComprobante(comprobanteId, { copias, admin = false } = {}) {
+  if (!admin) {
+    imprimirComprobante(comprobanteId, { formato: 'tiquete', copias })
+      .then(() => toast('Tiquete enviado a la impresora.'))
+      .catch((e) => toast('No se pudo imprimir: ' + textoDeError(e) + ' Intente de nuevo; si sigue igual, avise a un administrador.', 'error', 7000));
+    return null;
+  }
   const aj = leerAjustes();
   const estado = h('p.tenue-linea', { role: 'status' });
   let m = null;
