@@ -231,3 +231,14 @@
   .mt-item .mt-nombre,.mt-item .mt-sub{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
   .mt-item .mt-sub{-webkit-line-clamp:3} /* el aviso se lee completo; la fila crece solo si hace falta */
 }
+
+/* Usuarios: cuatro botones por persona. En todas las filas de la lista la misma columna, en dos por dos, con el texto completo (sin montarse) */
+@media(min-width:641px){
+  .mt-lista:has(.mt-btns .btn:nth-child(3)) .mt-item{grid-template-columns:minmax(0,1fr) min(24rem,46%)}
+  .mt-lista:has(.mt-btns .btn:nth-child(3)) .mt-item .mt-btns{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.5rem}
+  .mt-lista:has(.mt-btns .btn:nth-child(3)) .mt-item .mt-btns .btn{white-space:normal;line-height:1.15;min-height:48px;padding-inline:.5rem}
+}
+@media(max-width:640px){
+  .mt-lista:has(.mt-btns .btn:nth-child(3)) .mt-item .mt-btns{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.5rem}
+  .mt-lista:has(.mt-btns .btn:nth-child(3)) .mt-item .mt-btns .btn{white-space:normal;line-height:1.15;min-height:48px;padding-inline:.5rem}
+}
