@@ -20,6 +20,7 @@ export const sb = createClient(SUPA_URL, SUPA_KEY, { auth: { storageKey: 'sb-fac
 // Así se pueden cambiar las palabras de cualquier mensaje sin romper el reintento, y un mensaje de negocio que por casualidad diga «tardó» o «conexión» no se toma por falla de red.
 const MSG_RED = MSG_SIN_INTERNET;
 const MSG_OCUPADO = 'El sistema está ocupado en este momento. Espere unos segundos e intente de nuevo.';
+const MSG_OCUPADO_NADA_GUARDADO = 'El sistema estaba ocupado y no guardó nada. Espere unos segundos y vuelva a intentarlo.';
 const MSG_TARDO = 'La respuesta tardó demasiado. Intente de nuevo.';
 const MSG_ACCESO_TARDO = 'La entrada tardó demasiado en responder. Intente de nuevo.';
 // Cuando lo que falló era un cambio (cobrar, agregar una línea...) no se sabe si llegó a guardarse: el texto pide revisar ANTES de repetir, para no cobrar ni agregar dos veces
@@ -30,7 +31,7 @@ const MSG_PERMISO = 'Su usuario no tiene permiso para hacer esto. Avise a la per
 export const MSG_SESION = 'Su sesión venció. Toque «Entrar de nuevo» para seguir donde estaba.';
 // Los textos de arriba son los únicos que este archivo fabrica para una falla transitoria o de sesión. Si otro archivo vuelve a envolver uno de ellos en un ErrorApi nuevo
 // (api_clientes.js, api_mantenimiento.js), el tipo se recupera por igualdad exacta con la constante, nunca por palabras sueltas.
-const TIPO_DE_MENSAJE = new Map([[MSG_RED, 'red'], [MSG_RED_ESCRIBIR, 'red'], [MSG_OCUPADO, 'ocupado'], [MSG_TARDO, 'tiempo'], [MSG_TARDO_ESCRIBIR, 'tiempo'], [MSG_ACCESO_TARDO, 'tiempo'], [MSG_SESION, 'sesion']]);
+const TIPO_DE_MENSAJE = new Map([[MSG_RED, 'red'], [MSG_RED_ESCRIBIR, 'red'], [MSG_OCUPADO, 'ocupado'], [MSG_OCUPADO_NADA_GUARDADO, 'ocupado'], [MSG_TARDO, 'tiempo'], [MSG_TARDO_ESCRIBIR, 'tiempo'], [MSG_ACCESO_TARDO, 'tiempo'], [MSG_SESION, 'sesion']]);
 const TRANSITORIOS = new Set(['red', 'tiempo', 'ocupado']);
 
 // Error con texto listo para mostrar. motivo = la razón que da el servicio de acceso cuando la hay ('empresa_desconocida', 'empresa_no_habilitada', 'sin_acceso_empresa'...)
@@ -63,6 +64,8 @@ function clasificarFalla(error, estado, escribe) {
   const m = String(error?.message || '');
   const codigo = String(error?.code || '');
   if (CODIGO_NUESTRO.test(codigo)) return { tipo: 'negocio', mensaje: m || MSG_GENERICO }; // mande el estado HTTP que mande: es una respuesta del negocio
+  // 57014 = la base cortó la instrucción por el límite de tiempo (8 s) y la deshizo entera: no se guardó nada, así que es seguro volver a intentar. Se avisa como «ocupado», no como «no sabemos si se guardó».
+  if (escribe && (codigo === '57014' || /canceling statement|statement timeout/i.test(m))) return { tipo: 'ocupado', mensaje: MSG_OCUPADO_NADA_GUARDADO };
   if (/AbortError|aborted/i.test(m) || codigo === '57014' || /canceling statement|statement timeout/i.test(m)) return { tipo: 'tiempo', mensaje: escribe ? MSG_TARDO_ESCRIBIR : MSG_TARDO };
   if (!estado) return { tipo: 'red', mensaje: escribe ? MSG_RED_ESCRIBIR : MSG_RED }; // sin respuesta HTTP: no hubo conexión (postgrest-js deja status 0)
   if (estado === 504 || estado === 408 || estado === 502) return { tipo: 'tiempo', mensaje: escribe ? MSG_TARDO_ESCRIBIR : MSG_TARDO };

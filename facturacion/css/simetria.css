@@ -72,3 +72,15 @@ html body .par-botones>*{min-width:0;width:100%}
 html body .par-botones .btn{width:100%;text-align:center;justify-content:center}
 @media(min-width:560px){html body .par-botones{grid-template-columns:repeat(2,minmax(0,1fr))}}
 html body .par-botones{width:100%;max-width:none}
+
+/* 10. Recibir (pruebas del 3 nov): en teléfono la fila de factura apila documento, empresa, estado y total sin solaparse; todo botón mide 48 px, también «Deshacer» dentro de los avisos */
+@media (max-width:759px){
+  html body .rc-fac-fila{flex-wrap:wrap;gap:.2rem .8rem}
+  html body .rc-fac-abrir{flex:1 1 100%;min-width:0}
+  html body .rc-fac-doc{white-space:normal}
+  html body .rc-fac-emp{flex:1 1 auto}
+  html body .rc-fac-estado{flex:1 1 100%;justify-content:flex-start;flex-wrap:wrap}
+  html body .rc-fac-total{flex:0 0 auto;margin-left:auto}
+  html body .rc-fac-acc{flex:1 1 100%;margin-left:0}
+}
+html body .inv-eco .btn,html body .inv-eco .btn.chico{min-height:48px}
