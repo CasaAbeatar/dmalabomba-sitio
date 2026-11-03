@@ -540,38 +540,48 @@ export async function abrirFactura(ctx, clave, { previa = null, recibirSugeridas
     selCat.addEventListener('change', () => { bolsa = selCat.value; errorRubro.textContent = ''; if (art && grupoDe(cat, art) !== bolsa) { art = null; pintarArticulo(true); } llenarRubros(bolsa); pintarBolsa(); pintarBotones(); });
     filaRubro.append(h('label.etq', h('span', 'Grupo'), selCat));
     // Unitarios (gaseosas, bebidas): la línea se empareja con el producto del menú que se vende, 1 a 1. Cualquier nombre que el proveedor use después para eso se recuerda y entra al mismo producto.
-    const idProd = 'prod-' + String(f.clave).slice(-8) + '-' + l.linea;
-    const prodDatos = h('datalist', { id: idProd });
-    const prodInput = h('input.campo', { type: 'text', list: idProd, autocomplete: 'off', placeholder: 'Escriba para buscar el producto que usted vende…', 'aria-label': 'Producto del menú que se vende, línea ' + l.linea });
+    const prodInput = h('input.campo', { type: 'text', autocomplete: 'off', placeholder: 'Escriba para buscar el producto que usted vende (ej. fresca, coca)…', 'aria-label': 'Producto del menú que se vende, línea ' + l.linea });
     const prodEco = h('small.inv-eco');
+    const prodRes = h('div.inv-prod-res', { role: 'listbox', hidden: true });
     let prodLista = null;
-    const filaProd = h('div.inv-rubro-fila.inv-prod-fila', { hidden: true }, h('label.etq', h('span', 'Producto del menú que se vende'), prodInput, prodDatos), prodEco);
+    const filaProd = h('div.inv-prod-fila', { hidden: true }, h('label.etq', h('span', 'Producto del menú que se vende'), prodInput), prodRes, prodEco);
+    const malProd = (m) => { prodEco.textContent = m; prodEco.className = 'inv-eco mal'; };
+    async function cargarProductos() {
+      if (prodLista) return prodLista;
+      try { prodLista = ((await inv.productosMenu(f.sociedad_id)) || {}).filas || []; } catch { prodLista = []; }
+      return prodLista;
+    }
     async function pintarProducto() {
       const uni = ctx.esAdmin && (grupoDeRubro(rubro.value) === 'unitario' || (!!art && grupoDe(cat, art) === 'unitario'));
       filaProd.hidden = !uni;
       if (!uni) return;
-      if (!prodLista) { try { prodLista = ((await inv.productosMenu(f.sociedad_id)) || {}).filas || []; } catch { prodLista = []; } prodDatos.replaceChildren(...prodLista.map((x) => h('option', { value: x.nombre }))); }
+      await cargarProductos();
       const enl = art && prodLista.find((x) => x.articulo_id === art.id);
       if (enl) { prodInput.value = enl.nombre; prodEco.textContent = 'Este artículo es el producto «' + enl.nombre + '».'; prodEco.className = 'inv-eco'; }
     }
-    prodInput.addEventListener('change', async () => {
-      const t = norm(prodInput.value);
-      if (!t) { prodEco.textContent = ''; return; }
-      const ps = prodLista || [];
-      const coin = ps.filter((x) => norm(x.nombre).includes(t));
-      const pr = ps.find((x) => norm(x.nombre) === t) || (coin.length === 1 ? coin[0] : null);
-      const mal = (m) => { prodEco.textContent = m; prodEco.className = 'inv-eco mal'; };
-      if (!pr) return mal('No hay un producto con ese nombre: escoja uno de la lista.');
-      if (!rubro.value) return mal('Escoja primero la categoría de la línea.');
-      prodInput.disabled = true;
+    async function emparentar(pr) {
+      prodRes.hidden = true;
+      if (!rubro.value) return malProd('Escoja primero la categoría de la línea.');
+      prodInput.disabled = true; prodEco.textContent = 'Emparentando…'; prodEco.className = 'inv-eco';
       try {
         const nuevo = await inv.productoArticulo(pr.id, rubro.value, l.cabys || '', unidadSugerida(uFac(l)));
         prodLista = null; ctx.articulos.olvidar(); articulos = await ctx.articulos.lista(true);
         art = articulos.find((a) => a.id === nuevo.id) || nuevo;
         pintarArticulo(true); chk.checked = true; el.classList.add('marcada'); pintarBotones(); cambio(); guardarEstado();
+        prodInput.value = pr.nombre;
         prodEco.textContent = 'Emparentado con «' + pr.nombre + '». Con «Recordar» marcado, lo que este proveedor traiga con este nombre entrará solo a este producto.'; prodEco.className = 'inv-eco';
-      } catch (e) { mal((e && e.message) || 'No se pudo emparentar. Intente de nuevo.'); }
+      } catch (e) { malProd((e && e.message) || 'No se pudo emparentar. Intente de nuevo.'); }
       finally { prodInput.disabled = false; }
+    }
+    // Mientras se escribe sale la lista de coincidencias para tocar una (nombre o parte del nombre, sin tildes ni mayúsculas)
+    prodInput.addEventListener('input', async () => {
+      prodEco.textContent = '';
+      const t = norm(prodInput.value);
+      if (t.length < 2) { prodRes.hidden = true; return; }
+      const ps = (await cargarProductos()).filter((x) => norm(x.nombre).includes(t)).slice(0, 8);
+      if (!ps.length) { prodRes.hidden = true; return malProd('No hay un producto del menú con ese nombre. Pruebe con otra palabra.'); }
+      prodRes.replaceChildren(...ps.map((x) => h('button.btn.inv-prod-op', { type: 'button', role: 'option', onclick: () => emparentar(x) }, h('strong', x.nombre), h('small', (x.precio > 0 ? ' · ' + money(x.precio) + ' con IVA' : '') + (x.articulo ? ' · ya enlazado con «' + x.articulo + '»' : '')))));
+      prodRes.hidden = false;
     });
     // Buscador del rubro: se escribe parte del nombre (ej. «snack») y sale la lista de todos los rubros; al escoger uno, la categoría se ajusta sola
     const idLista = 'rubros-' + String(f.clave).slice(-8) + '-' + l.linea;

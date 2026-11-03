@@ -566,3 +566,9 @@ body:has(.inv-fondo) .cabecera:has(.cab-usuario.abierto){z-index:120}
 .inv-prod[hidden]{display:none}
 .inv-costo-rel{margin:.3rem 0 0;font-size:.92rem;line-height:1.35;color:var(--tinta,#222)}
 .inv-costo-rel[hidden]{display:none}
+
+.inv-prod-fila{margin:.5rem 0 .25rem;display:block}
+.inv-prod-fila[hidden],.inv-prod-res[hidden]{display:none}
+.inv-prod-fila .etq{display:flex;flex-direction:column;gap:.25rem}
+.inv-prod-res{display:flex;flex-direction:column;gap:.25rem;margin:.35rem 0}
+.inv-prod-op{text-align:left;min-height:48px;display:flex;flex-wrap:wrap;align-items:baseline;gap:.25rem}
