@@ -465,12 +465,13 @@ export async function abrirFactura(ctx, clave, { previa = null, recibirSugeridas
       autoRecibir = false;
       (async () => {
         try {
-        for (const x of formas) if (x.verde()) await x.marcarOCrear();
+        // Verdes siempre; y las ámbar de comida preparada o suministros (entran por su valor en colones: no hay conversión que revisar y el artículo se crea solo con el rubro sugerido). Los unitarios se deciden uno a uno.
+        for (const x of formas) if (x.verde() || (x.porColones() && x.sugerida() && x.semaforo().nivel === 'ambar')) await x.marcarOCrear();
         contar();
         const sel = marcadas();
         const mal = sel.map((x) => x.problema()).find(Boolean);
         if (sel.length && !mal) { const r = await accRecibir.ejecutar(); if (r == null && silencioso) { silencioso = false; vivo = false; } }
-        else if (silencioso) { silencioso = false; vivo = false; toastMal('No se recibió la factura de ' + proveedorTxt(f.proveedor_nombre) + ': ' + (mal || 'ninguna línea está en verde') + ' Use «Escoger qué líneas recibir» para revisarla.'); }
+        else if (silencioso) { silencioso = false; vivo = false; toastMal('No se recibió la factura de ' + proveedorTxt(f.proveedor_nombre) + ': ' + (mal || 'ninguna línea está lista para recibirse sola (los unitarios y lo dudoso se deciden uno a uno)') + ' Use «Escoger qué líneas recibir» para revisarla.'); }
         } finally { alFin?.(); }
       })();
     }
@@ -487,7 +488,7 @@ export async function abrirFactura(ctx, clave, { previa = null, recibirSugeridas
     if (!puede) {
       const el = h('article.inv-linea.bloqueada', { 'data-linea': l.linea }, h('div.inv-linea-cab', descLinea(l)),
         h('div.inv-linea-pie', h('button.btn', { type: 'button', onclick: () => pedirIgnorar(ctx, f, [l.linea], () => cargar()) }, 'No es de inventario')));
-      return { el, semaforo: () => ({ nivel: 'rojo' }), verde: () => false, sugerida: () => false, marcada: () => false, marcarSiTiene() {}, premarcar() {}, marcarOCrear: async () => {}, alCambiar() {}, problema: () => '', enfocarProblema() {}, datos: () => null };
+      return { el, semaforo: () => ({ nivel: 'rojo' }), verde: () => false, sugerida: () => false, marcada: () => false, porColones: () => false, marcarSiTiene() {}, premarcar() {}, marcarOCrear: async () => {}, alCambiar() {}, problema: () => '', enfocarProblema() {}, datos: () => null };
     }
     const sug = l.sugerencia || recordados.get(l.linea) || {};
     const avisarCambio = [];
@@ -507,7 +508,7 @@ export async function abrirFactura(ctx, clave, { previa = null, recibirSugeridas
     // Lo que la persona decide es el rubro, y de él sale la bolsa (comida preparada, unitario o suministro). El nombre interno del artículo se toma de la factura y solo se cambia en «Detalles».
     const bolsaEl = h('span.inv-bolsa-dice');
     const pintarBolsa = () => { const c = (cat.categorias || []).find((x) => x.id === rubro.value); bolsaEl.textContent = c ? 'Va al grupo: ' + (GRUPOS[c.grupo] || 'sin grupo') + (c.grupo === 'unitario' ? '' : ' (se lleva en colones)') : ''; filaNombre.hidden = !!art || !c || c.grupo !== 'unitario'; el.classList.toggle('por-valor', !!c && c.grupo !== 'unitario'); };
-    rubro.addEventListener('change', () => { errorRubro.textContent = ''; if (art && art.categoria_id !== rubro.value) { art = null; chk.checked = false; el.classList.remove('marcada'); pintarArticulo(true); rubro.value = rubro.value; cambio(); } pintarBolsa(); pintarBotones(); });
+    rubro.addEventListener('change', () => { errorRubro.textContent = ''; pintarProducto(); if (art && art.categoria_id !== rubro.value) { art = null; chk.checked = false; el.classList.remove('marcada'); pintarArticulo(true); rubro.value = rubro.value; cambio(); } pintarBolsa(); pintarBotones(); });
     const filaRubro = h('div.inv-rubro-fila', h('label.etq', h('span', 'Categoría'), rubro), bolsaEl);
     const filaNombre = h('label.etq.inv-c-nombre', h('span', 'Nombre interno del artículo (sale de la factura; cámbielo solo si hace falta)'), nombreNuevo);
     const errorRubro = h('small.inv-eco.mal');
@@ -537,6 +538,40 @@ export async function abrirFactura(ctx, clave, { previa = null, recibirSugeridas
     const pintarBotones = () => { bolsa = grupoDeRubro(rubro.value) || bolsa; selCat.value = bolsa || ''; el.dataset.bolsa = bolsa; if (typeof buscar !== 'undefined') buscar.value = (cat.categorias || []).find((x) => x.id === rubro.value)?.nombre || ''; };
     selCat.addEventListener('change', () => { bolsa = selCat.value; errorRubro.textContent = ''; if (art && grupoDe(cat, art) !== bolsa) { art = null; pintarArticulo(true); } llenarRubros(bolsa); pintarBolsa(); pintarBotones(); });
     filaRubro.append(h('label.etq', h('span', 'Grupo'), selCat));
+    // Unitarios (gaseosas, bebidas): la línea se empareja con el producto del menú que se vende, 1 a 1. Cualquier nombre que el proveedor use después para eso se recuerda y entra al mismo producto.
+    const idProd = 'prod-' + String(f.clave).slice(-8) + '-' + l.linea;
+    const prodDatos = h('datalist', { id: idProd });
+    const prodInput = h('input.campo', { type: 'text', list: idProd, autocomplete: 'off', placeholder: 'Escriba para buscar el producto que usted vende…', 'aria-label': 'Producto del menú que se vende, línea ' + l.linea });
+    const prodEco = h('small.inv-eco');
+    let prodLista = null;
+    const filaProd = h('div.inv-rubro-fila.inv-prod-fila', { hidden: true }, h('label.etq', h('span', 'Producto del menú que se vende'), prodInput, prodDatos), prodEco);
+    async function pintarProducto() {
+      const uni = ctx.esAdmin && (grupoDeRubro(rubro.value) === 'unitario' || (!!art && grupoDe(cat, art) === 'unitario'));
+      filaProd.hidden = !uni;
+      if (!uni) return;
+      if (!prodLista) { try { prodLista = ((await inv.productosMenu(f.sociedad_id)) || {}).filas || []; } catch { prodLista = []; } prodDatos.replaceChildren(...prodLista.map((x) => h('option', { value: x.nombre }))); }
+      const enl = art && prodLista.find((x) => x.articulo_id === art.id);
+      if (enl) { prodInput.value = enl.nombre; prodEco.textContent = 'Este artículo es el producto «' + enl.nombre + '».'; prodEco.className = 'inv-eco'; }
+    }
+    prodInput.addEventListener('change', async () => {
+      const t = norm(prodInput.value);
+      if (!t) { prodEco.textContent = ''; return; }
+      const ps = prodLista || [];
+      const coin = ps.filter((x) => norm(x.nombre).includes(t));
+      const pr = ps.find((x) => norm(x.nombre) === t) || (coin.length === 1 ? coin[0] : null);
+      const mal = (m) => { prodEco.textContent = m; prodEco.className = 'inv-eco mal'; };
+      if (!pr) return mal('No hay un producto con ese nombre: escoja uno de la lista.');
+      if (!rubro.value) return mal('Escoja primero la categoría de la línea.');
+      prodInput.disabled = true;
+      try {
+        const nuevo = await inv.productoArticulo(pr.id, rubro.value, l.cabys || '', unidadSugerida(uFac(l)));
+        prodLista = null; ctx.articulos.olvidar(); articulos = await ctx.articulos.lista(true);
+        art = articulos.find((a) => a.id === nuevo.id) || nuevo;
+        pintarArticulo(true); chk.checked = true; el.classList.add('marcada'); pintarBotones(); cambio(); guardarEstado();
+        prodEco.textContent = 'Emparentado con «' + pr.nombre + '». Con «Recordar» marcado, lo que este proveedor traiga con este nombre entrará solo a este producto.'; prodEco.className = 'inv-eco';
+      } catch (e) { mal((e && e.message) || 'No se pudo emparentar. Intente de nuevo.'); }
+      finally { prodInput.disabled = false; }
+    });
     // Buscador del rubro: se escribe parte del nombre (ej. «snack») y sale la lista de todos los rubros; al escoger uno, la categoría se ajusta sola
     const idLista = 'rubros-' + String(f.clave).slice(-8) + '-' + l.linea;
     const datos = h('datalist', { id: idLista }, ...(cat.categorias || []).filter((c) => c.activo !== false).map((c) => h('option', { value: c.nombre, label: GRUPOS[c.grupo] || '' })));
@@ -617,11 +652,13 @@ export async function abrirFactura(ctx, clave, { previa = null, recibirSugeridas
       sugTxt ? h('p.inv-sug' + (sug.no_inventario ? '.no-inv' : ''), h('span.inv-sug-et', 'Sugerencia: '), sugTxt) : null,
       resumen,
       filaRubro, errorRubro,
+      filaProd,
       h('div.inv-fila-cant', cantidad.el),
       detalles,
       h('div.inv-linea-pie', ignorarBtn, zona));
 
     function pintarArticulo(cambiar) {
+      pintarProducto();
       nombreArt.textContent = art ? (art.unidad === 'colon' ? art.nombre : art.nombre + ' (se cuenta en ' + unidadTxt(art.unidad, 2) + ')') : 'Sin escoger';
       el.classList.toggle('en-colones', enColones());
       nombreArt.classList.toggle('falta', !art);
@@ -797,6 +834,7 @@ export async function abrirFactura(ctx, clave, { previa = null, recibirSugeridas
       el,
       semaforo: () => sem,
       verde: () => sem.nivel === 'verde',
+      porColones: () => { const g = grupoDeRubro(rubro.value) || (art && grupoDe(cat, art)) || ''; return !!g && g !== 'unitario'; },
       sugerida: () => !!rubro.value && !sug.no_inventario && sug.fuente !== 'servicio' && !!(sug.categoria_id || art),
       marcada: () => chk.checked,
       marcarSiTiene: () => { if (art) { chk.checked = true; el.classList.add('marcada'); } },
