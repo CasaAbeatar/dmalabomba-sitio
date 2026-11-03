@@ -656,10 +656,9 @@ export default {
         envoltura.classList.toggle('mas-izq', lista.scrollLeft > 6);
       };
       lista.addEventListener('scroll', pistaViva, { passive: true });
-      // «Impresora» va en la misma fila que «Nueva cuenta» (antes ocupaba una fila entera casi vacía)
+      // Los ajustes de la impresora ya no están aquí: viven en Administración, Configuración
       barraCuentas.replaceChildren(envoltura, h('button.btn.primario', { type: 'button', onclick: seguro(nuevaCuenta) }, 'Nueva cuenta'),
-        h('button.btn.btn-efectivo', { type: 'button', onclick: seguro(abrirEfectivo) }, 'Efectivo'),
-        h('button.btn.btn-impresora', { type: 'button', onclick: seguro(async () => { try { (await imp()).abrirAjustesImpresion(); } catch (e) { toast(textoDeError(e), 'error', 6000); } }) }, 'Impresora'));
+        h('button.btn.btn-efectivo', { type: 'button', onclick: seguro(abrirEfectivo) }, 'Efectivo'));
       // La cuenta activa se deja a la vista y se revisa si quedan cuentas escondidas hacia un lado
       requestAnimationFrame(() => {
         lista.querySelector('.cuenta-btn[aria-pressed=true]')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
@@ -1242,9 +1241,8 @@ export default {
         })
         .catch((e) => { if (esRespuestaDeNegocio(e)) { if (!terminado) bloquear(e.message); return { ok: false, bloqueada: true }; } return { ok: false }; });
       const btnRevisar = h('button.btn', { type: 'button', hidden: true }, 'Revisar si se cobró');
-      // Impresión: se usan los ajustes de este aparato (botón «Impresora»); aquí solo se muestran y se pueden abrir para cambiarlos
+      // Impresión: se usan los ajustes de este aparato (Administración, Configuración); aquí solo se muestran
       const resImp = h('div.cobro-imp');
-      const abrirAjustes = async () => { try { (await imp()).abrirAjustesImpresion(); } catch (e) { toast(textoDeError(e), 'error', 6000); } };
       let claveImp = '';
       function pintarImp() {
         const a = ajustesImp();
@@ -1253,8 +1251,7 @@ export default {
         claveImp = clave;
         resImp.replaceChildren(
           h('div.cobro-imp-txt', h('strong', 'Impresión al cobrar'),
-            h('div.tenue-linea', a.auto ? 'Se imprime sola: ' + textoImpresion(a) + '.' : 'No se imprime sola. Al terminar el cobro aparece el botón «Imprimir tiquete».')),
-          h('button.btn', { type: 'button', onclick: abrirAjustes }, 'Cambiar ajustes de impresión'));
+            h('div.tenue-linea', a.auto ? 'Se imprime sola: ' + textoImpresion(a) + '.' : 'No se imprime sola. Al terminar el cobro aparece el botón «Imprimir tiquete».')));
       }
       const vigilaAjustes = new MutationObserver(() => pintarImp());
       vigilaAjustes.observe(document.body, { childList: true });
@@ -1691,7 +1688,7 @@ export default {
             : 'Se abrió la impresión del tiquete de ' + aj.papel + ' mm (' + aj.copias + (aj.copias === 1 ? ' copia' : ' copias') + '). Si no salió, toque «Imprimir otra vez».';
         } catch (e) {
           impEstado.className = 'tenue-linea msg-mal';
-          impEstado.textContent = 'No se pudo imprimir: ' + textoDeError(e) + ' Toque el botón de imprimir otra vez o revise el botón «Impresora».';
+          impEstado.textContent = 'No se pudo imprimir: ' + textoDeError(e) + ' Toque el botón de imprimir otra vez; si sigue igual, avise a un administrador (Administración, Configuración).';
         }
       }
       // Pagos, efectivo recibido y vuelto: salen de lo que guardó el servidor
@@ -1722,7 +1719,7 @@ export default {
       const mo = modal({ titulo: 'Cobro listo', contenido, ancho: 520, alCerrar: () => { abierto = false; dejarDeVigilar(); if (vivo && buscador && fino()) buscador.inp.focus(); } });
       cerrarM = mo.cerrar;
       if (aj.auto) imprimir(fmtPrincipal);
-      else impEstado.textContent = 'No se imprimió sola (la impresión automática está apagada en «Impresora»). Toque «Imprimir ' + nombrePrincipal + '» y ' + (fmtPrincipal === 'carta' ? 'entréguela' : 'entréguelo') + ' al cliente.';
+      else impEstado.textContent = 'No se imprimió sola (la impresión automática está apagada en Administración, Configuración). Toque «Imprimir ' + nombrePrincipal + '» y ' + (fmtPrincipal === 'carta' ? 'entréguela' : 'entréguelo') + ' al cliente.';
       vigilar();
     }
 

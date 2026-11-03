@@ -215,7 +215,6 @@
   .cuentas-bar{flex-wrap:wrap}
   .cuentas-bar>.cuentas-envoltura{flex:1 1 100%}
   .cuentas-bar>.btn{flex:1 1 0}
-  .cuentas-bar>.btn-impresora{flex:0 0 auto;min-width:120px}
 }
 
 /* ---------- Ventana de cuenta nueva / cobro ---------- */
