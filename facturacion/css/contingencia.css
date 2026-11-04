@@ -1,0 +1,34 @@
+/* Venta de contingencia (Administración). Líneas finas, una sola columna, mismo tipo de letra que el resto. */
+.ct{max-width:680px;margin:0 auto;display:flex;flex-direction:column;gap:1.4rem}
+.ct-intro{margin:0;color:var(--tinta2);line-height:1.5}
+.ct-form{display:flex;flex-direction:column;border:1px solid var(--linea);border-radius:var(--r);background:var(--papel)}
+.ct-campo{display:grid;grid-template-columns:11rem minmax(0,1fr);gap:.4rem 1rem;align-items:start;padding:1rem 1.1rem;border-top:1px solid var(--linea)}
+.ct-campo:first-child{border-top:0}
+.ct-campo>label,.ct-et{font-weight:600;padding-top:.7rem}
+.ct-campo small{display:block;margin-top:.25rem;font-weight:400}
+.ct input,.ct select{width:100%;min-height:48px;padding:.5rem .7rem;border:1px solid var(--borde-control);border-radius:8px;font:inherit;background:var(--papel);color:var(--tinta)}
+.ct input:focus,.ct select:focus{outline:2px solid var(--tinta);outline-offset:1px}
+.ct-prods{display:flex;flex-direction:column;max-height:19rem;overflow-y:auto;padding-right:.2rem}
+.ct-prod{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:.6rem;align-items:center;padding:.5rem 0;border-top:1px solid var(--linea)}
+.ct-prod:first-child{border-top:0}
+.ct-prod-n small{display:inline;margin-left:.4rem}
+.ct-cant{display:flex;align-items:center;gap:.2rem}
+.ct-cant button{width:48px;height:48px;border:1px solid var(--borde-control);border-radius:8px;background:var(--papel);font:inherit;font-size:1.3rem;cursor:pointer}
+.ct-cant output{min-width:2.2rem;text-align:center;font-weight:600}
+.ct-buscar{margin-bottom:.5rem}
+.ct-medios{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:.4rem}
+.ct-medios button{min-height:48px;font-size:.88rem;padding:0 .2rem;border:1px solid var(--borde-control);border-radius:8px;background:var(--papel);font:inherit;cursor:pointer}
+.ct-medios button[aria-pressed=true]{border-color:var(--tinta);background:var(--tinta);color:var(--papel)}
+.ct-cli-ok{display:flex;justify-content:space-between;align-items:center;gap:.6rem;padding:.5rem .7rem;border:1px solid var(--linea2);border-radius:8px}
+.ct-res{list-style:none;margin:.3rem 0 0;padding:0;border:1px solid var(--linea);border-radius:8px}
+.ct-res li button{width:100%;text-align:left;min-height:48px;padding:.4rem .7rem;border:0;border-top:1px solid var(--linea);background:var(--papel);font:inherit;cursor:pointer}
+.ct-res li:first-child button{border-top:0}
+.ct-pie{display:flex;justify-content:space-between;align-items:center;gap:1rem;padding:1rem 1.1rem;border-top:1px solid var(--linea);flex-wrap:wrap}
+.ct-total{font-size:1.5rem;font-weight:600}
+.ct-error{margin:0;padding:.7rem 1.1rem;color:var(--rojo-osc);background:var(--rojo-suave);border-top:1px solid var(--borde-mal)}
+.ct-reg h2{font-size:1.1rem;margin:0 0 .5rem}
+.ct-fila{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr) auto;gap:.3rem 1rem;padding:.7rem 0;border-top:1px solid var(--linea);align-items:center}
+.ct-fila:first-of-type{border-top:0}
+.ct-fila small{display:block}
+.ct-ok{padding:1rem 1.1rem;border:1px solid var(--borde-ok);border-radius:var(--r);background:var(--verde-suave)}
+@media(max-width:640px){.ct-medios{grid-template-columns:repeat(2,minmax(0,1fr))}.ct-medios button{font-size:1rem}.ct-campo{grid-template-columns:1fr}.ct-campo>label,.ct-et{padding-top:0}.ct-fila{grid-template-columns:1fr}.ct-pie .btn{width:100%}}
