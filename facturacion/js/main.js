@@ -45,6 +45,7 @@ export const app = {
   recepcion: null, // { pendientes_en_plazo, vencen_pronto, vencidas } de las facturas recibidas; alimenta las insignias de Contable y Administración
   inventario: null, // { vencidos, vencen_pronto, bajo_minimo, por_recibir, notas_por_revisar, urgente } de fx_inv_alertas_resumen; alimenta la insignia de Inventarios
   respaldo: null, // solo administradores: { problemas, urgente, mensaje, ultimo_respaldo, ultima_prueba, alertas } de fx_respaldo_alertas_resumen (avisos_admin.js); alimenta la franja del encabezado y la insignia de Respaldos
+  alertasHacienda: null, // solo administradores: { abiertas, urgentes, mensaje } de fx_alertas_hacienda_resumen (avisos_admin.js); alimenta la franja del encabezado y la insignia de Alertas de Hacienda
   seguridad: null, // solo administradores: { pendientes, ultimas } de fx_login_alertas (avisos_admin.js); alimenta la insignia de Usuarios
   pedido: null, // lo que una pantalla le pide a la otra al abrirla (por ejemplo { filtro: 'problemas' }); el módulo lo lee al empezar
   // Avisos del encabezado. datos = { rechazados, pendientes, recepcion_por_responder, ultimos, desde }. refrescar() vuelve a preguntar de inmediato.
@@ -811,7 +812,7 @@ function armarApp(reciente = false) {
       // Atajo siempre visible: anular una factura no debe esconderse dentro de otra pantalla. Lleva a «Anular y reimprimir» con el cursor en el buscador.
       h('button.btn.cab-anular', { type: 'button', onclick: irAAnular }, 'Anular factura'),
       menuEl),
-    alertaEl, avisosAdmin ? avisosAdmin.el : null, avisosAdmin ? avisosAdmin.elReceptor : null, redEl);
+    alertaEl, avisosAdmin ? avisosAdmin.el : null, avisosAdmin ? avisosAdmin.elReceptor : null, avisosAdmin ? avisosAdmin.elHacienda : null, redEl);
   raiz.append(cab, vista);
   if (window.ResizeObserver) new ResizeObserver(() => sincronizarAlturas()).observe(cab);
   pintarCabecera();
