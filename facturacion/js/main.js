@@ -80,7 +80,7 @@ window.addEventListener('unhandledrejection', (ev) => {
 // el campo no tiene largo fijo (sin maxlength), no hay casillas ni puntos de pista, el texto de ayuda no dice cuántos números son y NO se envía solo al llegar a cierto largo.
 // Se envía únicamente al dar Enter o al tocar el botón «Entrar» (alCompletar). boton = el botón «Entrar», que se bloquea junto con el campo.
 function crearCampoPin({ alCompletar, boton = null }) {
-  const campo = h('input.campo.campo-pin', { type: 'password', inputmode: 'numeric', autocomplete: 'off', autocapitalize: 'none', autocorrect: 'off', spellcheck: 'false', enterkeyhint: 'go', placeholder: 'PIN', 'aria-label': 'PIN' });
+  const campo = h('input.campo.campo-pin', { type: 'password', inputmode: 'numeric', autocomplete: 'off', autocapitalize: 'none', autocorrect: 'off', spellcheck: 'false', enterkeyhint: 'go', placeholder: 'Clave', 'aria-label': 'PIN' });
   campo.addEventListener('input', () => {
     const v = campo.value.replace(/\D/g, '').slice(0, 32);
     if (v !== campo.value) campo.value = v;
@@ -102,8 +102,8 @@ function textoErrorAcceso(e, { cambiarEmpresa = true } = {}) {
   if (e && e.motivo === 'sin_acceso_empresa') return 'Ese usuario no tiene acceso a esta empresa.' + (cambiarEmpresa ? ' Si trabaja en otro negocio, toque «Cambiar de empresa».' : ' Avise a la persona encargada.');
   if (e && e.estado === 401) {
     return cambiarEmpresa
-      ? 'Usuario o PIN incorrecto. Intente de nuevo.' // corto a propósito: de una sola línea para que la pantalla de entrada quepa sin deslizar
-      : 'El PIN no coincide. Escríbalo otra vez con cuidado; puede intentarlo de nuevo en un par de segundos.';
+      ? 'Usuario o clave incorrecta. Intente de nuevo.' // corto a propósito: de una sola línea para que la pantalla de entrada quepa sin deslizar
+      : 'La clave no coincide. Escríbala otra vez con cuidado; puede intentarlo de nuevo en un par de segundos.';
   }
   return conPunto((e && e.message) || 'No se pudo entrar. Revise la conexión e intente de nuevo.');
 }
@@ -229,7 +229,7 @@ function pantallaUsuario(emp, mensaje) {
   async function intentar() {
     if (ocupado) return;
     if (!usuario.value.trim()) { pad.limpiar(); mostrarError('Escriba su usuario.'); usuario.focus(); return; }
-    if (!pad.valor()) { mostrarError('Escriba su PIN.'); pad.enfocar(); return; }
+    if (!pad.valor()) { mostrarError('Escriba su clave.'); pad.enfocar(); return; }
     mostrarError('');
     bloquear(true); mostrarEstado('Entrando…');
     try {
@@ -273,10 +273,10 @@ function pantallaUsuario(emp, mensaje) {
         h('strong.emp-nombre', emp.nombre || 'Su empresa'),
         ced ? h('span.emp-ced', 'Cédula jurídica ' + ced) : null),
       cambiar),
-    h('p.sub', 'Escriba su usuario y su PIN'),
+    h('p.sub', 'Escriba su usuario y su clave'),
     mensaje ? h('div.error-caja', { role: 'alert' }, mensaje) : null,
     h('label.etq', 'Usuario', usuario, notaUsuario),
-    h('label.etq', 'PIN', pad.campo),
+    h('label.etq', 'Clave', pad.campo),
     estado, err, botonEntrar)));
   (usuario.value ? pad.campo : usuario).focus();
 }
