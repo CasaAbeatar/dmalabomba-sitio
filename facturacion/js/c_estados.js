@@ -76,6 +76,7 @@ export default {
           h('li', 'Ingresos: se reconocen con las facturas y tiquetes electrónicos aceptados por Hacienda, netos de notas de crédito y sin IVA.'),
           h('li', 'Políticas contables (inventarios, depreciación, provisiones): ' + (e.politicas ? String(e.politicas) : 'pendiente de la contadora.')),
           h('li', 'Impuesto sobre la renta: ' + (er.impuesto_renta ? 'registrado en el libro.' : 'todavía no hay gasto de renta registrado; los límites los fija la contadora.')),
+          h('li', 'Información auxiliar: estos estados no son oficiales ni definitivos; los oficiales son los que presenta la contadora a Hacienda.'),
           h('li', 'Estos estados salen solo de lo contabilizado: los días y las facturas de proveedores sin contabilizar no aparecen.'))));
     }
     await Promise.all([cargarHoy(), cargar()]);

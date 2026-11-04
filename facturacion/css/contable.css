@@ -35,3 +35,8 @@
 .con-cifra .n{font-size:.78rem;color:var(--tinta2)}
 .con-nota{font-size:.82rem;color:var(--tinta2)}
 @media(max-width:560px){.con-tab{flex:1 1 auto;padding:.5rem .6rem}.con-tabla{font-size:.88rem}}
+/* Aviso fijo de información auxiliar: una línea fina, sin botones; sale también al imprimir */
+.con-aviso{border:1px solid var(--linea);border-left:2px solid var(--rojo);border-radius:var(--r);padding:.5rem .8rem;font-size:.85rem;color:var(--tinta2);line-height:1.4;background:var(--papel)}
+.con-aviso p{margin:0}
+.con-aviso p+p{margin-top:.25rem;padding-top:.25rem;border-top:1px solid var(--linea)}
+.con-aviso strong{color:var(--tinta);font-weight:600}

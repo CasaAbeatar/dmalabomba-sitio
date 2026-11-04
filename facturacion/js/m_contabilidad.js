@@ -49,7 +49,12 @@ export default {
       const b = h('button.con-tab', { type: 'button', role: 'tab', 'aria-selected': 'false', onclick: () => ir(m.id) }, m.texto);
       botones.set(m.id, b); barra.append(b);
     }
-    root.append(h('div.con-raiz', h('p.tenue', 'Libros contables de ', h('strong', soc?.nombre_comercial || soc?.nombre || 'la empresa'), '. Las cifras salen de las facturas, los cierres de caja y los comprobantes de la CCSS que usted cargue; nada se digita dos veces.'), barra, panel));
+    // Aviso fijo en todas las pestañas (decisión facturador.contable.principio_sistema_auxiliar): sin botones, sobrio, y sale también al imprimir.
+    const esSoda = String(soc?.codigo_acceso || soc?.codigo || '').toLowerCase() === 'soda';
+    const aviso = h('div.con-aviso', { role: 'note' },
+      h('p', h('strong', 'Información auxiliar.'), ' Estos números no son oficiales ni definitivos; los oficiales son los que presenta la contadora a Hacienda.'),
+      esSoda ? h('p.con-aviso-soda', 'Las ventas de Soda aparecen aquí desde que facture con el facturador propio. Las que hace por Prisma no entran en este módulo.') : null);
+    root.append(h('div.con-raiz', h('p.tenue', 'Libros contables de ', h('strong', soc?.nombre_comercial || soc?.nombre || 'la empresa'), '. Las cifras salen de las facturas, los cierres de caja y los comprobantes de la CCSS que usted cargue; nada se digita dos veces.'), aviso, barra, panel));
     // Si otra pantalla pidió una factura (p. ej. «Ir a Contabilidad» desde Inventarios), se abre «Recibidas»; main.js borra el pedido al terminar mount
     const guardada = app.pedido && typeof app.pedido === 'object' && app.pedido.clave ? 'recibidas' : leer('con-pestana');
     await ir(mods.some((m) => m.id === guardada) ? guardada : mods[0].id);
