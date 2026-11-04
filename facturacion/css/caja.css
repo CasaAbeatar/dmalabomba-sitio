@@ -237,11 +237,10 @@
 .cobro-doc{border:1px solid var(--linea);border-radius:12px;padding:.8rem 1rem;display:flex;gap:.8rem;justify-content:space-between;align-items:center;flex-wrap:wrap;background:#fffdf9}
 .cobro-doc .doc{font-weight:700}
 .cobro-doc .cli{color:var(--tinta2);font-size:.92rem;overflow-wrap:anywhere}
-.medios{display:grid;grid-template-columns:repeat(4,1fr);gap:.5rem}
-.medio-btn{min-height:60px;padding:.4rem .5rem;border:1px solid var(--borde-control,#8f8672);border-radius:var(--r);background:#fff;font-weight:700;cursor:pointer}
+.medios{display:flex;flex-direction:column;gap:.6rem}
+.medio-btn{width:100%;min-height:64px;padding:.5rem 1rem;border:2px solid var(--borde-control,#8f8672);border-radius:var(--r);background:#fff;font:inherit;font-size:1.15rem;font-weight:700;cursor:pointer;box-shadow:0 1px 0 rgba(0,0,0,.12)}
 .medio-btn:hover{border-color:var(--tinta)}
 .medio-btn[aria-pressed=true]{background:var(--tinta);border-color:var(--tinta);color:#fff}
-@media(max-width:560px){.medios{grid-template-columns:repeat(2,1fr)}}
 .rapidos{display:grid;grid-template-columns:repeat(3,1fr);gap:.5rem}
 .rapidos .btn{min-height:52px}
 .pago-item{display:flex;justify-content:space-between;align-items:center;gap:.6rem;padding:.6rem .8rem;border:1px solid var(--linea);border-radius:var(--r);background:#fff}
@@ -668,3 +667,11 @@ body.fx-caja .sin-red-in{max-width:2200px}
 .cobro-cortesia[hidden]{display:none}
 .cobro-cortesia span{color:var(--tinta);font-size:.92rem}
 
+/* Medio de pago obligatorio: aviso encima de «Cobrar» y enlace pequeño de pago mixto */
+.cobro-pedir-medio{flex:1 0 100%;margin:0;font-weight:700;color:var(--rojo-osc);font-size:1rem;text-align:center}
+.cobro-pedir-medio[hidden]{display:none}
+.cobro-pie:has(.cobro-pedir-medio:not([hidden])){flex-wrap:wrap}
+.cobro-mixto{text-align:center}
+.cobro-mixto[hidden]{display:none}
+.btn-enlace{border:0;background:none;padding:.5rem;min-height:44px;font:inherit;font-size:.92rem;font-weight:inherit;color:var(--tinta2);text-decoration:underline;cursor:pointer}
+.btn-enlace:hover{color:var(--tinta)}
