@@ -1,4 +1,4 @@
-// Contabilidad (Administración, solo administradores): catálogo de cuentas, asientos, compras por clasificar, IVA y formularios, estados NIIF PYMES, análisis y planilla.
+// Contabilidad (Administración; administradores y contadora): catálogo de cuentas, asientos, compras por clasificar, IVA y formularios, estados NIIF PYMES, análisis y planilla.
 // Un solo módulo con pestañas; cada pestaña vive en su archivo c_*.js y recibe {app, soc, memoria}. `memoria` guarda lo que la persona dejó puesto (filtro, mes, pestaña)
 // para que al volver atrás o recargar no se pierda. Cada pestaña abre con la información del día y después los totales (mes, tendencias).
 import { h } from './util.js';
@@ -25,9 +25,10 @@ export default {
   titulo: 'Contabilidad',
   async mount(root, app) {
     await cargarHoja('contable.css');
-    if (!app.admin) { root.append(h('div.vacio', h('p', 'Esta pantalla es solo para administradores.'), h('button.btn', { type: 'button', onclick: () => app.ir('inicio') }, 'Volver al inicio'))); return; }
+    if (!app.admin && !app.contadora) { root.append(h('div.vacio', h('p', 'Esta pantalla es solo para administradores.'), h('button.btn', { type: 'button', onclick: () => app.ir('inicio') }, 'Volver al inicio'))); return; }
     const soc = app.soc;
-    const mods = (await Promise.all(PESTANAS.map((f) => f()))).map((m) => m.default);
+    // La contadora no ve «Recibidas» (aceptar o rechazar facturas ante Hacienda es de administración; la base también se lo niega)
+    const mods = (await Promise.all(PESTANAS.map((f) => f()))).map((m) => m.default).filter((m) => !(app.contadora && m.id === 'recibidas'));
     const barra = h('div.con-tabs', { role: 'tablist', 'aria-label': 'Secciones de la contabilidad' });
     const panel = h('div', { role: 'tabpanel' });
     const botones = new Map();
@@ -51,8 +52,9 @@ export default {
     }
     root.append(h('div.con-raiz', h('p.tenue', 'Libros contables de ', h('strong', soc?.nombre_comercial || soc?.nombre || 'la empresa'), '. Las cifras salen de las facturas, los cierres de caja y los comprobantes de la CCSS que usted cargue; nada se digita dos veces.'), barra, panel));
     // Si otra pantalla pidió una factura (p. ej. «Ir a Contabilidad» desde Inventarios), se abre «Recibidas»; main.js borra el pedido al terminar mount
-    const guardada = app.pedido && typeof app.pedido === 'object' && app.pedido.clave ? 'recibidas' : leer('con-pestana');
-    await ir(mods.some((m) => m.id === guardada) ? guardada : mods[0].id);
+    // La contadora abre en «Catálogo» (ahí están sus decisiones) la primera vez; después, en la pestaña que dejó
+    const guardada = app.pedido && typeof app.pedido === 'object' && app.pedido.clave && !app.contadora ? 'recibidas' : leer('con-pestana');
+    await ir(mods.some((m) => m.id === guardada) ? guardada : (app.contadora ? 'catalogo' : mods[0].id));
     return () => { vivo = false; if (typeof limpiar === 'function') { try { limpiar(); } catch { /* ya no está */ } } };
   },
 };

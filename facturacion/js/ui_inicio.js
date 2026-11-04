@@ -50,6 +50,12 @@ export function pintarInsignias(raiz, app) {
 
 /* ---------- Inicio: lo de HOY y los módulos principales ---------- */
 export function pantallaInicio(app, { alAbrir, alCerrarCaja, alAbrirCaja }) {
+  // La contadora no maneja caja: su inicio es solo su módulo (Contabilidad) con una línea que dice de qué empresa es
+  if (app.contadora) {
+    return h('div.inicio.contadora', h('h1.solo-lectores', 'Inicio'),
+      h('p.inicio-contadora', 'Está en ', h('strong', app.soc?.nombre_comercial || app.soc?.nombre || 'la empresa'), '. Aquí tiene lo que le corresponde a la contadora.'),
+      h('div.mod-rejilla.principal.una', modulosDe('principal', app).map((m) => tarjetaModulo(m, app, alAbrir))));
+  }
   const t = app.turno;
   const desde = t ? (new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Costa_Rica' }).format(new Date(t.abierto_en)) < hoyCR() ? ' del ' + fechaCorta(t.abierto_en) : '') : '';
   // Una caja que lleva más de 18 horas abierta casi siempre se olvidó de cerrar: el recuadro se pone ámbar y lo dice

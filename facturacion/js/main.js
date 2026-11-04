@@ -39,6 +39,9 @@ export const app = {
   get turno() { return this.soc?.turno || null; },
   get usuario() { return this.ctx?.usuario; },
   get admin() { return !!this.ctx?.admin; },
+  // Rol de la sesión: 'admin', 'contadora' o 'caja' (fx_contexto.rol). Con una base anterior a la 65 no viene: se deduce de `admin`.
+  get rol() { return this.ctx?.rol || (this.ctx?.admin ? 'admin' : 'caja'); },
+  get contadora() { return this.rol === 'contadora' && !this.ctx?.admin; },
   // La empresa de esta sesión: sale de la sociedad que devuelve el servidor, no de lo que haya en el aparato. codigo = el que se escribe para entrar.
   get empresa() { const s = this.soc; return s ? { id: s.id, codigo: String(s.codigo_acceso || s.codigo || '').toLowerCase(), nombre: nombreLocal(s), cedula: s.cedula || null } : null; },
   moduloActual: null, // el módulo (o pantalla) que se ve: una entrada de modulos.js o INICIO
@@ -632,7 +635,7 @@ function mostrarSesionVencida() {
 // La lista de módulos sale de modulos.js. El botón Atrás del navegador o del celular regresa a la pantalla anterior y recargar deja en el mismo lugar.
 // «#admin/cierre» es el nombre viejo del cierre de caja: se corrige solo a #turno.
 const INICIO = { id: 'inicio', titulo: 'Inicio', ruta: 'inicio', grupo: 'principal' };
-const tipoDe = (d) => (d === INICIO ? 'inicio' : d.pantalla === 'admin' ? 'admin' : d.id === 'caja' ? 'facturar' : d.grupo === 'admin' ? 'sub' : 'ventana');
+const tipoDe = (d) => (d === INICIO ? 'inicio' : d.pantalla === 'admin' ? 'admin' : d.id === 'caja' ? 'facturar' : d.grupo === 'admin' && !app.contadora ? 'sub' : 'ventana');
 // De cualquier forma de nombrar una pantalla (id, alias, dirección con o sin #) al destino. Lo desconocido, o lo que no le toca a esta persona, va al inicio.
 function destinoDe(clave) {
   let k = '';
@@ -643,6 +646,8 @@ function destinoDe(clave) {
   const enlaceFactura = /^(?:admin\/)?(?:contabilidad|contable|recepcion)\/(?:factura|clave)[\/=](\d{50})$/.exec(k);
   if (enlaceFactura && app.admin) { app.pedido = { clave: enlaceFactura[1] }; return buscar('contabilidad') || INICIO; }
   const m = buscar(k);
+  // La contadora solo puede abrir lo marcado `contadora` (Contabilidad); cualquier otra dirección escrita a mano vuelve al inicio sin consultar la base
+  if (app.contadora) return m && m.contadora ? m : INICIO;
   if (!m || (m.soloAdmin && !app.admin)) return INICIO;
   return m;
 }
@@ -734,7 +739,7 @@ async function mostrar(dest, forzar = false, { sinFoco = false } = {}) {
       : pantallaAdmin(app, { alAbrir, cambiarPin: cambiarPinDialogo }));
     app.pedido = null;
     if (!sinFoco) enfocarInicial(dest);
-    if (tipo === 'inicio') diferir(() => { import('./m_caja.js').catch(() => {}); }); // la caja es lo que más se usa: queda lista antes del primer toque
+    if (tipo === 'inicio' && !app.contadora) diferir(() => { import('./m_caja.js').catch(() => {}); }); // la caja es lo que más se usa: queda lista antes del primer toque
     return;
   }
   // Empresa «solo recepción» (hoy Soda): Facturar no está habilitado. La base de datos igual lo impide (fact.config 'sociedades_emisoras'); aquí se dice con palabras.
@@ -801,11 +806,12 @@ function armarApp(reciente = false) {
     h('button.btn.cab-menu', { type: 'button', 'aria-haspopup': 'true', 'aria-expanded': 'false', 'aria-controls': 'cab-panel', onclick: () => abrirMenu(!menuEl.classList.contains('abierto')) }, 'Menú ▾'),
     h('div#cab-panel.cab-panel',
       h('span.cab-sesion', h('span.cab-sesion-pre', 'Sesión de '), h('strong', app.ctx.nombre || app.usuario)),
+      app.contadora ? h('button.btn.chico', { type: 'button', onclick: () => { abrirMenu(false); cambiarPinDialogo(); } }, 'Cambiar mi clave') : null, // la contadora no pasa por Administración, donde está ese botón
       h('button.btn.chico', { type: 'button', onclick: () => { abrirMenu(false); cerrarSesion(); } }, 'Cerrar sesión')));
   volverEl = h('button.btn.cab-volver', { type: 'button' });
   inicioEl = h('button.btn.cab-inicio', { type: 'button', onclick: () => subir('inicio') }, 'Inicio');
   tituloEl = h('h1.cab-titulo');
-  cab = h('header.cabecera', { 'data-vista': 'inicio' },
+  cab = h('header.cabecera', { 'data-vista': 'inicio', 'data-rol': app.rol },
     h('div.cab-franja', h('div.cab-franja-in', h('button.cab-emp', { type: 'button', title: 'Ir al inicio', onclick: () => subir('inicio') }), h('span.amb'))), // tocar el nombre del negocio (o el logo) lleva siempre al inicio, desde cualquier pantalla: es lo más rápido para quien atiende
     h('div.cab-fila',
       volverEl, inicioEl,
@@ -888,7 +894,8 @@ async function cargarContexto(reciente) {
 async function arrancar(reciente = false) {
   // Todo lo que se puede pedir a la vez se pide a la vez: contexto, catálogo del último local (queda en memoria) y el módulo de la dirección (#) si recargó la página
   const recordada = empresaRecordada();
-  if (recordada?.id) api.catalogo(recordada.id).catch(() => {}); // si la sesión es de otra empresa el servidor lo rechaza y no pasa nada
+  // La contadora no cobra: su catálogo de productos no se precarga (la base se lo negaría). `rol` se recuerda de la entrada anterior en este aparato.
+  if (recordada?.id && leer('rol') !== 'contadora') api.catalogo(recordada.id).catch(() => {}); // si la sesión es de otra empresa el servidor lo rechaza y no pasa nada
   if (!reciente && location.hash) { const m = buscar(location.hash); m?.cargar?.().catch(() => {}); }
   try {
     app.ctx = await cargarContexto(reciente);
@@ -918,6 +925,7 @@ async function arrancar(reciente = false) {
   const codigoDe = (s) => String(s.codigo_acceso || s.codigo || '').toLowerCase();
   const delServidor = app.ctx.empresa_sesion && sociedades.find((s) => s.id === app.ctx.empresa_sesion);
   app.socId = (delServidor || sociedades.find((s) => codigoDe(s) === recordada?.codigo) || sociedades.find((s) => codigoDe(s) === 'pollos') || sociedades[0])?.id;
+  guardar('rol', app.rol); // solo comodidad (ver arriba); la que manda es la de la sesión
   if (app.soc) recordarEmpresa(infoEmpresa(app.soc)); // lo que se recuerda para la próxima entrada es lo que dice la sesión
   armarApp(reciente);
 }

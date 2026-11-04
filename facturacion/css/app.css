@@ -323,3 +323,6 @@ code,kbd,samp,pre{font-family:var(--letra);font-variant-numeric:tabular-nums}
 .modal{min-width:0;max-width:100%}
 .modal-cuerpo .col{min-width:0}
 .informe-texto{max-width:100%;overflow-wrap:anywhere;word-break:break-word}
+
+/* Rol contadora: no factura ni maneja caja, así que no se le ofrece «Anular factura» ni el estado de la caja */
+.cabecera[data-rol=contadora] .btn.cab-anular,.cabecera[data-rol=contadora] .estado-turno,.cabecera[data-rol=contadora] .cab-estado{display:none}
