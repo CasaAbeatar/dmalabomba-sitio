@@ -610,6 +610,9 @@ export async function abrirFactura(ctx, clave, { previa = null, recibirSugeridas
       return { el, semaforo: () => ({ nivel: 'rojo' }), verde: () => false, segura: () => false, sugerida: () => false, porColones: () => false, tieneArticulo: () => false, preparar: async () => false, alCambiar() {}, problema: () => '', enfocarProblema() {}, datos: () => null, aliasInfo: () => null };
     }
     const sug = l.sugerencia || recordados.get(l.linea) || {};
+    // Lo que dice el PDF de la factura (decisión de Emil: el PDF manda para leer unidades por paquete y precio unitario; el XML manda para lo fiscal). Lo calcula la base: fact.inv_pdf_leer.
+    const pdf = l.pdf && l.pdf.estado ? l.pdf : null;
+    const pdfOk = !!pdf && pdf.estado === 'confirmado' && Number(pdf.factor) > 0;
     const avisarCambio = [];
     const cambio = () => avisarCambio.forEach((fn) => fn());
     let art = sug.articulo_id ? articulos.find((a) => a.id === sug.articulo_id) || (sug.articulo ? { id: sug.articulo_id, nombre: sug.articulo, unidad: sug.unidad, categoria_id: sug.categoria_id } : null) : null;
@@ -740,6 +743,14 @@ export async function abrirFactura(ctx, clave, { previa = null, recibirSugeridas
     const iaEl = h('div.inv-ia', { hidden: !ia });
     const iaModelo = ia && /sonnet|opus/.test(ia.modelo || '') ? 'segunda revisión' : 'primera revisión';
     let sem = { nivel: 'rojo', razon: '' };
+    // Dos renglones para que la persona verifique contra el PDF: qué conclusión se sacó y la línea tal como viene impresa
+    function pdfTextos() {
+      if (!pdf || !pdf.linea_pdf || pdf.estado === 'sin_pista' || pdf.estado === 'sin_pdf') return { l1: '', l2: '', mal: false };
+      const dice = pdf.regla === 'femsa_sub_unidad' ? 'cada unidad cobrada trae ' + num(pdf.factor, 6) : 'el precio por unidad es ' + costoTxt(pdf.precio_pdf);
+      const nombre = pdf.factor_texto != null ? 'el nombre dice ' + num(pdf.factor_texto, 6) : 'el nombre no dice nada';
+      const l1 = pdf.estado === 'confirmado' ? 'El PDF confirma que ' + dice + (pdf.difiere ? ' (' + nombre + '; manda el PDF)' : '') + '.' : 'El PDF no alcanza para confirmar la conversión: ' + (pdf.motivo || 'revísela a mano');
+      return { l1, l2: 'En el PDF: «' + pdf.linea_pdf + '»', mal: pdf.estado !== 'confirmado' && pdf.regla === 'femsa_sub_unidad' };
+    }
     function evaluarSem() {
       const fv = leerFactor();
       const rojo = (razon, bloquea) => ({ nivel: 'rojo', razon, bloquea: !!bloquea });
@@ -748,12 +759,14 @@ export async function abrirFactura(ctx, clave, { previa = null, recibirSugeridas
       if (!art && ia && ia.nivel === 'verde' && !sug.no_inventario) { const g0 = grupoDeRubro(rubro.value); if (g0 && g0 !== 'unitario') return { nivel: 'verde', razon: 'Entra por su valor a «' + (nombreRubro() || 'el rubro') + '» (' + money(valorLinea()) + ' sin IVA). Claude la revisó: ' + ia.razon }; }
       if (!art) return { nivel: 'ambar', razon: 'No hay un artículo igual todavía: al recibirla se crea uno nuevo en el rubro «' + (nombreRubro() || 'escogido') + '». Mire si no existe ya uno parecido.' };
       if (!Number.isFinite(fv) || fv <= 0) return rojo('Revise la conversión: debe ser mayor que cero.');
-      const rev = enColones() ? { aviso: '' } : revisarConversion({ descripcion: l.descripcion, subtotal: l.subtotal_crc, cantidad: l.cantidad, factorActual: fv }, (n) => money(n));
+      const rev = enColones() || (pdfOk && fv === Number(pdf.factor)) ? { aviso: '' } : revisarConversion({ descripcion: l.descripcion, subtotal: l.subtotal_crc, cantidad: l.cantidad, factorActual: fv }, (n) => money(n));
       if (rev.aviso) return rojo('El precio por unidad no tiene sentido con esta conversión. ' + rev.aviso, true);
       const motivos = [];
       if (sug.fuente !== 'memoria') motivos.push(sug.fuente ? 'Es una sugerencia del sistema, no una compra anterior de este proveedor (' + String(FUENTES[sug.fuente] || 'por parecido').replace(/^./, (c) => c.toLowerCase()) + ').' : 'No hay una compra anterior de este proveedor con lo mismo.');
       else if (sug.articulo_id && sug.articulo_id !== art.id) motivos.push('Se cambió el artículo que recordaba el sistema.');
       if (sug.fuente === 'memoria' && sug.factor != null && Number(sug.factor) !== fv) motivos.push('La conversión es distinta a la de la vez pasada (' + num(sug.factor, 6) + ').');
+      if (pdfOk && !enColones() && Number(pdf.factor) !== fv) motivos.push('El PDF de la factura dice que cada unidad cobrada trae ' + num(pdf.factor, 6) + ' y aquí hay ' + num(fv, 6) + '.');
+      else if (pdf && pdf.estado === 'revision' && pdf.regla === 'femsa_sub_unidad' && !enColones()) motivos.push('No se pudo confirmar la conversión con el PDF. ' + (pdf.motivo || ''));
       if (notaAuto && fv === 1) motivos.push('La conversión quedó en 1 porque el precio de la factura cuadra con unidades sueltas.');
       if (ia) {
         if (ia.nivel !== 'verde') motivos.push('Claude pide revisarla.');
@@ -772,13 +785,13 @@ export async function abrirFactura(ctx, clave, { previa = null, recibirSugeridas
 
     /* ----- La fila: estado, lo que se entendió, cantidad y costo, destino y la acción ----- */
     const semPunto = h('span.rc-punto', { 'aria-hidden': 'true' }), semPalabra = h('span.rc-sem-pal');
-    const leidoNom = h('strong.rc-leido-nom'), leidoPres = h('span.rc-leido-pres'), leidoFac = h('small.rc-leido-fac');
+    const leidoNom = h('strong.rc-leido-nom'), leidoPres = h('span.rc-leido-pres'), leidoFac = h('small.rc-leido-fac'), leidoPdf1 = h('small.rc-leido-pdf.rc-leido-pdf1'), leidoPdf2 = h('small.rc-leido-pdf');
     const cantL1 = h('strong.rc-cant-l1'), cantL2 = h('small.rc-cant-l2');
     const destL1 = h('strong.rc-dest-l1'), destL2 = h('small.rc-dest-l2');
     const celdaAcc = h('div.rc-c-acc');
     const filaEl = h('div.rc-fila',
       h('div.rc-c-sem', semPunto, semPalabra),
-      h('div.rc-c-leido', h('div.rc-leido-l1', leidoNom, leidoPres), leidoFac),
+      h('div.rc-c-leido', h('div.rc-leido-l1', leidoNom, leidoPres), leidoFac, leidoPdf1, leidoPdf2),
       h('div.rc-c-cant', cantL1, cantL2),
       h('div.rc-c-dest', destL1, destL2),
       celdaAcc);
@@ -857,9 +870,14 @@ export async function abrirFactura(ctx, clave, { previa = null, recibirSugeridas
       semPalabra.textContent = sug.no_inventario && sem.nivel === 'rojo' ? 'No es de inventario' : ({ verde: 'Segura', ambar: 'Revisar', rojo: 'Falta algo' })[sem.nivel];
       const nom = art && !enColones() ? limpiaNombre(art.nombre) : ia && ia.articulo && !enColones() ? ia.articulo : pres.nombre;
       leidoNom.textContent = nom;
-      const extra = art && !enColones() && !pres.texto.includes('de ') && Number(leerFactor()) > 1 ? 'cada ' + (uFac(l) || 'unidad').toLowerCase() + ' trae ' + num(leerFactor(), 6) : '';
-      leidoPres.textContent = [pres.texto, extra].filter(Boolean).length ? ' · ' + [pres.texto, extra].filter(Boolean).join(' · ') : '';
-      leidoFac.textContent = 'Línea ' + l.linea + ' · en la factura: «' + l.descripcion + '»';
+      // Si el PDF contradice el empaque que dice el nombre (8U y el PDF cobra unidades sueltas), no se repite el empaque del nombre en la fila
+      const presTxt = pdfOk && pdf.difiere ? pres.texto.split(' · ').filter((x) => !/^(caja|bolsa|fardo|bulto|paquete|empaque) de \d+$/.test(x)).join(' · ') : pres.texto;
+      const extra = art && !enColones() && !presTxt.includes('de ') && Number(leerFactor()) > 1 ? 'cada ' + (uFac(l) || 'unidad').toLowerCase() + ' trae ' + num(leerFactor(), 6) : '';
+      leidoPres.textContent = [presTxt, extra].filter(Boolean).length ? ' · ' + [presTxt, extra].filter(Boolean).join(' · ') : '';
+      leidoFac.textContent = 'Línea ' + l.linea + ' · en la factura: «' + l.descripcion + '»' + (pdf && pdf.codigo ? ' · código del proveedor ' + pdf.codigo : '');
+      const pt = pdfTextos();
+      leidoPdf1.textContent = pt.l1; leidoPdf1.hidden = !pt.l1; leidoPdf1.className = 'rc-leido-pdf rc-leido-pdf1' + (pt.mal ? ' mal' : '');
+      leidoPdf2.textContent = pt.l2; leidoPdf2.hidden = !pt.l2;
       cantL1.textContent = num(l.cantidad, 3) + ' ' + uFac(l) + ' × ' + costoTxt(l.costo_unitario_factura);
       const c = costoCalculado(), r = art && refCosto.get(art.id), v = r && r.hay ? Number(r.precio_venta_sin_iva) : 0;
       cantL2.textContent = enColones() ? 'Entra por su valor: ' + money(valorLinea()) + ' sin IVA' : art && c != null && c > 0 ? costoTxt(c) + ' por ' + unidadTxt(art.unidad, 1) + (v > 0 ? ' · ' + num(c / v * 100, 0) + ' % del precio de venta' : '') : 'sin IVA';
@@ -897,7 +915,8 @@ export async function abrirFactura(ctx, clave, { previa = null, recibirSugeridas
       let fac = mismo && sug.factor != null ? Number(sug.factor) : sug.factor_sugerido != null ? Number(sug.factor_sugerido) : 1;
       // El nombre puede decir «8U» y la factura cobrar cada unidad suelta: si con ese número el costo por litro no es creíble y con 1 sí, se empieza en 1 (y se explica)
       notaAuto = '';
-      if (!(mismo && sug.factor != null && sug.fuente === 'memoria') && fac !== 1) { const r0 = revisarConversion({ descripcion: l.descripcion, subtotal: l.subtotal_crc, cantidad: l.cantidad, factorActual: fac }, (n) => money(n)); fac = r0.factor; if (r0.cambiado) notaAuto = r0.aviso; }
+      if (pdfOk && !enColones() && !(mismo && sug.factor != null && sug.fuente === 'memoria')) { fac = Number(pdf.factor); }
+      else if (!(mismo && sug.factor != null && sug.fuente === 'memoria') && fac !== 1) { const r0 = revisarConversion({ descripcion: l.descripcion, subtotal: l.subtotal_crc, cantidad: l.cantidad, factorActual: fac }, (n) => money(n)); fac = r0.factor; if (r0.cambiado) notaAuto = r0.aviso; }
       factor.value = String(fac).replace('.', ',');
       if (!cantidadTocada) cantidad.poner(Math.round(Number(l.cantidad) * fac * 1000) / 1000);
       ubic.value = (mismo && sug.ubicacion_id) || ubicacionPorOmision(art) || '';
@@ -938,7 +957,7 @@ export async function abrirFactura(ctx, clave, { previa = null, recibirSugeridas
       const fv = leerFactor();
       if (!Number.isFinite(fv) || fv <= 0) { factorEco.textContent = 'Escriba cuántas trae cada una (mayor que cero, hasta 6 decimales). Si es lo mismo, escriba 1.'; factorEco.className = 'inv-eco mal'; pintarSem(); return; }
       factorEco.className = 'inv-eco';
-      const rev = enColones() ? { aviso: '' } : revisarConversion({ descripcion: l.descripcion, subtotal: l.subtotal_crc, cantidad: l.cantidad, factorActual: fv }, (n) => money(n));
+      const rev = enColones() || (pdfOk && fv === Number(pdf.factor)) ? { aviso: '' } : revisarConversion({ descripcion: l.descripcion, subtotal: l.subtotal_crc, cantidad: l.cantidad, factorActual: fv }, (n) => money(n));
       // Si la persona escribió una conversión creíble no se le dice nada; si no lo es, se le explica con la cifra (no se cambia lo que escribió)
       const soloNota = !(rev.aviso && !rev.cambiado); avisoConv.textContent = rev.aviso && !rev.cambiado ? rev.aviso : (fv === 1 ? notaAuto : ''); avisoConv.classList.toggle('nota', soloNota && !!avisoConv.textContent); avisoConv.hidden = !avisoConv.textContent;
       factorEco.textContent = 'La factura dice ' + num(l.cantidad, 3) + ' × ' + num(fv, 6) + ' = ' + (art ? cantR(Math.round(Number(l.cantidad) * fv * 1000) / 1000, art.unidad) : num(Number(l.cantidad) * fv, 3)) + '. Si llegó menos, corrija la cantidad.';
