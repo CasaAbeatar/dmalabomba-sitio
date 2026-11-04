@@ -1,4 +1,4 @@
-// Usuarios del facturador (solo administradores): crear, cambiar nombre, reiniciar PIN, activar o desactivar. Nunca se elimina.
+// Usuarios del facturador (solo administradores): crear, cambiar nombre, reiniciar clave, activar o desactivar. Nunca se elimina.
 // Cada empresa tiene sus usuarios: el servidor (fx_usuarios) entrega solo los de la empresa de la sesión y un usuario nuevo queda en esa empresa.
 // fx_usuarios trae por usuario `empresas: [{ id, codigo, nombre_comercial }]`; de la fila del propio administrador salen las OTRAS empresas a las que él tiene acceso (casilla «También puede entrar a …»).
 import { estiloUsuario, h, modal, confirmar, pedir, conBoton, toast, fechaHora, fechaCorta, pinDebil, conPunto, nombrePropio, nombreLocal, bloqueError, textoDeError } from './util.js';
@@ -69,7 +69,7 @@ export default {
       const ultimo = u.ultimo_ingreso ? 'Último ingreso: ' + fechaHora(u.ultimo_ingreso) : 'Todavía no ha ingresado';
       const btnNombre = h('button.btn', { type: 'button', onclick: () => cambiarNombre(u) }, 'Cambiar nombre');
       const btnPin = yo ? null : h('button.btn', { type: 'button', onclick: (e) => reiniciarPin(u, e.currentTarget) }, 'Reiniciar clave');
-      const btnAdmin = yo ? null : h('button.btn', { type: 'button', onclick: (e) => cambiarAdmin(u, e.currentTarget) }, u.admin ? 'Quitar administrador' : 'Hacer administrador');
+      const btnAdmin = yo ? null : h('button.btn', { type: 'button', onclick: (e) => cambiarAdmin(u, e.currentTarget) }, u.admin ? 'Pasar a Caja' : 'Hacer administrador');
       const btnActivo = yo ? null : h('button.btn' + (u.activo ? '.peligro' : ''), { type: 'button', onclick: (e) => cambiarActivo(u, e.currentTarget) }, u.activo ? 'Desactivar' : 'Activar de nuevo');
       return h('div.mt-item' + (u.activo ? '' : '.apagado'),
         h('div.mt-datos',
@@ -78,7 +78,7 @@ export default {
           h('span.mt-sub', ultimo),
           h('div.fila', { style: 'gap:.4rem;margin-top:.2rem' },
             yo ? h('span.chip.ok', 'Es usted') : null,
-            h('span.chip' + (u.admin ? '.ok' : '.gris'), u.admin ? 'Administrador' : 'Usuario normal'),
+            h('span.chip' + (u.admin ? '.ok' : '.gris'), u.admin ? 'Administrador' : 'Caja'),
             u.activo ? null : h('span.chip.mal', 'Desactivado: no puede entrar'),
             otrasEmpresas(u).map((e) => h('span.chip.gris', 'También entra a ' + nombreLocal(e))),
             u.debe_cambiar_pin ? h('span.chip.espera', 'Debe cambiar su clave al entrar') : null)),
@@ -246,9 +246,9 @@ export default {
 
     async function cambiarAdmin(u, btn) {
       if (u.admin && u.activo && adminsActivos() <= 1) return toast('Tiene que quedar al menos un administrador activo. Primero haga administrador a otra persona.', 'error', 7000);
-      const ok = await confirmar(u.admin ? '¿Quitarle a ' + (u.nombre || u.usuario) + ' el permiso de administrador? Ya no podrá ver esta pantalla de Usuarios.' : '¿Hacer administrador a ' + (u.nombre || u.usuario) + '? Podrá crear usuarios, reiniciar claves y desactivar personas.');
+      const ok = await confirmar(u.admin ? '¿Dejar a ' + (u.nombre || u.usuario) + ' como Caja? Seguirá facturando, pero ya no podrá ver Usuarios ni el resto de la administración.' : '¿Hacer administrador a ' + (u.nombre || u.usuario) + '? Tendrá el mismo acceso que cualquier administrador: crear usuarios, reiniciar claves, desactivar personas y ver todo el sistema.');
       if (!ok) return;
-      await guardar(btn, { id: u.id, admin: !u.admin }, u.admin ? 'Ya no es administrador.' : 'Ahora es administrador.');
+      await guardar(btn, { id: u.id, admin: !u.admin }, u.admin ? 'Ahora es de Caja.' : 'Ahora es administrador.');
     }
 
     async function cambiarActivo(u, btn) {
@@ -282,8 +282,8 @@ export default {
           h('div.col', { style: 'gap:.3rem' }, campo('Clave temporal (4 números)', pin, 'La persona tendrá que cambiarla la primera vez que entre.'),
             h('div.fila', h('button.btn', { type: 'button', onclick: () => { pin.value = pinAzar(); } }, 'Generar una clave al azar'))),
           h('div.col', { style: 'gap:.3rem' }, h('span.etq', '¿Es administrador?'),
-            h('div.mt-radios', h('label', rNo, 'No, usuario normal'), h('label', rSi, 'Sí, administrador')),
-            h('small.tenue', 'Un administrador puede crear usuarios y reiniciar claves. Todos los usuarios ven todo lo demás.'))),
+            h('div.mt-radios', h('label', rNo, 'No, es de caja'), h('label', rSi, 'Sí, administrador')),
+            h('small.tenue', 'Caja: factura, crea y edita clientes, anula y reimprime facturas, y abre y cierra la caja. Administrador: todo eso y además el resto del sistema (usuarios, inventarios, contabilidad, informes, productos y precios).'))),
         botones: [{ texto: 'Cancelar', clase: 'suave', onclick: (c) => c() }, { texto: 'Crear usuario', clase: 'primario', onclick: async (c) => {
           mostrar('');
           const u = usuarioLimpio(usr.value);
@@ -309,16 +309,16 @@ export default {
         h('div', h('p', 'Las personas que pueden entrar al facturador de ', h('strong', miEmpresa), '. Nunca se elimina a nadie: se desactiva.')),
         h('div.mt-acciones', h('button.btn.primario.grande', { type: 'button', onclick: agregar }, 'Agregar usuario'))),
       segEl, resumen, lista, aparEl,
-      // Lo de hoy primero (quién ingresó hoy); la explicación del PIN va al final y se abre con un botón grande
+      // Lo de hoy primero (quién ingresó hoy); la explicación de la clave va al final y se abre con un botón grande
       h('details.tarjeta', { style: 'margin-top:1.2rem' },
         h('summary', 'Cómo funciona la clave'),
         h('ul', { style: 'margin:.4rem 0 0;padding-left:1.2rem;display:grid;gap:.3rem' },
           h('li', 'La clave tiene 4 números que solo conoce cada persona. Se usa junto con el código de la empresa y el usuario para entrar.'),
-          h('li', 'Si alguien se equivoca de clave, puede intentar de nuevo pasados 2 segundos. El ingreso nunca se bloquea ni se queda esperando más tiempo.'),
+          h('li', 'Si alguien se equivoca de clave, puede intentar de nuevo pasados 3 segundos. El ingreso nunca se bloquea ni se queda esperando más tiempo.'),
           h('li', 'Si alguien olvida su clave, use «Reiniciar clave»: se le da una temporal que tendrá que cambiar apenas entre.'),
           h('li', 'Nadie puede ver la clave de otra persona, ni siquiera un administrador.'),
           h('li', 'Cada persona entra solo a la empresa que se le dio. Aquí se ven y se crean los usuarios de ' + miEmpresa + '.'),
-          h('li', 'Dentro de la empresa todos los usuarios tienen acceso a todo. Solo esta pantalla de Usuarios es exclusiva de los administradores.'))));
+          h('li', 'Hay dos tipos de usuario. Caja: factura, crea y edita clientes (sin desactivarlos), anula y reimprime facturas, y abre y cierra la caja. Administrador: lo mismo y además todo el resto del sistema, incluida esta pantalla de Usuarios. Todos los administradores tienen el mismo acceso.'))));
     pintarSeguridad(); // «Revisando…» mientras llega
     pintarAparatos();
     cargarSeguridad(); // en paralelo con la lista de usuarios: si falla, la lista igual se ve
