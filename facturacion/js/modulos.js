@@ -113,5 +113,6 @@ export function descripcionDe(m, app) {
   }
   // Empresa «solo recepción» (hoy Soda): Facturar no está habilitado aquí, y la tarjeta lo dice sin entrar
   if (m.emite && app?.soc?.puede_emitir === false) return 'No disponible en esta empresa';
+  if (m.id === 'clientes' && app && !app.admin) return 'Buscar o agregar clientes'; // la caja crea clientes, no corrige los existentes
   return m.descripcion || '';
 }

@@ -186,7 +186,7 @@ export function abrirFormCliente(app, cliente, { alGuardar, alCambiarEstado, tit
       const igual = (x) => (letras ? limpiarNumeroId(x.identificacion, '05') === buscado : x.identificacion === buscado);
       return (await clientesTodos(soc.id, buscado)).find((x) => igual(x) && x.id !== c.id) || null;
     },
-    accionDuplicado: { texto: 'Abrir el cliente que ya existe', fn: (otro) => { m.cerrar(); abrirFormCliente(app, otro, { alGuardar, alCambiarEstado, titulo }); } },
+    accionDuplicado: !app.admin ? undefined : { texto: 'Abrir el cliente que ya existe', fn: (otro) => { m.cerrar(); abrirFormCliente(app, otro, { alGuardar, alCambiarEstado, titulo }); } },
     numeroInicial: esNuevo ? numeroInicial : '',
     alTerminar: () => { [correos[0]].find((x) => !x.value.trim())?.focus(); },
   });

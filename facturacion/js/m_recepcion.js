@@ -33,6 +33,14 @@ export function montoTexto(n, moneda = 'CRC') {
   return (Number(n) < 0 ? '-' : '') + (moneda === 'CRC' || !moneda ? '₡' : moneda + ' ') + e.replace(/\B(?=(\d{3})+(?!\d))/g, ' ') + ',' + d;
 }
 const largo = (t) => Array.from(String(t || '')).length;
+// «1 de enero de 2026» a partir de un AAAA-MM-DD (la fecha desde la que las facturas recibidas son operativas: la manda la base, fact.config.recibidas_operativas_desde)
+const fechaLargaIso = (iso) => (/^\d{4}-\d{2}-\d{2}/.test(String(iso || '')) ? new Intl.DateTimeFormat('es-CR', { timeZone: 'UTC', day: 'numeric', month: 'long', year: 'numeric' }).format(new Date(String(iso).slice(0, 10) + 'T12:00:00Z')) : '');
+// Desde cuándo se responde a Hacienda desde este facturador (fact.config.recibidas_respuesta_desde): lo informan fx_recibidas y fx_recibida. visto = la base ya trae el dato (migración 220).
+let respuestaDesde = { visto: false, fecha: null };
+const TIPOS_RESPONDEN = ['FacturaElectronica', 'NotaCreditoElectronica', 'NotaDebitoElectronica'];
+const textoFueraDelFacturador = () => respuestaDesde.fecha
+  ? 'Es anterior al ' + fechaLargaIso(respuestaDesde.fecha) + ': se gestionó fuera de este facturador y no se responde a Hacienda desde aquí.'
+  : 'Todavía no se responde a Hacienda desde este facturador: las respuestas se siguen haciendo en el sistema actual.';
 // replaceChildren no ignora null ni false (los pondría como texto «null»): esto sí, como h()
 const poner = (el, ...xs) => el.replaceChildren(...xs.flat(Infinity).filter((x) => x != null && x !== false && x !== ''));
 // Condición del IVA (nota 18 del anexo v4.4), en palabras para quien responde
@@ -47,6 +55,8 @@ const TEXTO_CONDICION = Object.fromEntries(CONDICIONES.map((x) => [x.c, x.t]));
 // Estado de una factura para mostrar: {texto, clase, sub, nivel}
 export function estadoFila(f) {
   const rec = f.receptor_estado, hac = f.hacienda_estado;
+  if (f.operativa === false) return { texto: 'Solo informativa', clase: '', sub: 'Es anterior al ' + (fechaLargaIso(f.operativas_desde) || 'inicio del uso del sistema') + ': se guarda para comparar precios. No se responde a Hacienda ni entra a inventario ni a contabilidad.' };
+  if (f.requiere === false && respuestaDesde.visto && TIPOS_RESPONDEN.includes(f.tipo)) return { texto: 'Se gestiona fuera del facturador', clase: '', sub: textoFueraDelFacturador() };
   if (!f.requiere) return { texto: 'No necesita respuesta', clase: '', sub: 'Los tiquetes y facturas de compra no se aceptan ni se rechazan.' };
   if (hac === '3' && f.hacienda_cuadra !== false) return { texto: 'Rechazada por Hacienda', clase: 'mal', sub: 'Hacienda no la aceptó cuando el proveedor la envió; no hay que responderla.' };
   const cuando = (f.receptor_en ? 'El ' + fechaHora(f.receptor_en) : '') + (f.receptor_envio === 'enviado' ? ' · Llegó a Hacienda, falta que Hacienda la confirme' : '');
@@ -258,6 +268,9 @@ export default {
         const d = await recibidas(soc.id, desde, hasta, est.q, modo());
         if (mia !== ficha || !vivo) return;
         est.datos = d; est.conteo = d.conteo; est.rango = [desde, hasta];
+        respuestaDesde = { visto: 'respuesta_desde' in d, fecha: d.respuesta_desde || null };
+        if (d.operativas_desde) rotulo.textContent += ' Las facturas anteriores al ' + fechaLargaIso(d.operativas_desde) + ' son solo informativas (sirven para comparar precios) y no aparecen aquí.';
+        if (respuestaDesde.visto && est.vista !== 'todas') rotulo.textContent += respuestaDesde.fecha ? ' Se cuentan las facturas emitidas desde el ' + fechaLargaIso(respuestaDesde.fecha) + '.' : ' Todavía no se responde a Hacienda desde este facturador, así que aquí no se cuenta nada como pendiente.';
         pintarKpis(); pintarTabs(); pintarLista();
         marcarPestana(d.conteo);
         if (!est.plazoVisto) { est.plazoVisto = true; cargarPlazo(); }
@@ -442,6 +455,7 @@ export default {
         return;
       }
       const f = d.factura, nota = esNC(f.tipo), sg = nota ? '−' : '';
+      respuestaDesde = { visto: 'respuesta_desde' in d, fecha: d.respuesta_desde || null };
       const e = estadoFila({ ...d, ...f, requiere: d.requiere, dias_restantes: d.dias_restantes });
       const dato = (t, v) => h('div.rec-dato', h('small', t), h('div', v));
       const moneda = f.moneda !== 'CRC';
@@ -512,6 +526,8 @@ export default {
       const f = d.factura;
       const quien = `${esNC(f.tipo) ? 'la nota de crédito' : esND(f.tipo) ? 'la nota de débito' : 'la factura'} ${f.consecutivo ? f.consecutivo.slice(-10).replace(/^0+(?=\d)/, '') : ''} de ${nomProv(f.emisor_nombre)}`.replace(/\s+/g, ' ');
       if (d.propia) { caja.append(h('p.tenue', 'Este comprobante lo emitió esta misma empresa; no es una compra a un proveedor.')); return; }
+      if (d.operativa === false) { caja.append(h('h3', 'Respuesta a Hacienda'), h('p', 'Esta factura es anterior al ' + (fechaLargaIso(d.operativas_desde) || 'inicio del uso del sistema') + ': se guarda solo para comparar precios. No hay que aceptarla ni rechazarla, y no entra a inventario ni a contabilidad.')); return; }
+      if (!d.requiere && respuestaDesde.visto && TIPOS_RESPONDEN.includes(f.tipo)) { caja.append(h('h3', 'Respuesta a Hacienda'), h('p', textoFueraDelFacturador() + ' No hay nada que aceptar o rechazar aquí.')); return; }
       if (!d.requiere) { caja.append(h('h3', 'Respuesta a Hacienda'), h('p', 'Este tipo de comprobante no necesita que usted lo acepte ni lo rechace. Los tiquetes no sirven para usar el IVA como crédito fiscal: si lo necesita, pida al proveedor una factura electrónica a nombre de la empresa.')); return; }
       if (d.hacienda_estado === '3' && d.hacienda_cuadra !== false) { caja.append(h('h3', 'Respuesta a Hacienda'), h('p', 'Hacienda rechazó esta factura cuando el proveedor la envió, así que no tiene validez y no hay nada que responder. Espere la factura que la reemplace.')); return; }
       const g = guardada && guardada.estado_envio ? guardada : null;
