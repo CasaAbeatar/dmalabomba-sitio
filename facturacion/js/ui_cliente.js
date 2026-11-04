@@ -186,7 +186,7 @@ export function abrirFormCliente(app, cliente, { alGuardar, alCambiarEstado, tit
       const igual = (x) => (letras ? limpiarNumeroId(x.identificacion, '05') === buscado : x.identificacion === buscado);
       return (await clientesTodos(soc.id, buscado)).find((x) => igual(x) && x.id !== c.id) || null;
     },
-    accionDuplicado: !app.admin ? undefined : { texto: 'Abrir el cliente que ya existe', fn: (otro) => { m.cerrar(); abrirFormCliente(app, otro, { alGuardar, alCambiarEstado, titulo }); } },
+    accionDuplicado: { texto: 'Abrir el cliente que ya existe', fn: (otro) => { m.cerrar(); abrirFormCliente(app, otro, { alGuardar, alCambiarEstado, titulo }); } },
     numeroInicial: esNuevo ? numeroInicial : '',
     alTerminar: () => { [correos[0]].find((x) => !x.value.trim())?.focus(); },
   });
@@ -285,6 +285,7 @@ export function abrirFormCliente(app, cliente, { alGuardar, alCambiarEstado, tit
   // Estado del cliente: activo o desactivado (solo en clientes ya guardados)
   const estadoTexto = h('p.mt-estado-txt');
   const estadoBtn = h('button.btn', { type: 'button' });
+  estadoBtn.hidden = !app.admin; // desactivar o activar un cliente es de administración; la caja puede crear y editar
   const pintarEstado = () => {
     estadoTexto.replaceChildren(activo ? h('b', 'Activo. ') : h('b', 'Desactivado. '), activo ? 'Aparece al buscar cliente para facturar.' : 'No aparece al buscar cliente para facturar. Sus facturas anteriores no cambian.');
     estadoBtn.textContent = activo ? 'Desactivar cliente' : 'Activar cliente';
