@@ -72,7 +72,7 @@ export default {
         h('details', { style: 'margin-top:.6rem' }, h('summary', 'Sección de profesional'),
           h('p.con-ayuda', 'Los formularios de IVA llevan los datos del profesional que los prepara o firma. Se guardan una vez para todos los meses.'),
           h('div.con-form', h('label.etq', 'Nombre', nomP), h('label.etq', 'Cédula', cedP)),
-          h('div.con-acciones', h('button.btn', { type: 'button', onclick: (e) => conBoton(e.currentTarget, async () => { try { await parametroGuardar(soc.id, 'profesional_nombre', nomP.value.trim() || null, !!nomP.value.trim()); await parametroGuardar(soc.id, 'profesional_cedula', cedP.value.trim() || null, !!cedP.value.trim()); toast('Datos del profesional guardados'); } catch (er) { toast(textoDeError(er), 'error'); } }) }, 'Guardar profesional'))),
+          h('div.con-acciones', h('button.btn', { type: 'button', onclick: (e) => conBoton(e.currentTarget, async () => { try { await parametroGuardar(soc.id, 'profesional_nombre', nomP.value.trim() || null, !!nomP.value.trim()); await parametroGuardar(soc.id, 'profesional_cedula', cedP.value.trim() || null, !!cedP.value.trim()); toast('Datos del profesional guardados'); } catch (er) { toast(textoDeError(er), 'error'); } }) }, 'Guardar los datos del profesional'))),
         presentada ? h('p.con-ayuda', 'Presentada el ' + fechaDMA(String(dec.presentado_en).slice(0, 10)) + ' por ' + dec.presentado_por + ' con el comprobante ' + dec.numero_presentacion + '. Si hay que corregir algo, al guardar nuevas cifras se abre una versión rectificativa.') : null,
         h('div.con-acciones',
           h('button.btn.primario', { type: 'button', onclick: (e) => conBoton(e.currentTarget, async () => {

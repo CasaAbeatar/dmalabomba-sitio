@@ -4,7 +4,7 @@ import { listados2 } from './api_listados.js';
 import { mensajeAmable } from './api_documentos.js';
 import { selectorPeriodo, textoRango, fechaLarga } from './periodo.js';
 import { crearDescarga, nombrePeriodo } from './descargas.js';
-import { graficoColumnas, graficoBarras, autoAjustar } from './graficos.js';
+import { graficoColumnas, graficoBarras, autoAjustar, columnasAngostas } from './graficos.js';
 
 const cssUrl = new URL('../css/listados.css', import.meta.url).href;
 const norm = (t) => String(t ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
@@ -130,12 +130,18 @@ export default {
       if (!datos.length) return h('p.tenue', vacioTxt || 'Sin datos en este periodo.');
       const lect = h('p.lectura', { 'aria-live': 'polite' }, 'Toque o pase el cursor sobre una barra para ver el detalle.');
       const cont = h('div.gr-caja');
-      let sel = -1;
-      limpiezas.push(autoAjustar(cont, (w) => {
+      let sel = -1, ancho = 0;
+      const paso = h('div.fila.gr-paso', { hidden: true });
+      const dibujar = () => {
         const f = tipo === 'col' ? graficoColumnas : graficoBarras;
-        cont.replaceChildren(f(datos, { ...opc, ancho: w, seleccionado: sel, alSeleccionar: (d, i) => { sel = i; lect.textContent = d.texto; } }));
-      }));
-      return h('div', cont, lect);
+        const angosta = tipo === 'col' && columnasAngostas(datos.length, ancho);
+        cont.replaceChildren(f(datos, { ...opc, ancho, seleccionado: sel, zonasPorColumna: !angosta, alSeleccionar: (d, i) => { sel = i; lect.textContent = d.texto; } }));
+        paso.hidden = !angosta;
+      };
+      const ir = (n) => { sel = Math.max(0, Math.min(datos.length - 1, (sel < 0 ? (n > 0 ? -1 : datos.length) : sel) + n)); lect.textContent = datos[sel].texto; dibujar(); };
+      paso.append(h('button.btn.crece', { type: 'button', onclick: () => ir(-1) }, '‹ Anterior'), h('button.btn.crece', { type: 'button', onclick: () => ir(1) }, 'Siguiente ›'));
+      limpiezas.push(autoAjustar(cont, (w) => { ancho = w; dibujar(); }));
+      return h('div', cont, paso, lect);
     }
 
     /* ---------- pintar todo ---------- */
