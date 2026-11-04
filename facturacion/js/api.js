@@ -367,7 +367,7 @@ async function conReintento(hacer, alReintentar) {
 }
 // El estado que se anota en el error: el del servidor; si contestó 200 con ok:false, el que corresponde al motivo (así un rechazo esperado nunca se toma por una falla)
 const ESTADO_DE_MOTIVO = { falta_empresa: 400, empresa_desconocida: 404, empresa_no_habilitada: 403 };
-// El ingreso NUNCA se bloquea (decisión de Emil): no hay «intentos restantes» ni hora de desbloqueo. Un PIN o un usuario que no coinciden dicen eso; tras un PIN equivocado solo hay una espera corta y fija de 1 o 2 segundos (3 nov 2026), que no crece.
+// El ingreso NUNCA se bloquea (decisión de Emil): no hay «intentos restantes» ni hora de desbloqueo. Un PIN o un usuario que no coinciden dicen eso; tras un PIN equivocado solo hay una espera corta y fija de 3 segundos (decisión del 4 nov 2026), que no crece.
 // Un 5xx o un 429 del servicio (saturado) es una falla transitoria; todo lo demás es una respuesta clara del acceso y no se repite sola.
 // Un 429 sigue siendo transitorio (en el primer paso deja usar la empresa de respaldo, así nadie queda sin poder llegar al usuario y al PIN) pero conReintento no lo repite
 // y su texto no promete una espera: dice que hay mucho movimiento y que se puede intentar otra vez.
@@ -376,7 +376,7 @@ const MSG_ACCESO_MUCHOS = 'Hay mucho movimiento en este momento y no se pudo ent
 function errorDeAcceso(r, j) {
   const estado = r.ok ? (ESTADO_DE_MOTIVO[j.motivo] || 400) : r.status;
   const motivo = j.motivo || '';
-  // El servidor pide esperar 1 o 2 segundos (espera corta y fija, no bloqueo). No se repite solo (tipo negocio); la pantalla muestra una cuenta regresiva y vuelve a habilitar el botón.
+  // El servidor pide esperar hasta 3 segundos (espera corta y fija, no bloqueo). No se repite solo (tipo negocio); la pantalla muestra una cuenta regresiva y vuelve a habilitar el botón.
   if (r.status === 429 && motivo === 'espera') {
     const s = Math.max(1, Math.min(60, Number(j.espera) || 5));
     const e = new ErrorApi(typeof j.error === 'string' && j.error.trim() ? j.error : `Espere ${s} segundos e intente de nuevo.`, { tipo: 'negocio', estado: 429, motivo: 'espera' });

@@ -76,14 +76,14 @@ window.addEventListener('unhandledrejection', (ev) => {
 });
 
 /* ---------- Campo de PIN (lo usan el inicio de sesión y «Entrar de nuevo») ---------- */
-// Un solo campo que se escribe con el teclado del aparato (en el celular sale el teclado de números). Al escribir el cuarto número entra solo; también sirve Enter o el botón «Entrar».
-// antes() puede devolver false para no seguir todavía (por ejemplo si falta el usuario). alCompletar() se llama con 4 números. boton = el botón «Entrar», que se bloquea junto con el campo.
-function crearCampoPin({ antes, alCompletar, boton = null }) {
-  const campo = h('input.campo.campo-pin', { type: 'password', inputmode: 'numeric', maxlength: 4, autocomplete: 'off', autocapitalize: 'none', autocorrect: 'off', spellcheck: 'false', placeholder: '4 números', 'aria-label': 'PIN' });
+// Un solo campo que se escribe con el teclado del aparato (en el celular sale el teclado de números). PIN FINAL (decisión de Emil, 4 nov 2026): la pantalla NO revela el largo del PIN:
+// el campo no tiene largo fijo (sin maxlength), no hay casillas ni puntos de pista, el texto de ayuda no dice cuántos números son y NO se envía solo al llegar a cierto largo.
+// Se envía únicamente al dar Enter o al tocar el botón «Entrar» (alCompletar). boton = el botón «Entrar», que se bloquea junto con el campo.
+function crearCampoPin({ alCompletar, boton = null }) {
+  const campo = h('input.campo.campo-pin', { type: 'password', inputmode: 'numeric', autocomplete: 'off', autocapitalize: 'none', autocorrect: 'off', spellcheck: 'false', enterkeyhint: 'go', placeholder: 'PIN', 'aria-label': 'PIN' });
   campo.addEventListener('input', () => {
-    const v = campo.value.replace(/\D/g, '').slice(0, 4);
+    const v = campo.value.replace(/\D/g, '').slice(0, 32);
     if (v !== campo.value) campo.value = v;
-    if (v.length === 4 && (!antes || antes() !== false)) setTimeout(alCompletar, 150);
   });
   campo.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); alCompletar(); } });
   return {
@@ -95,7 +95,7 @@ function crearCampoPin({ antes, alCompletar, boton = null }) {
   };
 }
 
-// Texto del error de acceso. El ingreso NUNCA se bloquea: no hay hora de desbloqueo ni intentos que se acaban. Tras un PIN equivocado solo hay una espera corta y fija (máximo 2 segundos, decisión de Emil del 3 nov 2026); nunca crece.
+// Texto del error de acceso. El ingreso NUNCA se bloquea: no hay hora de desbloqueo ni intentos que se acaban. Tras un PIN equivocado solo hay una espera corta y fija (3 segundos, decisión de Emil del 4 nov 2026); nunca crece.
 // Un usuario o un PIN que no coinciden se dicen con palabras claras (sin revelar cuál de los dos falló). cambiarEmpresa = false en la ventana «Su sesión venció», donde la empresa y el usuario no se cambian.
 function textoErrorAcceso(e, { cambiarEmpresa = true } = {}) {
   if (e && (e.motivo === 'empresa_desconocida' || e.motivo === 'empresa_no_habilitada')) return conPunto(e.message);
@@ -207,14 +207,12 @@ function pantallaUsuario(emp, mensaje) {
   let ocupado = false;
   const botonEntrar = h('button.btn.primario.grande.entrar-boton', { type: 'button', onclick: () => intentar() }, 'Entrar');
   const pad = crearCampoPin({
-    // Sin usuario no se entra solo con el cuarto número: se avisa y el PIN escrito se conserva
-    antes: () => { if (usuario.value.trim()) return true; mostrarError('Primero escriba su usuario.'); usuario.focus(); return false; },
-    alCompletar: () => intentar(),
+    alCompletar: () => intentar(), // Enter en el campo o el botón «Entrar»; si falta el usuario, intentar() lo avisa y conserva el PIN escrito
     boton: botonEntrar,
   });
   const cambiar = h('button.btn.emp-cambiar', { type: 'button', onclick: () => { if (!ocupado) pantallaCodigo({ codigo: emp.codigo }); } }, 'Cambiar de empresa'); // vuelve a los dos botones de empresa, con la actual ya enfocada
   const bloquear = (si) => { ocupado = si; pad.bloquear(si); usuario.disabled = si; cambiar.disabled = si; };
-  // Cuenta regresiva cuando el servidor pide esperar (la espera corta y fija tras un PIN equivocado: 1 o 2 segundos, nunca un bloqueo). No borra lo digitado; al llegar a 0 vuelve a habilitar los campos.
+  // Cuenta regresiva cuando el servidor pide esperar (la espera corta y fija tras un PIN equivocado: hasta 3 segundos, nunca un bloqueo). No borra lo digitado; al llegar a 0 vuelve a habilitar los campos.
   let relojEspera = null;
   function cuentaEspera(seg) {
     if (relojEspera) clearInterval(relojEspera);
@@ -231,7 +229,7 @@ function pantallaUsuario(emp, mensaje) {
   async function intentar() {
     if (ocupado) return;
     if (!usuario.value.trim()) { pad.limpiar(); mostrarError('Escriba su usuario.'); usuario.focus(); return; }
-    if (pad.valor().length < 4) { mostrarError('El PIN tiene 4 números.'); pad.enfocar(); return; }
+    if (!pad.valor()) { mostrarError('Escriba su PIN.'); pad.enfocar(); return; }
     mostrarError('');
     bloquear(true); mostrarEstado('Entrando…');
     try {
@@ -247,7 +245,7 @@ function pantallaUsuario(emp, mensaje) {
       if (!esErrorEsperado(e)) console.error(e);
       // La empresa dejó de existir o de estar habilitada entre el paso 1 y ahora: se vuelve al código con el mensaje
       if (e && (e.motivo === 'empresa_desconocida' || e.motivo === 'empresa_no_habilitada')) { pantallaCodigo({ codigo: emp.codigo, [e.motivo === 'empresa_no_habilitada' ? 'aviso' : 'error']: textoErrorAcceso(e) }); return; }
-      // El servidor pide esperar 1 o 2 segundos (hubo un PIN equivocado hace un instante desde esta conexión o con este usuario): cuenta regresiva, sin borrar el PIN ya escrito
+      // El servidor pide esperar hasta 3 segundos (hubo un PIN equivocado hace un instante desde esta conexión o con este usuario): cuenta regresiva, sin borrar el PIN ya escrito
       if (e && e.motivo === 'espera') { mostrarEstado(''); cuentaEspera(Math.max(1, Number(e.espera) || 5)); return; }
       pad.limpiar();
       alertar(e);
@@ -264,7 +262,7 @@ function pantallaUsuario(emp, mensaje) {
     if (e.key !== 'Enter') return;
     e.preventDefault();
     if (!usuario.value.trim()) return;
-    if (pad.valor().length === 4) intentar(); else pad.enfocar();
+    if (pad.valor()) intentar(); else pad.enfocar();
   });
   const ced = cedulaJuridica(emp.cedula);
   raiz.append(h('div.pantalla-centro', h('div.login.tarjeta.login-usuario',
@@ -574,7 +572,7 @@ function mostrarSesionVencida() {
   const pad = crearCampoPin({ alCompletar: () => reentrar(), boton: botonEntrar });
   const mostrarError = (m) => { err.textContent = m; err.hidden = !m; };
   async function reentrar() {
-    if (pad.valor().length < 4) { mostrarError('El PIN tiene 4 números.'); pad.enfocar(); return; }
+    if (!pad.valor()) { mostrarError('Escriba su PIN.'); pad.enfocar(); return; }
     mostrarError('');
     pad.bloquear(true); estado.textContent = 'Entrando…'; estado.hidden = false;
     try {
@@ -604,7 +602,7 @@ function mostrarSesionVencida() {
   function paso2() {
     cuerpo.replaceChildren(h('div.col',
       h('h2#sv-tit', 'Escriba su PIN'),
-      h('p.sub.sv-quien', h('span', 'Empresa: ', h('strong', emp.nombre || 'Su empresa')), h('span', 'Usuario: ', h('strong', nombre)), h('span', 'El PIN son 4 números.')),
+      h('p.sub.sv-quien', h('span', 'Empresa: ', h('strong', emp.nombre || 'Su empresa')), h('span', 'Usuario: ', h('strong', nombre))),
       h('label.etq', 'PIN', pad.campo), estado, err, botonEntrar,
       h('button.btn.suave', { type: 'button', onclick: () => { pad.limpiar(); mostrarError(''); paso1(); } }, 'Volver')));
     pad.enfocar(); // el botón que se tocó desaparece: el foco pasa al campo del PIN y no se pierde en la página
