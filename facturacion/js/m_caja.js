@@ -178,11 +178,14 @@ function buscarEn(productos, q) {
   return out.map((x) => x[1]);
 }
 
+// Medios que ofrece la pantalla de cobro, en este orden: Efectivo al medio, el único que puede dejar faltante si se marca por error (decisión de Emil, 4 nov 2026). «Transferencia» se registra como SINPE Móvil
+const MEDIOS_CAJA = [['tarjeta', 'Tarjeta'], ['efectivo', 'Efectivo'], ['sinpe', 'SINPE Móvil']];
+const MEDIO_CAJA_VALIDO = (m) => MEDIOS_CAJA.some(([k]) => k === m);
 // Reparte los pagos: lo que no es efectivo no puede pasar del total; el efectivo cubre el resto y da vuelto. Todo en céntimos.
 function calcularPagos(entradas, totalC) {
   let noEf = 0, ef = 0;
   for (const e of entradas) { const c = cents(e.recibido); if (e.medio === 'efectivo') ef += c; else noEf += c; }
-  if (noEf > totalC) return { ok: false, error: 'Tarjeta, SINPE y transferencia suman más que el total. Baje ese monto.', falta: 0, vuelto: 0, aplicados: [] };
+  if (noEf > totalC) return { ok: false, error: 'Tarjeta y SINPE suman más que el total. Baje ese monto.', falta: 0, vuelto: 0, aplicados: [] };
   const resto = totalC - noEf;
   const efAplic = Math.min(ef, resto);
   const falta = totalC - noEf - efAplic;
@@ -1255,7 +1258,8 @@ export default {
       let cliente = cur.cliente || null;
       let actividadFactura = null; // código de actividad pedido por el cliente solo para esta factura (null = la principal del cliente)
       let pagos = [];
-      let medio = 'efectivo';
+      let medio = null; // decisión de Emil (4 nov 2026): nada viene elegido; la cajera debe tocar SINPE Móvil, Tarjeta o Efectivo
+      let mixto = false; // pago con dos medios: cada fila también pide elegir medio
       let auto = true;
       let cobrando = false;
       let terminado = false;
@@ -1281,7 +1285,8 @@ export default {
       const exoEl = h('div.cobro-tarifa.cobro-exo', { hidden: true });
       const tipoIdEl = h('div.cobro-tipo-id', { hidden: true }); // el cliente elegido no puede llevar factura (o trae una advertencia de la base)
       const montoTotal = h('div.monto', money(venta.total));
-      const mediosBtns = Object.entries(MEDIOS).map(([k, v]) => h('button.medio-btn', { type: 'button', dataset: { medio: k }, onclick: () => { medio = k; auto = true; sugerir(); actualizar(); inpMonto.focus(); inpMonto.select(); } }, v));
+      // Solo estos tres medios en la caja y en este orden. «Transferencia» no se ofrece aquí: se registra como SINPE Móvil (el medio sigue existiendo en la base y en las otras pantallas)
+      const mediosBtns = MEDIOS_CAJA.map(([k, v]) => h('button.medio-btn', { type: 'button', dataset: { medio: k }, onclick: () => { medio = k; auto = true; sugerir(); actualizar(); if (medio === 'efectivo' || mixto) { inpMonto.focus(); inpMonto.select(); } } }, v));
       const inpMonto = h('input.campo.monto-grande', { type: 'text', inputmode: 'decimal', autocomplete: 'off', 'aria-label': 'Monto' });
       const lblMonto = h('span');
       const inpRef = h('input.campo', { type: 'text', maxlength: 60, autocomplete: 'off' });
@@ -1290,7 +1295,9 @@ export default {
       const rapidos = h('div.rapidos',
         h('button.btn', { type: 'button', onclick: () => { auto = true; sugerir(); actualizar(); } }, 'Exacto'),
         RAPIDOS.map((n) => h('button.btn', { type: 'button', onclick: () => { inpMonto.value = String(n); auto = false; actualizar(); } }, money0(n))));
-      const btnOtro = h('button.btn', { type: 'button', onclick: agregarOtro }, 'Agregar otro pago (pago mixto)');
+      const btnOtro = h('button.btn', { type: 'button', onclick: agregarOtro }, 'Agregar este pago y elegir otro medio');
+      const enlaceMixto = h('button.btn-enlace', { type: 'button', onclick: () => { mixto = !mixto; pagos = []; medio = null; auto = true; sugerir(); actualizar(); } });
+      const pedirMedio = h('p.cobro-pedir-medio', { hidden: true, role: 'status' }, 'Elija cómo pagó el cliente');
       const listaPagos = h('div.col');
       const resumen = h('div.cobro-resumen');
       const errEl = h('div.error-caja', { hidden: true, role: 'alert' });
@@ -1370,6 +1377,7 @@ export default {
       const cortesia = totalC === 0 && esCortesiaTotal(cur);
       const avisoCortesia = h('div.cobro-cortesia', { hidden: !cortesia, role: 'status' }, h('strong', 'Cuenta de cortesía: no se cobra nada.'), h('span', 'Todas las líneas tienen descuento del 100 %. Toque «Registrar cortesía» para emitir el comprobante en cero.'));
       const formaPago = h('div.col', { hidden: cortesia }, h('strong', 'Forma de pago'), h('div.medios', mediosBtns));
+      const bloqueMixto = h('div.cobro-mixto', { hidden: cortesia }, enlaceMixto);
       const etqMonto = h('label.etq', { hidden: cortesia }, lblMonto, inpMonto);
       const vistaPago = h('div.cobro',
         h('div.cobro-fijo',
@@ -1386,8 +1394,8 @@ export default {
         actEl,
         avisoCortesia,
         formaPago, etqMonto,
-        refEtq, btnOtro, errEl, btnRevisar,
-        h('div.cobro-pie', razonCobro, btnVolver, btnCobrar));
+        refEtq, btnOtro, bloqueMixto, errEl, btnRevisar,
+        h('div.cobro-pie', pedirMedio, razonCobro, btnVolver, btnCobrar));
 
       const sinErr = () => { errEl.hidden = true; };
       const conErr = (t) => { errEl.textContent = t; errEl.hidden = false; };
@@ -1400,7 +1408,7 @@ export default {
       };
       const entradas = () => {
         const b = borrador();
-        return b.v ? [...pagos, { medio, recibido: b.v, ref: inpRef.value.trim() }] : pagos;
+        return b.v && medio ? [...pagos, { medio, recibido: b.v, ref: inpRef.value.trim() }] : pagos; // sin medio elegido, el monto escrito no cuenta
       };
       function sugerir() {
         if (!auto) return;
@@ -1549,11 +1557,12 @@ export default {
       }
       function actualizar() {
         mediosBtns.forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.medio === medio)));
-        lblMonto.textContent = medio === 'efectivo' ? 'Efectivo que entrega el cliente (₡)' : 'Monto a cobrar con ' + MEDIOS[medio] + ' (₡)';
-        refEtq.hidden = medio === 'efectivo' || cortesia; btnOtro.hidden = cortesia;
-        refTxt.textContent = medio === 'tarjeta' ? 'Número de autorización o voucher (opcional)'
-          : medio === 'sinpe' ? 'Número de comprobante del SINPE Móvil (recomendado: ayuda a cuadrar la caja)'
-          : 'Número de referencia de la transferencia (recomendado: ayuda a cuadrar la caja)';
+        lblMonto.textContent = medio === 'efectivo' ? 'Recibido: efectivo que entrega el cliente (₡)' : 'Monto a cobrar con ' + (MEDIOS[medio] || '') + ' (₡)';
+        // Un solo medio: el monto solo se pide en efectivo (Recibido); con SINPE o tarjeta se cobra el total. En pago mixto el monto se pide en cada fila.
+        etqMonto.hidden = cortesia || !medio || !(mixto || medio === 'efectivo');
+        refEtq.hidden = !medio || medio === 'efectivo' || cortesia; btnOtro.hidden = cortesia || !mixto || !medio;
+        enlaceMixto.textContent = mixto ? 'Volver a pagar con un solo medio' : 'Pagar con dos medios (pago mixto)';
+        refTxt.textContent = medio === 'tarjeta' ? 'Número de autorización o voucher (opcional)' : 'Número de comprobante del SINPE Móvil (recomendado: ayuda a cuadrar la caja)';
         const b = borrador();
         const r = calcularPagos(entradas(), totalC);
         sinErr();
@@ -1573,20 +1582,23 @@ export default {
         if (bloqueo) { resumen.className = 'cobro-resumen falta'; resumen.replaceChildren(h('span', 'No se cobra esta cuenta: no entregue vuelto. Si ya recibió dinero por ella, devuélvalo.')); }
         btnCobrar.textContent = cobrando ? (cortesia ? 'Registrando…' : 'Cobrando…') : cortesia ? 'Registrar cortesía' : 'Cobrar ' + money(venta.total);
         // Con el cobro bloqueado el botón se ve apagado pero sigue recibiendo el toque (aunque falte el monto): el toque lleva la vista al aviso (no cobra) y al lado se dice por qué
-        btnCobrar.disabled = cobrando || cedulaPendiente() || (!bloqueo && (duda || !r.ok || !!b.malo));
+        // Sin medio de pago elegido no se cobra (salvo cortesía, que no lleva pago)
+        const sinMedio = !cortesia && !entradas().some((p) => MEDIO_CAJA_VALIDO(p.medio));
+        pedirMedio.hidden = cortesia || !(sinMedio || (!medio && !r.ok));
+        btnCobrar.disabled = cobrando || cedulaPendiente() || sinMedio || (!bloqueo && (duda || !r.ok || !!b.malo));
         btnCobrar.classList.toggle('bloqueado', !!bloqueo); if (bloqueo) btnCobrar.setAttribute('aria-disabled', 'true'); else btnCobrar.removeAttribute('aria-disabled');
         razonCobro.hidden = !bloqueo; razonCobro.parentElement?.classList.toggle('con-razon', !!bloqueo);
-        btnOtro.disabled = cobrando || !b.v || !!r.error;
+        btnOtro.disabled = cobrando || !b.v || !medio || !!r.error;
         btnVolver.disabled = cobrando;
       }
       function agregarOtro() {
         const b = borrador();
+        if (!medio) { conErr('Elija primero el medio de este pago.'); return; }
         if (!b.v) { conErr('Escriba primero el monto de este pago.'); return; }
         const prueba = calcularPagos([...pagos, { medio, recibido: b.v, ref: '' }], totalC);
         if (prueba.error) { conErr(prueba.error); return; }
         pagos.push({ medio, recibido: b.v, ref: inpRef.value.trim() });
-        inpRef.value = ''; auto = true; sugerir(); actualizar();
-        inpMonto.focus(); inpMonto.select();
+        inpRef.value = ''; medio = null; auto = true; sugerir(); actualizar(); // la fila siguiente también pide elegir medio
       }
       inpMonto.addEventListener('input', () => { auto = false; actualizar(); });
       [inpMonto, inpRef].forEach((i) => i.addEventListener('focus', () => llevarALaVista(i)));
@@ -1691,6 +1703,8 @@ export default {
         const b = borrador();
         const r = calcularPagos(entradas(), totalC);
         if (b.malo || !r.ok) { conErr(r.error || 'Los pagos todavía no cubren el total.'); return; }
+        // Validación propia de la caja antes de llamar a la base: todo pago lleva uno de los tres medios elegidos a propósito
+        if (!cortesia && (!r.aplicados.length || r.aplicados.some((p) => !MEDIO_CAJA_VALIDO(p.medio)))) { conErr('Elija cómo pagó el cliente.'); return; }
         cobrando = true; ventasEnCobro.add(ventaId); btnRevisar.hidden = true; actualizar();
         // En efectivo se manda también "recibido" (lo que entregó el cliente): el servidor guarda el vuelto y lo imprime en el tiquete
         const aplicados = r.aplicados.map((p) => (p.medio === 'efectivo' ? { medio: p.medio, monto: p.monto, referencia: p.referencia, recibido: p.recibido } : { medio: p.medio, monto: p.monto, referencia: p.referencia }));
