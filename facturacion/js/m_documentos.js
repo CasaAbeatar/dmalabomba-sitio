@@ -1201,7 +1201,7 @@ export default {
       if (at) {
         caja.append(h('div.doc-aviso.ref', h('div', h('b', 'Ya está marcado como atendido. '), 'Ya no sale en el aviso rojo, y el documento sigue en esta ventana y en Informes.',
           h('div.doc-motivo', [at.por ? 'Lo marcó ' + at.por + '. ' : '', at.en ? fechaHora(at.en) : '', at.nota ? '. Nota: ' + at.nota : ''].join('')))));
-      } else {
+      } else if (app.admin) { // la caja no marca alertas como atendidas (decisión de Emil, 4 nov 2026): solo administración
         const nota = h('input.campo', { type: 'text', maxlength: 300, placeholder: 'Por ejemplo: se hizo la venta de nuevo en Facturación', 'aria-label': 'Nota (opcional)', autocomplete: 'off', value: ctx.borrador?.nota || '',
           oninput: (e) => { if (ctx.borrador) ctx.borrador.nota = e.target.value; } });
         const ya = accion({ texto: 'Ya lo atendí', hint: 'Apaga el aviso rojo. El documento no se borra.', clase: 'primario.grande', onclick: async () => {

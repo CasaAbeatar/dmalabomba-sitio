@@ -450,6 +450,8 @@ async function actualizarAlertas(forzar = false) {
   if (!app.ctx || !app.soc || !cab) return;
   if (!forzar && Date.now() - alUltimo < 5000) return;
   alUltimo = Date.now();
+  // La caja no consulta fx_alertas (decisión de Emil, 4 nov 2026): la base se lo rechazará y el aviso rojo es solo de administración
+  if (!app.admin) { ++alSeq; app.alertas.datos = null; aplicarAlertas(null); fijarRecepcion(null); return; }
   const mi = ++alSeq, soc = app.socId;
   if (app.admin) actualizarInventario(mi); // la insignia de Inventarios es de administración: la persona de caja no la ve y la base tampoco se la daría
   avisosAdmin?.actualizar(() => mi === alSeq && !!app.ctx); // solo administradores: respaldos (franja y insignia) y avisos de ingreso (insignia de Usuarios)

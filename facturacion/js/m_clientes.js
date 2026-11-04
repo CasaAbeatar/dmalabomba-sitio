@@ -40,7 +40,7 @@ export default {
         ((est) => est === 'sin' ? h('span.mt-sub', h('span.chip.suave', 'Sin dirección'), ' No hace falta para facturar; se puede agregar al abrir el cliente.')
           : est === 'parcial' ? h('span.mt-sub', h('span.chip.suave', 'Dirección incompleta'), ' No hace falta para facturar.', resumenDireccion(c, { compacto: true }))
           : null)(estadoDireccion(c))),
-      h('div.mt-btns', h('button.btn', { type: 'button', onclick: () => abrir(c) }, 'Ver o editar'),
+      h('div.mt-btns', app.admin ? h('button.btn', { type: 'button', onclick: () => abrir(c) }, 'Ver o editar') : null,
         (() => { const b = h('button.btn' + (c.activo === false ? '.primario' : ''), { type: 'button', onclick: () => conBotonM(b, async () => { if (c.activo !== false && !(await confirmar('¿Desactivar a «' + nombrePropio(c.nombre) + '»? Ya no aparecerá al buscar cliente para facturar. Sus facturas anteriores no cambian y se puede activar de nuevo.', { si: 'Sí, desactivar', no: 'No, volver', peligro: true }))) return; await clienteActivar(c.id, c.activo === false); toast(c.activo === false ? 'Cliente activado. Ya aparece al buscar cliente.' : 'Cliente desactivado. Ya no aparece al buscar cliente.'); await cargar(); }) }, c.activo === false ? 'Activar' : 'Desactivar'); return b; })()));
 
     const abrir = (c) => abrirFormCliente(app, c, { alGuardar: () => cargar(), alCambiarEstado: () => cargar() });
