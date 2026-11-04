@@ -115,6 +115,10 @@
 .rc-leido-nom{font-weight:600}
 .rc-leido-pres{color:var(--tinta2)}
 .rc-c-leido small,.rc-c-cant small,.rc-c-dest small{color:var(--tinta2);font-size:.82rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rc-c-leido small.rc-leido-pdf,.rc-c-leido small.rc-leido-fac{white-space:normal;overflow:visible;overflow-wrap:anywhere}
+.rc-c-leido small.rc-leido-pdf1{color:var(--tinta)}
+.rc-c-leido small.rc-leido-pdf1.mal{color:#8a5a00}
+.rc-c-leido small.rc-leido-pdf[hidden]{display:none}
 .rc-cant-l1,.rc-dest-l1{font-weight:600;font-size:.95rem;overflow-wrap:break-word}
 .rc-dest-l1.falta{color:var(--rojo-osc)}
 .rc-c-acc{display:flex;justify-content:flex-end;min-width:0}
