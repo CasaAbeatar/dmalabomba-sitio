@@ -33,7 +33,7 @@ export default {
       const cuerpo = h('div'); let cargada = false;
       const det = h('details.con-asiento', { style: 'border-bottom:1px solid var(--linea)' },
         h('summary', h('span.con-codigo', fechaDMA(String(f.fecha).slice(0, 10))), ' ', h('strong', f.proveedor), ' ', h('span.con-nota', (TIPO[f.tipo] || f.tipo) + ' ' + (f.consecutivo ? '· ' + String(f.consecutivo).slice(-10) : '')), ' ',
-          h('strong', money(f.total)), ' ', h('span.chip' + (cls ? '.' + cls : ''), txt), f.asiento ? h('span.con-nota', ' asiento ' + f.asiento) : null), cuerpo);
+          h('strong', money(f.total)), ' ', h('span.chip' + (cls ? '.' + cls : ''), txt), f.provisional ? h('span.chip.espera', { title: 'Contabilizada con cuentas sin confirmar' }, 'Provisional') : null, f.asiento ? h('span.con-nota', ' asiento ' + f.asiento) : null), cuerpo);
       det.addEventListener('toggle', async () => {
         if (!det.open || cargada) return; cargada = true; llenar(cuerpo, esqueleto(1, 'Cargando las líneas…'));
         try { pintarDetalle(cuerpo, await compra(soc.id, f.clave), f, alCambiar); } catch (e) { cargada = false; llenar(cuerpo, bloqueError({ titulo: 'No se pudo cargar la factura', mensaje: textoDeError(e), alReintentar: () => { cargada = false; det.open = false; det.open = true; } })); }
@@ -59,7 +59,7 @@ export default {
         h('tbody', lineasP.map((l) => h('tr', h('td', nombre(l.cuenta_id)), h('td.der', l.debe ? money(l.debe) : ''), h('td.der', l.haber ? money(l.haber) : ''))))),
         h('p.con-nota', 'Es la propuesta con las cuentas de arriba tal como están guardadas; al confirmar se recalcula con lo que usted escoja.')));
       llenar(cuerpo, 
-        d.asiento ? h('p.con-nota', 'Contabilizada en el asiento ' + d.asiento + '. Si cambia una cuenta y confirma, el asiento se reversa y se hace uno nuevo.') : null,
+        d.asiento ? h('p.con-nota', 'Contabilizada en el asiento ' + d.asiento + (d.provisional ? ' (provisional: ' + (d.provisional_motivo || 'cuentas sin confirmar') + ')' : '') + '. Si cambia una cuenta y confirma, el asiento se reversa y se hace uno nuevo.') : null,
         filas, lineasP.length ? resumen : null,
         h('div.con-acciones', h('button.btn.primario', { type: 'button', onclick: (e) => conBoton(e.currentTarget, async () => {
           const falta = [...sel.entries()].filter(([, s]) => !s.value);

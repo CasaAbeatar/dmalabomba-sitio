@@ -88,13 +88,14 @@ export default {
       const motivo = h('input.campo', { type: 'text', placeholder: 'Motivo de la reversa', 'aria-label': 'Motivo de la reversa' });
       const puedeRev = !reversado && a.origen !== 'reversa';
       return h('details.con-asiento', { style: 'border-bottom:1px solid var(--linea)' },
-        h('summary', h('span.con-codigo', '#' + a.numero + ' · ' + fechaDMA(a.fecha)), ' ', a.concepto, ' ', h('span.chip' + (reversado ? '.mal' : ''), reversado ? 'Reversado' : ORIGEN[a.origen] || a.origen), ' ', h('strong', money(a.total))),
+        h('summary', h('span.con-codigo', '#' + a.numero + ' · ' + fechaDMA(a.fecha)), ' ', a.concepto, ' ', h('span.chip' + (reversado ? '.mal' : ''), reversado ? 'Reversado' : ORIGEN[a.origen] || a.origen), a.provisional ? h('span.chip.espera', { title: a.provisional_motivo || 'Provisional' }, 'Provisional') : null, ' ', h('strong', money(a.total))),
         h('div.tabla-caja', h('table.con-tabla', h('thead', h('tr', h('th', 'Cuenta'), h('th.der', 'Debe'), h('th.der', 'Haber'))),
           h('tbody', (a.lineas || []).map((l) => h('tr', h('td', h('span.con-codigo', l.codigo), ' ', l.cuenta, l.detalle ? h('div.con-nota', l.detalle) : null), h('td.der', dm(l.debe)), h('td.der', dm(l.haber))))))),
         puedeRev ? h('div.con-fila', { style: 'margin:.5rem 0 .8rem' }, motivo, h('button.btn.peligro', { type: 'button', onclick: (e) => conBoton(e.currentTarget, async () => {
           if (motivo.value.trim().length < 3) { toast('Escriba el motivo de la reversa', 'error'); motivo.focus(); return; }
           try { await asientoReversar(soc.id, a.id, motivo.value.trim()); toast('Asiento reversado'); await Promise.all([cargarHoy(), cargarDiario(), cargarBalanza()]); } catch (er) { toast(textoDeError(er), 'error'); }
         }) }, 'Reversar este asiento')) : null,
+        a.provisional ? h('p.con-nota', 'Provisional: ' + (a.provisional_motivo || 'falta que la contadora confirme las cuentas') + '. Se vuelve definitivo cuando todas las líneas de la factura tienen su cuenta confirmada.') : null,
         a.creado_por ? h('p.con-nota', 'Registrado por ' + a.creado_por) : null);
     }
 
