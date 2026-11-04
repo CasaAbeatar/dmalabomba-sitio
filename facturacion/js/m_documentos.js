@@ -11,6 +11,8 @@ import { imprimirComprobante, reimprimirComprobante, formatoDireccion, formatoCe
 import { crearDescarga, nombrePeriodo } from './descargas.js';
 import { textoRango, rangoPeriodo } from './periodo.js';
 import { explicarRechazoConClaude } from './claude_ayuda.js';
+import { abrirReemplazo } from './m_reemplazo.js';
+import { tipoDeReemplazo } from './api_reemplazo.js';
 
 if (!document.querySelector('link[data-fx-documentos]')) document.head.append(h('link', { rel: 'stylesheet', href: new URL('../css/documentos.css', import.meta.url).href, 'data-fx-documentos': '1' }));
 
@@ -833,8 +835,11 @@ export default {
       // Una venta nueva que sustituye a un documento anulado (solo cuando la base guarda la referencia, código 07). fx_comprobante trae el número del documento que sustituye en `reemplaza`.
       if (c.reemplaza_a) {
         const r = c.reemplaza;
-        raiz.append(h('div.doc-aviso.ref', h('div', h('b', r?.consecutivo ? `Este documento sustituye al ${(NOMBRES_DOCUMENTO[r.tipo_doc] || 'documento').toLowerCase()} N.° ${numeroCorto(r.consecutivo)}, que se anuló. ` : 'Este documento sustituye a uno que se anuló. '), 'Tipo de referencia: ' + TEXTO_07 + '.'),
-          h('button.btn', { type: 'button', onclick: () => { ctx.cerrar(); abrirDetalle(c.reemplaza_a); } }, 'Ver el documento anulado')));
+        const rechazado = String(c.codigo_referencia) === '16'; // código 16: sustituye a un documento que Hacienda rechazó (no hubo nota de crédito)
+        const que = `${conArticulo(r?.tipo_doc)} N.° ${numeroCorto(r?.consecutivo)}`;
+        raiz.append(h('div.doc-aviso.ref', h('div', h('b', r?.consecutivo ? `Este documento sustituye a ${que}, ${rechazado ? 'que Hacienda rechazó' : 'que se anuló'}. ` : `Este documento sustituye a uno ${rechazado ? 'que Hacienda rechazó' : 'que se anuló'}. `),
+          'Tipo de referencia: ' + (rechazado ? 'código 16 «Sustituye el comprobante rechazado»' : TEXTO_07) + '.'),
+          h('button.btn', { type: 'button', onclick: () => { ctx.cerrar(); abrirDetalle(c.reemplaza_a); } }, rechazado ? 'Ver el documento rechazado' : 'Ver el documento anulado')));
       }
 
       // Devoluciones, correcciones de monto y notas de débito de una factura o un tiquete (la anulación total se dice arriba, aparte). Una nota que quedó en error también cuenta y se ve con su estado.
@@ -969,12 +974,20 @@ export default {
           : permiso.sabe && !permiso.permite ? 'ya tiene devoluciones o notas, abajo se ve qué sí se puede hacer' : '';
         anular = boton('Anular', '.peligro', async () => { abrirAnular(doc, { alTerminar: async () => { await ctx.repintar(true); await refrescarTras(); }, alVerNC: (n) => { ctx.cerrar(); abrirDetalle(n.id); } }); }, motivo);
       }
+      // «Corregir y generar de nuevo»: rechazado, con error o anulado con nota de crédito. Ocupa el lugar de «Anular» (que en esos casos no se puede) y abre la pantalla de reemplazo de un solo paso.
+      const hechaDeNuevo = rehechoPor(c);
+      let reemplazar = null;
+      if (tipoDeReemplazo(c, nc) && !hechaDeNuevo && !ctx.falloNC) {
+        reemplazar = boton('Corregir y generar de nuevo', '.primario', async () => { abrirReemplazo(app, c, { nc, alTerminar: async () => { await ctx.repintar(true); await refrescarTras(); }, alVerNuevo: (n) => { ctx.cerrar(); abrirDetalle(n.id); } }); }, '');
+        anular = null;
+        const i = motivos.findIndex((x) => x.startsWith('Anular:')); if (i >= 0) motivos.splice(i, 1);
+      }
       const puedeCorreo = correoActivo(app) && !!c.cliente_snapshot && c.estado === 'aceptado';
       const reenviar = boton('Reenviar al correo', '', () => reenviarPorCorreo(c, ctx),
         puedeCorreo ? '' : !correoActivo(app) ? 'el correo todavía no está activo' : !c.cliente_snapshot ? 'no tiene cliente' : 'Hacienda todavía no lo acepta');
       const reimprimir = boton('Reimprimir', '', () => reimprimirComprobante(c.id, { admin: app.admin }), '');
       return h('div.doc-barra', { role: 'group', 'aria-label': 'Acciones rápidas del documento' },
-        h('div.doc-barra-bot', anular, reimprimir, reenviar),
+        h('div.doc-barra-bot', reemplazar, anular, reimprimir, reenviar),
         motivos.length ? h('small.doc-barra-motivo', motivos.join(' ')) : null);
     }
 
@@ -1128,7 +1141,9 @@ export default {
             accion({ texto: esTiquete ? 'El cliente pide factura' : 'Corregir el cliente de la factura', hint: bloq || sinComprobar ? 'No se puede: lea el aviso de arriba' : esTiquete ? 'Anula el tiquete y deja la factura lista para cobrar con el cliente que usted elija.' : 'Anula la factura y deja la venta lista para cobrar con el cliente correcto.', clase: 'primario', disabled: bloq || sinComprobar, onclick: async () => { cambiarCliente(app, doc, { alTerminar: repintar }); } }),
             accion({ texto: 'Anular con nota de crédito', hint: bloq || sinComprobar ? 'No se puede: lea el aviso de arriba' : null, clase: 'peligro', disabled: bloq || sinComprobar, onclick: async () => { abrirAnular(doc, { alTerminar: repintar, alVerNC: (n) => { ctx.cerrar(); abrirDetalle(n.id); } }); } }))].filter(Boolean));
       } else if (c.estado === 'rechazado') {
-        g.append(h('p.tenue', 'Hacienda rechazó este comprobante, por eso no vale y no se le hace nota de crédito. Toque «Hacer la venta de nuevo en Facturación» para sacar uno correcto de inmediato.' + (SUSTITUYE_RECHAZADO ? ' El nuevo indicará que sustituye a este.' : '')), bloqueAtender(c, ctx));
+        const pasoUno = tipoDeReemplazo(c, nc) && !rehechoPor(c)
+          ? h('div.doc-botones', accion({ texto: 'Corregir y generar de nuevo', hint: 'Una sola ventana: ve el motivo, corrige lo que haga falta y genera el documento nuevo.', clase: 'primario', onclick: async () => { abrirReemplazo(app, c, { nc, alTerminar: async () => { await ctx.repintar(true); await refrescarTras(); }, alVerNuevo: (n) => { ctx.cerrar(); abrirDetalle(n.id); } }); } })) : null;
+        g.append(h('p.tenue', 'Hacienda rechazó este comprobante, por eso no vale y no se le hace nota de crédito. Toque «Corregir y generar de nuevo» para sacar uno correcto de inmediato, o «Hacer la venta de nuevo en Facturación» si necesita cambiar los productos.' + (SUSTITUYE_RECHAZADO ? ' El nuevo indicará que sustituye a este.' : '')), pasoUno, bloqueAtender(c, ctx));
       } else {
         // pendiente, enviado o con error: todavía no hay nada que anular. Se explica qué significa y qué hacer, sin prometer cuánto tarda Hacienda.
         const pend = c.estado === 'pendiente' || c.estado === 'enviado';

@@ -54,9 +54,9 @@ const QUIEN = { caja: 'La caja', administracion: 'Administración', contadora: '
 const CERTEZA = { alta: 'Claude está bastante seguro', media: 'Claude lo cree probable', baja: 'Claude no está seguro' };
 
 // Solo administración: «Explicar con Claude» en un documento que Hacienda rechazó. Lee el comprobante de la base; no cambia nada.
-export function explicarRechazoConClaude({ comprobanteId }) {
+export function explicarRechazoConClaude({ comprobanteId, rotulo = 'Explicar con Claude por qué lo rechazaron' }) {
   const zona = h('div.claude-zona', { 'aria-live': 'polite' });
-  const btn = h('button.btn', { type: 'button' }, 'Explicar con Claude por qué lo rechazaron');
+  const btn = h('button.btn', { type: 'button' }, rotulo);
   btn.addEventListener('click', async () => {
     btn.disabled = true; btn.textContent = 'Claude está revisando…'; zona.replaceChildren();
     try {

@@ -417,6 +417,14 @@ export function traducirHacienda(crudo) {
     items.push({ codigo: m[1], original, texto: CODIGOS_HACIENDA[m[1]] || conPunto(original) });
   }
   const pruebas = /ambiente de pruebas/i.test(t);
+  // El texto que guarda la función de borde ya viene explicado en español («Hacienda rechazó el comprobante. frase | frase [Texto de Hacienda: ...]»), pero el original queda cortado a 1 000 letras
+  // y su lista de errores puede quedar incompleta: sin esos errores completos no se puede leer por código, así que se leen las frases ya explicadas (la causa primero, el aviso del domicilio al final).
+  if (!items.length && /\[Texto de Hacienda:/.test(t)) {
+    const cabeza = t.slice(0, t.indexOf('[Texto de Hacienda:')).replace(/^\s*(Hacienda rechazó el comprobante|Aceptado por Hacienda con avisos)\.\s*/i, '');
+    const frases = cabeza.split(/\s*\|\s*/).map((x) => limpiarHacienda(x.replace(/^\s*(Hacienda indicó:|además,)\s*/i, ''))).filter(Boolean);
+    const es37 = (x) => /provincia, cant[oó]n y distrito/i.test(x);
+    [...frases.filter((x) => !es37(x)), ...frases.filter(es37)].forEach((x) => { const f = x.charAt(0).toUpperCase() + x.slice(1); items.push({ codigo: es37(x) ? '-37' : '', original: f, texto: es37(x) ? CODIGOS_HACIENDA['-37'] : conPunto(f) }); });
+  }
   if (!items.length) {
     const sinNota = limpiarHacienda(t.replace(/Este comprobante fue recibido en el ambiente de pruebas, por lo cual no tiene validez para fines tributarios\.?/i, '').replace(/El comprobante electr[oó]nico tiene los siguientes errores:?/i, ''));
     if (sinNota) items.push({ codigo: '', original: sinNota, texto: conPunto(sinNota) });
