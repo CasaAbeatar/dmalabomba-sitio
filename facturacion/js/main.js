@@ -515,8 +515,8 @@ function abrirAyudaSinRed() {
       h('p.ayuda-red-intro', 'Deje esta pantalla abierta. Cuando la conexión vuelva, el aviso amarillo se quita; si tarda, toque «Revisar ahora».'),
       bloque('Qué hacer', [
         'Si el local tiene un segundo internet (los datos de un celular o el otro router), conecte la caja a ese y toque «Revisar ahora».',
-        'Si no hay ninguna forma de conectarse, anote cada venta en el cuaderno de contingencia: hora, productos, monto, forma de pago y, si el cliente pide factura, su cédula y su correo.',
-        'Cuando vuelva la conexión, facture en orden lo que anotó y avise a la persona encargada.',
+        'Si no hay ninguna forma de conectarse, llame a la persona encargada. Solo ella usa el talonario de comprobantes provisionales, si el local lo tiene. No entregue notas escritas a mano: no son comprobantes.',
+        'Cuando vuelva la conexión, la persona encargada emite el comprobante electrónico de cada provisional (el plazo es de 2 días hábiles).',
       ]),
       bloque('Qué NO hacer', [
         'No cobre otra vez una cuenta si no está segura de que no se cobró. Un cobro que iba en camino puede haberse hecho aunque la pantalla no lo muestre.',
