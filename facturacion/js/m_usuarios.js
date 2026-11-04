@@ -47,7 +47,7 @@ export default {
       }
       if (mi !== nCarga) return;
       usuarios = nuevos;
-      if (ultimaSeg) pintarSeguridad(); // con los usuarios a mano, cada aviso puede ofrecer «Reiniciar PIN»
+      if (ultimaSeg) pintarSeguridad(); // con los usuarios a mano, cada aviso puede ofrecer «Reiniciar clave»
       const hoy = diaCR(new Date());
       // Solo cuentan los usuarios activos, en los dos números de la frase y en la lista de arriba
       const hoyIng = (u) => u.activo && u.ultimo_ingreso && diaCR(u.ultimo_ingreso) === hoy;
@@ -68,7 +68,7 @@ export default {
       const yo = esYo(u);
       const ultimo = u.ultimo_ingreso ? 'Último ingreso: ' + fechaHora(u.ultimo_ingreso) : 'Todavía no ha ingresado';
       const btnNombre = h('button.btn', { type: 'button', onclick: () => cambiarNombre(u) }, 'Cambiar nombre');
-      const btnPin = yo ? null : h('button.btn', { type: 'button', onclick: (e) => reiniciarPin(u, e.currentTarget) }, 'Reiniciar PIN');
+      const btnPin = yo ? null : h('button.btn', { type: 'button', onclick: (e) => reiniciarPin(u, e.currentTarget) }, 'Reiniciar clave');
       const btnAdmin = yo ? null : h('button.btn', { type: 'button', onclick: (e) => cambiarAdmin(u, e.currentTarget) }, u.admin ? 'Quitar administrador' : 'Hacer administrador');
       const btnActivo = yo ? null : h('button.btn' + (u.activo ? '.peligro' : ''), { type: 'button', onclick: (e) => cambiarActivo(u, e.currentTarget) }, u.activo ? 'Desactivar' : 'Activar de nuevo');
       return h('div.mt-item' + (u.activo ? '' : '.apagado'),
@@ -81,16 +81,16 @@ export default {
             h('span.chip' + (u.admin ? '.ok' : '.gris'), u.admin ? 'Administrador' : 'Usuario normal'),
             u.activo ? null : h('span.chip.mal', 'Desactivado: no puede entrar'),
             otrasEmpresas(u).map((e) => h('span.chip.gris', 'También entra a ' + nombreLocal(e))),
-            u.debe_cambiar_pin ? h('span.chip.espera', 'Debe cambiar su PIN al entrar') : null)),
+            u.debe_cambiar_pin ? h('span.chip.espera', 'Debe cambiar su clave al entrar') : null)),
         h('div.mt-btns', btnNombre, btnPin, btnAdmin, btnActivo));
     }
 
-    /* ---------- Seguridad del ingreso: avisos por muchos intentos fallidos de PIN (fx_login_alertas) ---------- */
+    /* ---------- Seguridad del ingreso: avisos por muchos intentos fallidos de clave (fx_login_alertas) ---------- */
     // Qué conviene hacer según el tipo de aviso. El texto del aviso lo escribe la base; esto solo orienta.
     const QUE_HACER = {
-      usuario_fallos: 'Si fue esa persona equivocándose, no pasa nada. Si no, reinicie su PIN.',
-      total_fallos: 'Pueden ser varias personas equivocándose, o alguien probando PIN. Si no hubo cambio de personal, vale la pena reiniciar el PIN de quien usted note raro.',
-      acierto_tras_fallos: 'Pregúntele a esa persona si fue ella. Si no fue, reinicie su PIN ahora.',
+      usuario_fallos: 'Si fue esa persona equivocándose, no pasa nada. Si no, reinicie su clave.',
+      total_fallos: 'Pueden ser varias personas equivocándose, o alguien probando claves. Si no hubo cambio de personal, vale la pena reiniciar la clave de quien usted note raro.',
+      acierto_tras_fallos: 'Pregúntele a esa persona si fue ella. Si no fue, reinicie su clave ahora.',
     };
     let nSeg = 0, ultimaSeg = null; // ultimaSeg = lo último que contestó fx_login_alertas (ya limpio); se vuelve a pintar cuando llega la lista de usuarios
     async function cargarSeguridad() {
@@ -118,7 +118,7 @@ export default {
       segEl.replaceChildren(...[
         h('div.mt-seg-cab', h('h2', 'Seguridad del ingreso'),
           r.pendientes > 0 ? h('span.chip.mal', r.pendientes === 1 ? '1 aviso sin atender' : r.pendientes + ' avisos sin atender') : h('span.chip.ok', 'Sin avisos pendientes')),
-        h('p.mt-nota', 'Aquí aparece un aviso cuando alguien se equivoca muchas veces con el PIN. El ingreso nunca se bloquea: esto es solo para que usted se entere.'),
+        h('p.mt-nota', 'Aquí aparece un aviso cuando alguien se equivoca muchas veces con la clave. El ingreso nunca se bloquea: esto es solo para que usted se entere.'),
         pend.length ? h('ul.mt-seg-lista', pend.map(avisoIngreso)) : (r.pendientes > 0 ? null : h('p.mt-seg-ok', 'No hay avisos de ingreso por atender.')),
         masSinVer > 0 ? h('p.mt-nota', 'Hay ' + masSinVer + (masSinVer === 1 ? ' aviso más' : ' avisos más') + ' sin atender, más antiguos que los de arriba. Atienda estos y aparecerán.') : null,
         pend.length ? h('p.mt-seg-pie', 'La red se muestra resumida, sin la dirección completa.') : null,
@@ -147,7 +147,7 @@ export default {
       const origen = origenDe(a);
       const quien = a.usuario ? usuarios.find((u) => u.usuario === a.usuario) : null;
       const btnAtender = h('button.btn.primario', { type: 'button', onclick: (e) => atenderAviso(a, e.currentTarget) }, 'Marcar como atendida');
-      const btnPin = quien && !esYo(quien) && quien.activo ? h('button.btn', { type: 'button', onclick: (e) => reiniciarPin(quien, e.currentTarget) }, 'Reiniciar PIN de ' + nombrePropio(quien.nombre || quien.usuario)) : null;
+      const btnPin = quien && !esYo(quien) && quien.activo ? h('button.btn', { type: 'button', onclick: (e) => reiniciarPin(quien, e.currentTarget) }, 'Reiniciar clave de ' + nombrePropio(quien.nombre || quien.usuario)) : null;
       return h('li.mt-seg-aviso',
         h('p.mt-seg-que', a.mensaje || 'Aviso de ingreso.'),
         origen ? h('p.mt-seg-origen', origen) : null,
@@ -157,7 +157,7 @@ export default {
     }
 
     async function atenderAviso(a, btn) {
-      const nota = await pedir({ titulo: 'Marcar como atendida', etiqueta: 'Nota (opcional)', multilinea: true, boton: 'Marcar como atendida', nota: 'Por ejemplo: «Era María, se equivocó» o «Se reinició el PIN». Hasta 300 letras.' });
+      const nota = await pedir({ titulo: 'Marcar como atendida', etiqueta: 'Nota (opcional)', multilinea: true, boton: 'Marcar como atendida', nota: 'Por ejemplo: «Era María, se equivocó» o «Se reinició la clave». Hasta 300 letras.' });
       if (nota == null) return;
       if (nota.trim().length > 300) return toast('La nota puede tener hasta 300 letras.', 'error');
       await conBoton(btn, async () => {
@@ -199,7 +199,7 @@ export default {
       aparEl.replaceChildren(...[
         h('div.mt-seg-cab', h('h2', 'Aparatos de confianza'), h('span.chip' + (r.activos ? '.ok' : '.gris'), r.activos === 1 ? '1 aparato activo' : r.activos + ' aparatos activos')),
         h('p.mt-nota', 'Un aparato de confianza es uno que el sistema reconoce porque esa persona ya entró desde él. Se olvida solo si pasan 90 días sin usarlo. Con esto los avisos de ingreso pueden decir si un intento vino de un aparato conocido.'),
-        h('p.mt-nota', 'Quitar la confianza no cierra la sesión que esa persona tenga abierta ni le impide entrar con su PIN. Para cortar el acceso, reinicie su PIN o desactívela en la lista de usuarios, más arriba.'),
+        h('p.mt-nota', 'Quitar la confianza no cierra la sesión que esa persona tenga abierta ni le impide entrar con su clave. Para cortar el acceso, reinicie su clave o desactívela en la lista de usuarios, más arriba.'),
         r.aparatos.length ? [...grupos.values()].map((g) => h('div.mt-apa-grupo', h('h3', nombrePropio(g.nombre || '') + (g.usuario && nombrePropio(g.nombre || '').toLowerCase() !== g.usuario ? ' (' + g.usuario + ')' : '')), h('ul.mt-apa-lista', g.lista.map(filaAparato))))
           : h('p.mt-seg-ok', verTodos ? 'No hay aparatos registrados.' : 'No hay aparatos de confianza activos.'),
         h('label.mt-apa-ver', cbTodos, h('span', 'Mostrar también los que ya no valen (quitados o vencidos)'))].flat());
@@ -209,7 +209,7 @@ export default {
       let motivo = '';
       for (;;) {
         const v = await pedir({ titulo: 'Quitar la confianza a este aparato', etiqueta: 'Motivo (de 3 a 200 letras)', valor: motivo, multilinea: true, boton: 'Quitar la confianza',
-          nota: (a.etiqueta ? '«' + a.etiqueta + '», de ' + quien + '. ' : 'Aparato de ' + quien + '. ') + 'En los avisos de ingreso dejará de aparecer como aparato conocido. No se cierra su sesión abierta: para cortarle el acceso, reinicie su PIN o desactívela. El motivo queda anotado.' });
+          nota: (a.etiqueta ? '«' + a.etiqueta + '», de ' + quien + '. ' : 'Aparato de ' + quien + '. ') + 'En los avisos de ingreso dejará de aparecer como aparato conocido. No se cierra su sesión abierta: para cortarle el acceso, reinicie su clave o desactívela. El motivo queda anotado.' });
         if (v == null) return;
         motivo = v.trim();
         if (motivo.length < 3) { toast('Escriba el motivo, al menos 3 letras.', 'error'); continue; }
@@ -231,29 +231,29 @@ export default {
     }
 
     async function reiniciarPin(u, btn) {
-      const ok = await confirmar('¿Reiniciar el PIN de ' + (u.nombre || u.usuario) + '? Se le dará un PIN temporal y tendrá que cambiarlo al entrar.', { si: 'Sí, reiniciar el PIN', no: 'No, volver' });
+      const ok = await confirmar('¿Reiniciar la clave de ' + (u.nombre || u.usuario) + '? Se le dará una clave temporal y tendrá que cambiarla al entrar.', { si: 'Sí, reiniciar la clave', no: 'No, volver' });
       if (!ok) return;
       const pin = pinAzar();
       const hecho = await guardar(btn, { id: u.id, pin });
       if (!hecho) return;
       modal({
-        titulo: 'PIN temporal listo', ancho: 440,
-        contenido: h('div', h('p', 'Dígale este PIN a ', h('strong', u.nombre || u.usuario), ':'), h('div.mt-pin-grande', pin),
-          aviso('ambar', 'Anótelo ahora: no se vuelve a mostrar. Al entrar con este PIN, el sistema le pedirá elegir uno nuevo que solo esa persona conozca.')),
+        titulo: 'Clave temporal lista', ancho: 440,
+        contenido: h('div', h('p', 'Dígale esta clave a ', h('strong', u.nombre || u.usuario), ':'), h('div.mt-pin-grande', pin),
+          aviso('ambar', 'Anótela ahora: no se vuelve a mostrar. Al entrar con esta clave, el sistema le pedirá elegir una nueva que solo esa persona conozca.')),
         botones: [{ texto: 'Ya lo anoté', clase: 'primario', onclick: (c) => c() }],
       });
     }
 
     async function cambiarAdmin(u, btn) {
       if (u.admin && u.activo && adminsActivos() <= 1) return toast('Tiene que quedar al menos un administrador activo. Primero haga administrador a otra persona.', 'error', 7000);
-      const ok = await confirmar(u.admin ? '¿Quitarle a ' + (u.nombre || u.usuario) + ' el permiso de administrador? Ya no podrá ver esta pantalla de Usuarios.' : '¿Hacer administrador a ' + (u.nombre || u.usuario) + '? Podrá crear usuarios, reiniciar PIN y desactivar personas.');
+      const ok = await confirmar(u.admin ? '¿Quitarle a ' + (u.nombre || u.usuario) + ' el permiso de administrador? Ya no podrá ver esta pantalla de Usuarios.' : '¿Hacer administrador a ' + (u.nombre || u.usuario) + '? Podrá crear usuarios, reiniciar claves y desactivar personas.');
       if (!ok) return;
       await guardar(btn, { id: u.id, admin: !u.admin }, u.admin ? 'Ya no es administrador.' : 'Ahora es administrador.');
     }
 
     async function cambiarActivo(u, btn) {
       if (u.activo && u.admin && adminsActivos() <= 1) return toast('No se puede desactivar al único administrador activo. Primero haga administrador a otra persona.', 'error', 7000);
-      const ok = await confirmar(u.activo ? '¿Desactivar a ' + (u.nombre || u.usuario) + '? No podrá entrar al facturador. No se borra nada y se puede activar de nuevo.' : '¿Activar de nuevo a ' + (u.nombre || u.usuario) + '? Podrá entrar con su PIN.', { si: u.activo ? 'Sí, desactivar' : 'Sí, activar', peligro: u.activo });
+      const ok = await confirmar(u.activo ? '¿Desactivar a ' + (u.nombre || u.usuario) + '? No podrá entrar al facturador. No se borra nada y se puede activar de nuevo.' : '¿Activar de nuevo a ' + (u.nombre || u.usuario) + '? Podrá entrar con su clave.', { si: u.activo ? 'Sí, desactivar' : 'Sí, activar', peligro: u.activo });
       if (!ok) return;
       await guardar(btn, { id: u.id, activo: !u.activo }, u.activo ? 'Usuario desactivado.' : 'Usuario activado.');
     }
@@ -264,7 +264,7 @@ export default {
       const usr = h('input.campo', { type: 'text', autocapitalize: 'none', autocorrect: 'off', spellcheck: 'false', autocomplete: 'off', 'aria-label': 'Usuario' });
       estiloUsuario(usr, usuarioLimpio); // se ve «Maria»; lo que se guarda es siempre «maria» (usuarioLimpio al enviar)
       const nom = h('input.campo', { type: 'text', autocomplete: 'off', 'aria-label': 'Nombre' });
-      const pin = soloDigitos(h('input.campo', { type: 'text', inputmode: 'numeric', autocomplete: 'off', maxlength: 4, 'aria-label': 'PIN de 4 números' }), 4);
+      const pin = soloDigitos(h('input.campo', { type: 'text', inputmode: 'numeric', autocomplete: 'off', maxlength: 4, 'aria-label': 'clave de 4 números' }), 4);
       let admin = false;
       const rNo = h('input', { type: 'radio', name: 'adm', checked: true, onchange: () => { admin = false; } });
       const rSi = h('input', { type: 'radio', name: 'adm', onchange: () => { admin = true; } });
@@ -279,24 +279,24 @@ export default {
             h('small.tenue', extras.length ? 'La persona queda en ' + miEmpresa + '. Marque la otra empresa solo si también trabaja allá.' : 'La persona queda en ' + miEmpresa + ' y solo entra a esta empresa.')),
           campo('Usuario para entrar', usr, 'Letras minúsculas sin tilde ni espacios; puede llevar números, punto o guion. Entre 2 y 30 caracteres. Ejemplo: maria'),
           campo('Nombre de la persona', nom, 'Ejemplo: María Rodríguez'),
-          h('div.col', { style: 'gap:.3rem' }, campo('PIN temporal (4 números)', pin, 'La persona tendrá que cambiarlo la primera vez que entre.'),
-            h('div.fila', h('button.btn', { type: 'button', onclick: () => { pin.value = pinAzar(); } }, 'Generar un PIN al azar'))),
+          h('div.col', { style: 'gap:.3rem' }, campo('Clave temporal (4 números)', pin, 'La persona tendrá que cambiarla la primera vez que entre.'),
+            h('div.fila', h('button.btn', { type: 'button', onclick: () => { pin.value = pinAzar(); } }, 'Generar una clave al azar'))),
           h('div.col', { style: 'gap:.3rem' }, h('span.etq', '¿Es administrador?'),
             h('div.mt-radios', h('label', rNo, 'No, usuario normal'), h('label', rSi, 'Sí, administrador')),
-            h('small.tenue', 'Un administrador puede crear usuarios y reiniciar PIN. Todos los usuarios ven todo lo demás.'))),
+            h('small.tenue', 'Un administrador puede crear usuarios y reiniciar claves. Todos los usuarios ven todo lo demás.'))),
         botones: [{ texto: 'Cancelar', clase: 'suave', onclick: (c) => c() }, { texto: 'Crear usuario', clase: 'primario', onclick: async (c) => {
           mostrar('');
           const u = usuarioLimpio(usr.value);
           if (!/^[a-z0-9._-]{2,30}$/.test(u)) return mostrar('El usuario debe tener entre 2 y 30 caracteres: letras minúsculas sin tilde, números, punto o guion.', usr);
           if (usuarios.some((x) => x.usuario === u)) return mostrar('Ya existe un usuario «' + u + '». Elija otro.', usr);
           if (!nom.value.trim()) return mostrar('Escriba el nombre de la persona.', nom);
-          if (!/^\d{4}$/.test(pin.value)) return mostrar('El PIN debe tener exactamente 4 números.', pin);
-          if (pinDebil(pin.value)) return mostrar(conPunto(pinDebil(pin.value)) + ' Use el botón «Generar un PIN al azar» o escriba otro.', pin);
+          if (!/^\d{4}$/.test(pin.value)) return mostrar('La clave debe tener exactamente 4 números.', pin);
+          if (pinDebil(pin.value)) return mostrar(conPunto(pinDebil(pin.value)) + ' Use el botón «Generar una clave al azar» o escriba otra.', pin);
           const btn = m.el.querySelector('.modal-pie .primario');
           await conBoton(btn, async () => {
             const ids = extras.filter((x) => x.cb.checked).map((x) => x.id);
             await api.usuarioGuardar({ usuario: u, nombre: nom.value.trim(), admin, pin: pin.value, sociedad_id: app.socId, ...(ids.length ? { empresas: ids } : {}) });
-            toast('Usuario creado. Al entrar por primera vez tendrá que cambiar su PIN.');
+            toast('Usuario creado. Al entrar por primera vez tendrá que cambiar su clave.');
             c(); await cargar();
           });
         } }],
@@ -311,12 +311,12 @@ export default {
       segEl, resumen, lista, aparEl,
       // Lo de hoy primero (quién ingresó hoy); la explicación del PIN va al final y se abre con un botón grande
       h('details.tarjeta', { style: 'margin-top:1.2rem' },
-        h('summary', 'Cómo funciona el PIN'),
+        h('summary', 'Cómo funciona la clave'),
         h('ul', { style: 'margin:.4rem 0 0;padding-left:1.2rem;display:grid;gap:.3rem' },
-          h('li', 'El PIN son 4 números que solo conoce cada persona. Se usa junto con el código de la empresa y el usuario para entrar.'),
-          h('li', 'Si alguien se equivoca de PIN, puede intentar de nuevo pasados 2 segundos. El ingreso nunca se bloquea ni se queda esperando más tiempo.'),
-          h('li', 'Si alguien olvida su PIN, use «Reiniciar PIN»: se le da uno temporal que tendrá que cambiar apenas entre.'),
-          h('li', 'Nadie puede ver el PIN de otra persona, ni siquiera un administrador.'),
+          h('li', 'La clave tiene 4 números que solo conoce cada persona. Se usa junto con el código de la empresa y el usuario para entrar.'),
+          h('li', 'Si alguien se equivoca de clave, puede intentar de nuevo pasados 2 segundos. El ingreso nunca se bloquea ni se queda esperando más tiempo.'),
+          h('li', 'Si alguien olvida su clave, use «Reiniciar clave»: se le da una temporal que tendrá que cambiar apenas entre.'),
+          h('li', 'Nadie puede ver la clave de otra persona, ni siquiera un administrador.'),
           h('li', 'Cada persona entra solo a la empresa que se le dio. Aquí se ven y se crean los usuarios de ' + miEmpresa + '.'),
           h('li', 'Dentro de la empresa todos los usuarios tienen acceso a todo. Solo esta pantalla de Usuarios es exclusiva de los administradores.'))));
     pintarSeguridad(); // «Revisando…» mientras llega

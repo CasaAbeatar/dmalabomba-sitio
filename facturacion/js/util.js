@@ -393,7 +393,7 @@ export function pinDebil(p) {
   if (d[0] === d[2] && d[1] === d[3]) return 'No repita una pareja de números, como 1212.';
   if (d[0] === d[1] && d[2] === d[3]) return 'No use dos parejas seguidas, como 1122.';
   if (['2580', '0852'].includes(String(p))) return 'No use una línea recta del teclado, como 2580.';
-  if (['1357', '2468', '1379', '1004'].includes(String(p))) return 'Ese PIN es de los primeros que se adivinan, como 2468 o 1357.';
+  if (['1357', '2468', '1379', '1004'].includes(String(p))) return 'Esa clave es de las primeras que se adivinan, como 2468 o 1357.';
   if (/^(19\d\d|20[0-3]\d)$/.test(String(p))) return 'No use un año, como 1990.';
   return '';
 }

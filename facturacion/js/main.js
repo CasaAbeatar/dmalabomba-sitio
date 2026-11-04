@@ -18,7 +18,7 @@ const leer = (k) => { try { return localStorage.getItem('fx_' + k); } catch { re
 // P0001) cuando el usuario fue desactivado; el día que fx_chk lo diga con el código PT403 basta el código (ErrorApi.codigo). Un 403 por otro motivo (el permiso de una función,
 // una regla de la puerta de entrada) NO cierra la sesión: sale la pantalla de «Intentar de nuevo» con el mensaje que mandó el sistema.
 const esSinAcceso = (e) => !!e && (e.codigo === 'PT403' || /^sin acceso al facturador\.?$/i.test(String(e.message || '').trim()));
-const PIN_FACIL = 'Elija un PIN menos obvio. ';
+const PIN_FACIL = 'Elija una clave menos obvia. ';
 
 // El PIN con el que la persona acaba de entrar, SOLO en memoria (nunca en el aparato) y solo para el cambio obligatorio de PIN: ese PIN ya se comprobó al entrar, así que la pantalla no
 // lo vuelve a pedir. El servidor igual lo verifica al cambiarlo. Se olvida al cambiar el PIN, al salir, cuando la sesión no tiene cambio pendiente y a los pocos minutos.
@@ -27,7 +27,7 @@ let pinDeEntrada = null; // { pin, hasta }
 const recordarPinDeEntrada = (pin) => { pinDeEntrada = /^\d{4}$/.test(String(pin)) ? { pin: String(pin), hasta: Date.now() + VIDA_PIN_DE_ENTRADA } : null; };
 const olvidarPinDeEntrada = () => { pinDeEntrada = null; };
 const pinDeEntradaVigente = () => (pinDeEntrada && Date.now() < pinDeEntrada.hasta ? pinDeEntrada.pin : '');
-let cambioPinActivo = false; // true mientras se ve la pantalla de cambio obligatorio de PIN: evita abrirla dos veces cuando varias llamadas contestan lo mismo a la vez
+let cambioPinActivo = false; // true mientras se ve la pantalla de cambio obligatorio de clave: evita abrirla dos veces cuando varias llamadas contestan lo mismo a la vez
 
 // Estado compartido con los módulos
 export const app = {
@@ -75,12 +75,12 @@ window.addEventListener('unhandledrejection', (ev) => {
   toast(m, 'error', 7000);
 });
 
-/* ---------- Campo de PIN (lo usan el inicio de sesión y «Entrar de nuevo») ---------- */
+/* ---------- Campo de clave (lo usan el inicio de sesión y «Entrar de nuevo») ---------- */
 // Un solo campo que se escribe con el teclado del aparato (en el celular sale el teclado de números). PIN FINAL (decisión de Emil, 4 nov 2026): la pantalla NO revela el largo del PIN:
 // el campo no tiene largo fijo (sin maxlength), no hay casillas ni puntos de pista, el texto de ayuda no dice cuántos números son y NO se envía solo al llegar a cierto largo.
 // Se envía únicamente al dar Enter o al tocar el botón «Entrar» (alCompletar). boton = el botón «Entrar», que se bloquea junto con el campo.
 function crearCampoPin({ alCompletar, boton = null }) {
-  const campo = h('input.campo.campo-pin', { type: 'password', inputmode: 'numeric', autocomplete: 'off', autocapitalize: 'none', autocorrect: 'off', spellcheck: 'false', enterkeyhint: 'go', placeholder: 'Clave', 'aria-label': 'PIN' });
+  const campo = h('input.campo.campo-pin', { type: 'password', inputmode: 'numeric', autocomplete: 'off', autocapitalize: 'none', autocorrect: 'off', spellcheck: 'false', enterkeyhint: 'go', placeholder: 'Clave', 'aria-label': 'clave' });
   campo.addEventListener('input', () => {
     const v = campo.value.replace(/\D/g, '').slice(0, 32);
     if (v !== campo.value) campo.value = v;
@@ -110,7 +110,7 @@ function textoErrorAcceso(e, { cambiarEmpresa = true } = {}) {
 // Los errores esperados del acceso (usuario o PIN que no coinciden, empresa no reconocida) no son fallas: no se anotan en la consola
 const esErrorEsperado = (e) => !!e && [400, 401, 403, 404, 429].includes(e.estado);
 
-/* ---------- Inicio de sesión: código de empresa, usuario y PIN ---------- */
+/* ---------- Inicio de sesión: código de empresa, usuario y clave ---------- */
 // Paso 1: dos botones, uno por empresa (Pollos o Soda). Paso 2: la empresa reconocida en grande, usuario y PIN. La empresa queda recordada en este aparato (solo es comodidad:
 // la que manda es la de la sesión, que ata el servidor), así que al volver a entrar, y después de cerrar sesión, se pasa directo al paso 2 con «Cambiar de empresa».
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -207,7 +207,7 @@ function pantallaUsuario(emp, mensaje) {
   let ocupado = false;
   const botonEntrar = h('button.btn.primario.grande.entrar-boton', { type: 'button', onclick: () => intentar() }, 'Entrar');
   const pad = crearCampoPin({
-    alCompletar: () => intentar(), // Enter en el campo o el botón «Entrar»; si falta el usuario, intentar() lo avisa y conserva el PIN escrito
+    alCompletar: () => intentar(), // Enter en el campo o el botón «Entrar»; si falta el usuario, intentar() lo avisa y conserva la clave escrito
     boton: botonEntrar,
   });
   const cambiar = h('button.btn.emp-cambiar', { type: 'button', onclick: () => { if (!ocupado) pantallaCodigo({ codigo: emp.codigo }); } }, 'Cambiar de empresa'); // vuelve a los dos botones de empresa, con la actual ya enfocada
@@ -235,7 +235,7 @@ function pantallaUsuario(emp, mensaje) {
     try {
       const u = limpiarUsuario(usuario.value); // «María », «MARIA» y «ma ria» entran como «maria»: un usuario válido nunca lleva mayúsculas, tildes ni espacios
       const j = await entrar(emp.codigo, u, pad.valor(), { alReintentar: () => mostrarEstado('La respuesta tardó. Intentando de nuevo…') });
-      recordarPinDeEntrada(pad.valor()); // solo en memoria: si hay que cambiar el PIN, no se vuelve a pedir el que acaba de comprobarse
+      recordarPinDeEntrada(pad.valor()); // solo en memoria: si hay que cambiar la clave, no se vuelve a pedir el que acaba de comprobarse
       guardar('usuario', u);
       // El servicio de acceso nuevo devuelve la empresa de la sesión. Si todavía no la devuelve, vale la que se reconoció en el paso 1 (respaldo temporal).
       recordarEmpresa(j && j.empresa ? infoEmpresa(j.empresa) : emp);
@@ -281,15 +281,15 @@ function pantallaUsuario(emp, mensaje) {
   (usuario.value ? pad.campo : usuario).focus();
 }
 
-/* ---------- Cambio obligatorio de PIN (primer ingreso o reinicio por el administrador) ---------- */
+/* ---------- Cambio obligatorio de clave (primer ingreso o reinicio por el administrador) ---------- */
 // Revisa el PIN nuevo antes de mandarlo al servidor. Devuelve el texto del problema o ''.
 function problemaPinNuevo(actual, nuevo, otra) {
-  if (!/^\d{4}$/.test(actual)) return 'Escriba el PIN actual, que son 4 números.';
-  if (!/^\d{4}$/.test(nuevo)) return 'El PIN nuevo debe tener 4 números.';
+  if (!/^\d{4}$/.test(actual)) return 'Escriba la clave actual, que son 4 números.';
+  if (!/^\d{4}$/.test(nuevo)) return 'La clave nueva debe tener 4 números.';
   const facil = pinDebil(nuevo);
   if (facil) return PIN_FACIL + facil;
-  if (nuevo === actual) return 'El PIN nuevo debe ser distinto al actual.';
-  if (otra != null && nuevo !== otra) return 'Los dos PIN nuevos no son iguales.';
+  if (nuevo === actual) return 'La clave nueva debe ser distinta a la actual.';
+  if (otra != null && nuevo !== otra) return 'Las dos claves nuevas no son iguales.';
   return '';
 }
 // pedirActual = true fuerza el campo «PIN actual» (cuando no se recuerda el PIN con el que se entró, o el servidor no lo aceptó). aviso = una frase para arriba de los campos.
@@ -300,33 +300,33 @@ function pantallaCambioPin({ pedirActual = false, aviso = '' } = {}) {
   // Si recargó la página con la sesión abierta no hay nada que recordar y el campo se muestra como siempre.
   const conocido = !pedirActual && !!pinDeEntradaVigente();
   const campoPin = (etiqueta, auto) => h('input.campo', { type: 'password', inputmode: 'numeric', maxlength: 4, autocomplete: auto, 'aria-label': etiqueta });
-  const actual = conocido ? null : campoPin('PIN actual', 'current-password'), nuevo = campoPin('PIN nuevo', 'new-password'), otra = campoPin('Repita el PIN nuevo', 'new-password');
+  const actual = conocido ? null : campoPin('Clave actual', 'current-password'), nuevo = campoPin('Clave nueva', 'new-password'), otra = campoPin('Repita la clave nueva', 'new-password');
   [actual, nuevo, otra].filter(Boolean).forEach((i) => i.addEventListener('input', () => { const v = i.value.replace(/\D/g, '').slice(0, 4); if (v !== i.value) i.value = v; }));
   const err = h('div.error-caja', { hidden: true, role: 'alert' });
   const mostrar = (m) => { err.textContent = m; err.hidden = !m; };
   const ok = h('button.btn.primario.grande', { type: 'button', onclick: () => conBoton(ok, async () => {
     mostrar('');
     const pinActual = actual ? actual.value : pinDeEntradaVigente();
-    if (!actual && !pinActual) return pantallaCambioPin({ pedirActual: true, aviso: 'Por seguridad, escriba otra vez el PIN actual, el que le dieron.' }); // pasaron unos minutos desde que entró
+    if (!actual && !pinActual) return pantallaCambioPin({ pedirActual: true, aviso: 'Por seguridad, escriba otra vez la clave actual, la que le dieron.' }); // pasaron unos minutos desde que entró
     const p = problemaPinNuevo(pinActual, nuevo.value, otra.value);
     if (p) return mostrar(p);
     try {
       await api.pinCambiar(pinActual, nuevo.value);
       olvidarPinDeEntrada();
-      toast('PIN cambiado.');
+      toast('Clave cambiada.');
       await arrancar();
     } catch (e) {
       // El servidor dice por su pista (hint) que el PIN actual no coincide: el que se recordaba ya no vale (por ejemplo, el administrador lo reinició mientras tanto). Se pide el campo.
-      if (!actual && e?.hint === 'pin_actual') { olvidarPinDeEntrada(); return pantallaCambioPin({ pedirActual: true, aviso: 'No se pudo confirmar su PIN actual. Escríbalo otra vez, el que le dieron.' }); }
+      if (!actual && e?.hint === 'pin_actual') { olvidarPinDeEntrada(); return pantallaCambioPin({ pedirActual: true, aviso: 'No se pudo confirmar su clave actual. Escríbala otra vez, la que le dieron.' }); }
       mostrar(conPunto(textoDeError(e)));
     }
-  }) }, 'Guardar mi PIN nuevo');
+  }) }, 'Guardar mi clave nueva');
   raiz.append(h('div.pantalla-centro', h('div.login.tarjeta.col',
-    h('h1', 'Elija su PIN'),
-    h('p.sub', 'Por seguridad, cambie el PIN que le dieron por uno que solo usted conozca. Tiene que ser de 4 números. Evite repetir el mismo número (1111), números seguidos (1234 o 4321) o parejas (1212).'),
-    actual ? h('label.etq', 'PIN actual (el que le dieron)', actual) : null,
-    h('label.etq', 'PIN nuevo', nuevo),
-    h('label.etq', 'Repita el PIN nuevo', otra),
+    h('h1', 'Elija su clave'),
+    h('p.sub', 'Por seguridad, cambie la clave que le dieron por una que solo usted conozca. Tiene que ser de 4 números. Evite repetir el mismo número (1111), números seguidos (1234 o 4321) o parejas (1212).'),
+    actual ? h('label.etq', 'Clave actual (la que le dieron)', actual) : null,
+    h('label.etq', 'Clave nueva', nuevo),
+    h('label.etq', 'Repita la clave nueva', otra),
     err, ok,
     h('button.btn.suave', { type: 'button', onclick: () => cerrarSesion() }, 'Cerrar sesión'))));
   if (aviso) mostrar(aviso);
@@ -338,13 +338,13 @@ function cambiarPinDialogo() {
   const a = campoPin(), n = campoPin(), r = campoPin();
   [a, n, r].forEach((i) => i.addEventListener('input', () => { const v = i.value.replace(/\D/g, '').slice(0, 4); if (v !== i.value) i.value = v; }));
   const err = h('div.error-caja', { hidden: true, role: 'alert' });
-  modal({ titulo: 'Cambiar mi PIN', ancho: 400,
-    contenido: h('div.col', h('label.etq', 'PIN actual', a), h('label.etq', 'PIN nuevo (4 números)', n), h('label.etq', 'Repita el PIN nuevo', r), err),
-    botones: [{ texto: 'Cancelar', onclick: (c) => c() }, { texto: 'Guardar PIN', clase: 'primario', onclick: async (c) => {
+  modal({ titulo: 'Cambiar mi clave', ancho: 400,
+    contenido: h('div.col', h('label.etq', 'Clave actual', a), h('label.etq', 'Clave nueva (4 números)', n), h('label.etq', 'Repita la clave nueva', r), err),
+    botones: [{ texto: 'Cancelar', onclick: (c) => c() }, { texto: 'Guardar clave', clase: 'primario', onclick: async (c) => {
       err.hidden = true;
       const p = problemaPinNuevo(a.value, n.value, r.value);
       if (p) { err.textContent = p; err.hidden = false; return; }
-      try { await api.pinCambiar(a.value, n.value); toast('PIN cambiado.'); c(); } catch (e) { err.textContent = conPunto(textoDeError(e)); err.hidden = false; }
+      try { await api.pinCambiar(a.value, n.value); toast('Clave cambiada.'); c(); } catch (e) { err.textContent = conPunto(textoDeError(e)); err.hidden = false; }
     } }] });
 }
 
@@ -391,7 +391,7 @@ function sincronizarAlturas() {
   if (st.getPropertyValue('--cab-h')) st.setProperty('--cab-h', (window.matchMedia('(max-width:979px)').matches ? 0 : alto) + 'px'); // Caja
 }
 
-/* Menú de la sesión (en pantallas angostas reúne «Cambiar mi PIN» y «Cerrar sesión») */
+/* Menú de la sesión (en pantallas angostas reúne «Cambiar mi clave» y «Cerrar sesión») */
 function abrirMenu(si) {
   if (!menuEl) return;
   menuEl.classList.toggle('abierto', si);
@@ -549,7 +549,7 @@ function mostrarSesionVencida() {
   // El botón Atrás (util.js) le pregunta a la ventana de arriba, con su _bloqueo, si se puede cerrar: mientras «Su sesión venció» esté puesta, ninguna ventana de debajo se cierra
   // con Atrás y lo que la persona tenía escrito se conserva. Al cerrar esta ventana cada una recupera el bloqueo que tenía.
   const bloqueosPrevios = previos.map((x) => x._bloqueo);
-  previos.forEach((x) => { if (typeof x._cerrar === 'function') x._bloqueo = () => 'Primero entre de nuevo con su PIN. Así lo que escribió no se pierde.'; });
+  previos.forEach((x) => { if (typeof x._cerrar === 'function') x._bloqueo = () => 'Primero entre de nuevo con su clave. Así lo que escribió no se pierde.'; });
   const cuerpo = h('div.modal-cuerpo');
   const fondo = h('div#sesion-vencida.modal-fondo.sesion-fondo', { role: 'alertdialog', 'aria-modal': 'true', 'aria-labelledby': 'sv-tit' }, h('div.modal.sesion-caja', { style: 'max-width:420px' }, cuerpo));
   const cerrar = () => {
@@ -562,7 +562,7 @@ function mostrarSesionVencida() {
   const paso1 = () => {
     cuerpo.replaceChildren(h('div.col',
       h('h2#sv-tit', 'Su sesión venció'),
-      h('p', 'Por seguridad hay que volver a entrar con su PIN. Lo que tiene en pantalla no se cierra, y las cuentas que ya estaban guardadas siguen ahí.'),
+      h('p', 'Por seguridad hay que volver a entrar con su clave. Lo que tiene en pantalla no se cierra, y las cuentas que ya estaban guardadas siguen ahí.'),
       h('button.btn.primario.grande', { type: 'button', onclick: paso2 }, 'Entrar de nuevo'),
       h('button.btn.suave', { type: 'button', onclick: () => { cerrar(); cerrarSesion(); } }, 'Cerrar sesión'),
       h('small.tenue', 'Si cierra la sesión, lo que escribió y todavía no se guardó se pierde.')));
@@ -574,7 +574,7 @@ function mostrarSesionVencida() {
   const pad = crearCampoPin({ alCompletar: () => reentrar(), boton: botonEntrar });
   const mostrarError = (m) => { err.textContent = m; err.hidden = !m; };
   async function reentrar() {
-    if (!pad.valor()) { mostrarError('Escriba su PIN.'); pad.enfocar(); return; }
+    if (!pad.valor()) { mostrarError('Escriba su clave.'); pad.enfocar(); return; }
     mostrarError('');
     pad.bloquear(true); estado.textContent = 'Entrando…'; estado.hidden = false;
     try {
@@ -603,11 +603,11 @@ function mostrarSesionVencida() {
   }
   function paso2() {
     cuerpo.replaceChildren(h('div.col',
-      h('h2#sv-tit', 'Escriba su PIN'),
+      h('h2#sv-tit', 'Escriba su clave'),
       h('p.sub.sv-quien', h('span', 'Empresa: ', h('strong', emp.nombre || 'Su empresa')), h('span', 'Usuario: ', h('strong', nombre))),
-      h('label.etq', 'PIN', pad.campo), estado, err, botonEntrar,
+      h('label.etq', 'Clave', pad.campo), estado, err, botonEntrar,
       h('button.btn.suave', { type: 'button', onclick: () => { pad.limpiar(); mostrarError(''); paso1(); } }, 'Volver')));
-    pad.enfocar(); // el botón que se tocó desaparece: el foco pasa al campo del PIN y no se pierde en la página
+    pad.enfocar(); // el botón que se tocó desaparece: el foco pasa al campo de la clave y no se pierde en la página
   }
   // Escape y Tab se atienden ANTES que la ventana de debajo (escucha en la fase de captura de window): Escape no la cierra y Tab no le mueve el foco a algo que está inerte.
   // Tab da la vuelta dentro de esta ventana.
@@ -866,7 +866,7 @@ async function cerrarSesion() {
 // Al guardar el PIN nuevo, arrancar() vuelve a la misma dirección (#) donde la persona estaba. Se detienen los avisos y se cierran las ventanas; las cuentas abiertas están guardadas en el sistema.
 // La base ya lo exige (fx_chk, interruptor pin_cambio_obligatorio): pasa, por ejemplo, cuando una persona administradora reinicia el PIN de alguien que tiene la sesión abierta.
 // fx_chk corre antes de cualquier escritura, así que la llamada que recibió el PT409 no hizo nada. Lo que se pierde es solo lo escrito en ventanas abiertas; las cuentas abiertas están guardadas en el sistema.
-const AVISO_PIN_OBLIGATORIO = 'Antes de seguir, elija su PIN nuevo. Al guardarlo vuelve a esta misma pantalla. Las cuentas abiertas siguen guardadas, pero lo que estaba escribiendo en una ventana se pierde.';
+const AVISO_PIN_OBLIGATORIO = 'Antes de seguir, elija su clave nueva. Al guardarla vuelve a esta misma pantalla. Las cuentas abiertas siguen guardadas, pero lo que estaba escribiendo en una ventana se pierde.';
 document.addEventListener('app:pin-obligatorio', () => {
   if (!app.ctx || cambioPinActivo || cerrando) return;
   clearInterval(alTimer); alSeq++; irSeq++;
@@ -894,7 +894,7 @@ async function arrancar(reciente = false) {
     app.ctx = await cargarContexto(reciente);
   } catch (e) {
     // La base exige elegir un PIN nuevo antes de contestar cualquier cosa (código PT409): se va a la pantalla de cambio de PIN y, al guardarlo, arrancar() sigue desde aquí
-    if (esPinObligatorio(e)) return pantallaCambioPin({ aviso: 'Antes de seguir, elija su PIN nuevo.' });
+    if (esPinObligatorio(e)) return pantallaCambioPin({ aviso: 'Antes de seguir, elija su clave nueva.' });
     if (esSesionVencida(e) || esSinAcceso(e)) {
       olvidarPinDeEntrada();
       await salir().catch(() => {});

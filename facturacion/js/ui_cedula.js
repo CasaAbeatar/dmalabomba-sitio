@@ -400,7 +400,7 @@ export function crearCampoIdentificacion(opts = {}) {
     } else if (fase === 'formato') nodo = caja('rojo', '✕', 'El número no tiene un largo válido', r?.mensaje || 'La cédula debe tener entre 9 y 12 números.');
     else if (fase === 'servicio') nodo = caja('gris', '-', 'Hacienda no responde en este momento',
       'Puede seguir: el cliente se guarda marcado como «sin verificar» y se confirma después. Revise bien el número, porque Hacienda rechaza las facturas con un número que no existe.' + (r?.mensaje ? ' ' + r.mensaje : ''), btnVolver());
-    else if (fase === 'sesion') nodo = caja('rojo', '✕', 'Su sesión venció', 'Entre de nuevo con su usuario y PIN para poder consultar a Hacienda.');
+    else if (fase === 'sesion') nodo = caja('rojo', '✕', 'Su sesión venció', 'Entre de nuevo con su usuario y clave para poder consultar a Hacienda.');
     else if (fase === 'otro' && juridicaConLetras(t)) nodo = caja('gris', '-', 'Esta cédula jurídica lleva letras y no se consulta en Hacienda', 'Tiene 10 entre números y letras. Escriba el nombre completo a mano y revise bien el número.');
     else if (fase === 'otro') nodo = caja('gris', '-', 'Este tipo de documento no se consulta en Hacienda', 'El número puede llevar letras y números (hasta ' + MAX_ID_LETRAS + '). Escriba el nombre completo a mano.');
     estado._k = claveEstado;

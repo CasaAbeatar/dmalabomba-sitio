@@ -212,7 +212,7 @@ export function accionSegura({ boton, zona, hacer, alTerminar, alFallar, ocupado
         const reintentar = h('button.btn.primario.inv-reintentar', { type: 'button', onclick: () => ejecutar() }, 'Reintentar');
         decir(aviso('espera',
           h('p', h('strong', esSesionVencida(e) ? 'Su sesión venció antes de guardar. ' : 'No se pudo confirmar si quedó guardado: falló la conexión. '),
-            esSesionVencida(e) ? 'Entre de nuevo con su PIN y toque «Reintentar».' : 'Toque «Reintentar» cuando vuelva la conexión.',
+            esSesionVencida(e) ? 'Entre de nuevo con su clave y toque «Reintentar».' : 'Toque «Reintentar» cuando vuelva la conexión.',
             ' Se manda con la misma clave, así que no se duplica aunque la primera vez sí haya llegado.'),
           reintentar));
         reintentar.focus({ preventScroll: true });

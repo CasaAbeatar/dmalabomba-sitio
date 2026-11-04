@@ -35,7 +35,7 @@ export default {
     function pintarProductos() {
       prodsEl.replaceChildren(...productos.map((p) => {
         const out = h('output', String(cant.get(p.id) || 0));
-        const cambiar = (d) => { cant.set(p.id, Math.max(0, Math.min(99, (cant.get(p.id) || 0) + d))); out.textContent = String(cant.get(p.id)); totalEl.textContent = money(total()); };
+        const cambiar = (d) => { mostrarError(''); cant.set(p.id, Math.max(0, Math.min(99, (cant.get(p.id) || 0) + d))); out.textContent = String(cant.get(p.id)); totalEl.textContent = money(total()); };
         return h('div.ct-prod', h('div.ct-prod-n', p.nombre, h('small', money(p.precio_final))),
           h('div.ct-cant', h('button', { type: 'button', 'aria-label': 'Quitar uno de ' + p.nombre, onclick: () => cambiar(-1) }, '−'), out, h('button', { type: 'button', 'aria-label': 'Agregar uno de ' + p.nombre, onclick: () => cambiar(1) }, '+')));
       }));
