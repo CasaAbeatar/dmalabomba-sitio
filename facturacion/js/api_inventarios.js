@@ -95,6 +95,8 @@ export const inv = {
   notaIgnorar: (nota, motivo = null, idem) => escribir('fx_inv_nota_ignorar', { p_clave_nota: nota, p_motivo: motivo, p_idem: idem }),
   notaReabrir: (nota, idem) => escribir('fx_inv_nota_reabrir', { p_clave_nota: nota, p_idem: idem }),
   // Idempotente por naturaleza (como fx_alerta_atender): no lleva clave
+  // Aviso de una factura rechazada (o aceptada en parte) cuya mercadería ya está en la bodega (migración 203). La nota es obligatoria y solo una persona administradora la atiende.
+  receptorAtender: (id, nota) => escribir('fx_receptor_aviso_atender', { p_id: id, p_nota: nota }),
   alertaAtender: (tipo, referencia, estadoClave, nota = null) => escribir('fx_inv_alerta_atender', { p_tipo: tipo, p_referencia: referencia, p_estado_clave: estadoClave, p_nota: nota }),
 
   /* ---------- Administrador (la base lo vuelve a revisar con fx_es_admin) ---------- */

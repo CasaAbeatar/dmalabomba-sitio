@@ -811,7 +811,7 @@ function armarApp(reciente = false) {
       // Atajo siempre visible: anular una factura no debe esconderse dentro de otra pantalla. Lleva a «Anular y reimprimir» con el cursor en el buscador.
       h('button.btn.cab-anular', { type: 'button', onclick: irAAnular }, 'Anular factura'),
       menuEl),
-    alertaEl, avisosAdmin ? avisosAdmin.el : null, redEl);
+    alertaEl, avisosAdmin ? avisosAdmin.el : null, avisosAdmin ? avisosAdmin.elReceptor : null, redEl);
   raiz.append(cab, vista);
   if (window.ResizeObserver) new ResizeObserver(() => sincronizarAlturas()).observe(cab);
   pintarCabecera();

@@ -541,10 +541,22 @@ export default {
           const verPct = () => { const v = Number(pct.value); valores.proporcion = pct.value; pctTxt.textContent = pct.value !== '' && v > 0 && v < 100 ? `Unos ${montoTexto(Math.round(ivaF * v) / 100, mon)} de los ${montoTexto(ivaF, mon)} de IVA de esta factura. El cálculo exacto se muestra antes de enviar.` : 'Escriba un número entre 1 y 99.'; alCambiar?.(); };
           pct.addEventListener('input', verPct); if (valores.proporcion !== '') verPct();
           const grupo = h('div.rec-opciones', { role: 'radiogroup', 'aria-label': 'Cómo se usa el IVA de esta compra' }, CONDICIONES.map((o) => {
-            const r = h('input', { type: 'radio', name: 'cond-' + clave.slice(-8), value: o.c, checked: valores.condicion === o.c, onchange: () => { valores.condicion = o.c; pctCaja.hidden = o.c !== '02'; if (o.c === '02') pct.focus(); alCambiar?.(); } });
+            const r = h('input', { type: 'radio', name: 'cond-' + clave.slice(-8), value: o.c, checked: valores.condicion === o.c, onchange: () => { valores.condicion = o.c; pctCaja.hidden = o.c !== '02'; if (o.c === '02') pct.focus(); verNota(); alCambiar?.(); } });
             return h('label.rec-opcion', r, h('span', h('strong', o.t), h('small', o.d)));
           }));
-          return h('fieldset.rec-cond', h('legend', '¿Cómo se usa el IVA de esta compra?'), grupo, pctCaja);
+          // Aceptar parcialmente: el mensaje a Hacienda lleva el IVA de la factura COMPLETA; la rebaja llega después, con la nota de crédito del proveedor. Se dice aquí, donde se elige la condición.
+          const nota = tipo === 'parcial' ? h('p.lis-aviso.rec-cond-parcial', { 'aria-live': 'polite' }) : null;
+          const verNota = () => {
+            if (!nota) return;
+            const c = valores.condicion;
+            nota.replaceChildren(h('strong', 'Importante: el IVA se cuenta por la factura completa. '), c === '04'
+              ? 'Aunque acepte solo una parte de la compra, este mensaje le dice a Hacienda que todo el monto va al gasto y que no se usa IVA como crédito fiscal. Cuando el proveedor haga la nota de crédito por lo que usted no aceptó, el monto se corrige solo.'
+              : c === '02'
+              ? 'Aunque acepte solo una parte de la compra, el porcentaje que escriba se aplica al IVA de toda la factura, no solo al de lo que aceptó. Cuando el proveedor haga la nota de crédito por lo que usted no aceptó, el IVA se corrige solo.'
+              : 'Aunque acepte solo una parte de la compra, este mensaje le dice a Hacienda que usted usa como crédito todo el IVA de la factura. La rebaja llega después: cuando el proveedor haga la nota de crédito por lo que usted no aceptó y usted la acepte, ese IVA se resta.');
+          };
+          verNota();
+          return h('fieldset.rec-cond', h('legend', '¿Cómo se usa el IVA de esta compra?'), nota, grupo, pctCaja);
         }
         function pintarDatos() {
           if (tipo === 'aceptar') return pintarAceptar();

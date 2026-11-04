@@ -31,6 +31,7 @@ export function crearAvisosAdmin(app, { alCambiar } = {}) {
   const baja = window.matchMedia ? window.matchMedia('(max-height:899px)') : { matches: false };
   function pintar() {
     const t = app.admin ? textoAvisoRespaldo(app.respaldo, baja.matches) : null;
+    pintarR();
     if (!t) { el.hidden = true; return; }
     titulo.textContent = t.titulo;
     detalle.textContent = t.detalle;
@@ -38,6 +39,26 @@ export function crearAvisosAdmin(app, { alCambiar } = {}) {
     el.classList.toggle('urgente', !!app.respaldo.urgente);
     el.hidden = false;
   }
+  // Respuestas de proveedores y clientes que dejan algo por hacer (migración 203): una factura rechazada o aceptada en parte con la mercadería ya en la bodega (se lee en Inventarios),
+  // o un cliente que rechazó una factura nuestra (la nota de crédito que falta se ve en «Anular y reimprimir»). Viene en fx_alertas, llave `receptor`: no pide nada aparte.
+  const tituloR = h('strong'), detalleR = h('span.alerta-detalle'), botonR = h('button.btn.alerta-ver', { type: 'button' }, 'Ver');
+  const elR = h('div.alerta-resp.alerta-receptor', { role: 'status', hidden: true }, h('div.alerta-in', h('div.alerta-texto', tituloR, detalleR), botonR));
+  function pintarR() {
+    const r = app.admin ? app.alertas?.datos?.receptor : null;
+    const b = Math.max(0, Number(r?.bodega) || 0), c = Math.max(0, Number(r?.clientes) || 0);
+    if (!b && !c) { elR.hidden = true; return; }
+    const items = Array.isArray(r.items) ? r.items : [];
+    const primero = items.find((x) => x.tipo === (b ? 'rechazo_con_bodega' : 'respuesta_de_cliente')) || {};
+    tituloR.textContent = primero.texto || (b ? 'Rechazaron una factura cuya mercadería ya está en bodega: deshaga la recepción' : 'Un cliente respondió una factura nuestra: falta hacer la nota de crédito');
+    const mas = b + c > 1 ? ' Hay ' + (b + c - 1) + (b + c === 2 ? ' aviso más.' : ' avisos más.') : '';
+    detalleR.textContent = (b ? (primero.proveedor ? primero.proveedor + '. ' : '') + 'El mensaje ya salió a Hacienda; la bodega sigue contando esa mercadería.' : 'La nota de crédito propuesta está en «Anular y reimprimir».') + mas;
+    botonR.textContent = b ? 'Ver en Inventarios' : 'Ver la nota por hacer';
+    botonR.setAttribute('aria-label', b ? 'Ver en Inventarios las facturas rechazadas con mercadería en bodega' : 'Ver la nota de crédito que falta hacer');
+    botonR.onclick = () => (b ? app.ir('inventarios', { seccion: 'hoy', foco: 'rechazos' }) : app.ir('anular', { propuestas: true }));
+    elR.classList.toggle('urgente', b > 0);
+    elR.hidden = false;
+  }
+  document.addEventListener('app:alertas-cambio', pintarR);
   baja.addEventListener?.('change', pintar);
 
   // Pregunta las dos cosas a la vez. `vigente()` dice si la respuesta todavía sirve (no cambió la empresa ni se cerró la sesión). Una falla no borra lo que ya se sabía:
@@ -53,5 +74,5 @@ export function crearAvisosAdmin(app, { alCambiar } = {}) {
     pintar();
     try { alCambiar?.(); } catch { /* la insignia es un adorno: si falla, el aviso igual ya se pintó */ }
   }
-  return { el, actualizar, pintar };
+  return { el, elReceptor: elR, actualizar, pintar };
 }

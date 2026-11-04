@@ -256,3 +256,17 @@
 .doc-correo-op[aria-pressed=true] span{color:#fff}
 .doc-correo-campo[hidden],.doc-correo-nota[hidden]{display:none}
 @media(max-width:480px){.doc-correo-pie .btn{flex:1 1 100%}}
+
+/* ---------- Notas de crédito por hacer: un cliente rechazó (o aceptó en parte) una factura nuestra (migración 203) ---------- */
+.doc-propuestas:empty{display:none}
+.doc-propuestas{display:flex;flex-direction:column;gap:.7rem;margin:0 0 1rem}
+.doc-propuesta{padding:1rem 1.1rem;border:1px solid #e9b3b7;border-left:4px solid var(--rojo);border-radius:14px;background:var(--rojo-suave);display:flex;flex-direction:column;gap:.55rem}
+.doc-propuesta h3{margin:0;font-size:1.05rem;color:var(--rojo-osc)}
+.doc-propuesta dl{margin:0;display:grid;gap:.2rem}
+.doc-propuesta dl>div{display:grid;grid-template-columns:minmax(8rem,12rem) minmax(0,1fr);gap:.2rem .8rem}
+.doc-propuesta dt{color:var(--tinta2);font-size:.92rem}
+.doc-propuesta dd{margin:0;font-weight:600;overflow-wrap:anywhere}
+.doc-propuesta p{margin:0}
+.doc-propuesta-btns{display:flex;flex-wrap:wrap;gap:.5rem}
+.doc-propuesta-btns .btn{min-height:48px}
+@media (max-width:700px){.doc-propuesta dl>div{grid-template-columns:1fr}.doc-propuesta-btns .btn{flex:1 1 100%}}

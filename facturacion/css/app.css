@@ -158,6 +158,7 @@ button.marca{min-height:48px;min-width:44px;appearance:none;background:none;bord
   .cabecera:has(.alerta-cab:not([hidden])):has(.sin-red:not([hidden]))>.alerta-cab{grid-column:1;grid-row:3}
   .cabecera:has(.alerta-cab:not([hidden])):has(.sin-red:not([hidden]))>.sin-red{grid-column:2;grid-row:3}
   .cabecera:has(.alerta-cab:not([hidden])):has(.sin-red:not([hidden]))>.alerta-resp{grid-row:4}
+  .cabecera:has(.alerta-cab:not([hidden])):has(.sin-red:not([hidden]))>.alerta-resp.alerta-receptor{grid-row:5}
   /* En monitores muy anchos el contenido de cada mitad se acerca a la línea del medio, para que siga alineado con el resto del encabezado */
   .cabecera:has(.alerta-cab:not([hidden])):has(.sin-red:not([hidden]))>.alerta-cab .alerta-in{max-width:560px;margin:0 0 0 auto}
   .cabecera:has(.alerta-cab:not([hidden])):has(.sin-red:not([hidden]))>.sin-red .sin-red-in{max-width:840px;margin:0 auto 0 0}
