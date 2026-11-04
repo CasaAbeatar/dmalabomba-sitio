@@ -41,3 +41,11 @@ export const consultarRespuesta = (clave) => funcion('facturador-receptor', { fa
 // Revisa los buzones de contabilidad (Microsoft Graph) y guarda las facturas nuevas. La función de borde "facturas-recibidas" exige sesión válida (verify_jwt) y por omisión lee los últimos 3 días.
 // Por buzón: {buzon, correos, comprobantes, mensajes_hacienda, n_sin_xml, sin_xml[], avisos[], errores[]}
 export const revisarCorreo = () => funcion('facturas-recibidas', {});
+
+// Recomendaciones (migración 208, solo administradores): plazo de 8 días hábiles y CABYS contra el historial. Solo informan; no bloquean nada.
+// Plazo: {hoy, regla, presuncion, proximo_feriado, grupos:[{mes, vence, dias, n}], por_vencer, vencidas, en_plazo}
+export const plazoRecibidas = (soc) => rpc('fx_recibidas_plazo', { p_soc: soc });
+// Líneas de una compra con un CABYS distinto al que ese proveedor usó antes: {lineas:[{linea, cabys, habitual, veces, total, habitual_descripcion, cambia_tarifa, habitual_tarifa, actual_tarifa}]}
+export const revisarCabysFactura = (clave) => rpc('fx_cabys_revision_factura', { p_clave: clave });
+// Un artículo propio contra el CABYS de sus ventas: {hay_historial, distinto, habitual, veces, habitual_descripcion, habitual_tarifa, nuevo_tarifa}
+export const revisarCabysProducto = (soc, producto, cabys) => rpc('fx_cabys_revision_producto', { p_soc: soc, p_producto: producto, p_cabys: cabys });
