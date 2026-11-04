@@ -1,0 +1,14 @@
+# Material interno que no debe publicarse (cierre de seguridad 4 nov 2026)
+.env
+.env.*
+*.pem
+*.key
+*.p12
+*.pfx
+*.bak
+*.enc
+*.sql
+node_modules/
+*.log
+.DS_Store
+estado*.json
