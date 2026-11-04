@@ -67,7 +67,7 @@ export const claseVence = (dias, aviso = 2) => (dias == null ? '' : dias < 0 ? '
 export const numFactura = (c) => { const n = parseInt(String(c || '').slice(-10), 10); return Number.isFinite(n) ? String(n) : String(c || ''); };
 // Proveedor: Hacienda lo trae como «RAZÓN SOCIAL (Nombre comercial)». En bodega se conoce por el nombre comercial: ese va en grande y la razón social debajo.
 export function proveedorPartes(n) {
-  const t = String(n || '').trim();
+  const t = String(n || '').replace(/_+/g, ' ').replace(/\s+/g, ' ').trim();
   const m = t.match(/^(.*?)\s*\(([^()]+)\)\s*$/);
   if (!t) return { nombre: 'Proveedor sin nombre', razon: '' };
   if (!m || !m[1]) return { nombre: nombrePropio(t), razon: '' };

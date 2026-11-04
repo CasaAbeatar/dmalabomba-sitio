@@ -292,7 +292,7 @@ async function abrirLista(ctx) {
     todas.sort((a, b) => ORD_NIVEL[a.v] - ORD_NIVEL[b.v] || String(a.f.proveedor_nombre).localeCompare(String(b.f.proveedor_nombre), 'es') || String(a.f.consecutivo).localeCompare(String(b.f.consecutivo)) || a.l.linea - b.l.linea);
     const marcada = (f, l) => !!est.sel.get(f.clave)?.has(l.linea);
     const poner1 = (f, l, si) => { let s = est.sel.get(f.clave); if (!s) est.sel.set(f.clave, (s = new Set())); si ? s.add(l.linea) : s.delete(l.linea); if (!s.size) est.sel.delete(f.clave); };
-    const marcarSegun = (ok) => { est.sel.clear(); todas.forEach((x) => { if (ok(x.v)) poner1(x.f, x.l, true); }); pintar(); };
+    const marcarSegun = (ok) => { est.sel.clear(); let ultima = -1; todas.forEach((x, i) => { if (ok(x.v)) { poner1(x.f, x.l, true); ultima = i; } }); est.mostrarL = Math.max(est.mostrarL, ultima + 1); pintar(); }; // toda línea marcada queda a la vista
     const nMarc = [...est.sel.values()].reduce((a, s) => a + s.size, 0);
     const totMarc = todas.filter((x) => marcada(x.f, x.l)).reduce((a, x) => a + (Number(x.l.subtotal_crc) || 0), 0);
     const cuenta = { verde: 0, segura: 0, ambar: 0, rojo: 0 }; todas.forEach((x) => { cuenta[x.v]++; });
@@ -397,7 +397,7 @@ async function abrirLista(ctx) {
     const rot = { verde: 'Verdes', ambar: 'Ámbar', rojo: 'Rojas' }[et.nivel];
     const resto = inf.ls.length - et.ls.length;
     return h('div.rc-etapa',
-      h('p.rc-etapa-tit', h('i.rc-lin-punto.' + et.nivel, { 'aria-hidden': 'true' }), h('strong', rot + ' (' + et.ls.length + ')'), resto ? h('span.tenue', ' · después ' + (et.nivel === 'verde' ? 'siguen las ámbar y rojas' : 'siguen las rojas') + ' (' + resto + ')') : null),
+      h('p.rc-etapa-tit', h('i.rc-lin-punto.' + et.nivel, { 'aria-hidden': 'true' }), h('strong', rot + ' (' + et.ls.length + ')'), resto && est.estado === 'todas' ? h('span.tenue', ' · después ' + (et.nivel === 'verde' ? 'siguen las ámbar y rojas' : 'siguen las rojas') + ' (' + resto + ')') : null),
       h('ul.rc-seguras', ...et.ls.map((l) => {
         const sg = l.sugerencia || {};
         const destino = sg.articulo ? limpiaNombre(sg.articulo) : (sg.categoria ? 'rubro «' + sg.categoria + '»' : 'sin artículo');

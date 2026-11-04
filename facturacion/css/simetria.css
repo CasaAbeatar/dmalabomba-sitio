@@ -84,3 +84,11 @@ html body .par-botones{width:100%;max-width:none}
   html body .rc-fac-acc{flex:1 1 100%;margin-left:0}
 }
 html body .inv-eco .btn,html body .inv-eco .btn.chico{min-height:48px}
+
+/* 11. Recibir: selector de empresa con tres botones del mismo ancho; tarjetas de siglas del mismo ancho; Deshacer de 48 px (gana a .rc-sigla .inv-eco .btn de recibir.css) */
+html body .inv-segmento.rc-seg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.5rem;width:100%;max-width:34rem}
+html body .inv-segmento.rc-seg .btn.inv-seg{width:100%;min-width:0;white-space:normal;line-height:1.15}
+@media (max-width:520px){html body .inv-segmento.rc-seg{grid-template-columns:repeat(2,minmax(0,1fr))}html body .inv-segmento.rc-seg .btn.inv-seg:last-child:nth-child(odd){grid-column:1 / -1}}
+html body .rc-siglas{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,22rem),1fr));gap:.5rem;align-items:stretch}
+html body .rc-sigla{flex:none;max-width:none;width:100%}
+html body .rc-sigla .inv-eco .btn,html body .rc-sigla .inv-eco .btn.chico{min-height:48px}
