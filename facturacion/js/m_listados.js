@@ -4,7 +4,7 @@ import { listados2 } from './api_listados.js';
 import { mensajeAmable } from './api_documentos.js';
 import { selectorPeriodo, textoRango, fechaLarga } from './periodo.js';
 import { crearDescarga, nombrePeriodo } from './descargas.js';
-import { graficoColumnas, graficoBarras, autoAjustar } from './graficos.js';
+import { graficoColumnas, graficoBarras, autoAjustar, columnasAngostas } from './graficos.js';
 
 const cssUrl = new URL('../css/listados.css', import.meta.url).href;
 const norm = (t) => String(t ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
@@ -39,7 +39,7 @@ export default {
 
     root.append(
       h('div.lis-cab', h('div', h('p.tenue', 'Ventas ya facturadas de ', h('strong', nomSoc), '. Las cifras vienen de las facturas y tiquetes emitidos; las notas de crédito se restan.')),
-        h('div.fila', crearDescarga(() => informeCompleto(), { texto: 'Descargar todo el informe', etiqueta: 'Descargar todo el informe de ventas, con una hoja por tabla' }),
+        h('div.fila.par-botones', crearDescarga(() => informeCompleto(), { texto: 'Descargar todo el informe', etiqueta: 'Descargar todo el informe de ventas, con una hoja por tabla' }),
           h('button.btn', { type: 'button', onclick: (e) => imprimir(e.currentTarget) }, 'Imprimir resumen'))),
       h('div.tarjeta.lis-filtros', periodo.el, turnoCaja),
       demoBanner, rotulo, ambienteEl, resumenEl, cuerpo);
@@ -130,12 +130,18 @@ export default {
       if (!datos.length) return h('p.tenue', vacioTxt || 'Sin datos en este periodo.');
       const lect = h('p.lectura', { 'aria-live': 'polite' }, 'Toque o pase el cursor sobre una barra para ver el detalle.');
       const cont = h('div.gr-caja');
-      let sel = -1;
-      limpiezas.push(autoAjustar(cont, (w) => {
+      let sel = -1, ancho = 0;
+      const paso = h('div.fila.gr-paso', { hidden: true });
+      const dibujar = () => {
         const f = tipo === 'col' ? graficoColumnas : graficoBarras;
-        cont.replaceChildren(f(datos, { ...opc, ancho: w, seleccionado: sel, alSeleccionar: (d, i) => { sel = i; lect.textContent = d.texto; } }));
-      }));
-      return h('div', cont, lect);
+        const angosta = tipo === 'col' && columnasAngostas(datos.length, ancho);
+        cont.replaceChildren(f(datos, { ...opc, ancho, seleccionado: sel, zonasPorColumna: !angosta, alSeleccionar: (d, i) => { sel = i; lect.textContent = d.texto; } }));
+        paso.hidden = !angosta;
+      };
+      const ir = (n) => { sel = Math.max(0, Math.min(datos.length - 1, (sel < 0 ? (n > 0 ? -1 : datos.length) : sel) + n)); lect.textContent = datos[sel].texto; dibujar(); };
+      paso.append(h('button.btn.crece', { type: 'button', onclick: () => ir(-1) }, '‹ Anterior'), h('button.btn.crece', { type: 'button', onclick: () => ir(1) }, 'Siguiente ›'));
+      limpiezas.push(autoAjustar(cont, (w) => { ancho = w; dibujar(); }));
+      return h('div', cont, paso, lect);
     }
 
     /* ---------- pintar todo ---------- */
@@ -533,8 +539,8 @@ export default {
       const bOrden = (id, t) => h('button.btn.chico.seg', { type: 'button', 'data-o': id, 'aria-pressed': String(est.orden === id), onclick: () => { est.orden = id; pintarProd(); } }, t);
       const barra = h('div.fila.lis-prod-barra');
       function pintarProd() {
-        barra.replaceChildren(h('div.fila', h('span.tenue', 'Vista:'), bVista('arbol', 'Por cajón y producto'), bVista('lista', 'Lista de más vendidos')),
-          est.vista === 'arbol' ? h('div.fila', h('span.tenue', 'Ordenar por:'), bOrden('monto', 'Monto'), bOrden('cantidad', 'Cantidad'), bOrden('codigo', 'Código')) : null);
+        barra.replaceChildren(h('div.fila.lis-vista', h('span.tenue', 'Vista:'), bVista('arbol', 'Por cajón y producto'), bVista('lista', 'Lista de más vendidos')),
+          est.vista === 'arbol' ? h('div.fila.lis-orden', h('span.tenue', 'Ordenar por:'), bOrden('monto', 'Monto'), bOrden('cantidad', 'Cantidad'), bOrden('codigo', 'Código')) : null);
         cuerpoProd.replaceChildren(est.vista === 'arbol' ? vistaArbol() : vistaLista());
       }
       const dibujarFila = (cls, nivelTxt, nombre, cant, tot, base, abrible, id, abierto, codigo) => {

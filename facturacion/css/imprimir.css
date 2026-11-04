@@ -6,7 +6,7 @@
 .fxd{color:#000;background:#fff;font-family:Arial,"Helvetica Neue","Liberation Sans",sans-serif;-webkit-print-color-adjust:exact;print-color-adjust:exact;overflow-wrap:anywhere}
 .fxd,.fxd *{box-sizing:border-box}
 .fxd img{display:block}
-.fxd .mono{font-family:"Courier New","Liberation Mono","DejaVu Sans Mono",monospace;letter-spacing:0;word-break:break-all}
+.fxd .mono{font-family:var(--letra);font-variant-numeric:tabular-nums;letter-spacing:0;word-break:break-all}
 .fxd .der{text-align:right;font-variant-numeric:tabular-nums}
 
 /* ---------- tiquete térmico: 80 mm de papel con 72 mm útiles (58 mm con 48 mm útiles) ---------- */
@@ -92,7 +92,7 @@ table.ct-tabla{width:100%;border-collapse:collapse;margin-top:2mm}
 .ct-tabla th{text-align:left;font-size:9.5px;text-transform:uppercase;letter-spacing:.08em;color:#6b645b;font-weight:600;padding:1.8mm 1.5mm;border-bottom:.3mm solid #1d1a17;white-space:nowrap}
 .ct-tabla th.der{text-align:right}
 .ct-tabla td{padding:1.8mm 1.5mm;border-bottom:.15mm solid #e2dacb;vertical-align:top}
-.ct-tabla td.cod{font-family:"Courier New","Liberation Mono","DejaVu Sans Mono",monospace;font-size:10.5px;white-space:nowrap;color:#444}
+.ct-tabla td.cod{font-family:var(--letra);font-variant-numeric:tabular-nums;font-size:10.5px;white-space:nowrap;color:#444}
 .ct-tabla td.der{white-space:nowrap}
 .ct-tabla td.uni{font-size:11px;color:#444;width:22mm}
 .ct-fila.neto{border-top:.15mm solid #e2dacb;margin-top:.8mm;padding-top:1.2mm;font-weight:600}
@@ -137,7 +137,7 @@ table.ct-tabla{width:100%;border-collapse:collapse;margin-top:2mm}
 .fx-instr h3{font-size:1.05rem}
 .fx-instr p{margin:0}
 .fx-instr ol{margin:0;padding-left:1.3rem;display:flex;flex-direction:column;gap:.55rem}
-.fx-cmd{font-family:"Courier New","Liberation Mono",monospace;font-size:.85rem;background:#fbf8f2;border:1px solid var(--borde-control,#8f8672);border-radius:var(--r);padding:.7rem .8rem;word-break:break-all;user-select:all}
+.fx-cmd{font-family:var(--letra);font-variant-numeric:tabular-nums;font-size:.85rem;background:#fbf8f2;border:1px solid var(--borde-control,#8f8672);border-radius:var(--r);padding:.7rem .8rem;word-break:break-all;user-select:all}
 .fx-nota{color:var(--tinta2);font-size:.92rem}
 .fx-instr .btn{align-self:flex-start}
 

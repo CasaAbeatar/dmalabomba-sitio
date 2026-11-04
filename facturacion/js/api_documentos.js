@@ -236,6 +236,8 @@ export async function alertas(soc) {
         recepcion_vencen_pronto: a.recepcion_vencen_pronto == null ? null : entero(a.recepcion_vencen_pronto),
         ultimos: (Array.isArray(a.ultimos) ? a.ultimos : []).slice(0, 5).map((u) => ({ id: u.id, numero: String(u.numero ?? ''), estado: u.estado || '', mensaje: String(u.mensaje ?? '') })),
         desde: typeof a.desde === 'string' ? a.desde.slice(0, 10) : sumaDias(hoyCR(), -DIAS_VENTANA), fuente: 'fx_alertas',
+        // Respuestas de proveedores y clientes con algo por hacer (migración 203): solo se pintan para administradores (avisos_admin.js)
+        receptor: a.receptor && typeof a.receptor === 'object' ? { bodega: entero(a.receptor.bodega), clientes: entero(a.receptor.clientes), items: Array.isArray(a.receptor.items) ? a.receptor.items.slice(0, 5) : [] } : null,
       };
     } catch (e) {
       if (!faltaFuncion(e) && !SIN_FUNCION.test(e.message || '')) throw e;
@@ -261,6 +263,10 @@ async function alertasDeReserva(soc) {
 }
 
 /* ---------- Funciones nuevas de la ronda 2B (si la base todavía no las tiene, se avisa con palabras claras) ---------- */
+// Respuestas de clientes sobre facturas nuestras (migración 203): { bodega: [...], clientes: [{id, texto, numero, cliente, total, comprobante_id, propuesta:{tipo_nota, monto_sugerido, motivo}}] }.
+export const avisosReceptor = (soc) => rpc('fx_receptor_avisos', { p_soc: soc });
+// «No hace falta la nota»: solo una persona administradora; la nota es obligatoria y queda con su nombre.
+export const atenderAvisoReceptor = (id, nota) => rpc('fx_receptor_aviso_atender', { p_id: id, p_nota: String(nota || '').trim().slice(0, 300) });
 // Marca un documento rechazado como atendido. La nota es opcional. Devuelve lo que responda la base ({ok, ...}).
 export async function alertaAtender(comprobanteId, nota = '') {
   try {

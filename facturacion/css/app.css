@@ -1,4 +1,4 @@
-:root{--fondo:#fbf8f2;--papel:#fff;--tinta:#1d1a17;--tinta2:#6b645b;--linea:#e2dacb;--linea2:#cfc5b2;--borde-control:#8f8672;--borde-ok:#3f8f66;--borde-mal:#bf4a54;--borde-ambar:#a87400;--rojo:#b81622;--rojo-osc:#8f101a;--rojo-suave:#fbeceb;--ambar:#f3a62c;--ambar-suave:#fdf2dc;--verde:#1f7a4d;--verde-suave:#e6f4ec;--azul:#2a5fa8;--r:10px;--sombra:0 1px 0 rgba(29,26,23,.04),0 6px 24px rgba(29,26,23,.06)}
+:root{--letra:"Helvetica Neue",Helvetica,Arial,"Liberation Sans",sans-serif;--fondo:#fbf8f2;--papel:#fff;--tinta:#1d1a17;--tinta2:#6b645b;--linea:#e2dacb;--linea2:#cfc5b2;--borde-control:#8f8672;--borde-ok:#3f8f66;--borde-mal:#bf4a54;--borde-ambar:#a87400;--rojo:#b81622;--rojo-osc:#8f101a;--rojo-suave:#fbeceb;--ambar:#f3a62c;--ambar-suave:#fdf2dc;--verde:#1f7a4d;--verde-suave:#e6f4ec;--azul:#2a5fa8;--r:10px;--sombra:0 1px 0 rgba(29,26,23,.04),0 6px 24px rgba(29,26,23,.06)}
 *{box-sizing:border-box}
 [hidden]{display:none!important}
 .solo-lectores{position:absolute;width:1px;height:1px;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0;padding:0}
@@ -121,6 +121,8 @@ button.marca{min-height:48px;min-width:44px;appearance:none;background:none;bord
 .cab-menu{display:none}
 .cab-panel{display:flex;align-items:center;gap:.5rem;font-size:.92rem}
 .cab-sesion{margin-right:.2rem}
+@media(max-width:1359px){.estado-turno .est-desde{display:none}} /* «Caja abierta 22:52»: en pantallas apretadas se acorta en lugar de cortarse con «…» */
+@media(min-width:1100px) and (max-width:1439px){.cab-sesion-pre{display:none}} /* en pantallas de 15" el «Sesión de» sobra: así el estado de la caja cabe completo */
 @media(max-width:1099px){
   .cab-menu{display:inline-flex}
   .cab-panel{display:none;position:absolute;right:0;top:calc(100% + 6px);z-index:40;flex-direction:column;align-items:stretch;gap:.5rem;width:min(300px,calc(100vw - 1.4rem));padding:.9rem;background:#fff;border:1px solid var(--linea2);border-radius:14px;box-shadow:0 14px 40px rgba(29,26,23,.2)}
@@ -156,6 +158,7 @@ button.marca{min-height:48px;min-width:44px;appearance:none;background:none;bord
   .cabecera:has(.alerta-cab:not([hidden])):has(.sin-red:not([hidden]))>.alerta-cab{grid-column:1;grid-row:3}
   .cabecera:has(.alerta-cab:not([hidden])):has(.sin-red:not([hidden]))>.sin-red{grid-column:2;grid-row:3}
   .cabecera:has(.alerta-cab:not([hidden])):has(.sin-red:not([hidden]))>.alerta-resp{grid-row:4}
+  .cabecera:has(.alerta-cab:not([hidden])):has(.sin-red:not([hidden]))>.alerta-resp.alerta-receptor{grid-row:5}
   /* En monitores muy anchos el contenido de cada mitad se acerca a la línea del medio, para que siga alineado con el resto del encabezado */
   .cabecera:has(.alerta-cab:not([hidden])):has(.sin-red:not([hidden]))>.alerta-cab .alerta-in{max-width:560px;margin:0 0 0 auto}
   .cabecera:has(.alerta-cab:not([hidden])):has(.sin-red:not([hidden]))>.sin-red .sin-red-in{max-width:840px;margin:0 auto 0 0}
@@ -314,6 +317,8 @@ table.hist th{min-width:0}
 .contador-notas{align-self:flex-end;font-weight:400;color:var(--tinta2);font-variant-numeric:tabular-nums}
 
 button,input,select,textarea{font-family:inherit}
+/* Una sola familia tipográfica: los códigos (cédulas, CABYS, usuarios) usan la misma letra, con cifras de ancho fijo para que alineen */
+code,kbd,samp,pre{font-family:var(--letra);font-variant-numeric:tabular-nums}
 /* Informe de cierre (administración): el texto se parte en renglones en vez de ensanchar la ventana en el celular */
 .modal{min-width:0;max-width:100%}
 .modal-cuerpo .col{min-width:0}

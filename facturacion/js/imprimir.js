@@ -87,7 +87,7 @@ export function leerAjustes() {
   a.papel = Number(a.papel) === 58 ? 58 : 80;
   a.copias = Math.min(5, Math.max(1, parseInt(a.copias, 10) || 1));
   a.auto = !!a.auto;
-  a.formato = a.formato === 'carta' ? 'carta' : 'tiquete';
+  a.formato = 'tiquete'; // la impresora es de tiquetes (POS): lo automático siempre sale en tiquete
   a.hoja = a.hoja === 'a4' ? 'a4' : 'carta';
   a.modo = ['auto', 'iframe', 'pagina'].includes(a.modo) ? a.modo : 'auto';
   a.autoImprimir = a.auto;
@@ -692,16 +692,24 @@ export async function imprimirComprobante(comprobanteId, { formato, copias } = {
   await imprimirNodos(nodos, { tipo: formato, papel: aj.papel, hoja: aj.hoja, titulo: nombre, fuentes: formato === 'carta' });
 }
 
-// Para reimprimir un comprobante ya emitido: pregunta si se quiere el tiquete de rollo o la factura carta y lo imprime.
+// Para reimprimir un comprobante ya emitido.
+// Cajera (admin=false): sale directo el tiquete de rollo, sin preguntar nada: la caja no está conectada a una computadora normal.
+// Administrador (admin=true): pregunta si se quiere el tiquete de rollo o la factura carta, porque se conecta desde cualquier parte.
 // Lo pueden usar otras pantallas (Documentos del día, Anular factura) en lugar de tener botones sueltos.
-export function reimprimirComprobante(comprobanteId, { copias } = {}) {
+export function reimprimirComprobante(comprobanteId, { copias, admin = false } = {}) {
+  if (!admin) {
+    imprimirComprobante(comprobanteId, { formato: 'tiquete', copias })
+      .then(() => toast('Tiquete enviado a la impresora.'))
+      .catch((e) => toast('No se pudo imprimir: ' + textoDeError(e) + ' Intente de nuevo; si sigue igual, avise a un administrador.', 'error', 7000));
+    return null;
+  }
   const aj = leerAjustes();
   const estado = h('p.tenue-linea', { role: 'status' });
   let m = null;
   const lanzar = (formato, btn) => conBoton(btn, async () => {
     estado.textContent = '';
     try { await imprimirComprobante(comprobanteId, { formato, copias }); m?.cerrar(); }
-    catch (e) { estado.textContent = 'No se pudo imprimir: ' + textoDeError(e) + ' Revise el botón «Impresora» e intente de nuevo.'; }
+    catch (e) { estado.textContent = 'No se pudo imprimir: ' + textoDeError(e) + ' Intente de nuevo; si sigue igual, pida a un administrador que revise Administración, Configuración.'; }
   });
   const b1 = h('button.btn.primario.grande', { type: 'button', onclick: () => lanzar('tiquete', b1) }, 'Tiquete (rollo de ' + aj.papel + ' mm)');
   const b2 = h('button.btn.grande', { type: 'button', onclick: () => lanzar('carta', b2) }, 'Factura carta (' + (aj.hoja === 'a4' ? 'hoja grande A4' : 'hoja carta') + ')');
@@ -748,7 +756,8 @@ function comandoChrome() {
   return `"C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe" --kiosk-printing --user-data-dir="C:\\FacturadorLaBomba" --app=${url}`;
 }
 
-export function abrirAjustesImpresion() {
+// Arma el contenido de los ajustes (sirve para la ventana y para la pantalla Administración, Configuración)
+export function armarAjustesImpresion() {
   let aj = leerAjustes();
   const guardado = h('small.fx-guardado', 'Los cambios se guardan solos en este aparato.');
   // Frase que dice, en palabras, qué pasa en ESTE aparato al terminar un cobro (se actualiza al cambiar la opción)
@@ -756,7 +765,7 @@ export function abrirAjustesImpresion() {
   const pintarEstadoAuto = () => {
     estadoAuto.className = 'fx-estado ' + (aj.auto ? 'si' : 'no');
     estadoAuto.textContent = aj.auto
-      ? 'En este aparato: ENCENDIDA. Al terminar cada cobro sale ' + (aj.formato === 'carta' ? 'la factura carta' : 'el tiquete') + ' solo.'
+      ? 'En este aparato: ENCENDIDA. Al terminar cada cobro sale ' + 'el tiquete' + ' solo.'
       : 'En este aparato: APAGADA. Al terminar el cobro no sale nada solo; aparece el botón «Imprimir tiquete» para tocarlo y entregarle el tiquete al cliente.';
   };
   const cambiar = (k, v) => { aj = guardarAjustes({ [k]: v }); guardado.textContent = 'Guardado.'; pintarEstadoAuto(); };
@@ -776,10 +785,6 @@ export function abrirAjustesImpresion() {
       seg([[1, '1 copia'], [2, '2 copias'], [3, '3 copias']], aj.copias, (v) => cambiar('copias', Number(v)), 'Copias')),
     grupo('Imprimir automáticamente al cobrar', 'En computadora y tableta viene encendido: el tiquete sale solo al terminar el cobro y se entrega al cliente. En celular viene apagado: el tiquete se imprime tocando el botón y se entrega igual. Cada aparato guarda su propia opción.',
       seg([['si', 'Sí, imprimir solo'], ['no', 'No, yo lo pido']], aj.auto ? 'si' : 'no', (v) => cambiar('auto', v === 'si'), 'Imprimir automáticamente'), estadoAuto),
-    grupo('Qué se imprime automáticamente', 'Solo aplica si arriba escogió que se imprima solo.',
-      seg([['tiquete', 'Tiquete (rollo)'], ['carta', 'Factura carta (hoja)']], aj.formato, (v) => cambiar('formato', v), 'Formato automático')),
-    grupo('Tamaño de la hoja para la factura carta', null,
-      seg([['carta', 'Hoja carta (Letter)'], ['a4', 'Hoja grande (A4)']], aj.hoja, (v) => cambiar('hoja', v), 'Tamaño de la hoja')),
     h('div.fx-grupo', h('div.fx-tit', 'Probar la impresora'),
       h('div.fx-ayuda', 'Saca un tiquete con una regla, letras de varios tamaños y tildes, para ver que nada se corta.'), probar, guardado),
 
@@ -798,5 +803,8 @@ export function abrirAjustesImpresion() {
       h('p.fx-nota', 'En celular o tableta no hay forma de saltarse la ventanita: aparece la ventana de impresión del aparato y ahí se escoge la impresora.')));
 
   pintarEstadoAuto();
-  modal({ titulo: 'Ajustes de impresión', contenido, ancho: 680, botones: [{ texto: 'Cerrar', clase: 'primario', onclick: (c) => c() }] });
+  return contenido;
+}
+export function abrirAjustesImpresion() {
+  modal({ titulo: 'Ajustes de impresión', contenido: armarAjustesImpresion(), ancho: 680, botones: [{ texto: 'Cerrar', clase: 'primario', onclick: (c) => c() }] });
 }

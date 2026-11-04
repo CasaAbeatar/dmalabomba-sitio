@@ -314,7 +314,7 @@ export default {
         h('summary', 'Cómo funciona el PIN'),
         h('ul', { style: 'margin:.4rem 0 0;padding-left:1.2rem;display:grid;gap:.3rem' },
           h('li', 'El PIN son 4 números que solo conoce cada persona. Se usa junto con el código de la empresa y el usuario para entrar.'),
-          h('li', 'Si alguien se equivoca de PIN, puede intentar de nuevo de inmediato. El ingreso no se bloquea.'),
+          h('li', 'Si alguien se equivoca de PIN, puede intentar de nuevo pasados 2 segundos. El ingreso nunca se bloquea ni se queda esperando más tiempo.'),
           h('li', 'Si alguien olvida su PIN, use «Reiniciar PIN»: se le da uno temporal que tendrá que cambiar apenas entre.'),
           h('li', 'Nadie puede ver el PIN de otra persona, ni siquiera un administrador.'),
           h('li', 'Cada persona entra solo a la empresa que se le dio. Aquí se ven y se crean los usuarios de ' + miEmpresa + '.'),

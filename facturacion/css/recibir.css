@@ -1,0 +1,270 @@
+/* Por recibir, rediseño del 3 nov 2026 (m_inv_recibir.js). Todo lleva el prefijo rc- para no tocar las demás pantallas de Inventarios.
+   Una sola familia tipográfica (la de la aplicación) y líneas finas; el símbolo ₡ y los números heredan el mismo estilo y grosor del texto que los acompaña.
+   Lo que se toca mide 48 px o más (simetria.css), las filas de la lista unos 52 px y cada línea de una factura una sola fila. */
+
+/* ---------- Título de la ventana de la factura: en celular el botón «Volver» va arriba y el título abajo, a todo el ancho ----------
+   La clase rc-vent la pone el JS en la ventana (no depende de :has ni de que el contenido ya esté cargado). */
+.inv-ventana.rc-vent .modal-tit{flex-wrap:wrap;gap:.4rem .9rem}
+.inv-ventana.rc-vent .modal-tit h2{flex:1 1 9rem;min-width:0;overflow-wrap:break-word;word-break:normal}
+@media (max-width:640px){
+  .inv-ventana.rc-vent .modal-tit h2{flex:1 1 100%;order:1;width:100%}
+  .inv-ventana.rc-vent .modal-tit .cerrar.inv-volver{order:0;max-width:100%;white-space:normal;text-align:left}
+}
+
+/* ---------- Filtros y resumen de la lista ---------- */
+.rc-filtros{display:flex;flex-direction:column;gap:.7rem}
+.rc-filtros-fila{display:grid;grid-template-columns:minmax(0,2fr) repeat(3,minmax(0,1fr));gap:.5rem .8rem;align-items:end}
+.rc-filtro{min-width:0}
+.rc-filtro>span{font-size:.8rem;color:var(--tinta2)}
+.rc-filtros .campo,.rc-filtros select.campo{min-width:0;text-overflow:ellipsis}
+@media (max-width:820px){.rc-filtros-fila{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.rc-f-buscar{grid-column:1/-1}}
+.rc-resumen{margin:.2rem 0 0;font-size:.95rem;color:var(--tinta2);line-height:1.4}
+.rc-resumen strong{color:var(--tinta)}
+.rc-leyenda{display:block}
+
+/* ---------- Lista: proveedor y, debajo, una fila compacta por factura ---------- */
+.rc-lista{display:flex;flex-direction:column;gap:.7rem}
+.rc-filas{display:flex;flex-direction:column;border:1px solid var(--linea2);border-radius:12px;background:#fff;overflow:hidden}
+.rc-sep{margin:0;padding:.5rem .9rem;font-size:.82rem;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--tinta2);background:var(--fondo);border-top:1px solid var(--linea2);border-bottom:1px solid var(--linea)}
+.rc-filas>.rc-sep:first-child{border-top:0}
+.rc-prov-cab{display:flex;align-items:baseline;flex-wrap:wrap;gap:.1rem .8rem;margin:0;padding:.4rem .9rem;background:#fcfaf5;border-bottom:1px solid var(--linea);font-size:.98rem;font-weight:400}
+.rc-prov-cab strong{font-weight:600;overflow-wrap:anywhere}
+.rc-prov-datos{font-size:.86rem;color:var(--tinta2)}
+.inv-fac.rc-fac{display:block;padding:.3rem .9rem;border:0;border-bottom:1px solid var(--linea);border-radius:0;background:#fff;min-height:52px}
+.rc-fac-fila{display:flex;flex-direction:row;flex-wrap:wrap;align-items:center;gap:.2rem .9rem}
+.rc-filas>.rc-fac:last-child{border-bottom:0}
+.inv-fac.rc-fac.rechazada{border-left:3px solid var(--rojo)}
+.rc-fac-abrir{flex:1 1 15rem;min-width:0;display:flex;flex-direction:column;align-items:flex-start;justify-content:center;gap:0;min-height:48px;padding:.1rem 0;border:0;background:none;text-align:left;cursor:pointer;color:inherit;line-height:1.25}
+.rc-fac-abrir:hover .rc-fac-doc,.rc-fac-abrir:hover .rc-fac-prov{text-decoration:underline}
+.rc-fac-prov{font-weight:600;overflow-wrap:anywhere}
+.rc-fac-doc{font-size:.86rem;color:var(--tinta2)}
+.rc-fac-emp,.rc-fac-estado,.rc-fac-total,.rc-fac-acc{flex:0 0 auto}
+.rc-fac-estado{display:inline-flex;align-items:center;flex-wrap:wrap;gap:.2rem .9rem;font-size:.9rem}
+.rc-fac-lineas{color:var(--tinta2);white-space:nowrap}
+.rc-pills{display:inline-flex;flex-wrap:wrap;gap:.1rem .8rem}
+.rc-pill{display:inline-flex;align-items:center;gap:.35rem;white-space:nowrap}
+.rc-pill i{width:.65rem;height:.65rem;border-radius:50%;background:var(--linea2);flex:0 0 auto}
+.rc-pill.verde i{background:var(--verde)}.rc-pill.ambar i{background:var(--ambar)}.rc-pill.rojo i{background:var(--rojo)}
+.rc-fac-total{min-width:5.2rem;text-align:right;font-weight:600}
+.rc-fac-acc{display:flex;gap:.5rem;margin-left:auto}
+.rc-fac-rech{white-space:normal}
+.rc-pag{align-self:center;min-width:16rem}
+/* Pantalla de 15 pulgadas o más: cada pieza de la fila tiene siempre el mismo ancho, así los totales, los semáforos y los botones quedan en columnas rectas
+   (antes cada botón medía lo que decía su texto y todo se corría de fila en fila) */
+@media (min-width:1200px){
+  .rc-fac-fila{flex-wrap:nowrap;gap:.2rem .8rem}
+  .rc-fac-abrir{flex:1 1 0;min-width:7.5rem}
+  .rc-fac-emp{flex:0 0 8.5rem}
+  .rc-fac-estado{flex:0 0 21rem;justify-content:flex-end;flex-wrap:nowrap;gap:.2rem .6rem}
+  .rc-pills{gap:.1rem .6rem}
+  .rc-fac-total{flex:0 0 6rem}
+  .rc-fac-acc{flex:0 0 25rem;display:grid;grid-template-columns:minmax(0,1fr) 10rem;gap:.5rem;margin-left:0}
+  .rc-fac-acc .btn{min-width:0;padding-inline:.5rem;line-height:1.15}
+  .rc-fac-acc>.btn:only-child{grid-column:2}
+  .rc-fac-acc>.btn.primario:only-child{grid-column:1/-1}
+}
+@media (max-width:760px){
+  .inv-fac.rc-fac{padding:.35rem .7rem;gap:.1rem .6rem}
+  .rc-fac-abrir{flex:1 1 0}
+  .rc-fac-total{order:2}
+  .rc-fac-estado{order:3;flex:1 1 100%;justify-content:space-between}
+  .rc-fac-emp{order:4;flex:1 1 100%}
+  .rc-fac-acc{order:5;flex:1 1 100%;margin:.2rem 0 .3rem;gap:.5rem}
+  .rc-fac-acc .btn{flex:1 1 0;min-width:0;padding-inline:.5rem}
+  .rc-fac-rech{order:3}
+}
+
+/* ---------- Factura: encabezado, barra de aceptar y la tabla de líneas ---------- */
+.rc-factura{gap:.7rem}
+.rc-cab{display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:.5rem 1.2rem;padding-bottom:.7rem;border-bottom:1px solid var(--linea2)}
+.rc-cab-prov{min-width:0;flex:1 1 18rem}
+.rc-cab-prov h2{margin:0;font-size:1.3rem;overflow-wrap:break-word}
+.rc-cab-prov p{margin:.15rem 0 0;font-size:.92rem}
+.rc-cab-datos{display:flex;flex-direction:column;align-items:flex-end;gap:.4rem;max-width:100%}
+.rc-cab-datos .inv-fac-emp{flex-direction:row;align-items:center;gap:.5rem}
+.rc-cab-datos .inv-fac-estado{justify-content:flex-end}
+@media (max-width:640px){.rc-cab-datos{align-items:flex-start}.rc-cab-datos .inv-fac-estado{justify-content:flex-start}}
+.rc-lineas{padding-top:.2rem;border-top:0;gap:.6rem}
+.rc-barra{display:flex;flex-wrap:wrap;align-items:center;gap:.5rem 1.1rem}
+.rc-barra .rc-aceptar{min-height:52px}
+.rc-barra .inv-casilla{min-height:48px}
+.rc-zona:empty{display:none}
+.rc-sem-resumen{margin:0}
+@media (max-width:640px){.rc-barra .btn{flex:1 1 100%}}
+
+.rc-tabla{display:flex;flex-direction:column;border:1px solid var(--linea2);border-radius:12px;background:#fff;overflow:hidden}
+.rc-encab,.rc-fila{display:grid;grid-template-columns:8.6rem minmax(0,2.3fr) minmax(0,1.6fr) minmax(0,1.7fr) 11rem;gap:.2rem 1rem;align-items:center}
+.rc-fila{padding:.45rem .9rem .45rem .8rem;min-height:56px}
+.rc-fila-simple{grid-template-columns:minmax(0,1fr) 11rem}
+.rc-encab{padding:.45rem .9rem .45rem 1rem;font-size:.72rem;letter-spacing:.05em;text-transform:uppercase;color:var(--tinta2);background:#fcfaf5;border-bottom:1px solid var(--linea2)}
+.inv-linea.rc-lin{display:block;padding:0;gap:0;border:0;border-left:3px solid var(--linea2);border-bottom:1px solid var(--linea);border-radius:0;background:#fff}
+.inv-linea.rc-lin:last-child{border-bottom:0}
+.rc-lin[data-semaforo="verde"]{border-left-color:var(--verde)}
+.rc-lin[data-semaforo="ambar"]{border-left-color:var(--ambar)}
+.rc-lin[data-semaforo="rojo"]{border-left-color:var(--rojo)}
+.inv-linea.rc-lin.abierta{background:#fffdf8}
+.rc-lin[data-semaforo="ambar"].abierta{background:#fffaf0}
+.rc-lin[data-semaforo="rojo"].abierta{background:#fffafa}
+.rc-lin.bloqueada{border-left-color:var(--tinta2);background:#fcfaf5}
+
+.rc-c-sem{display:flex;align-items:center;gap:.5rem;font-weight:600;font-size:.9rem;line-height:1.2}
+.rc-punto{width:.8rem;height:.8rem;border-radius:50%;background:var(--linea2);flex:0 0 auto}
+.rc-punto.verde{background:var(--verde)}.rc-punto.ambar{background:var(--ambar)}.rc-punto.rojo{background:var(--rojo)}
+.rc-c-leido,.rc-c-cant,.rc-c-dest{display:flex;flex-direction:column;min-width:0;line-height:1.3}
+.rc-leido-l1{overflow-wrap:break-word}
+.rc-leido-nom{font-weight:600}
+.rc-leido-pres{color:var(--tinta2)}
+.rc-c-leido small,.rc-c-cant small,.rc-c-dest small{color:var(--tinta2);font-size:.82rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rc-cant-l1,.rc-dest-l1{font-weight:600;font-size:.95rem;overflow-wrap:break-word}
+.rc-dest-l1.falta{color:var(--rojo-osc)}
+.rc-c-acc{display:flex;justify-content:flex-end;min-width:0}
+.rc-c-acc .btn{width:100%;padding-inline:.6rem}
+
+/* Lo que se abre en la misma fila: la razón en una línea, la sigla, los campos para corregir y las acciones */
+.rc-panel{padding:.1rem .9rem .9rem 1rem;border-top:1px dashed var(--linea2)}
+.rc-razon-fila{display:flex;align-items:baseline;gap:.5rem;min-width:0;padding-top:.45rem}
+.rc-razon{margin:0;flex:0 1 auto;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:.93rem}
+.rc-vermas{flex:0 0 auto;min-height:44px;padding:0 .4rem;border:0;background:none;color:var(--rojo-osc);text-decoration:underline;cursor:pointer;font-size:.9rem}
+.rc-mas{margin:0 0 .4rem;display:flex;flex-direction:column;gap:.35rem}
+.rc-mas[hidden],.rc-panel[hidden],.rc-siglas[hidden],.rc-vermas[hidden]{display:none}
+.rc-razon-full{margin:0;font-size:.92rem}
+.rc-mas .inv-sug{margin:0;padding:.35rem .6rem}
+.rc-mas .inv-ia{margin:0}
+.rc-siglas{display:flex;flex-direction:column;gap:.4rem;margin:.2rem 0 .4rem}
+.rc-sigla{display:flex;flex-wrap:wrap;align-items:center;gap:.3rem .9rem;padding:.35rem .7rem;border:1px solid var(--borde-ambar);border-radius:var(--r);background:#fff}
+.rc-sigla-txt{flex:1 1 12rem;min-width:0;overflow-wrap:anywhere}
+.rc-sigla-bot{display:flex;gap:.5rem}
+.rc-sigla-ed{display:flex;flex:1 1 100%;gap:.5rem;align-items:center}
+.rc-sigla-ed[hidden]{display:none}
+.rc-sigla .inv-eco{flex:1 1 100%}
+.rc-campos{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.6rem 1rem;align-items:start;margin:.3rem 0 .4rem}
+.rc-f-conv{grid-column:1/-1}
+.rc-f-conv .inv-con-unidad{display:flex;align-items:center;gap:.5rem;flex-wrap:wrap}
+.rc-f-conv .inv-con-unidad input{width:7rem;flex:0 0 auto}
+.rc-f-conv small{grid-column:auto}
+.rc-campos label.etq>span:first-child{font-size:.8rem;color:var(--tinta2)}
+.rc-f-ancho,.rc-campos>.inv-eco{grid-column:1/-1}
+.rc-f-ancho[hidden]{display:none}
+.rc-campos .inv-art-fila{min-height:48px}
+.rc-campos .inv-con-unidad{flex-wrap:wrap}
+.rc-f-rubro .inv-buscar-rubro{min-height:48px}
+.rc-panel .inv-costo-fila{border-top:0;padding-top:.1rem}
+.rc-panel .inv-costo-aviso,.rc-panel .inv-costo-rel{margin:.3rem 0}
+.rc-mas-campos{margin-top:.4rem}
+.rc-panel-acc{display:flex;flex-wrap:wrap;gap:.6rem;margin-top:.6rem}
+.rc-panel-acc:empty{display:none}
+.rc-lin .rc-zona{margin-top:.4rem}
+.rc-lin .rc-zona .inv-aviso{margin:0}
+.inv-linea.rc-lin.en-colones .inv-c-conv,.inv-linea.rc-lin.en-colones .inv-costo-fila{display:none}
+.rc-lin.en-colones .rc-f-conv{display:none}
+
+/* Lo ya recibido y lo ya decidido: una línea cada una, plegado */
+.rc-decididas{border:1px solid var(--linea2);border-radius:12px;background:#fff;overflow:hidden}
+.rc-decididas>summary{padding:.2rem .9rem;font-weight:600;cursor:pointer;display:flex;align-items:center}
+.rc-decididas .inv-lineas{gap:0;border-top:1px solid var(--linea)}
+.rc-decididas,.rc-decididas .inv-lineas{height:auto;min-height:0;flex:none}
+/* Una línea decidida es compacta: nombre y estado en una fila, lo recibido debajo y el botón al final; nada de alturas mínimas ni estirado */
+.inv-linea.rc-dec.decidida{display:grid;grid-template-columns:minmax(0,1fr) auto;grid-auto-rows:auto;align-content:start;align-items:center;gap:.15rem .7rem;height:auto;min-height:0;padding:.5rem .9rem;border:0;border-left:3px solid var(--linea2);border-bottom:1px solid var(--linea);border-radius:0;background:#fff}
+.inv-linea.rc-dec.decidida:last-child{border-bottom:0}
+.inv-linea.rc-dec.recibida{border-left-color:var(--borde-ok)}
+.inv-linea.rc-dec .chip{grid-column:2;grid-row:1;justify-self:end;align-self:center;margin:0}
+.rc-dec-txt{display:contents}
+.rc-dec-txt strong{grid-column:1;grid-row:1;min-width:0;overflow-wrap:anywhere}
+.rc-dec-txt small{grid-column:1/-1;color:var(--tinta2);overflow-wrap:anywhere;margin:0}
+.rc-dec-acc{grid-column:1/-1;display:flex;flex-direction:row;flex-wrap:wrap;align-items:center;gap:.3rem .6rem;margin-top:.2rem}
+.rc-dec-acc:empty,.rc-zona:empty{display:none}
+.rc-dec-acc .rc-zona{flex:1 1 100%}
+.rc-res-det{margin:.3rem 0 0}
+.rc-res-det>summary{cursor:pointer;min-height:44px;display:flex;align-items:center;font-weight:600}
+
+/* ---------- Celular: la fila baja a tres renglones (estado y acción, lo entendido, cantidad y destino) ---------- */
+@media (max-width:860px){
+  .rc-encab{display:none}
+  .rc-fila{grid-template-columns:minmax(0,1fr) minmax(0,1fr);grid-template-areas:"sem acc" "leido leido" "cant dest";gap:.15rem .8rem;padding:.55rem .7rem .55rem .65rem}
+  .rc-fila-simple{grid-template-areas:"leido leido" "acc acc"}
+  .rc-fila-simple .rc-c-leido{grid-area:leido}
+  .rc-c-sem{grid-area:sem}.rc-c-leido{grid-area:leido}.rc-c-cant{grid-area:cant}.rc-c-dest{grid-area:dest}.rc-c-acc{grid-area:acc}
+  .rc-c-acc .btn{width:auto;min-width:9rem}
+  .rc-panel{padding:.1rem .7rem .8rem .65rem}
+  .rc-campos{grid-template-columns:minmax(0,1fr)}
+  .rc-f-conv{grid-column:auto}
+  .rc-razon{white-space:normal;flex:1 1 auto}
+  .rc-razon-fila{flex-wrap:wrap}
+  .rc-panel-acc .btn{flex:1 1 100%}
+  .inv-linea.rc-dec.decidida{padding:.5rem .7rem}
+  .rc-dec-acc .btn{flex:1 1 100%}
+}
+
+.rc-panel .inv-costo-fila{padding:0}
+.rc-mas-campos>summary{min-height:44px}
+.rc-panel-acc{margin-top:.3rem}
+.rc-campos>.rc-f-rubro,.rc-campos>.rc-f-cat,.rc-campos>.rc-f-art{grid-column:auto;margin:0}
+.rc-campos>.rc-f-art{display:flex;flex-direction:column;gap:.15rem}
+.rc-campos>.rc-f-art>.etq{font-size:.8rem;color:var(--tinta2);font-weight:600}
+.rc-campos>.rc-f-art .inv-art-fila{padding:.2rem .3rem .2rem .6rem}
+.rc-campos>.rc-f-art .btn{padding-inline:.6rem;white-space:nowrap}
+.rc-campos>.rc-f-conv{grid-column:1/-1}
+.rc-campos>.rc-f-conv .inv-eco{display:inline}
+@media (max-width:860px){.rc-campos>.rc-f-rubro,.rc-campos>.rc-f-cat,.rc-campos>.rc-f-art,.rc-campos>.rc-f-conv{grid-column:1/-1}}
+
+.rc-campos>.rc-f-conv{grid-column:span 2}
+.rc-campos>.rc-costo{grid-column:auto;align-self:end;padding-bottom:.6rem;border:0}
+.rc-f-conv .inv-eco:not(.mal){display:none}
+@media (max-width:860px){.rc-campos>.rc-f-conv,.rc-campos>.rc-costo{grid-column:1/-1;padding-bottom:0}}
+.inv-fac.rc-fac{padding-block:.1rem;min-height:50px}
+.rc-fac-abrir{min-height:46px;padding:0}
+@media (max-width:760px){
+  .rc-fac-estado{flex:1 1 0;min-width:0;order:3;justify-content:flex-start}
+  .rc-fac-emp{flex:0 0 auto;order:4;margin-left:auto}
+  .rc-fac-acc{order:5}
+  .inv-fac.rc-fac{row-gap:0}
+}
+@media (min-width:761px){.rc-fac-abrir{flex:1 1 9rem}.rc-fac-estado{flex-wrap:nowrap}.inv-fac.rc-fac{gap:.1rem .7rem}}
+
+/* Líneas seguras a la vista: columnas fijas para que todas las filas queden alineadas */
+.rc-seguras{list-style:none;margin:0;padding:.2rem 0 .4rem;display:grid;gap:.1rem;font-size:.86rem;color:var(--tinta2);border-top:1px dashed var(--linea)}
+.rc-seguras li{display:grid;grid-template-columns:minmax(0,1.3fr) 1.2rem minmax(0,1fr) 4.5rem;gap:.5rem;align-items:baseline;min-width:0}
+.rc-seg-desc,.rc-seg-art{overflow-wrap:anywhere}
+.rc-seg-art{color:var(--tinta);font-weight:600}
+.rc-seg-cant{text-align:right;white-space:nowrap}
+@media (max-width:700px){.rc-seguras li{grid-template-columns:minmax(0,1fr) 1.2rem minmax(0,1fr) 3.5rem}}
+
+/* Vista «Todas las líneas»: una columna por dato, iguales en todas las filas */
+.rc-sel-barra{display:flex;flex-direction:column;gap:.4rem;padding:.5rem 0}
+.rc-sel-botones{display:flex;flex-wrap:wrap;gap:.5rem}
+.rc-sel-botones .btn{min-height:48px}
+.rc-sel-leyenda{margin:0}
+.rc-lin-cab,.rc-lin{display:grid;grid-template-columns:2rem .8rem minmax(0,1.1fr) minmax(0,2fr) 4.5rem 6.5rem 6rem;gap:.5rem .7rem;align-items:center;padding:.35rem .9rem}
+.rc-lin-cab{font-size:.78rem;text-transform:uppercase;letter-spacing:.04em;color:var(--tinta2);border-bottom:1px solid var(--linea);background:#fff}
+.rc-lin-cab .cifra,.rc-lin .cifra{text-align:right}
+.rc-lin-filas{background:#fff;border:1px solid var(--linea);border-top:0;border-radius:0 0 10px 10px}
+.rc-lin{min-height:52px;border-bottom:1px solid var(--linea)}
+.rc-lin:last-child{border-bottom:0}
+.rc-lin.marcada{background:#f4faf6}
+.rc-lin input[type=checkbox]{width:1.5rem;height:1.5rem;margin:0}
+.rc-sel-vacio{display:block;width:1.5rem}
+.rc-lin-punto{display:block;width:.7rem;height:.7rem;border-radius:50%;background:var(--tinta2)}
+.rc-lin-punto.verde{background:#1e7a4f}.rc-lin-punto.ambar{background:#e8a531}.rc-lin-punto.rojo{background:var(--rojo)}
+.rc-lin-doc{display:flex;flex-direction:column;min-width:0;line-height:1.25}
+.rc-lin-doc strong{overflow-wrap:anywhere}.rc-lin-doc small{color:var(--tinta2)}
+.rc-lin-art{display:grid;grid-template-columns:minmax(0,1.3fr) 1.2rem minmax(0,1fr);gap:.4rem;align-items:baseline;min-width:0;font-size:.9rem}
+.rc-sel-pie{position:sticky;bottom:0;display:flex;justify-content:flex-end;padding:.6rem .9rem;background:linear-gradient(to top,var(--fondo,#fff) 70%,transparent)}
+@media (max-width:900px){
+  .rc-lin-cab{display:none}
+  .rc-lin{grid-template-columns:2rem .8rem minmax(0,1fr) auto;grid-template-areas:"c p d i" ". . a a" ". . n b"}
+  .rc-lin>:nth-child(1){grid-area:c}.rc-lin>:nth-child(2){grid-area:p}.rc-lin>:nth-child(3){grid-area:d}.rc-lin>:nth-child(4){grid-area:a}
+  .rc-lin>:nth-child(5){grid-area:n;text-align:left}.rc-lin>:nth-child(6){grid-area:i}.rc-lin>:nth-child(7){grid-area:b;justify-self:end}
+}
+
+.rc-etapa{padding:.2rem 0 .4rem;border-top:1px dashed var(--linea)}
+.rc-etapa .rc-seguras{border-top:0;padding:0}
+.rc-etapa-tit{display:flex;align-items:center;gap:.4rem;margin:.1rem 0 .15rem;font-size:.86rem}
+.rc-etapa-tit .tenue{color:var(--tinta2)}
+
+/* Siglas de la IA: etiquetas compactas una al lado de otra, no una tarjeta por todo el ancho */
+.rc-siglas{flex-direction:row;flex-wrap:wrap;align-items:flex-start}
+.rc-sigla{flex:0 1 auto;max-width:100%;gap:.2rem .6rem;padding:.25rem .6rem}
+.rc-sigla-txt{flex:0 1 auto}
+.rc-sigla .inv-eco{flex:0 1 auto;display:inline-flex;align-items:center;gap:.5rem;margin:0}
+.rc-sigla .inv-eco:empty{display:none}
+.rc-sigla .inv-eco .btn{min-height:36px;padding:.15rem .6rem}

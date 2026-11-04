@@ -61,6 +61,8 @@ function tituloEjeY(svg, texto, cy, alto) {
 
 // Columnas verticales. datos: [{id, etiqueta, valor, texto}]  (texto = lectura completa al tocar)
 // opciones: {ancho, alto, tituloX, tituloY, color: 'rojo'|'ambar', seleccionado (índice), alSeleccionar(d, i), descripcion}
+// ¿Las columnas quedan más angostas que un dedo (44 px)? Entonces se avanza con botones grandes en lugar de tocar cada columna.
+export const columnasAngostas = (n, ancho) => (Math.max(300, Math.round(ancho || 640)) - 96) / Math.max(1, n) < 44;
 export function graficoColumnas(datos, o = {}) {
   const W = Math.max(300, Math.round(o.ancho || 640)), H = o.alto || 270;
   const M = { l: 84, r: 12, t: 16, b: 58 }; // 84 px a la izquierda: el título del eje (hasta 2 renglones) no pisa los valores en colones
@@ -93,7 +95,7 @@ export function graficoColumnas(datos, o = {}) {
   // zonas para tocar (una por columna, de arriba abajo)
   let sel = o.seleccionado ?? -1;
   const marcar = (i) => { sel = i; barras.forEach((b, k) => b.classList.toggle('sel', k === i)); };
-  datos.forEach((d, i) => {
+  if (o.zonasPorColumna !== false) datos.forEach((d, i) => {
     const z = s('rect', { class: 'zona', x: M.l + slot * i, y: M.t, width: slot, height: ph + 22, tabindex: 0, role: 'button', 'aria-label': d.texto || d.etiqueta });
     const elegir = () => { marcar(i); o.alSeleccionar?.(d, i); };
     z.addEventListener('click', elegir);

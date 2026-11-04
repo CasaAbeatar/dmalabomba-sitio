@@ -35,8 +35,7 @@ export function revisarConversion({ descripcion, subtotal, cantidad, factorNombr
   const dicho = (x) => fmt(x.porUnidad) + ' por unidad (' + fmt(x.porLitro) + ' por litro)';
   const razon = a.porLitro < BANDA_POR_LITRO.min ? 'muy por debajo' : 'muy por encima';
   if (uno && creible(uno)) {
-    return { factor: 1, cambiado: true, aviso: 'El nombre dice ' + actual + ' unidades por paquete, pero con ' + actual + ' cada unidad saldría a ' + dicho(a) + ', ' + razon + ' de lo normal en bebidas. '
-      + 'Con 1 queda en ' + dicho(uno) + ', que sí tiene sentido: la factura parece cobrar cada unidad suelta. Se dejó 1; si llegaron paquetes completos y se cobraron por paquete, escriba ' + actual + '.' };
+    return { factor: 1, cambiado: true, aviso: 'Cuadra con la factura: cada unidad sale a ' + dicho(uno) + ', o sea se cobró por unidad suelta. El «' + actual + '» del nombre es el empaque del fabricante; con ' + actual + ' por paquete cada unidad saldría a ' + fmt(a.porUnidad) + ', que no es un precio normal.' };
   }
   return { factor: actual, aviso: 'Con esta conversión cada unidad sale a ' + dicho(a) + ', ' + razon + ' de lo normal en bebidas (entre ' + fmt(BANDA_POR_LITRO.min) + ' y ' + fmt(BANDA_POR_LITRO.max) + ' por litro). Revise cuántas unidades trae cada una de la factura.' };
 }

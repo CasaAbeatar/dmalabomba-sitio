@@ -2,7 +2,7 @@
 // y en cada fila los botones «Reimprimir» y «Anular». La lista se pinta por tandas («Mostrar más»): la búsqueda y los filtros actúan sobre todo lo cargado. Tocar la fila abre el detalle (estado en Hacienda, «Ya lo atendí», archivos, reenvíos).
 // La anulación con nota de crédito es la de m_anular.js; la impresión es la de imprimir.js.
 import { h, money, modal, toast, descargar, hoyCR, sumaDias, fechaHora, horaCorta, debounce, num, r2, nombrePropio, nombreLocal, traducirHacienda, campoBusqueda, TIPOS_SERVICIO, MEDIOS, TIPOS_ID } from './util.js';
-import { documentosPagina, DOCUMENTOS_POR_PAGINA, anulacionDe, permiteAnular, otrasNotas, sinEfectoDeSaldos, correoActivo, reenviarCorreo, correoOpciones, reenviarCorreoA, alertaAtender, copiarVentaParaRehacer, abrirCuentaNueva, mensajeAmable } from './api_documentos.js';
+import { avisosReceptor, atenderAvisoReceptor, documentosPagina, DOCUMENTOS_POR_PAGINA, anulacionDe, permiteAnular, otrasNotas, sinEfectoDeSaldos, correoActivo, reenviarCorreo, correoOpciones, reenviarCorreoA, alertaAtender, copiarVentaParaRehacer, abrirCuentaNueva, mensajeAmable } from './api_documentos.js';
 import { anularDocumento, cambiarCliente, textoCodigoNota, codigoDeNota, sustituyeSoportado, listaNotas, TEXTO_07 } from './m_anular.js';
 import { devolverParte, corregirMonto, dejarSinEfecto } from './m_nota_parcial.js';
 import { selectorCliente } from './ui_cliente.js';
@@ -137,9 +137,10 @@ export default {
     async function actualizarTodo() {
       if (esperandoActualizar || est.cargando) return;
       esperandoActualizar = true; pintarControles();
-      try { if (est.cargandoMas && promesaMas) await promesaMas.catch(() => {}); await cargar('actualizar'); } finally { esperandoActualizar = false; pintarControles(); }
+      try { cargarPropuestas(); if (est.cargandoMas && promesaMas) await promesaMas.catch(() => {}); await cargar('actualizar'); } finally { esperandoActualizar = false; pintarControles(); }
     }
     const refrescar = h('button.btn', { type: 'button', 'data-actualizar': '1', onclick: actualizarTodo }, 'Actualizar todo lo que se ve');
+    const zonaPropuestas = h('div.doc-propuestas', { 'aria-live': 'polite' });
     const zonaResumen = h('div');
     const zonaCuadre = h('div.doc-cuadre-zona');
     const zonaFiltros = h('div.doc-filtros');
@@ -149,6 +150,7 @@ export default {
     const zonaPaginas = h('div.doc-paginas');
 
     root.append(h('div.doc-mod',
+      zonaPropuestas,
       h('div.doc-buscar', buscadorFila),
       botonesRango, h('div.doc-fecha-fila', titulo, refrescar), cajaFechas, zonaResumen, zonaCuadre, zonaFiltros,
       h('p.doc-ayuda', 'Toque una fila para ver el detalle. «Anular» crea una nota de crédito (código 01, anulación total): el documento original no se borra. En el buscador también puede escribir un estado (aceptado, rechazado, pendiente) o un rango de montos, por ejemplo 5000-20000.'),
@@ -697,7 +699,7 @@ export default {
       const quien = `${tipo.toLowerCase()} número ${numeroCorto(d.consecutivo)} por ${money(d.total)}`;
       const nDev = Number(d.parciales_n) || 0, nDeb = Number(d.debitos_n) || 0;
       const notasTxt = (n) => (n > 1 ? ` (${n} notas)` : '');
-      const reimprimir = h('button.btn.doc-bot', { type: 'button', 'aria-label': 'Reimprimir ' + quien, onclick: () => reimprimirComprobante(d.id) }, 'Reimprimir');
+      const reimprimir = h('button.btn.doc-bot', { type: 'button', 'aria-label': 'Reimprimir ' + quien, onclick: () => reimprimirComprobante(d.id, { admin: app.admin }) }, 'Reimprimir');
       // Orden fijo de la fila: Anular, Reimprimir, Reenviar al correo. Después, solo si hace falta: Ver y atender / Ver detalle (Hacienda no lo aceptó). Siempre en una sola línea.
       const anularBtn = (motivo, onclick) => h('button.btn.peligro.doc-bot', onclick ? { type: 'button', 'aria-label': 'Anular ' + quien, onclick } : { type: 'button', disabled: true, 'aria-label': `Anular ${quien}. No disponible: ${motivo}` }, 'Anular');
       let primero = null, extra = null;
@@ -970,7 +972,7 @@ export default {
       const puedeCorreo = correoActivo(app) && !!c.cliente_snapshot && c.estado === 'aceptado';
       const reenviar = boton('Reenviar al correo', '', () => reenviarPorCorreo(c, ctx),
         puedeCorreo ? '' : !correoActivo(app) ? 'el correo todavía no está activo' : !c.cliente_snapshot ? 'no tiene cliente' : 'Hacienda todavía no lo acepta');
-      const reimprimir = boton('Reimprimir', '', () => reimprimirComprobante(c.id), '');
+      const reimprimir = boton('Reimprimir', '', () => reimprimirComprobante(c.id, { admin: app.admin }), '');
       return h('div.doc-barra', { role: 'group', 'aria-label': 'Acciones rápidas del documento' },
         h('div.doc-barra-bot', anular, reimprimir, reenviar),
         motivos.length ? h('small.doc-barra-motivo', motivos.join(' ')) : null);
@@ -1214,8 +1216,49 @@ export default {
       return caja;
     }
 
+    /* ---------- notas de crédito por hacer: un cliente rechazó (o aceptó en parte) una factura nuestra ---------- */
+    // Viene de fx_receptor_avisos (migración 203). Es una propuesta: nada se emite solo. «Abrir la factura» lleva al documento, donde están las opciones para anular o devolver parte;
+    // la propuesta desaparece sola cuando existe una nota de crédito sobre esa factura. El artículo 10 de la resolución MH-DGT-RES-0027-2024 pide emitirla de inmediato.
+    async function cargarPropuestas() {
+      let r;
+      try { r = await avisosReceptor(app.soc.id); } catch { zonaPropuestas.replaceChildren(); return; } // sin la función o sin internet: no estorba el resto de la pantalla
+      if (!root.isConnected) return;
+      const lista = (r && r.clientes) || [];
+      zonaPropuestas.replaceChildren(...lista.map((x) => {
+        const p = x.propuesta || {}, parcial = String(x.estado_mensaje) === '2';
+        const monto = p.monto_sugerido != null && +p.monto_sugerido > 0 ? money(+p.monto_sugerido) : null;
+        const filas = [
+          ['Cliente', x.cliente || 'sin nombre'], ['Factura', 'N.° ' + (x.numero || '') + (x.total != null ? ' · ' + money(+x.total) : '')],
+          p.motivo ? ['Lo que dijo el cliente', '«' + p.motivo + '»'] : null,
+          ['Nota de crédito', monto ? (parcial ? 'por ' + money(+p.monto_sugerido) + ', lo que el cliente no aceptó' : 'por ' + money(+p.monto_sugerido) + ', todo el valor de la factura') : (parcial ? 'por el monto que el cliente no aceptó' : 'por todo el valor de la factura')]].filter(Boolean);
+        return h('section.doc-propuesta', { role: 'group', 'aria-label': 'Nota de crédito por hacer' },
+          h('h3', x.texto),
+          h('dl', filas.map(([k, v]) => h('div', h('dt', k), h('dd', v)))),
+          h('p.tenue', 'Es una propuesta: no se emite sola. La resolución de Hacienda pide hacer la nota de crédito de inmediato. Cuando exista, este aviso se quita solo.'),
+          h('div.doc-propuesta-btns',
+            h('button.btn.primario.grande', { type: 'button', onclick: () => abrirDetalle(x.comprobante_id) }, 'Abrir la factura para hacer la nota de crédito'),
+            app.admin ? h('button.btn.grande', { type: 'button', onclick: () => noHaceFalta(x) }, 'No hace falta la nota') : null));
+      }));
+    }
+    function noHaceFalta(x) {
+      const nota = h('textarea.campo', { rows: 2, maxlength: 300, 'aria-label': 'Nota obligatoria', placeholder: 'Por ejemplo: el cliente se equivocó y ya lo aclaró por teléfono' });
+      const err = h('p.error-caja', { role: 'alert', hidden: true });
+      const ok = h('button.btn.primario', { type: 'button' }, 'Sí, no hace falta');
+      ok.addEventListener('click', async () => {
+        if (nota.value.trim().length < 3) { err.textContent = 'Escriba una nota corta (al menos 3 letras) para dejar constancia.'; err.hidden = false; nota.focus(); return; }
+        ok.disabled = true; ok.textContent = 'Guardando…';
+        try { await atenderAvisoReceptor(x.id, nota.value); m.cerrar(); toast('Listo: el aviso quedó atendido.'); app.alertas?.refrescar?.(); cargarPropuestas(); }
+        catch (e) { ok.disabled = false; ok.textContent = 'Sí, no hace falta'; err.textContent = mensajeAmable ? mensajeAmable(e) : (e.message || 'No se pudo guardar.'); err.hidden = false; }
+      });
+      const m = modal({ titulo: 'No hace falta la nota', ancho: 520,
+        contenido: [h('p', 'La respuesta del cliente quedó sin nota de crédito. Escriba por qué no hace falta: queda guardado con su nombre y la hora.'), h('label.etq', 'Nota (obligatoria)', nota), err],
+        botones: [{ texto: 'No, volver', onclick: (c) => c() }] });
+      m.el.querySelector('.modal-pie').append(ok);
+    }
+
     /* ---------- arranque y actualización automática ---------- */
     pintarControles();
+    cargarPropuestas();
     await cargar();
     if (alFinal) buscador.focus(); // desde el botón rojo «Anular y reimprimir»: el cursor queda en el buscador
     if (verDocumento) abrirDetalle(verDocumento); // desde «Me equivoqué» del cobro: se abre el documento recién emitido
@@ -1224,7 +1267,7 @@ export default {
     const reloj = setInterval(() => {
       if (document.hidden || !root.isConnected) return;
       const espera = est.rango === 'hoy' ? 15000 : est.rango === 'anterior' ? Infinity : 60000;
-      if (Date.now() - ultimaCarga >= espera) cargar('auto');
+      if (Date.now() - ultimaCarga >= espera) { cargar('auto'); cargarPropuestas(); }
       detalleActual?.repintar(true);
     }, 20000);
     // Si el aparato cambia de ancho (girar el celular), el tamaño de la página cambia: se vuelve a la primera

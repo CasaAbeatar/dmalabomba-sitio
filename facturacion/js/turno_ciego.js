@@ -1,5 +1,5 @@
 // Apertura y cierre de caja para la persona de caja (cierre ciego).
-// Regla de Emil (1 nov 2026): la cajera nunca sabe cuánto debe haber en la caja ni si le sobra dinero. Solo se le avisa si FALTA, después de que ella cuenta.
+// Regla de Emil (1 nov 2026, ajustada el 3 nov): la cajera nunca sabe cuánto debe haber en la caja, ni si le falta o le sobra. Si lo que contó no coincide, el sistema dice solo «no coincide, vuelva a contar» (el mismo mensaje para falta y para sobra, sin montos). La diferencia la ve solo administración.
 // Aquí no hay totales vendidos, ni «debe haber», ni diferencias, ni historial de cierres: solo la apertura o el cierre de ESTE turno.
 // El servidor tampoco manda esas cifras a quien no es administrador (fx_turno_estado, fx_turnos), así que no están ni siquiera escondidas en la pantalla.
 import { h, money, leerNumero, toast, modal, fechaCorta, horaCorta, esqueleto, bloqueError, nombreLocal, conPunto, hoyCR } from './util.js';
@@ -14,10 +14,11 @@ const MAX_NOTAS = 200;
 const TOPE = 99999999.99;
 const ymdDe = (iso) => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Costa_Rica' }).format(new Date(iso));
 const fechaPartida = (d) => (d ? [h('span.nw', fechaCorta(d) + ','), ' ', h('span.nw', horaCorta(d))] : '');
-// «Faltan ₡5 000,00 en la caja…» -> 5000 (el servidor escribe el monto en el mensaje)
-const montoDelMensaje = (m) => { const x = /₡\s*([\d\s\u00a0.]+(?:,\d+)?)/.exec(String(m || '')); return x ? Number(x[1].replace(/[\s\u00a0.]/g, '').replace(',', '.')) || 0 : 0; };
 const rechazoPorCuentas = (e) => !!e && !esTransitorio(e) && (e.hint === 'cuentas_abiertas' || /cuentas? abiertas?/i.test(e.message || ''));
-const faltaDe = (e) => !!e && !esTransitorio(e) && e.hint === 'faltante';
+const noCoincideDe = (e) => !!e && !esTransitorio(e) && (e.hint === 'no_coincide' || e.hint === 'faltante');
+const conteoBajoDe = (e) => !!e && !esTransitorio(e) && e.hint === 'conteo_bajo';
+// Decisión de Emil (3 nov 2026): si lo contado es muy bajo (no pasa de lo que ya había al abrir, más entradas, menos salidas), el servidor solo dice que no coincide. Nunca se muestra un monto aquí.
+const TXT_RECONTAR = 'El conteo no coincide. Vuelva a contar el efectivo de la caja y escriba el total otra vez.';
 
 export async function montarCajera(root, app) {
   const api = app.api, socId = app.soc.id, soc = app.soc;
@@ -169,19 +170,20 @@ export async function montarCajera(root, app) {
     const [fresco, lista] = await Promise.all([api.turnoEstado(turnoVisto), api.ventasAbiertas(socId)]);
     if (fresco?.turno?.cerrado_en) { await terminar(fresco, true); return; }
     if ((lista || []).length) { abiertas = lista; pintar(); toast('Hay cuentas abiertas. Cóbrelas o anúlelas antes de cerrar la caja.', 'error', 9000); return; }
-    // El servidor compara y solo contesta cuánto falta (si falta). Nunca dice cuánto debía haber.
+    // El servidor compara y solo contesta si coincide o no (igual si falta que si sobra). Nunca dice cuánto debía haber ni cuánto falta.
+    // Si el conteo es demasiado bajo (puede_cerrar false), tampoco deja cerrar así.
     const r = await api.turnoConteo(turnoVisto, contado);
-    const falta = Number(r?.faltante) > 0 ? Number(r.faltante) : 0;
-    if (falta > 0) { preguntarFaltante(falta, contado); return; }
+    if (r?.recontar && r.puede_cerrar === false) { mensaje = TXT_RECONTAR; toast(TXT_RECONTAR, 'error', 9000); pintar(); return; }
+    if (r?.recontar) { preguntarNoCoincide(contado); return; }
     await cerrar(contado, false);
   }
 
-  function preguntarFaltante(falta, contado) {
+  function preguntarNoCoincide(contado) {
     let decidido = false;
     modal({ titulo: 'Revise el conteo', ancho: 520, alCerrar: () => {},
       contenido: h('div.col',
-        h('div.alerta-dif.falta', 'Faltan ' + money(falta) + ' en la caja.', h('small', 'Usted contó ' + money(contado) + '.')),
-        h('p.tenue-linea', 'Puede contar otra vez o cerrar así. Si cierra, el faltante queda anotado en el cierre y en el tiquete.')),
+        h('div.alerta-dif.falta', 'El conteo no coincide.', h('small', 'Usted contó ' + money(contado) + '.')),
+        h('p.tenue-linea', 'Puede contar otra vez o cerrar así. Si cierra, la diferencia queda anotada en el cierre para administración.')),
       botones: [
         { texto: 'Cerrar de todos modos', clase: 'peligro', onclick: async (c) => { if (decidido) return; decidido = true; c(); await cerrar(contado, true); } },
         { texto: 'Volver a contar', clase: 'primario', onclick: (c) => c() }] });
@@ -194,7 +196,8 @@ export async function montarCajera(root, app) {
       let res;
       try { res = await api.turnoCerrar(turnoVisto, { efectivo: contado, notas: notas.trim() || null, aceptaFaltante: acepta }); }
       catch (e) {
-        if (faltaDe(e)) { preguntarFaltante(montoDelMensaje(e.message), contado); return; }
+        if (noCoincideDe(e)) { preguntarNoCoincide(contado); return; }
+        if (conteoBajoDe(e)) { mensaje = TXT_RECONTAR; toast(TXT_RECONTAR, 'error', 9000); pintar(); return; }
         if (rechazoPorCuentas(e)) { toast('Hay cuentas abiertas. Cóbrelas o anúlelas antes de cerrar la caja.', 'error', 9000); await cargar(); return; }
         let cerrada = null;
         if (/ya est[aá] cerrado/i.test(e.message || '') || esTransitorio(e)) { try { const t = await api.turnoEstado(turnoVisto); if (t?.turno?.cerrado_en) cerrada = t; } catch { /* sin conexión */ } }
@@ -221,13 +224,11 @@ export async function montarCajera(root, app) {
 
   function seccionFinal() {
     const t = final.turno || {};
-    const falto = Number(t.faltante_reconocido) > 0;
     return h('section.resumen-final',
       h('h2', '✓ Caja cerrada'),
       h('div.turno-datos',
         h('div.dato', h('div.et', 'Cerró'), h('div.val', fechaPartida(t.cerrado_en)), h('div.det', t.cerrado_por || '')),
         h('div.dato', h('div.et', 'Efectivo contado'), h('div.val', money(final.contado_efectivo ?? t.contado_efectivo ?? 0)))),
-      falto ? h('div.alerta-dif.falta', 'Faltante reconocido: ' + money(t.faltante_reconocido) + '.') : null,
       h('div.fila',
         h('button.btn.primario.grande', { type: 'button', onclick: () => imprimirNodo(nodoCierreCajera(soc, final, true), 'Cierre de caja') }, 'Imprimir tiquete del cierre'),
         h('button.btn.grande', { type: 'button', onclick: () => app.ir('caja') }, 'Abrir una caja nueva')));

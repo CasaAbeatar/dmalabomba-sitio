@@ -71,7 +71,7 @@
 .ced-opt{display:flex;gap:.7rem;align-items:flex-start;width:100%;min-height:52px;padding:.5rem .8rem;text-align:left;border:1px solid var(--borde-control,#8f8672);border-radius:var(--r);background:#fff;cursor:pointer}
 .ced-opt:hover{border-color:var(--tinta)}
 .ced-opt[aria-pressed=true]{border-color:var(--verde);background:var(--verde-suave);box-shadow:0 0 0 1px var(--verde) inset}
-.ced-opt .cod{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-weight:700;white-space:nowrap}
+.ced-opt .cod{font-family:var(--letra);font-variant-numeric:tabular-nums;font-weight:700;white-space:nowrap}
 .ced-opt .desc{flex:1 1 auto;min-width:0;overflow-wrap:anywhere}
 .ced-opt .desc small{display:block;color:var(--tinta2);font-weight:400}
 .ced-opt .pri{font-size:.76rem;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--verde);white-space:nowrap}

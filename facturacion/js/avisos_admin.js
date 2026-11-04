@@ -7,6 +7,7 @@ import { cargarHoja } from './ui_hojas.js';
 import { esTransitorio, esSesionVencida } from './api.js';
 import { respaldos, normalizarRespaldo } from './api_respaldos.js';
 import { seguridad, normalizarSeguridad } from './api_seguridad.js';
+import { alertasHacienda, normalizarAlertasHacienda } from './api_alertas_hacienda.js';
 
 // Lo que dice la franja. En pantallas bajas va una sola línea; en las altas, un título y el aviso completo.
 export function textoAvisoRespaldo(r, baja = false) {
@@ -24,6 +25,7 @@ export function textoAvisoRespaldo(r, baja = false) {
 
 export function crearAvisosAdmin(app, { alCambiar } = {}) {
   cargarHoja('respaldos.css');
+  cargarHoja('alertas_hacienda.css');
   const titulo = h('strong'), detalle = h('span.alerta-detalle');
   const el = h('div.alerta-resp', { role: 'status', hidden: true },
     h('div.alerta-in', h('div.alerta-texto', titulo, detalle),
@@ -31,6 +33,7 @@ export function crearAvisosAdmin(app, { alCambiar } = {}) {
   const baja = window.matchMedia ? window.matchMedia('(max-height:899px)') : { matches: false };
   function pintar() {
     const t = app.admin ? textoAvisoRespaldo(app.respaldo, baja.matches) : null;
+    pintarR();
     if (!t) { el.hidden = true; return; }
     titulo.textContent = t.titulo;
     detalle.textContent = t.detalle;
@@ -38,20 +41,56 @@ export function crearAvisosAdmin(app, { alCambiar } = {}) {
     el.classList.toggle('urgente', !!app.respaldo.urgente);
     el.hidden = false;
   }
+  // Respuestas de proveedores y clientes que dejan algo por hacer (migración 203): una factura rechazada o aceptada en parte con la mercadería ya en la bodega (se lee en Inventarios),
+  // o un cliente que rechazó una factura nuestra (la nota de crédito que falta se ve en «Anular y reimprimir»). Viene en fx_alertas, llave `receptor`: no pide nada aparte.
+  const tituloR = h('strong'), detalleR = h('span.alerta-detalle'), botonR = h('button.btn.alerta-ver', { type: 'button' }, 'Ver');
+  const elR = h('div.alerta-resp.alerta-receptor', { role: 'status', hidden: true }, h('div.alerta-in', h('div.alerta-texto', tituloR, detalleR), botonR));
+  function pintarR() {
+    const r = app.admin ? app.alertas?.datos?.receptor : null;
+    const b = Math.max(0, Number(r?.bodega) || 0), c = Math.max(0, Number(r?.clientes) || 0);
+    if (!b && !c) { elR.hidden = true; return; }
+    const items = Array.isArray(r.items) ? r.items : [];
+    const primero = items.find((x) => x.tipo === (b ? 'rechazo_con_bodega' : 'respuesta_de_cliente')) || {};
+    tituloR.textContent = primero.texto || (b ? 'Rechazaron una factura cuya mercadería ya está en bodega: deshaga la recepción' : 'Un cliente respondió una factura nuestra: falta hacer la nota de crédito');
+    const mas = b + c > 1 ? ' Hay ' + (b + c - 1) + (b + c === 2 ? ' aviso más.' : ' avisos más.') : '';
+    detalleR.textContent = (b ? (primero.proveedor ? primero.proveedor + '. ' : '') + 'El mensaje ya salió a Hacienda; la bodega sigue contando esa mercadería.' : 'La nota de crédito propuesta está en «Anular y reimprimir».') + mas;
+    botonR.textContent = b ? 'Ver en Inventarios' : 'Ver la nota por hacer';
+    botonR.setAttribute('aria-label', b ? 'Ver en Inventarios las facturas rechazadas con mercadería en bodega' : 'Ver la nota de crédito que falta hacer');
+    botonR.onclick = () => (b ? app.ir('inventarios', { seccion: 'hoy', foco: 'rechazos' }) : app.ir('anular', { propuestas: true }));
+    elR.classList.toggle('urgente', b > 0);
+    elR.hidden = false;
+  }
+  // Alertas de Hacienda (decisión de Emil: tres canales, solo administradores). La bandeja completa está en Administración; aquí solo se avisa cuántas siguen por atender.
+  const tituloH = h('strong'), detalleH = h('span.alerta-detalle'), botonH = h('button.btn.alerta-ver', { type: 'button', 'aria-label': 'Ver las alertas de Hacienda', onclick: () => app.ir('alertas_hacienda') }, 'Ver alertas de Hacienda');
+  const elH = h('div.alerta-resp.alerta-hacienda', { role: 'status', hidden: true }, h('div.alerta-in', h('div.alerta-texto', tituloH, detalleH), botonH));
+  function pintarH() {
+    const r = app.admin ? app.alertasHacienda : null;
+    if (!r || !(r.abiertas > 0)) { elH.hidden = true; return; }
+    tituloH.textContent = r.abiertas === 1 ? 'Hay 1 alerta de Hacienda por atender.' : 'Hay ' + r.abiertas + ' alertas de Hacienda por atender.';
+    detalleH.textContent = r.mensaje ? r.mensaje + '.' : '';
+    detalleH.hidden = !r.mensaje;
+    elH.classList.toggle('urgente', r.urgentes > 0);
+    elH.hidden = false;
+  }
+  document.addEventListener('app:alertas-hacienda-cambio', () => { actualizar(); }); // al atender una alerta, vuelve a preguntar cuántas quedan
+  document.addEventListener('app:alertas-cambio', pintarR);
   baja.addEventListener?.('change', pintar);
 
   // Pregunta las dos cosas a la vez. `vigente()` dice si la respuesta todavía sirve (no cambió la empresa ni se cerró la sesión). Una falla no borra lo que ya se sabía:
   // no poder preguntar no quiere decir que el aviso se resolvió.
   async function actualizar(vigente = () => true) {
-    if (!app.admin) { app.respaldo = null; app.seguridad = null; pintar(); return; }
-    const [a, b] = await Promise.allSettled([respaldos.resumen(), seguridad.alertas()]);
+    if (!app.admin) { app.respaldo = null; app.seguridad = null; app.alertasHacienda = null; pintar(); pintarH(); return; }
+    const [a, b, c] = await Promise.allSettled([respaldos.resumen(), seguridad.alertas(), alertasHacienda.resumen()]);
     if (!vigente()) return;
     if (a.status === 'fulfilled') app.respaldo = normalizarRespaldo(a.value);
     else if (!esTransitorio(a.reason) && !esSesionVencida(a.reason)) console.warn('Avisos de respaldos no disponibles:', a.reason?.message || a.reason);
     if (b.status === 'fulfilled') app.seguridad = normalizarSeguridad(b.value);
     else if (!esTransitorio(b.reason) && !esSesionVencida(b.reason)) console.warn('Avisos de seguridad del ingreso no disponibles:', b.reason?.message || b.reason);
+    if (c.status === 'fulfilled') app.alertasHacienda = normalizarAlertasHacienda(c.value);
+    else if (!esTransitorio(c.reason) && !esSesionVencida(c.reason)) console.warn('Alertas de Hacienda no disponibles:', c.reason?.message || c.reason);
     pintar();
+    pintarH();
     try { alCambiar?.(); } catch { /* la insignia es un adorno: si falla, el aviso igual ya se pintó */ }
   }
-  return { el, actualizar, pintar };
+  return { el, elReceptor: elR, elHacienda: elH, actualizar, pintar };
 }

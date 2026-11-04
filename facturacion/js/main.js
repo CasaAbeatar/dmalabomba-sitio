@@ -45,6 +45,7 @@ export const app = {
   recepcion: null, // { pendientes_en_plazo, vencen_pronto, vencidas } de las facturas recibidas; alimenta las insignias de Contable y Administración
   inventario: null, // { vencidos, vencen_pronto, bajo_minimo, por_recibir, notas_por_revisar, urgente } de fx_inv_alertas_resumen; alimenta la insignia de Inventarios
   respaldo: null, // solo administradores: { problemas, urgente, mensaje, ultimo_respaldo, ultima_prueba, alertas } de fx_respaldo_alertas_resumen (avisos_admin.js); alimenta la franja del encabezado y la insignia de Respaldos
+  alertasHacienda: null, // solo administradores: { abiertas, urgentes, mensaje } de fx_alertas_hacienda_resumen (avisos_admin.js); alimenta la franja del encabezado y la insignia de Alertas de Hacienda
   seguridad: null, // solo administradores: { pendientes, ultimas } de fx_login_alertas (avisos_admin.js); alimenta la insignia de Usuarios
   pedido: null, // lo que una pantalla le pide a la otra al abrirla (por ejemplo { filtro: 'problemas' }); el módulo lo lee al empezar
   // Avisos del encabezado. datos = { rechazados, pendientes, recepcion_por_responder, ultimos, desde }. refrescar() vuelve a preguntar de inmediato.
@@ -94,7 +95,7 @@ function crearCampoPin({ antes, alCompletar, boton = null }) {
   };
 }
 
-// Texto del error de acceso. El ingreso NUNCA se bloquea: no hay esperas, ni hora de desbloqueo, ni intentos que se acaban; siempre se puede probar de nuevo en seguida.
+// Texto del error de acceso. El ingreso NUNCA se bloquea: no hay hora de desbloqueo ni intentos que se acaban. Tras un PIN equivocado solo hay una espera corta y fija (máximo 2 segundos, decisión de Emil del 3 nov 2026); nunca crece.
 // Un usuario o un PIN que no coinciden se dicen con palabras claras (sin revelar cuál de los dos falló). cambiarEmpresa = false en la ventana «Su sesión venció», donde la empresa y el usuario no se cambian.
 function textoErrorAcceso(e, { cambiarEmpresa = true } = {}) {
   if (e && (e.motivo === 'empresa_desconocida' || e.motivo === 'empresa_no_habilitada')) return conPunto(e.message);
@@ -102,7 +103,7 @@ function textoErrorAcceso(e, { cambiarEmpresa = true } = {}) {
   if (e && e.estado === 401) {
     return cambiarEmpresa
       ? 'Usuario o PIN incorrecto. Intente de nuevo.' // corto a propósito: de una sola línea para que la pantalla de entrada quepa sin deslizar
-      : 'El PIN no coincide. Escríbalo otra vez con cuidado; puede intentarlo de nuevo ahora mismo.';
+      : 'El PIN no coincide. Escríbalo otra vez con cuidado; puede intentarlo de nuevo en un par de segundos.';
   }
   return conPunto((e && e.message) || 'No se pudo entrar. Revise la conexión e intente de nuevo.');
 }
@@ -213,7 +214,7 @@ function pantallaUsuario(emp, mensaje) {
   });
   const cambiar = h('button.btn.emp-cambiar', { type: 'button', onclick: () => { if (!ocupado) pantallaCodigo({ codigo: emp.codigo }); } }, 'Cambiar de empresa'); // vuelve a los dos botones de empresa, con la actual ya enfocada
   const bloquear = (si) => { ocupado = si; pad.bloquear(si); usuario.disabled = si; cambiar.disabled = si; };
-  // Cuenta regresiva cuando el servidor pide esperar (demora acotada del ingreso, nunca un bloqueo). No borra lo digitado; al llegar a 0 vuelve a habilitar los campos.
+  // Cuenta regresiva cuando el servidor pide esperar (la espera corta y fija tras un PIN equivocado: 1 o 2 segundos, nunca un bloqueo). No borra lo digitado; al llegar a 0 vuelve a habilitar los campos.
   let relojEspera = null;
   function cuentaEspera(seg) {
     if (relojEspera) clearInterval(relojEspera);
@@ -246,7 +247,7 @@ function pantallaUsuario(emp, mensaje) {
       if (!esErrorEsperado(e)) console.error(e);
       // La empresa dejó de existir o de estar habilitada entre el paso 1 y ahora: se vuelve al código con el mensaje
       if (e && (e.motivo === 'empresa_desconocida' || e.motivo === 'empresa_no_habilitada')) { pantallaCodigo({ codigo: emp.codigo, [e.motivo === 'empresa_no_habilitada' ? 'aviso' : 'error']: textoErrorAcceso(e) }); return; }
-      // El servidor pide esperar unos segundos (hubo muchos intentos desde esta conexión o con este usuario): cuenta regresiva, sin borrar el PIN ya escrito
+      // El servidor pide esperar 1 o 2 segundos (hubo un PIN equivocado hace un instante desde esta conexión o con este usuario): cuenta regresiva, sin borrar el PIN ya escrito
       if (e && e.motivo === 'espera') { mostrarEstado(''); cuentaEspera(Math.max(1, Number(e.espera) || 5)); return; }
       pad.limpiar();
       alertar(e);
@@ -376,7 +377,8 @@ function pintarCabecera() {
   iconoPestana(codigoReal);
   const et = cab.querySelector('.estado-turno');
   et.className = 'estado-turno ' + (t ? 'abierto' : 'cerrado');
-  et.textContent = t ? 'Caja abierta desde las ' + new Date(t.abierto_en).toLocaleTimeString('es-CR', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Costa_Rica' }) : 'Caja cerrada';
+  if (t) { et.replaceChildren('Caja abierta ', h('span.est-desde', 'desde las '), new Date(t.abierto_en).toLocaleTimeString('es-CR', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Costa_Rica' })); }
+  else et.textContent = 'Caja cerrada';
   const amb = cab.querySelector('.amb');
   amb.textContent = s.ambiente === 'produccion' ? 'Facturas reales' : 'Modo de pruebas';
   amb.className = 'amb ' + (s.ambiente === 'produccion' ? 'amb-prod' : 'amb-prueba');
@@ -412,6 +414,8 @@ const sinAvisoUbicacion = (t) => String(t || '').replace(/\s*La ubicaci[oó]n de
 function aplicarAlertas(a) {
   app.alertas.datos = a;
   if (!alertaEl) return;
+  // El aviso rojo es solo para administración: la persona de caja no puede resolverlo y no debe verlo (3 nov 2026). A Emil le llega aparte, por el panel.
+  if (!app.admin) { alertaEl.hidden = true; sincronizarAlturas(); document.dispatchEvent(new CustomEvent('app:alertas-cambio', { detail: a })); return; }
   const r = a ? a.rechazados : 0, p = a ? a.pendientes : 0;
   if (!r && !p) { alertaEl.hidden = true; sincronizarAlturas(); document.dispatchEvent(new CustomEvent('app:alertas-cambio', { detail: a })); return; }
   const docs = (n) => (n === 1 ? '1 documento' : n + ' documentos');
@@ -512,8 +516,8 @@ function abrirAyudaSinRed() {
       h('p.ayuda-red-intro', 'Deje esta pantalla abierta. Cuando la conexión vuelva, el aviso amarillo se quita; si tarda, toque «Revisar ahora».'),
       bloque('Qué hacer', [
         'Si el local tiene un segundo internet (los datos de un celular o el otro router), conecte la caja a ese y toque «Revisar ahora».',
-        'Si no hay ninguna forma de conectarse, anote cada venta en el cuaderno de contingencia: hora, productos, monto, forma de pago y, si el cliente pide factura, su cédula y su correo.',
-        'Cuando vuelva la conexión, facture en orden lo que anotó y avise a la persona encargada.',
+        'Si no hay ninguna forma de conectarse, llame a la persona encargada. Solo ella usa el talonario de comprobantes provisionales, si el local lo tiene. No entregue notas escritas a mano: no son comprobantes.',
+        'Cuando vuelva la conexión, la persona encargada emite el comprobante electrónico de cada provisional (el plazo es de 2 días hábiles).',
       ]),
       bloque('Qué NO hacer', [
         'No cobre otra vez una cuenta si no está segura de que no se cobró. Un cobro que iba en camino puede haberse hecho aunque la pantalla no lo muestre.',
@@ -793,8 +797,7 @@ function armarApp(reciente = false) {
   menuEl = h('div.cab-usuario',
     h('button.btn.cab-menu', { type: 'button', 'aria-haspopup': 'true', 'aria-expanded': 'false', 'aria-controls': 'cab-panel', onclick: () => abrirMenu(!menuEl.classList.contains('abierto')) }, 'Menú ▾'),
     h('div#cab-panel.cab-panel',
-      h('span.cab-sesion', 'Sesión de ', h('strong', app.ctx.nombre || app.usuario)),
-      app.admin ? h('button.btn.chico', { type: 'button', onclick: async () => { abrirMenu(false); (await import('./claude_ayuda.js')).abrirPreguntaClaude(app); } }, 'Preguntar a Claude') : null,
+      h('span.cab-sesion', h('span.cab-sesion-pre', 'Sesión de '), h('strong', app.ctx.nombre || app.usuario)),
       h('button.btn.chico', { type: 'button', onclick: () => { abrirMenu(false); cerrarSesion(); } }, 'Cerrar sesión')));
   volverEl = h('button.btn.cab-volver', { type: 'button' });
   inicioEl = h('button.btn.cab-inicio', { type: 'button', onclick: () => subir('inicio') }, 'Inicio');
@@ -809,7 +812,7 @@ function armarApp(reciente = false) {
       // Atajo siempre visible: anular una factura no debe esconderse dentro de otra pantalla. Lleva a «Anular y reimprimir» con el cursor en el buscador.
       h('button.btn.cab-anular', { type: 'button', onclick: irAAnular }, 'Anular factura'),
       menuEl),
-    alertaEl, avisosAdmin ? avisosAdmin.el : null, redEl);
+    alertaEl, avisosAdmin ? avisosAdmin.el : null, avisosAdmin ? avisosAdmin.elReceptor : null, avisosAdmin ? avisosAdmin.elHacienda : null, redEl);
   raiz.append(cab, vista);
   if (window.ResizeObserver) new ResizeObserver(() => sincronizarAlturas()).observe(cab);
   pintarCabecera();

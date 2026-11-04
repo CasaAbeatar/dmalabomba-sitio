@@ -80,6 +80,10 @@
 .mos>*{flex-shrink:0}
 .cajon-btn.mos{justify-content:flex-start;white-space:normal}
 .cajon-btn.mos .mos-nombre{-webkit-line-clamp:3}
+/* Pantalla ancha: el nombre se lee completo (hasta 4 líneas) y el mosaico crece hacia abajo en lugar de cortarlo con «…» (3 nov 2026) */
+@media(min-width:980px){
+  .mos-nombre,.prod-nombre,.cajon-btn.mos .mos-nombre{-webkit-line-clamp:4}
+}
 .cajon-btn[aria-pressed=true]{background:var(--niv1);border-color:var(--niv1);border-top-color:var(--niv1-osc);color:#fff;box-shadow:var(--sombra)}
 .cajon-btn[aria-pressed=true] .mos-num{background:#fff;color:var(--niv1)}
 /* Un producto con opciones parece una pila de tarjetas y queda relleno de ámbar mientras su panel de opciones está abierto: el ojo une los dos */
@@ -87,7 +91,9 @@
 .prod-grupo[aria-pressed=true]{background:var(--niv2);border-color:var(--niv2);border-top-color:var(--niv2-osc);color:#2b1a00;box-shadow:var(--sombra)}
 .prod-grupo[aria-pressed=true] .mos-num{background:#2b1a00;color:#fff}
 .prod-grupo[aria-pressed=true] .prod-precio,.prod-grupo[aria-pressed=true] .prod-opciones{color:#2b1a00}
-.prod-pie{display:flex;justify-content:space-between;align-items:baseline;gap:.3rem;min-height:16px;white-space:nowrap}
+.prod-pie{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:baseline;gap:0 .3rem;min-height:16px} /* si el código y el precio no caben juntos, el precio baja a otra línea en lugar de cortarse */
+.prod-pie>*{min-width:0}
+.prod-pie .prod-precio:only-child,.prod-pie .prod-precio:last-child{margin-left:auto;text-align:right}
 .prod-grupo .prod-pie{justify-content:flex-end}
 .prod-precio{font-variant-numeric:tabular-nums;color:var(--c-osc,var(--rojo-osc));font-weight:700;font-size:.86rem}
 .prod-precio.abierto{color:#8a5a00}
@@ -215,7 +221,6 @@
   .cuentas-bar{flex-wrap:wrap}
   .cuentas-bar>.cuentas-envoltura{flex:1 1 100%}
   .cuentas-bar>.btn{flex:1 1 0}
-  .cuentas-bar>.btn-impresora{flex:0 0 auto;min-width:120px}
 }
 
 /* ---------- Ventana de cuenta nueva / cobro ---------- */
@@ -593,3 +598,40 @@
 .acciones-cuenta .btn.peligro{background:none;border:0;min-height:48px;color:var(--tinta2);text-decoration:underline;font-weight:500;font-size:.9rem}
 .acciones-cuenta .btn.peligro:hover{color:var(--rojo)}
 .pie-cobro .btn-cobrar-aside[disabled]{opacity:1;cursor:default}
+/* Poner en espera: debajo de Cobrar, con otro color (decisión de Emil, 3 nov 2026) */
+.pie-cobro .btn-espera{flex:1 1 100%;width:100%}
+
+/* ---------- Pantalla ancha, pantalla baja y dedos (3 nov 2026) ----------
+   1) Ancho flexible: en la Caja todo (franja, cabecera, avisos y vista) usa el ancho de la pantalla en lugar de pararse a 1400 px con márgenes vacíos.
+      Los mosaicos se reparten solos (auto-fill), así que en monitor grande caben más cajones y productos por fila; la cuenta crece un poco, con tope.
+   2) Alto compacto: en pantallas bajas (POS de 15" y 15,6" a 1366×768) la cabecera y los avisos se adelgazan y el cuerpo puede ser más bajo,
+      para que «Cobrar» quede a la vista sin bajar la página.
+   3) Dedos: ningún mosaico ni botón de la Caja baja de 48 px de alto. */
+body.fx-caja main#vista,
+body.fx-caja .cab-fila,
+body.fx-caja .cab-franja-in,
+body.fx-caja .alerta-in,
+body.fx-caja .sin-red-in{max-width:2200px}
+@media(min-width:980px){
+  body.fx-caja .caja-cuerpo{grid-template-columns:minmax(0,1fr) clamp(480px,26vw,600px)}
+}
+@media(min-width:1500px){
+  .caja-catalogo{--mos-min:136px;--mos-h:60px}
+}
+@media(min-width:1900px){
+  .caja-catalogo{--mos-min:150px;--mos-h:64px}
+}
+.caja-catalogo .mos{min-height:max(var(--mos-h),48px)}
+@media(min-width:980px) and (max-height:800px){
+  body.fx-caja .cab-franja-in{min-height:22px}
+  body.fx-caja .cab-fila{padding-block:.15rem}
+  body.fx-caja .alerta-in{padding-block:.2rem}
+  body.fx-caja .alerta-texto strong{font-size:.92rem;line-height:1.2}
+  body.fx-caja .alerta-detalle{display:none}
+  body.fx-caja .sin-red-in{padding-block:.2rem}
+  body.fx-caja main#vista{padding-block:.5rem}
+  .caja-izq{min-height:420px}
+}
+
+/* En la pantalla de Facturación no va el aviso rojo de Hacienda: no es de quien cobra (decisión de Emil, 3 nov 2026). En las demás pantallas lo ve el administrador. */
+.cabecera[data-vista=facturar] .alerta-cab{display:none}

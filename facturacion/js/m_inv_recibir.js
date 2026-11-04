@@ -1,21 +1,52 @@
 // Por recibir: facturas de proveedores de las DOS empresas con líneas que todavía no entran al inventario (fx_inv_pendientes), y la ventana de cada factura
-// (fx_inv_factura) donde se reciben una o varias líneas a la vez (fx_inv_recibir) o se marcan «No es de inventario» (fx_inv_ignorar) con su «Deshacer».
-// La sugerencia (memoria del proveedor, CABYS) NUNCA recibe sola: la persona marca cada línea «Recibir esta línea» y confirma con el botón de abajo.
+// (fx_inv_factura) donde se reciben las líneas (fx_inv_recibir) o se marcan «No es de inventario» (fx_inv_ignorar).
+// Pantalla rediseñada (3 nov 2026): una fila compacta por factura en la lista y UNA FILA por línea dentro de la factura.
+//  - Lista: facturas agrupadas por proveedor, con filtros y orden que se conservan al entrar y volver. «Recibir las N líneas seguras» recibe sin abrir la factura.
+//  - Factura: las verdes (seguras) se aceptan juntas con un solo botón; las ámbar y rojas se abren en su misma fila para corregir y recibirse una por una.
+// Lo que se escribe en el inventario NO cambió: sigue siendo fx_inv_recibir / fx_inv_ignorar con la misma clave de repetición por intención.
+// Rótulos: «Categoría» = comida preparada, unitarios o suministros (el tratamiento en inventario); «Rubro» = Lácteos y quesos, Abarrotes secos, etc.
 // Una factura que Contable o Hacienda rechazaron no se puede recibir (puede_recibir = false): solo se puede marcar «No es de inventario».
-import { h, money, num, fechaHora, horaCorta, debounce, campoBusqueda, sumaDias } from './util.js';
+import { h, money, money0, num, fechaHora, horaCorta, debounce, campoBusqueda, sumaDias } from './util.js';
 import { inv, cant, dinero } from './api_inventarios.js';
+import { debeGuardarAlias } from './invclave.js';
 import { revisarConversion, unidadReal } from './inv_sentido.js';
 const uFac = (l) => unidadReal(l.cantidad, l.unidad).unidad; // «Unid» con decimales es peso: se muestra y se usa como kg
 import {
   ventana, dialogo, cargando, falla, vacio, aviso, cantTxt, costoTxt, unidadTxt, dma, diaTxt, plural, empresaChip, numFactura, proveedorTxt, tipoDocTxt,
-  accionSegura, botonSeguro, rotular, repetidaTxt, campoCantidad, leerCantidad, leerMonto, selectUbicacion, nombreUbicacion, elegirArticulo, opcionDeArticulo,
-  enfocar, toastOk, toastMal, norm, poner, ymdCR, proveedorPartes, GRUPOS, grupoDe, esSimple } from './m_inv_comun.js';
+  accionSegura, botonSeguro, rotular, repetidaTxt, campoCantidad, leerCantidad, leerMonto, selectUbicacion, elegirArticulo, opcionDeArticulo,
+  enfocar, toastOk, toastMal, norm, poner, ymdCR, proveedorPartes, GRUPOS, grupoDe } from './m_inv_comun.js';
+
+/* =====================================================================================================================
+   Ajustes y ganchos (lo que el agente de datos entrega después)
+   ===================================================================================================================== */
+// Banda costo/precio ÚNICA: la fija la base (fact.inv_config: costo_precio_min y costo_precio_max) y llega en fx_inv_catalogos().config. No hay valor de respaldo en la pantalla:
+// si la base no la trae, la pantalla no juzga el costo contra el precio (se muestra la relación sin decir «normal» o «fuera de lo normal»).
+const bandaCostoPrecio = (cat) => {
+  const c = (cat && cat.config) || {}, mn = Number(c.costo_precio_min), mx = Number(c.costo_precio_max);
+  return Number.isFinite(mn) && Number.isFinite(mx) && mn > 0 && mx > mn ? { min: mn, max: mx } : null;
+};
+
+// Diccionario de siglas de la IA (fact.ia_diccionario). La propuesta de la IA trae ia.siglas = [{ id, sigla, significado, confirmado }] (fx_ia_propuestas, solo las del proveedor que aparecen en la línea).
+// «Confirmar» marca la sigla como confirmada por Emil, «Corregir» guarda el significado correcto (y la confirma) y «No es correcta» la rechaza: la IA deja de usarla.
+const DICCIONARIO = {
+  confirmar: (s) => inv.diccionarioConfirmar(s.id),
+  corregir: (s, significado) => inv.diccionarioCorregir(s.id, significado),
+  rechazar: (s) => inv.diccionarioRechazar(s.id),
+  deshacer: (s) => inv.diccionarioDeshacer(s.id),
+};
+const siglasDe = (ia) => {
+  if (!ia) return [];
+  const bruto = Array.isArray(ia.siglas) ? ia.siglas : [];
+  return bruto.filter((s) => s && s.id && s.sigla && s.significado && !s.confirmado && !s.rechazada);
+};
 
 // Estado contable (contrato 3.2) a color: verde aceptada, ámbar con aviso, rojo no entra
 const CLASE_ESTADO = { aceptada: 'ok', parcial: 'espera', plazo_vencido: 'espera', rechazada: 'mal', rechazo_en_tramite: 'mal', rechazada_por_hacienda: 'mal' };
 export const chipContable = (ec) => (ec ? h('span.chip.inv-contable' + (CLASE_ESTADO[ec.estado] ? '.' + CLASE_ESTADO[ec.estado] : ''), 'Contable: ' + (ec.texto || 'Sin dato')) : null);
 const FUENTES = {
   memoria: 'Lo mismo que se usó la vez pasada con este proveedor',
+  alias: 'Otro nombre que ya se le conoce a este artículo (alias guardado)',
+  nombre: 'Es el mismo nombre de un artículo del inventario (sin contar mayúsculas, tildes ni puntuación)',
   memoria_cabys: 'Con este proveedor y este CABYS se usó este artículo (revise la conversión)',
   articulo_cabys: 'Es el único artículo con este mismo CABYS',
   cabys: 'Por su CABYS',
@@ -24,6 +55,52 @@ const FUENTES = {
 // Unidad de la factura (Hacienda) a la del inventario, para proponerla al crear un artículo nuevo
 const UNIDAD_DE_FACTURA = { kg: 'kg', g: 'g', l: 'litro', lt: 'litro', ml: 'ml', unid: 'unidad', und: 'unidad', un: 'unidad', caja: 'caja', paq: 'paquete', bolsa: 'bolsa', lata: 'lata', botella: 'botella' };
 const unidadSugerida = (u) => UNIDAD_DE_FACTURA[norm(u).replace(/\./g, '')] || 'unidad';
+// El artículo general de comida preparada y suministros se llama «Rubro (en colones)»: en pantalla el dinero va con ₡, nunca con la palabra colones al lado
+const limpiaNombre = (n) => String(n || '').replace(/\s*\(en colones\)\s*/i, '').trim();
+// Cantidad con su unidad; si la unidad es el colón es dinero y se escribe con ₡
+const cantR = (n, unidad) => (unidad === 'colon' ? money(n) : cantTxt(n, unidad));
+
+// Decidir un enlace de verdad guarda su alias (solo administración): el texto del proveedor queda como otra forma de nombrar ese artículo, para ese proveedor.
+// No se guarda alias si el texto solo difiere del nombre del artículo en mayúsculas, tildes, puntuación o espacios (eso es el mismo nombre, la base lo compara normalizado),
+// ni si el sistema ya lo conocía. Es un efecto secundario: si falla, la recepción ya quedó hecha y no se avisa como error.
+async function guardarAliases(ctx, f, infos) {
+  if (!ctx.esAdmin) return 0;
+  let n = 0;
+  for (const a of infos.filter((x) => x && debeGuardarAlias(x))) {
+    try { await inv.aliasGuardar({ descripcion: a.detalle, proveedor_cedula: f.proveedor_cedula || null, articulo_id: a.articuloId, factor: a.factor > 0 && a.factor !== 1 ? String(a.factor) : null, origen: 'decision', confirmado: true }); n++; }
+    catch { /* el alias es una ayuda para la próxima vez; nada que reintentar ahora */ }
+  }
+  return n;
+}
+
+/* ---------- Lector de presentación (empaque, peso, volumen) a partir del texto de la factura ---------- */
+// Esta lectura es solo para MOSTRAR y no decide nada: la conversión y los factores los lee la base con fact.inv_leer_presentacion (la misma regla que usa la IA).
+// «GASEOSA LATA 355ML CAJA X24» -> { nombre: 'Gaseosa lata', texto: '355 mL · caja de 24' }
+const PEQUENAS = new Set(['de', 'la', 'el', 'en', 'con', 'sin', 'por', 'los', 'las', 'una', 'uno', 'al', 'del', 'para', 'y']);
+export function leerPresentacion(desc, unidadFactura = '') {
+  let t = ' ' + String(desc || '').replace(/\s+/g, ' ').trim() + ' ';
+  const partes = [];
+  const quita = (re, formato) => { const m = t.match(re); if (!m) return null; t = t.replace(re, ' '); const p = formato(m); if (p) partes.push(p); return m; };
+  const decimal = (s) => String(s).replace(',', '.');
+  quita(/(?<![\w.])(\d+(?:[.,]\d+)?)\s?(ml|cc|lts?|litros?|l)\b\.?/i, (m) => { const u = /^(ml|cc)$/i.test(m[2]) ? 'mL' : 'L'; return num(decimal(m[1]), 3) + ' ' + u; });
+  quita(/(?<![\w.])(\d+(?:[.,]\d+)?)\s?(kgs?|kilos?|grs?|g|gramos?|lbs?|libras?|oz)\b\.?/i, (m) => { const u = /^(kg|kilo)/i.test(m[2]) ? 'kg' : /^(g|gr|gramo)/i.test(m[2]) ? 'g' : /^(lb|libra)/i.test(m[2]) ? 'lb' : 'oz'; return num(decimal(m[1]), 3) + ' ' + u; });
+  let pack = null;
+  const sustantivo = (n) => { const base = (String(unidadFactura) + ' ' + String(desc || '')); return (/\bcaj|\bcj\b/i.test(base) ? 'caja' : /\bbols/i.test(base) ? 'bolsa' : /\bfard|\bbult/i.test(base) ? 'bulto' : /\bpaq/i.test(base) ? 'paquete' : 'empaque') + ' de ' + n; };
+  const m1 = quita(/(?<![\w.])(?:x|por)\s?(\d{1,3})(?:\s?(?:u|uds?|unid\w*|und))?(?![\w])/i, (m) => { pack = sustantivo(m[1]); return ''; })
+    || quita(/(?<![\w.])(\d{1,3})\s?(?:u|uds?|unid\w*|und)\b\.?/i, (m) => { pack = sustantivo(m[1]); return ''; })
+    || quita(/\/\s?(\d{2,3})(?!\d)/, (m) => { pack = sustantivo(m[1]); return ''; });
+  if (m1 && pack) partes.push(pack);
+  t = t.replace(/\b(caja|cj|bolsa|fardo|bulto|paquete)\b\s*$/i, ' ').replace(/[-/,.\s]+$/g, ' ').replace(/^[-/,.\s]+/g, ' ').replace(/\s+/g, ' ').trim();
+  const nombre = t.split(' ').filter(Boolean).map((w, i) => {
+    const bajo = w.toLowerCase();
+    if (w.length <= 3 && w === w.toUpperCase() && /[A-ZÁÉÍÓÚÑ]/.test(w) && !PEQUENAS.has(bajo)) return w; // siglas cortas (CC, DPR) se dejan como vienen
+    return i === 0 ? bajo.charAt(0).toUpperCase() + bajo.slice(1) : bajo;
+  }).join(' ');
+  return { nombre: nombre || String(desc || '').trim(), texto: partes.join(' · ') };
+}
+
+// Una frase corta para la fila: la primera oración, sin pasar de unos 110 caracteres
+const frase = (t) => { const s = String(t || '').replace(/\s+/g, ' ').trim(); const p = s.split(/(?<=[.!?])\s/)[0] || s; return p.length > 110 ? p.slice(0, 107).trimEnd() + '…' : p; };
 
 export async function abrir(ctx, id, pedido = {}) {
   if (id === 'factura' && pedido.clave) return abrirFactura(ctx, pedido.clave);
@@ -33,43 +110,55 @@ export async function abrir(ctx, id, pedido = {}) {
 /* =====================================================================================================================
    Lista de facturas por recibir
    ===================================================================================================================== */
-// Al entrar a una empresa, «Por recibir» abre con las facturas de ESA empresa; «Las dos empresas» queda a un toque. La última elección se recuerda por empresa mientras la página siga abierta.
-const FILTRO_RECUERDO = new Map();
-let VISTA_RECUERDO = 'fecha'; // cómo se ordena la lista: por fecha o por proveedor (se recuerda mientras la página siga abierta)
+// Los filtros y el orden se guardan al tocarlos (sessionStorage; si el navegador no deja, en memoria): al entrar a una factura y volver, o al salir y volver a entrar, la lista está como se dejó.
+const LLAVE_LISTA = 'fx.inv.recibir.lista.v1';
+let RESPALDO_LISTA = {};
+const leerLista = () => { try { const t = sessionStorage.getItem(LLAVE_LISTA); const o = t ? JSON.parse(t) : null; if (o && typeof o === 'object') return o; } catch { /* sin almacenamiento */ } return RESPALDO_LISTA; };
+const guardarLista = (o) => { RESPALDO_LISTA = o; try { sessionStorage.setItem(LLAVE_LISTA, JSON.stringify(o)); } catch { /* sin almacenamiento: la lista funciona igual */ } };
+const PAGINA = 30; // facturas que se pintan de una vez; «Ver más facturas» agrega otras tantas
+const ESTADOS = [['todas', 'Todas, por etapas'], ['verde', 'Solo verdes'], ['ambar', 'Solo ámbar'], ['rojo', 'Solo rojas'], ['rechazadas', 'Rechazadas (no entran)']];
+const ORDENES = [['proveedor', 'Por proveedor'], ['recientes', 'Más recientes primero'], ['lineas', 'Todas las líneas']];
+const dm = (x) => { const d = ymdCR(x); return d ? d.split('-').reverse().slice(0, 2).join('/') : ''; };
+
 async function abrirLista(ctx) {
   const cat = ctx.cat;
   const propia = (cat.empresas || []).some((e) => e.id === ctx.app.socId) ? ctx.app.socId : null;
-  const est = { vista: VISTA_RECUERDO, sociedad: FILTRO_RECUERDO.has(propia) ? FILTRO_RECUERDO.get(propia) : propia, q: '', datos: null, otra: null, otraVieja: true };
+  const g = leerLista();
+  const empresaGuardada = 'sociedad' in g ? (g.sociedad === 'todas' ? null : (cat.empresas || []).some((e) => e.id === g.sociedad) ? g.sociedad : propia) : propia;
+  const est = {
+    sociedad: empresaGuardada, q: String(g.q || ''), proveedor: String(g.proveedor || ''),
+    estado: ESTADOS.some(([v]) => v === g.estado) ? g.estado : 'todas', orden: g.orden === 'recientes' || g.orden === 'lineas' ? g.orden : 'proveedor', sel: new Map(), mostrarL: 120,
+    mostrar: Number(g.mostrar) >= PAGINA ? Number(g.mostrar) : PAGINA, datos: null, otra: null, otraVieja: true,
+  };
+  const persistir = () => guardarLista({ sociedad: est.sociedad || 'todas', q: est.q, proveedor: est.proveedor, estado: est.estado, orden: est.orden, mostrar: est.mostrar });
   let vivo = true, seq = 0;
-  const buscar = h('input.campo', { type: 'search', placeholder: 'Proveedor, cédula, número o artículo', 'aria-label': 'Buscar factura por recibir', autocomplete: 'off' });
-  const filtroEmp = h('div.inv-segmento', { role: 'group', 'aria-label': 'De qué empresa' });
-  const filtroVista = h('div.inv-segmento', { role: 'group', 'aria-label': 'Cómo ordenar la lista' });
+  const buscar = h('input.campo', { type: 'search', placeholder: 'Proveedor, cédula, número o artículo', 'aria-label': 'Buscar factura por recibir', autocomplete: 'off', value: est.q });
+  const filtroEmp = h('div.inv-segmento.rc-seg', { role: 'group', 'aria-label': 'De qué empresa' });
+  const selProv = h('select.campo', { 'aria-label': 'Proveedor', onchange: () => { est.proveedor = selProv.value; est.mostrar = PAGINA; persistir(); pintar(); } });
+  const selEstado = h('select.campo', { 'aria-label': 'Estado de las facturas', onchange: () => { est.estado = selEstado.value; est.mostrar = PAGINA; persistir(); pintar(); } },
+    ...ESTADOS.map(([v, t]) => h('option', { value: v, selected: v === est.estado }, t)));
+  const selOrden = h('select.campo', { 'aria-label': 'Cómo ordenar la lista', onchange: () => { est.orden = selOrden.value; persistir(); pintar(); } },
+    ...ORDENES.map(([v, t]) => h('option', { value: v, selected: v === est.orden }, t)));
+  selEstado.value = est.estado; selOrden.value = est.orden;
   const deshechos = h('div.inv-deshechos', { 'aria-live': 'polite' });
-  const lista = h('div.inv-fac-lista', cargando('Buscando facturas por recibir…'));
-  const resumen = h('div.inv-resumen');
-  const cab = h('div.inv-ventana-cab');
+  const lista = h('div.inv-fac-lista.rc-lista', cargando('Buscando facturas por recibir…'));
+  const resumen = h('p.rc-resumen', { 'aria-live': 'polite' });
   const otraNota = h('div.inv-otra-nota');
+  const campo = (txt, ctl) => h('label.etq.rc-filtro', h('span', txt), ctl);
   const contenido = [
-    cab,
-    h('div.inv-filtros', filtroEmp, filtroVista, h('label.etq.inv-buscar', 'Buscar', campoBusqueda(buscar, () => { est.q = ''; cargar(); }))),
-    otraNota, deshechos, lista, resumen];
+    h('div.rc-filtros', filtroEmp,
+      h('div.rc-filtros-fila', h('label.etq.inv-buscar.rc-filtro.rc-f-buscar', h('span', 'Buscar'), campoBusqueda(buscar, () => { est.q = ''; est.mostrar = PAGINA; persistir(); cargar(); })), campo('Proveedor', selProv), campo('Semáforo', selEstado), campo('Orden', selOrden))),
+    resumen, otraNota, deshechos, lista];
   const alCambio = () => { if (vivo) { est.otraVieja = true; cargar(); } };
-  ventana({ titulo: 'Por recibir', contenido, alCerrar: () => { vivo = false; document.removeEventListener('inv:cambio', alCambio); } });
+  ventana({ titulo: 'Por recibir', contenido, alCerrar: () => { vivo = false; document.removeEventListener('inv:cambio', alCambio); } }).el.classList.add('rc-vent');
   document.addEventListener('inv:cambio', alCambio);
-  buscar.addEventListener('input', debounce(() => { est.q = buscar.value.trim(); cargar(); }, 350));
+  if (est.q) buscar.dispatchEvent(new Event('input'));
+  buscar.addEventListener('input', debounce(() => { est.q = buscar.value.trim(); est.mostrar = PAGINA; persistir(); cargar(); }, 350));
 
   function elegir(id) {
     if (est.sociedad === id) return;
-    est.sociedad = id; FILTRO_RECUERDO.set(propia, id);
-    est.datos = null; pintarFiltro(); cargar();
-  }
-  function elegirVista(v) {
-    if (est.vista === v) return;
-    est.vista = v; VISTA_RECUERDO = v; pintarFiltro(); if (est.datos) pintar();
-  }
-  function pintarFiltro() {
-    poner(filtroVista, ...[['fecha', 'Ver por fecha'], ['proveedor', 'Ver por proveedor']].map(([v, t]) => h('button.btn.inv-seg', { type: 'button', 'aria-pressed': String(est.vista === v), onclick: () => elegirVista(v) }, t)));
-    pintarEmpresas();
+    est.sociedad = id; est.proveedor = ''; est.mostrar = PAGINA; persistir();
+    est.datos = null; pintarEmpresas(); cargar();
   }
   function pintarEmpresas() {
     const b = (id, t) => h('button.btn.inv-seg', { type: 'button', 'aria-pressed': String(est.sociedad === id), onclick: () => elegir(id) }, t);
@@ -78,10 +167,6 @@ async function abrirLista(ctx) {
     // La empresa de la sesión va primero; «Las dos empresas» después
     const otras = empresas.filter((e) => e.id !== propia);
     poner(filtroEmp, ...(mi ? [b(mi.id, mi.nombre), b(null, 'Las dos empresas'), ...otras.map((e) => b(e.id, e.nombre))] : [b(null, 'Las dos empresas'), ...empresas.map((e) => b(e.id, e.nombre))]));
-    const e = empresas.find((x) => x.id === est.sociedad);
-    poner(cab, h('p', 'Facturas de proveedores a nombre de ',
-      ...(e ? [h('strong', e.nombre)] : empresas.flatMap((x, i) => [i ? ' y de ' : '', h('strong', x.nombre)])),
-      ' que traen líneas por entrar a la bodega. Lo que llegó hoy va primero.'));
   }
   // Con una sola empresa a la vista, avisa cuántas hay de la otra para que el número del inicio de Inventarios (las dos) cuadre
   function pintarOtra() {
@@ -100,80 +185,224 @@ async function abrirLista(ctx) {
     } catch (e) {
       if (!vivo || mia !== seq) return;
       poner(lista, falla(e, () => { est.datos = null; cargar(); }, 'No se pudieron traer las facturas por recibir'));
-      poner(resumen, );
+      poner(resumen);
     }
   }
+
+  /* ---- Lo que se sabe de cada línea sin abrir la factura (para el semáforo de la fila y el botón «Recibir las N líneas seguras») ---- */
+  // Es un cálculo rápido con la sugerencia que ya viene en la lista; al recibir, cada línea pasa por su semáforo completo (incluida la revisión de Claude) y lo que no lo pase se queda sin recibir.
+  const pendiente = (l) => !l.estado || l.estado === 'pendiente';
+  const grupoDeRubro = (id) => (cat.categorias || []).find((x) => x.id === id)?.grupo || '';
+  function nivelRapido(l) {
+    const sg = l.sugerencia || {};
+    if (sg.no_inventario) return 'rojo';
+    if (sg.fuente === 'memoria' && sg.articulo_id && Number(sg.factor) > 0) {
+      if (sg.unidad === 'colon') return 'verde';
+      return revisarConversion({ descripcion: l.descripcion, subtotal: l.subtotal_crc, cantidad: l.cantidad, factorActual: Number(sg.factor) }).aviso ? 'ambar' : 'verde';
+    }
+    return sg.categoria_id || sg.articulo_id ? 'ambar' : 'rojo';
+  }
+  // Seguras: las verdes y la comida preparada o suministro con rubro sugerido (entran por su valor: no hay conversión que revisar)
+  const esSegura = (l) => { const n = nivelRapido(l); const sg = l.sugerencia || {}; return n === 'verde' || (n === 'ambar' && !!sg.categoria_id && grupoDeRubro(sg.categoria_id) !== 'unitario' && sg.fuente !== 'servicio'); };
+  const infoFactura = (f) => {
+    const ls = (f.lineas || []).filter(pendiente), puede = f.puede_recibir !== false;
+    const niv = { verde: 0, ambar: 0, rojo: 0 };
+    ls.forEach((l) => { niv[nivelRapido(l)]++; });
+    return { ls, puede, n: ls.length, niv, seguras: puede ? ls.filter(esSegura).length : 0, todasNoInv: ls.length > 0 && ls.every((l) => (l.sugerencia || {}).no_inventario) };
+  };
+  // Etapas por factura: primero se ven las verdes; al aceptarlas aparecen las ámbar; al resolverlas, las rojas
+  const nivelEtapa = (l) => { const v = nivelRapido(l); return v === 'verde' ? 'verde' : v === 'ambar' ? 'ambar' : 'rojo'; };
+  function etapaDe(inf) {
+    const forzado = ['verde', 'ambar', 'rojo'].includes(est.estado) ? [est.estado] : ['verde', 'ambar', 'rojo']; // con un color escogido solo se ve ese color
+    for (const nivel of forzado) {
+      const ls = inf.ls.filter((l) => nivelEtapa(l) === nivel);
+      if (ls.length) return { nivel, ls, recibibles: nivel === 'rojo' ? [] : ls.filter(esSegura) };
+    }
+    return { nivel: null, ls: [], recibibles: [] };
+  }
+  const claveProv = (f) => f.proveedor_cedula || f.proveedor_nombre || 'sin dato';
+
   function pintar() {
-    const d = est.datos, facs = d.facturas || [], hoy = d.hoy || ctx.hoy;
-    const deHoy = facs.filter((f) => ymdCR(f.llego || f.fecha) === hoy);
-    const antes = facs.filter((f) => !deHoy.includes(f));
+    if (!est.datos) return;
+    const d = est.datos, todas = d.facturas || [];
+    const scroller = lista.closest('.modal-cuerpo'), yAntes = scroller ? scroller.scrollTop : 0;
+    const infos = new Map(todas.map((f) => [f.clave, infoFactura(f)]));
+    // Proveedores para el filtro (de lo que se ve; con cuántas facturas)
+    const provs = new Map();
+    todas.forEach((f) => { const k = claveProv(f); if (!provs.has(k)) provs.set(k, { nombre: proveedorTxt(f.proveedor_nombre), n: 0 }); provs.get(k).n++; });
+    if (est.proveedor && !provs.has(est.proveedor)) est.proveedor = '';
+    poner(selProv, h('option', { value: '' }, 'Todos los proveedores'), ...[...provs.entries()].sort((a, b) => a[1].nombre.localeCompare(b[1].nombre, 'es')).map(([k, p]) => h('option', { value: k }, p.nombre + ' (' + p.n + ')')));
+    selProv.value = est.proveedor;
+    const pasa = (f) => {
+      const i = infos.get(f.clave);
+      if (est.proveedor && claveProv(f) !== est.proveedor) return false;
+      if (['verde', 'ambar', 'rojo'].includes(est.estado)) return i.puede && i.ls.some((l) => nivelEtapa(l) === est.estado);
+      if (est.estado === 'rechazadas') return !i.puede;
+      return true;
+    };
+    const facs = todas.filter(pasa);
+    const totalFacs = Number((d.resumen || {}).facturas) || 0;
+    const totSeg = facs.reduce((s, f) => s + infos.get(f.clave).seguras, 0), totLin = facs.reduce((s, f) => s + infos.get(f.clave).n, 0);
+    poner(resumen, h('strong', plural(facs.length, 'factura por recibir', 'facturas por recibir')), ' · ' + plural(totLin, 'línea', 'líneas') + ' · ' + plural(totSeg, 'línea segura', 'líneas seguras'),
+      d.truncado ? ' · se muestran las ' + todas.length + ' más recientes' + (totalFacs > todas.length ? ' de ' + totalFacs : '') + (est.sociedad ? '; use el buscador para ver las demás' : '; use el buscador o escoja una empresa para ver las demás') : '',
+      h('span.tenue.inv-chico.rc-leyenda', ' Verde: segura. Ámbar: revisar. Rojo: falta algo o no es de inventario.'));
     if (!facs.length) {
-      poner(lista, vacio(est.q ? 'Ninguna factura por recibir coincide con «' + est.q + '».' : 'No hay facturas por recibir. Todo lo que llegó ya se recibió o se marcó «No es de inventario».'));
+      poner(lista, vacio(est.q || est.proveedor || est.estado !== 'todas' ? 'Ninguna factura por recibir coincide con lo que escogió. Cambie el filtro o el buscador.' : 'No hay facturas por recibir. Todo lo que llegó ya se recibió o se marcó «No es de inventario».'));
     } else {
-      // Si hay más de las que se muestran, el aviso va ARRIBA y el contador dice «100 de 119» (antes quedaba al final de la lista, tras 100 tarjetas)
-      const totalFacs = Number((d.resumen || {}).facturas) || 0;
-      const cuenta = (n) => String(n) + (d.truncado && totalFacs > facs.length ? ' de ' + totalFacs : '');
-      if (est.vista === 'proveedor') {
-        poner(lista, d.truncado ? aviso('espera', h('p', 'Se muestran las ' + facs.length + ' facturas más recientes' + (Number((d.resumen || {}).facturas) > facs.length ? ' de ' + (d.resumen || {}).facturas : '') + '. Use el buscador para ver las demás.')) : null, ...seccionesPorProveedor(facs));
-      } else poner(lista,
-        d.truncado ? aviso('espera', h('p', 'Se muestran las ' + facs.length + ' más recientes' + (totalFacs > facs.length ? ' de ' + totalFacs : '') + (est.sociedad ? '. Use el buscador para ver las demás.' : '. Use el buscador o escoja una empresa para ver las demás.'))) : null,
-        deHoy.length ? h('h3.inv-grupo-tit', 'Llegaron hoy', h('span.inv-cuenta', String(deHoy.length))) : null, ...deHoy.map(tarjeta),
-        antes.length ? h('h3.inv-grupo-tit', deHoy.length ? 'De días anteriores' : 'Facturas por recibir', h('span.inv-cuenta', deHoy.length ? String(antes.length) : cuenta(antes.length))) : null, ...antes.map(tarjeta));
+      const conEmpresa = !est.sociedad;
+      const filaDe = (f, conProveedor) => fila(f, infos.get(f.clave), conProveedor, conEmpresa);
+      let cuerpoLista, restan = 0;
+      if (est.orden === 'lineas') {
+        cuerpoLista = [vistaLineas(facs, infos, conEmpresa)];
+      } else if (est.orden === 'recientes') {
+        const orden = [...facs].sort((a, b) => String(b.llego || b.fecha).localeCompare(String(a.llego || a.fecha)));
+        cuerpoLista = orden.slice(0, est.mostrar).map((f) => filaDe(f, true));
+        restan = Math.max(0, orden.length - est.mostrar);
+      } else {
+        // Por proveedor: lo decidido en la primera factura de un proveedor ayuda a las siguientes. Un proveedor con varias facturas lleva su renglón de título;
+        // el que tiene una sola muestra su nombre en la misma fila (así una factura sigue siendo UNA fila).
+        const grupos = agrupar(facs, infos);
+        const cuerpoG = []; let pintadas = 0;
+        const normales = grupos.filter((x) => !x.aparte), aparte = grupos.filter((x) => x.aparte);
+        const poneGrupos = (gs, titulo) => {
+          let tituloPuesto = false;
+          for (const gr of gs) {
+            if (pintadas >= est.mostrar) break;
+            if (!tituloPuesto && titulo) { cuerpoG.push(h('h3.rc-sep', titulo, h('span.inv-cuenta', String(gs.length)))); tituloPuesto = true; }
+            if (gr.facturas.length > 1) cuerpoG.push(h('h3.rc-prov-cab', h('strong', proveedorTxt(gr.nombre)), h('span.rc-prov-datos', plural(gr.facturas.length, 'factura', 'facturas') + ' · ' + plural(gr.lineas, 'línea', 'líneas')), gr.aparte ? h('span.chip', 'Casi nunca es de inventario') : null));
+            gr.facturas.forEach((f) => cuerpoG.push(filaDe(f, gr.facturas.length === 1)));
+            pintadas += gr.facturas.length;
+          }
+        };
+        poneGrupos(normales, normales.length && aparte.length ? 'Proveedores de mercadería' : '');
+        poneGrupos(aparte, 'Ferretería, combustible y servicios');
+        cuerpoLista = cuerpoG;
+        restan = Math.max(0, facs.length - pintadas);
+      }
+      poner(lista, est.orden === 'lineas' ? cuerpoLista[0] : h('div.rc-filas', cuerpoLista), restan ? h('button.btn.rc-pag', { type: 'button', onclick: () => { est.mostrar += PAGINA; persistir(); pintar(); } }, 'Ver ' + plural(Math.min(PAGINA, restan), 'factura más', 'facturas más') + ' (quedan ' + restan + ')') : null);
     }
-    const r = d.resumen || {};
-    poner(resumen, h('h3', 'Resumen de lo pendiente'),
-      h('ul.inv-datos-lista',
-        h('li', h('span', 'Facturas con líneas por recibir'), h('strong.cifra', num(r.facturas || 0, 0))),
-        h('li', h('span', 'Líneas que se pueden recibir'), h('strong.cifra', num(r.lineas_por_recibir || 0, 0))),
-        r.facturas_rechazadas ? h('li', h('span', 'Facturas rechazadas (no entran)'), h('strong.cifra', num(r.facturas_rechazadas, 0))) : null,
-        ...(r.por_empresa || []).map((e) => h('li', empresaChip(e.sociedad_nombre, codigoEmp(cat, e.sociedad_id)), h('strong.cifra', plural(e.facturas, 'factura', 'facturas') + ' · ' + plural(e.lineas, 'línea', 'líneas'))))),
-      h('p.tenue.inv-chico', 'Se toman en cuenta las facturas emitidas desde el ' + dma(d.desde) + '.'));
+    if (scroller && yAntes) scroller.scrollTop = yAntes;
   }
-  // Vista por proveedor: una sección por proveedor con sus facturas; lo que casi nunca es de inventario (ferretería, combustible, servicios) va al final
+  /* ---- Vista «Todas las líneas»: cada línea de todas las facturas, las verdes primero; se marcan y se reciben juntas ---- */
+  const ORD_NIVEL = { verde: 0, segura: 1, ambar: 2, rojo: 3 };
+  const nivelVista = (l) => { const n = nivelRapido(l); return n === 'verde' ? 'verde' : (esSegura(l) ? 'segura' : n); };
+  function vistaLineas(facs, infos, conEmpresa) {
+    const todas = [];
+    for (const f of facs) { const inf = infos.get(f.clave); if (!inf.puede) continue; for (const l of inf.ls) { const v = nivelVista(l); if (['verde', 'ambar', 'rojo'].includes(est.estado) && nivelEtapa(l) !== est.estado) continue; todas.push({ f, l, v }); } }
+    todas.sort((a, b) => ORD_NIVEL[a.v] - ORD_NIVEL[b.v] || String(a.f.proveedor_nombre).localeCompare(String(b.f.proveedor_nombre), 'es') || String(a.f.consecutivo).localeCompare(String(b.f.consecutivo)) || a.l.linea - b.l.linea);
+    const marcada = (f, l) => !!est.sel.get(f.clave)?.has(l.linea);
+    const poner1 = (f, l, si) => { let s = est.sel.get(f.clave); if (!s) est.sel.set(f.clave, (s = new Set())); si ? s.add(l.linea) : s.delete(l.linea); if (!s.size) est.sel.delete(f.clave); };
+    const marcarSegun = (ok) => { est.sel.clear(); let ultima = -1; todas.forEach((x, i) => { if (ok(x.v)) { poner1(x.f, x.l, true); ultima = i; } }); est.mostrarL = Math.max(est.mostrarL, ultima + 1); pintar(); }; // toda línea marcada queda a la vista
+    const nMarc = [...est.sel.values()].reduce((a, s) => a + s.size, 0);
+    const totMarc = todas.filter((x) => marcada(x.f, x.l)).reduce((a, x) => a + (Number(x.l.subtotal_crc) || 0), 0);
+    const cuenta = { verde: 0, segura: 0, ambar: 0, rojo: 0 }; todas.forEach((x) => { cuenta[x.v]++; });
+    const barra = h('div.rc-sel-barra',
+      h('div.rc-sel-botones',
+        h('button.btn', { type: 'button', disabled: !cuenta.verde, onclick: () => marcarSegun((v) => v === 'verde') }, 'Marcar las ' + cuenta.verde + ' verdes'),
+        h('button.btn', { type: 'button', disabled: !(cuenta.verde + cuenta.segura), onclick: () => marcarSegun((v) => v === 'verde' || v === 'segura') }, 'Marcar verdes y ámbar seguras (' + (cuenta.verde + cuenta.segura) + ')'),
+        h('button.btn', { type: 'button', disabled: !nMarc, onclick: () => { est.sel.clear(); pintar(); } }, 'Quitar las marcas')),
+      h('p.tenue.inv-chico.rc-sel-leyenda', 'Se marcan solo las que se pueden recibir sin revisar. Las ámbar con duda y las rojas se abren con «Revisar».'));
+    const hasta = Math.min(todas.length, est.mostrarL);
+    const filas = todas.slice(0, hasta).map(({ f, l, v }) => {
+      const sg = l.sugerencia || {};
+      const destino = sg.articulo ? limpiaNombre(sg.articulo) : (sg.categoria ? 'rubro «' + sg.categoria + '»' : 'sin artículo');
+      const puedeMarcar = v === 'verde' || v === 'segura';
+      const caja = puedeMarcar ? h('input', { type: 'checkbox', checked: marcada(f, l), 'aria-label': 'Marcar la línea ' + l.linea + ' de la factura N.° ' + numFactura(f.consecutivo), onchange: (e) => { poner1(f, l, e.target.checked); pintar(); } }) : h('span.rc-sel-vacio');
+      return h('div.rc-lin' + (marcada(f, l) ? '.marcada' : ''),
+        caja, h('i.rc-lin-punto.' + (v === 'segura' ? 'ambar' : v), { 'aria-hidden': 'true', title: v === 'verde' ? 'Verde' : v === 'segura' ? 'Ámbar segura' : v === 'ambar' ? 'Ámbar: revisar' : 'Roja' }),
+        h('span.rc-lin-doc', h('strong', proveedorTxt(f.proveedor_nombre)), h('small', 'N.° ' + numFactura(f.consecutivo) + ' · línea ' + l.linea + (conEmpresa ? ' · ' + (f.sociedad_nombre || '') : ''))),
+        h('span.rc-lin-art', h('span.rc-seg-desc', l.descripcion || ''), h('span.rc-seg-flecha', { 'aria-hidden': 'true' }, '→'), h('span.rc-seg-art', destino)),
+        h('span.rc-seg-cant.cifra', num(Number(l.cantidad) || 0, 3)),
+        h('span.rc-lin-imp.cifra', money0(l.subtotal_crc)),
+        puedeMarcar ? h('span.rc-lin-acc') : h('button.btn.chico', { type: 'button', onclick: () => abrirFactura(ctx, f.clave, { previa: f }) }, 'Revisar'));
+    });
+    const btnRecibir = h('button.btn.primario.grande', { type: 'button', disabled: !nMarc }, nMarc ? 'Recibir ' + (nMarc === 1 ? 'la línea marcada' : 'las ' + nMarc + ' líneas marcadas') + ' · ' + money0(totMarc) : 'Marque las líneas que quiere recibir');
+    btnRecibir.addEventListener('click', async () => {
+      if (btnRecibir.disabled) return;
+      btnRecibir.disabled = true;
+      const grupos = [...est.sel.entries()];
+      let i = 0;
+      for (const [clave, set] of grupos) {
+        i++; btnRecibir.textContent = 'Recibiendo ' + i + ' de ' + grupos.length + '…';
+        const f = facs.find((x) => x.clave === clave);
+        await new Promise((res) => { abrirFactura(ctx, clave, { previa: f, recibirSugeridas: true, soloLineas: new Set(set), alFin: res }).catch(res); });
+      }
+      est.sel.clear();
+      if (vivo) { est.otraVieja = true; cargar(); }
+    });
+    return h('div.rc-lineas', barra, h('div.rc-lin-cab', h('span'), h('span'), h('span', 'Proveedor y factura'), h('span', 'Línea → artículo'), h('span.cifra', 'Cantidad'), h('span.cifra', 'Importe'), h('span')),
+      h('div.rc-lin-filas', filas),
+      hasta < todas.length ? h('button.btn.rc-pag', { type: 'button', onclick: () => { est.mostrarL += 120; pintar(); } }, 'Ver ' + Math.min(120, todas.length - hasta) + ' líneas más (quedan ' + (todas.length - hasta) + ')') : null,
+      h('div.rc-sel-pie', btnRecibir));
+  }
+  // Lo que casi nunca es de inventario (ferretería, combustible, servicios) va al final
   const SIN_INVENTARIO = /ferreter|materiales|constru|combustible|gasolin|servicentro|estaci[oó]n de servicio|repuesto|el[eé]ctric|seguro|alquiler|internet|telecom|municipalidad/i;
-  function seccionesPorProveedor(facs) {
+  function agrupar(facs, infos) {
     const grupos = new Map();
     for (const f of facs) {
-      const k = f.proveedor_cedula || f.proveedor_nombre || 'sin dato';
-      if (!grupos.has(k)) grupos.set(k, { nombre: f.proveedor_nombre, facturas: [], pend: 0, total: 0 });
-      const g = grupos.get(k); g.facturas.push(f); g.pend += Number(f.lineas_pendientes) || 0; g.total += Number(f.total) || 0;
+      const k = claveProv(f);
+      if (!grupos.has(k)) grupos.set(k, { nombre: f.proveedor_nombre, facturas: [], lineas: 0 });
+      const gr = grupos.get(k); gr.facturas.push(f); gr.lineas += infos.get(f.clave).n;
     }
-    const lista = [...grupos.values()].map((g) => {
-      const ls = g.facturas.flatMap((f) => f.lineas || []);
-      g.aparte = SIN_INVENTARIO.test(g.nombre || '') || (ls.length > 0 && ls.filter((l) => l.sugerencia && l.sugerencia.no_inventario).length >= ls.length * 0.8);
-      return g;
-    }).sort((a, b) => (a.aparte - b.aparte) || (b.pend - a.pend) || String(a.nombre).localeCompare(String(b.nombre), 'es'));
-    const fila = (g) => h('details.inv-prov' + (g.aparte ? '.aparte' : ''), { open: grupos.size === 1 },
-      h('summary', h('strong', proveedorTxt(g.nombre)), h('span.inv-prov-datos', plural(g.facturas.length, 'factura', 'facturas') + ' · ' + plural(g.pend, 'línea por recibir', 'líneas por recibir') + ' · ' + money(g.total) + ' con IVA'), g.aparte ? h('span.chip', 'Casi nunca es de inventario') : null),
-      h('div.inv-prov-acciones', h('button.btn', { type: 'button', onclick: () => abrirProductosProveedor(ctx, g, () => cargar()) }, 'Ver por producto: decidir cada uno una sola vez')),
-      h('div.inv-prov-facturas', g.facturas.map(tarjeta)));
-    const normales = lista.filter((g) => !g.aparte), aparte = lista.filter((g) => g.aparte);
-    return [normales.length ? h('h3.inv-grupo-tit', 'Proveedores de mercadería', h('span.inv-cuenta', String(normales.length))) : null, ...normales.map(fila),
-      aparte.length ? h('h3.inv-grupo-tit', 'Ferretería, combustible y servicios', h('span.inv-cuenta', String(aparte.length))) : null, ...aparte.map(fila)];
+    return [...grupos.values()].map((gr) => {
+      const ls = gr.facturas.flatMap((f) => infos.get(f.clave).ls);
+      gr.aparte = SIN_INVENTARIO.test(gr.nombre || '') || (ls.length > 0 && ls.filter((l) => l.sugerencia && l.sugerencia.no_inventario).length >= ls.length * 0.8);
+      gr.facturas.sort((a, b) => String(b.llego || b.fecha).localeCompare(String(a.llego || a.fecha)));
+      return gr;
+    }).sort((a, b) => String(a.nombre).localeCompare(String(b.nombre), 'es'));
   }
-  // Lo que se sugiere para cada línea (rubro y categoría) y si el botón «Recibir todas» la puede recibir
-  const sugRecibe = (l) => { const sg = l.sugerencia || {}; return l.estado ? l.estado === 'pendiente' && !!sg.categoria_id && !sg.no_inventario : !!sg.categoria_id && !sg.no_inventario && sg.fuente !== 'servicio'; };
-  const sugTexto = (l) => { const sg = l.sugerencia || {}; if (sg.no_inventario) return 'Sugerido: no es de inventario'; const c = (cat.categorias || []).find((x) => x.id === sg.categoria_id); return c ? c.nombre + ' › ' + (GRUPOS[c.grupo] || '') : 'Sin sugerencia: se decide al abrir'; };
-  function tarjeta(f) {
+  const pill = (nivel, n, uno, varios) => (n ? h('span.rc-pill.' + nivel, h('i', { 'aria-hidden': 'true' }), n + ' ' + (n === 1 ? uno : varios)) : null);
+
+  // Una fila compacta por factura: documento, proveedor, líneas, semáforo, total y las acciones, todo en una sola línea (en celular baja a dos)
+  function fila(f, inf, conProveedor, conEmpresa) {
+    const et = etapaDe(inf);
     const ec = f.estado_contable || {};
-    const puede = f.puede_recibir !== false;
-    const ignorarToda = h('button.btn', { type: 'button', onclick: () => pedirIgnorar(ctx, f, null, (r) => { quitarDeLista(f, r); }) }, 'Toda la factura no es de inventario');
-    const decididas = (f.lineas_recibidas || 0) + (f.lineas_ignoradas || 0);
-    return h('article.inv-fac' + (puede ? '' : '.rechazada'), { 'data-clave': f.clave },
-      h('div.inv-fac-cab',
-        h('div.inv-fac-prov', h('strong', proveedorTxt(f.proveedor_nombre)), razonTxt(f.proveedor_nombre),
-          h('small', tipoDocTxt(f.tipo) + ' N.° ' + numFactura(f.consecutivo) + ' · emitida ' + diaTxt(f.fecha) + (f.llego ? ' · llegó ' + (ymdCR(f.llego) === ctx.hoy ? 'hoy a las ' + horaCorta(f.llego) : fechaHora(f.llego)) : ''))),
-        h('div.inv-fac-emp', h('small', 'A nombre de'), empresaChip(f.sociedad_nombre, f.sociedad_codigo))),
-      h('div.inv-fac-estado', chipContable(ec), h('span.inv-fac-total.cifra', 'Total con IVA ' + money(f.total) + (f.moneda && f.moneda !== 'CRC' ? ' (en ' + f.moneda + ' convertido)' : ''))),
-      !puede ? aviso('mal', h('p', h('strong', (ec.texto || 'Rechazada, no entra') + '. '), 'Esta factura no se puede recibir al inventario. Si la mercadería no se quedó, márquela «No es de inventario» para que salga de esta lista.'))
-        : (f.aviso || ec.aviso) ? aviso('espera', h('p', f.aviso || ec.aviso)) : null,
-      h('p.inv-fac-cuenta', h('strong', plural(f.lineas_pendientes, 'línea por recibir', 'líneas por recibir')), ' de ' + num(f.lineas_total, 0) + (decididas ? ' (' + [f.lineas_recibidas ? plural(f.lineas_recibidas, 'recibida', 'recibidas') : '', f.lineas_ignoradas ? plural(f.lineas_ignoradas, 'no es de inventario', 'no son de inventario') : ''].filter(Boolean).join(', ') + ')' : '')),
-      h('ul.inv-fac-lineas', (f.lineas || []).slice(0, 8).map((l) => h('li', h('span.inv-fl-desc', l.descripcion), h('span.inv-fl-sug' + (sugRecibe(l) ? '' : '.sin'), sugTexto(l)), h('span.tenue.cifra', num(l.cantidad, 3) + ' ' + uFac(l))))),
-      (f.lineas || []).length > 8 ? h('p.tenue.inv-chico', 'y ' + plural(f.lineas.length - 8, 'línea más', 'líneas más')) : null,
-      h('div.inv-fac-btns',
-        puede && (f.lineas || []).some(sugRecibe) ? h('button.btn.primario', { type: 'button', onclick: () => abrirFactura(ctx, f.clave, { previa: f, recibirSugeridas: true, alRecibir: () => cargar() }) }, (f.lineas || []).every(sugRecibe) ? 'Recibir todas las líneas' : 'Recibir las líneas con sugerencia') : null,
-        h('button.btn', { type: 'button', onclick: () => abrirFactura(ctx, f.clave, { previa: f }) }, puede ? 'Escoger qué líneas recibir' : 'Ver la factura'),
-        ignorarToda));
+    const hoyLlego = f.llego && ymdCR(f.llego) === (est.datos.hoy || ctx.hoy);
+    const cuando = hoyLlego ? 'hoy ' + horaCorta(f.llego) : dm(f.llego || f.fecha);
+    const ver = () => abrirFactura(ctx, f.clave, { previa: f });
+    const botones = [];
+    if (!inf.puede) botones.push(h('button.btn', { type: 'button', onclick: ver }, 'Ver la factura'));
+    else {
+      if (inf.todasNoInv) botones.push(h('button.btn.primario', { type: 'button', onclick: () => pedirIgnorar(ctx, f, null, (r) => { quitarDeLista(f, r); }) }, 'Toda la factura no es de inventario'));
+      else if (et.recibibles.length > 0) {
+        const nR = et.recibibles.length, solo = new Set(et.recibibles.map((l) => l.linea));
+        const rotulo = et.nivel === 'verde' ? (nR === 1 ? 'Recibir la línea verde' : 'Recibir las ' + nR + ' verdes') : (nR === 1 ? 'Recibir la ámbar segura' : 'Recibir las ' + nR + ' ámbar seguras');
+        const bs = h('button.btn.primario', { type: 'button' }, rotulo);
+        bs.addEventListener('click', async () => {
+          if (bs.disabled) return;
+          bs.disabled = true; bs.textContent = 'Recibiendo…';
+          await new Promise((res) => { abrirFactura(ctx, f.clave, { previa: f, recibirSugeridas: true, soloLineas: solo, alFin: res }).catch(res); });
+          if (bs.isConnected) { bs.disabled = false; bs.textContent = rotulo; }
+        });
+        botones.push(bs);
+      }
+      const porRevisar = inf.n - et.recibibles.length;
+      botones.push(h('button.btn', { type: 'button', onclick: ver }, porRevisar > 0 && !inf.todasNoInv ? 'Revisar ' + plural(porRevisar, 'línea', 'líneas') : 'Ver la factura'));
+    }
+    return h('article.inv-fac.rc-fac' + (inf.puede ? '' : '.rechazada'), { 'data-clave': f.clave },
+     h('div.rc-fac-fila',
+      h('button.rc-fac-abrir', { type: 'button', onclick: ver, 'aria-label': 'Abrir la factura N.° ' + numFactura(f.consecutivo) + ' de ' + proveedorTxt(f.proveedor_nombre) },
+        conProveedor ? h('strong.rc-fac-prov', proveedorTxt(f.proveedor_nombre)) : null,
+        h('span.rc-fac-doc', 'N.° ' + numFactura(f.consecutivo) + ' · ' + cuando)),
+      conEmpresa ? h('span.rc-fac-emp', empresaChip(f.sociedad_nombre, f.sociedad_codigo)) : null,
+      h('span.rc-fac-estado', h('span.rc-fac-lineas', plural(inf.n, 'línea', 'líneas')),
+        inf.puede ? h('span.rc-pills', pill('verde', inf.niv.verde, 'verde', 'verdes'), pill('ambar', inf.niv.ambar, 'ámbar', 'ámbar'), pill('rojo', inf.niv.rojo, 'roja', 'rojas')) : h('span.chip.mal.rc-fac-rech', ec.texto || 'Rechazada, no entra')),
+      h('span.rc-fac-total.cifra', { title: 'Total con IVA' }, money0(f.total)),
+      h('div.rc-fac-acc', botones)),
+     listaEtapa(inf, et));
+  }
+  // Lo que toca decidir ahora, a la vista: solo la etapa actual de la factura (verdes, luego ámbar, luego rojas), cada línea con su artículo y cantidad
+  function listaEtapa(inf, et) {
+    if (!inf.puede || inf.todasNoInv || !et.nivel) return null;
+    const rot = { verde: 'Verdes', ambar: 'Ámbar', rojo: 'Rojas' }[et.nivel];
+    const resto = inf.ls.length - et.ls.length;
+    return h('div.rc-etapa',
+      h('p.rc-etapa-tit', h('i.rc-lin-punto.' + et.nivel, { 'aria-hidden': 'true' }), h('strong', rot + ' (' + et.ls.length + ')'), resto && est.estado === 'todas' ? h('span.tenue', ' · después ' + (et.nivel === 'verde' ? 'siguen las ámbar y rojas' : 'siguen las rojas') + ' (' + resto + ')') : null),
+      h('ul.rc-seguras', ...et.ls.map((l) => {
+        const sg = l.sugerencia || {};
+        const destino = sg.articulo ? limpiaNombre(sg.articulo) : (sg.categoria ? 'rubro «' + sg.categoria + '»' : 'sin artículo');
+        return h('li', h('span.rc-seg-desc', l.descripcion || ('Línea ' + l.linea)), h('span.rc-seg-flecha', { 'aria-hidden': 'true' }, '→'), h('span.rc-seg-art', destino), h('span.rc-seg-cant.cifra', num(Number(l.cantidad) || 0, 3)));
+      })));
   }
   // La factura entera quedó «No es de inventario»: sale de la lista y deja un aviso con «Deshacer»
   function quitarDeLista(f, r) {
@@ -186,15 +415,14 @@ async function abrirLista(ctx) {
     deshechos.prepend(banda);
     boton.focus({ preventScroll: true });
   }
-  pintarFiltro();
+  pintarEmpresas();
   await cargar();
   enfocar(lista.closest('.modal-cuerpo') || lista);
 }
 // La razón social, en pequeño, cuando el proveedor trae nombre comercial
 const razonTxt = (n) => { const r = proveedorPartes(n).razon; return r ? h('small.inv-razon', r) : null; };
-const codigoEmp = (cat, id) => (cat.empresas || []).find((e) => e.id === id)?.codigo || null;
 
-/* ---------- «No es de inventario» (una línea, varias o toda la factura) ---------- */
+/* ---------- «No es de inventario» (varias líneas o toda la factura, con motivo) ---------- */
 // lineas = null: todas las pendientes de la factura. alTerminar(r) recibe la respuesta de fx_inv_ignorar.
 export function pedirIgnorar(ctx, f, lineas, alTerminar) {
   const motivo = h('input.campo', { type: 'text', maxlength: 200, 'aria-label': 'Motivo (opcional)', placeholder: 'Por ejemplo: es un repuesto de ferretería' });
@@ -226,162 +454,34 @@ export function pedirIgnorar(ctx, f, lineas, alTerminar) {
 }
 
 /* =====================================================================================================================
-   Un proveedor, producto por producto: las líneas de todas sus facturas por recibir juntas, cada producto una sola vez
-   ===================================================================================================================== */
-const claveProducto = (l) => norm(l.descripcion) + '|' + String(l.cabys || '');
-// Cálculo rápido con lo que ya se sabe de cada línea (compra anterior del proveedor y sentido del precio). Antes de recibir, cada línea vuelve a pasar por su semáforo completo, incluida la revisión de Claude.
-function nivelProducto(ls) {
-  if (ls.every((l) => (l.sugerencia || {}).no_inventario)) return { nivel: 'rojo', razon: 'Parece que no es de inventario. Se marca como «No es de inventario» desde cada factura.' };
-  const buenas = ls.filter((l) => {
-    const sg = l.sugerencia || {};
-    if (sg.no_inventario || sg.fuente !== 'memoria' || !sg.articulo_id || !(Number(sg.factor) > 0)) return false;
-    return sg.unidad === 'colon' || !revisarConversion({ descripcion: l.descripcion, subtotal: l.subtotal_crc, cantidad: l.cantidad, factorActual: Number(sg.factor) }).aviso;
-  });
-  if (buenas.length === ls.length) return { nivel: 'verde', razon: 'Igual que compras anteriores de este proveedor.' };
-  if (buenas.length) return { nivel: 'ambar', razon: plural(buenas.length, 'línea ya tiene', 'líneas ya tienen') + ' una compra anterior; las otras ' + (ls.length - buenas.length) + ' hay que mirarlas.' };
-  return { nivel: 'ambar', razon: 'Producto nuevo para este proveedor: se decide una sola vez y las demás facturas lo recuerdan.' };
-}
-
-export async function abrirProductosProveedor(ctx, g, alCambiar) {
-  let vivo = true;
-  let orden = null; // posición de cada producto: al volver de decidir uno, la lista no se reordena
-  let filtroNivel = 'todos'; // el filtro puesto se conserva al volver
-  const cuerpo = h('div.inv-productos', cargando('Leyendo las líneas de ' + plural(g.facturas.length, 'factura', 'facturas') + '…'));
-  ventana({ titulo: proveedorTxt(g.nombre) + ': por producto', volver: 'la lista de facturas por recibir', contenido: [cuerpo], alCerrar: () => { vivo = false; alCambiar?.(); } });
-  async function cargar() {
-    // Al volver de decidir un producto se conserva el lugar donde estaba la persona (además del orden y del filtro)
-    const scroller = cuerpo.closest('.modal-cuerpo'), yAntes = scroller ? scroller.scrollTop : 0;
-    const restaurarY = () => { if (scroller && yAntes) requestAnimationFrame(() => { scroller.scrollTop = yAntes; }); };
-    poner(cuerpo, cargando('Leyendo las líneas de ' + plural(g.facturas.length, 'factura', 'facturas') + '…'));
-    const facs = [];
-    try {
-      const cola = [...g.facturas];
-      await Promise.all(Array.from({ length: 3 }, async () => { while (cola.length) { const f = cola.shift(); const d = await inv.factura(f.clave); facs.push({ clave: f.clave, consecutivo: f.consecutivo, puede: (d.factura || {}).puede_recibir !== false, lineas: (d.lineas || []).filter((l) => l.estado === 'pendiente') }); } }));
-    } catch (e) { if (vivo) poner(cuerpo, falla(e, cargar, 'No se pudieron leer las facturas')); return; }
-    if (!vivo) return;
-    // Propuestas de Claude (solo administración): una consulta por factura, de a tres
-    const iaMapa = new Map();
-    if (ctx.esAdmin) {
-      const cola2 = facs.map((f) => f.clave);
-      await Promise.all(Array.from({ length: 3 }, async () => { while (cola2.length) { const c = cola2.shift(); const r = await inv.iaPropuestas(c).catch(() => []); (r || []).forEach((x) => iaMapa.set(c + '|' + x.linea, x)); } }));
-      if (!vivo) return;
-    }
-    const prod = new Map();
-    for (const f of facs) for (const l of f.lineas) {
-      const k = claveProducto(l);
-      if (!prod.has(k)) prod.set(k, { nombre: l.descripcion, lineas: [], claves: new Set(), cant: 0, unidad: l.unidad, unidades: new Set() });
-      const p = prod.get(k); p.lineas.push({ ...l, factura: f }); p.claves.add(f.clave); p.cant += Number(l.cantidad) || 0; p.unidades.add(String(l.unidad || ''));
-    }
-    const filas = [...prod.entries()].map(([k, p]) => ({ ...p, k, ...nivelProducto(p.lineas), ia: p.lineas.map((l) => iaMapa.get(l.factura.clave + '|' + l.linea)).find(Boolean) || null }))
-      .sort((a, b) => orden ? (orden.has(a.k) ? orden.get(a.k) : 1e6) - (orden.has(b.k) ? orden.get(b.k) : 1e6) : ({ ambar: 0, rojo: 1, verde: 2 })[a.nivel] - ({ ambar: 0, rojo: 1, verde: 2 })[b.nivel] || b.lineas.length - a.lineas.length);
-    orden = new Map(filas.map((x, i) => [x.k, i]));
-    const cedulaProv = (g.facturas[0] || {}).proveedor_cedula || '';
-    const cuenta = (n) => filas.filter((x) => x.nivel === n).length;
-    let lineasVerdes = filas.filter((x) => x.nivel === 'verde').reduce((s, x) => s + x.lineas.length, 0);
-    let facturasVerdes = [...new Set(filas.filter((x) => x.nivel === 'verde').flatMap((x) => x.lineas.map((l) => l.factura)))].filter((f) => f.puede);
-    const lineasTotal = filas.reduce((s, x) => s + x.lineas.length, 0);
-    const NIVEL = { verde: 'Verde', ambar: 'Ámbar', rojo: 'Rojo' };
-    const tabla = h('div.inv-prod-lista');
-    function pintarFila(p) {
-      const ia = p.ia, ven = ia && ia.venta_neta != null ? Number(ia.venta_neta) : 0, cu = ia && ia.costo_unidad != null ? Number(ia.costo_unidad) : 0;
-      const puedeAceptar = !!(ia && ia.articulo_id && Number(ia.factor) > 0 && p.nivel !== 'verde' && ia.nivel !== 'rojo' && cedulaProv);
-      const aceptar = h('button.btn.primario', { type: 'button' }, 'Aceptar y recordar');
-      aceptar.addEventListener('click', async () => {
-        aceptar.disabled = true; aceptar.textContent = 'Guardando…';
-        try {
-          await inv.decidirProducto({ proveedor_cedula: cedulaProv, cabys: p.lineas[0].cabys || '', descripcion: p.nombre, articulo_id: ia.articulo_id, factor: String(ia.factor) });
-          p.nivel = 'verde'; p.razon = 'Decidido por usted: ' + ia.articulo + ', cada unidad trae ' + num(ia.factor, 6) + '. Las demás facturas de este proveedor lo toman igual.';
-          toastOk('Guardado: ' + p.nombre);
-          repintar(p);
-        } catch (e) { aceptar.disabled = false; aceptar.textContent = 'Aceptar y recordar'; toastMal(e?.message || 'No se pudo guardar'); }
-      });
-      return h('article.inv-prod.' + p.nivel, { 'data-k': p.k },
-        h('div.inv-prod-datos', h('strong', p.nombre),
-          h('small', plural(p.lineas.length, 'línea', 'líneas') + ' en ' + plural(p.claves.size, 'factura', 'facturas') + ' · ' + (p.unidades.size === 1 ? num(p.cant, 3) + ' ' + (p.unidad || 'unid.') + ' en total' : 'unidades distintas, se revisan una por una')),
-          h('small.inv-prod-razon', h('strong', NIVEL[p.nivel] + ': '), p.razon),
-          ia && p.nivel !== 'verde' ? h('div.inv-prod-ia',
-            h('small', h('strong', 'Propuesta de Claude: '), ia.articulo ? ia.articulo + (Number(ia.factor) > 0 ? ', cada unidad de la factura trae ' + num(ia.factor, 6) : '') : 'no encontró un artículo seguro'),
-            cu > 0 ? h('small', 'Costo por unidad ' + money(cu) + (ven > 0 ? ' · se vende a ' + money(ven) + ' sin IVA · el costo es el ' + num(cu / ven * 100, 0) + ' % del precio' : ' · no hay producto de venta parecido para comparar')) : null,
-            h('small.tenue', ia.razon)) : null),
-        p.nivel === 'verde' ? null : h('div.inv-prod-acc', puedeAceptar ? aceptar : null,
-          h('button.btn', { type: 'button', onclick: () => abrirFactura(ctx, [...p.claves][0], { alRecibir: () => { if (vivo) cargar(); } }) }, p.nivel === 'rojo' ? 'Abrir la primera factura' : puedeAceptar ? 'Cambiar' : 'Decidir este producto')));
-    }
-    function repintar(p) {
-      const viejo = tabla.querySelector('[data-k="' + CSS.escape(p.k) + '"]'); if (viejo) viejo.replaceWith(pintarFila(p));
-      pintarResumen(); aplicarFiltro();
-    }
-    function aplicarFiltro() {
-      for (const x of filas) { const el = tabla.querySelector('[data-k="' + CSS.escape(x.k) + '"]'); if (el) el.hidden = filtroNivel !== 'todos' && x.nivel !== filtroNivel; }
-      botonesFiltro.forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.nivel === filtroNivel)));
-    }
-    const resumenEl = h('p.tenue.inv-chico.inv-resumen-sem');
-    const botonesFiltro = [['todos', 'Todos'], ['ambar', 'Ámbar'], ['rojo', 'Rojo'], ['verde', 'Verde']].map(([n, t]) => h('button.btn.chico', { type: 'button', 'data-nivel': n, onclick: () => { filtroNivel = n; aplicarFiltro(); } }, t));
-    filas.forEach((p) => tabla.append(pintarFila(p)));
-    const recibir = h('button.btn.primario', { type: 'button', disabled: !lineasVerdes, onclick: () => confirmarVerdes() }, lineasVerdes ? 'Recibir las ' + lineasVerdes + ' líneas verdes' : 'No hay productos verdes');
-    function pintarResumen() {
-      lineasVerdes = filas.filter((x) => x.nivel === 'verde').reduce((t, x) => t + x.lineas.length, 0);
-      facturasVerdes = [...new Set(filas.filter((x) => x.nivel === 'verde').flatMap((x) => x.lineas.map((l) => l.factura)))].filter((f) => f.puede);
-      resumenEl.textContent = cuenta('verde') + ' verdes, ' + cuenta('ambar') + ' ámbar, ' + cuenta('rojo') + ' rojos.';
-      recibir.disabled = !lineasVerdes; recibir.textContent = lineasVerdes ? 'Recibir las ' + lineasVerdes + ' líneas verdes' : 'No hay productos verdes';
-    }
-    function confirmarVerdes() {
-      const ok = h('button.btn.primario', { type: 'button' }, 'Sí, recibir las verdes');
-      const d = dialogo({ titulo: 'Recibir los productos en verde', ancho: 600, contenido: [
-        h('p', 'Se van a recibir ' + plural(lineasVerdes, 'línea', 'líneas') + ' de ' + plural(facturasVerdes.length, 'factura', 'facturas') + ' de ' + proveedorTxt(g.nombre) + ', que corresponden a ' + plural(cuenta('verde'), 'producto', 'productos') + ':'),
-        h('ul.inv-datos-lista', filas.filter((x) => x.nivel === 'verde').slice(0, 25).map((x) => h('li', h('span', x.nombre), h('strong', plural(x.lineas.length, 'línea', 'líneas') + ' · ' + num(x.cant, 3) + ' ' + (x.unidad || ''))))),
-        filas.filter((x) => x.nivel === 'verde').length > 25 ? h('p.tenue.inv-chico', 'y ' + (filas.filter((x) => x.nivel === 'verde').length - 25) + ' productos más.') : null,
-        h('p.tenue.inv-chico', 'Antes de recibir, cada línea vuelve a pasar por su revisión completa (incluida la de Claude). Las que no la pasen quedan sin recibir y se lo digo al final. Lo ámbar y lo rojo no se toca.')],
-        botones: [{ texto: 'No, volver', onclick: (c) => c() }] });
-      d.el.querySelector('.modal-pie').append(ok);
-      ok.addEventListener('click', async () => {
-        ok.disabled = true; ok.textContent = 'Recibiendo…';
-        let recibidas = 0; const sinRecibir = [];
-        for (const f of facturasVerdes) {
-          let recib = false;
-          await new Promise((res) => { abrirFactura(ctx, f.clave, { recibirSugeridas: true, alRecibir: () => { recib = true; }, alFin: res }).catch(res); });
-          if (recib) recibidas++; else sinRecibir.push(f);
-        }
-        d.cerrar?.(); ctx.articulos.olvidar();
-        (sinRecibir.length ? toastMal : toastOk)(recibidas + ' de ' + facturasVerdes.length + ' facturas recibidas.' + (sinRecibir.length ? ' ' + plural(sinRecibir.length, 'factura quedó', 'facturas quedaron') + ' sin recibir porque alguna línea no pasó la revisión completa; ábrala para verla.' : ''));
-        if (vivo) cargar();
-      });
-    }
-    poner(cuerpo,
-      h('p.tenue', plural(lineasTotal, 'línea por recibir', 'líneas por recibir') + ' de ' + plural(g.facturas.length, 'factura', 'facturas') + ' son ' + plural(filas.length, 'producto distinto', 'productos distintos') + '.'),
-      resumenEl,
-      h('div.inv-prov-acciones.inv-filtro', h('span.tenue.inv-chico', 'Ver:'), ...botonesFiltro),
-      h('div.inv-prov-acciones', recibir),
-      tabla,
-      h('p.tenue.inv-chico', 'Cuando decide un producto nuevo y deja marcado «Recordarlo», las demás facturas de este proveedor lo toman igual y pasan a verde.'));
-    pintarResumen(); aplicarFiltro(); restaurarY();
-  }
-  await cargar();
-}
-
-/* =====================================================================================================================
    Ventana de una factura: recibir sus líneas
    ===================================================================================================================== */
-export async function abrirFactura(ctx, clave, { previa = null, recibirSugeridas = false, alRecibir = null, alFin = null } = {}) {
+export async function abrirFactura(ctx, clave, { previa = null, recibirSugeridas = false, soloLineas = null, alRecibir = null, alFin = null } = {}) {
   let autoRecibir = recibirSugeridas;
-  let silencioso = recibirSugeridas; // «Recibir todas» desde la lista: no se abre la ventana salvo que algo necesite revisarse
+  let silencioso = recibirSugeridas; // «Recibir las N líneas seguras» desde la lista: no se abre la ventana salvo que algo necesite revisarse
   const cat = ctx.cat;
+  const banda = bandaCostoPrecio(cat);
   let vivo = true;
-  const cuerpo = h('div.inv-factura', cargando('Cargando la factura…'));
+  const cuerpo = h('div.inv-factura.rc-factura', cargando('Cargando la factura…'));
   const resultado = h('div.inv-resultado', { 'aria-live': 'polite' });
-  const mostrar = () => { if (!silencioso) return; silencioso = false; ventana({ titulo: 'Factura de proveedor', volver: 'la lista de facturas por recibir', contenido: [resultado, cuerpo], alCerrar: () => { vivo = false; } }); };
+  const mostrar = () => { if (!silencioso) return; silencioso = false; ventana({ titulo: 'Factura de proveedor', volver: 'Por recibir', contenido: [resultado, cuerpo], alCerrar: () => { vivo = false; } }).el.classList.add('rc-vent'); };
   if (!silencioso) { silencioso = true; mostrar(); }
   const recordados = new Map(); // línea -> sugerencia que trajo la lista (por si la consulta de la factura no la repite)
   (previa?.lineas || []).forEach((l) => recordados.set(l.linea, l.sugerencia));
   let articulos = [];
   let iaPorLinea = new Map(); // línea -> propuesta de la IA (solo administración)
   const recordar = h('input', { type: 'checkbox', checked: true });
-  // Lo que la persona ya llenó en cada línea pendiente: se conserva cuando la ventana se vuelve a pintar (después de marcar otra línea «No es de inventario», por ejemplo)
+  // Lo que la persona ya llenó en cada línea pendiente (y si la fila está abierta): se conserva cuando la ventana se vuelve a pintar
   const memoria = new Map();
 
   async function cargar(primera = false) {
     let d;
     try { [d, articulos] = await Promise.all([inv.factura(clave), ctx.articulos.lista()]); }
-    catch (e) { if (vivo) poner(cuerpo, falla(e, () => { poner(cuerpo, cargando()); cargar(primera); }, 'No se pudo abrir la factura')); return; }
+    catch (e) {
+      if (!vivo) return;
+      if (autoRecibir && silencioso) { autoRecibir = false; silencioso = false; vivo = false; toastMal('No se pudo abrir la factura para recibirla: ' + ((e && e.message) || 'intente de nuevo') + ' Toque «Revisar» o «Ver la factura» para intentarlo de nuevo.'); alFin?.(); return; }
+      poner(cuerpo, falla(e, () => { poner(cuerpo, cargando()); cargar(primera); }, 'No se pudo abrir la factura')); return;
+    }
     if (!vivo) return;
     if (ctx.esAdmin) { const ia = await inv.iaPropuestas(clave).catch(() => []); iaPorLinea = new Map((ia || []).map((x) => [x.linea, x])); }
     if (!vivo) return;
@@ -389,106 +489,125 @@ export async function abrirFactura(ctx, clave, { previa = null, recibirSugeridas
     if (primera) enfocar(cuerpo);
   }
 
+  // Lo que entró, en palabras; el detalle va plegado para que no empuje lo importante
+  function mostrarResultado(r, repetida) {
+    const rec = r.recibidas || [];
+    poner(resultado, aviso('ok',
+      h('p', h('strong', rec.length === 1 ? 'Se recibió 1 línea.' : 'Se recibieron ' + rec.length + ' líneas.'), repetidaTxt(repetida)),
+      rec.length ? h('details.rc-res-det', h('summary', 'Ver qué entró'),
+        h('ul.inv-res-lista', rec.map((x) => h('li', `Línea ${x.linea}: ${limpiaNombre(x.articulo)}, ${cantR(x.cantidad, x.unidad)} a ${x.ubicacion}` + (x.vence_en ? ', vence el ' + dma(x.vence_en) : ', no vence') + (x.unidad === 'colon' ? '' : `, ${costoTxt(x.costo_unitario)} por ${unidadTxt(x.unidad, 1)}`) + ` (${money(x.valor)} sin IVA). Empresa de origen: ${x.sociedad_origen_nombre || 'sin dato'}.`)))) : null,
+      ...(r.avisos || []).map((t) => h('p.inv-res-aviso', t))));
+    resultado.scrollIntoView({ block: 'nearest' });
+  }
+
   function pintar(d) {
     const f = d.factura || {}, ec = f.estado_contable || {};
+    const scroller = cuerpo.closest('.modal-cuerpo'), yAntes = scroller ? scroller.scrollTop : 0;
     const puede = f.puede_recibir !== false;
     const lineas = d.lineas || [];
     const pend = lineas.filter((l) => l.estado === 'pendiente');
     const otras = lineas.filter((l) => l.estado !== 'pendiente');
     const formas = pend.map((l) => formaLinea(f, l, puede));
-    const marcadas = () => formas.filter((x) => x.marcada());
-    const zonaRecibir = h('div');
-    const btnRecibir = h('button.btn.primario.grande', { type: 'button' }, 'Recibir las líneas marcadas');
-    const contar = () => { const n = marcadas().length; rotular(btnRecibir, n ? 'Recibir ' + plural(n, 'línea marcada', 'líneas marcadas') : 'Marque las líneas que va a recibir'); btnRecibir.disabled = !n && !btnRecibir.dataset.ocupado; };
-    formas.forEach((x) => x.alCambiar(contar));
+    const zonaRecibir = h('div.rc-zona');
+    const btnRecibir = h('button.btn.primario.grande.rc-aceptar', { type: 'button' }, 'Aceptar las líneas seguras');
+    const seguras = () => formas.filter((x) => x.segura() && (!soloLineas || soloLineas.has(x.linea)));
+    const resumenSem = h('p.tenue.inv-chico.rc-sem-resumen');
+    const pintarBarra = () => {
+      const n = seguras().length;
+      rotular(btnRecibir, n === 1 ? 'Aceptar la línea segura' : 'Aceptar las ' + n + ' líneas seguras'); btnRecibir.hidden = !n;
+      const c = { verde: 0, ambar: 0, rojo: 0 }; formas.forEach((x) => { c[x.semaforo().nivel || 'rojo']++; });
+      resumenSem.textContent = c.verde + ' verdes, ' + c.ambar + ' ámbar, ' + c.rojo + ' rojas. ' + (c.verde ? 'Las verdes se aceptan juntas; las ámbar y rojas se abren en su fila para recibirse una por una.' : 'Las ámbar y rojas se abren en su fila para recibirse una por una.');
+    };
+    formas.forEach((x) => x.alCambiar(pintarBarra));
+    // Un solo botón para las seguras: sin abrir cada línea y sin confirmar de nuevo. Una clave por intención (reintentar no duplica).
     const accRecibir = accionSegura({ boton: btnRecibir, zona: zonaRecibir, ocupado: 'Recibiendo…',
-      hacer: (idem) => {
-        const sel = marcadas();
-        if (!sel.length) throw new Error('Marque al menos una línea con «Recibir esta línea».');
-        const problemas = sel.map((x) => x.problema()).filter(Boolean);
-        if (problemas.length) { sel.find((x) => x.problema())?.enfocarProblema(); throw new Error(problemas[0]); }
-        return inv.recibir(sel.map((x) => ({ ...x.datos(), recordar: recordar.checked })), idem);
+      hacer: async (idem) => {
+        const sel0 = seguras();
+        if (!sel0.length) throw new Error('Ninguna línea está lista para aceptarse sola. Revise las que dicen «Revisar».');
+        for (const x of sel0) await x.preparar();
+        const faltan = sel0.filter((x) => !x.tieneArticulo());
+        if (faltan.length) { faltan[0].enfocarProblema(); throw new Error(faltan[0].problema() || 'No se pudo preparar una de las líneas seguras.'); }
+        const mal = sel0.find((x) => x.problema());
+        if (mal) { mal.enfocarProblema(); throw new Error(mal.problema()); }
+        const infos = sel0.map((x) => x.aliasInfo()), r = await inv.recibir(sel0.map((x) => ({ ...x.datos(), recordar: recordar.checked })), idem);
+        await guardarAliases(ctx, f, infos.map((i) => i && { ...i, recordar: recordar.checked }));
+        return r;
       },
-      alFallar: (e) => { if (silencioso) { silencioso = false; vivo = false; toastMal('No se pudo recibir la factura de ' + proveedorTxt(f.proveedor_nombre) + ': ' + ((e && e.message) || 'intente de nuevo') + ' Use «Escoger qué líneas recibir» para revisarla.'); } },
+      alFallar: (e) => { if (silencioso) { silencioso = false; vivo = false; toastMal('No se pudo recibir la factura de ' + proveedorTxt(f.proveedor_nombre) + ': ' + ((e && e.message) || 'intente de nuevo') + ' Toque «Revisar» en esa factura para verla.'); } },
       alTerminar: async (r, { repetida }) => {
         const rec = r.recibidas || [];
         if (silencioso) { silencioso = false; vivo = false; ctx.articulos.olvidar(); toastOk((rec.length === 1 ? 'Se recibió 1 línea' : 'Se recibieron ' + rec.length + ' líneas') + ' de ' + proveedorTxt(f.proveedor_nombre) + '.' + repetidaTxt(repetida)); alRecibir?.(); return; }
-        poner(resultado, aviso('ok',
-          h('p', h('strong', rec.length === 1 ? 'Se recibió 1 línea.' : 'Se recibieron ' + rec.length + ' líneas.'), repetidaTxt(repetida)),
-          h('ul.inv-res-lista', rec.map((x) => h('li', `Línea ${x.linea}: ${x.articulo}, ${cantTxt(x.cantidad, x.unidad)} a ${x.ubicacion}` + (x.vence_en ? ', vence el ' + dma(x.vence_en) : ', no vence') + `, ${costoTxt(x.costo_unitario)} por ${unidadTxt(x.unidad, 1)} (${money(x.valor)} sin IVA). Empresa de origen: ${x.sociedad_origen_nombre || 'sin dato'}.`))),
-          ...(r.avisos || []).map((t) => h('p.inv-res-aviso', t))));
-        resultado.scrollIntoView({ block: 'nearest' });
+        mostrarResultado(r, repetida);
         ctx.articulos.olvidar();
         await cargar();
       } });
     btnRecibir.addEventListener('click', () => accRecibir.ejecutar());
-    const nVerdes = () => formas.filter((x) => x.verde()).length;
-    const marcarTodas = h('button.btn', { type: 'button', onclick: async () => { for (const x of formas.filter((y) => y.verde())) await x.marcarOCrear(); contar(); } }, 'Marcar las verdes');
-    const resumenSem = h('p.tenue.inv-chico.inv-resumen-sem');
-    const pintarResumenSem = () => { const c = { verde: 0, ambar: 0, rojo: 0 }; formas.forEach((x) => { c[x.semaforo().nivel || 'rojo']++; }); resumenSem.textContent = c.verde + ' verdes (listas, ya marcadas para recibir; desmarque la que no quiera), ' + c.ambar + ' ámbar (revisar una por una), ' + c.rojo + ' rojas (falta algo o no tiene sentido).'; const faltan = formas.filter((x) => x.verde() && !x.marcada()).length; marcarTodas.hidden = !faltan; marcarTodas.textContent = 'Volver a marcar ' + (faltan === 1 ? 'la línea verde' : 'las ' + faltan + ' líneas verdes'); };
-    formas.forEach((x) => x.alCambiar(pintarResumenSem));
     const ignorarToda = h('button.btn', { type: 'button', onclick: () => pedirIgnorar(ctx, f, null, () => cargar()) }, 'Toda la factura no es de inventario');
     const contableAqui = f.sociedad_id && f.sociedad_id === ctx.app.socId;
 
-    poner(cuerpo, 
-      h('div.inv-fac-detalle-cab',
-        h('div', h('h2', proveedorTxt(f.proveedor_nombre)), razonTxt(f.proveedor_nombre),
-          h('p.tenue', tipoDocTxt(f.tipo) + ' N.° ' + numFactura(f.consecutivo) + ' · emitida ' + diaTxt(f.fecha) + ' · cédula del proveedor ' + (f.proveedor_cedula || 'sin dato'))),
-        h('div.inv-fac-emp', h('small', 'A nombre de'), empresaChip(f.sociedad_nombre, f.sociedad_codigo))),
-      h('div.inv-fac-estado', chipContable(ec), h('span.inv-fac-total.cifra', 'Total con IVA ' + money(f.total)), f.moneda && f.moneda !== 'CRC' ? h('span.tenue', 'Factura en ' + f.moneda + ', tipo de cambio ' + num(f.tipo_cambio, 2)) : null),
+    poner(cuerpo,
+      h('header.inv-fac-detalle-cab.rc-cab',
+        h('div.rc-cab-prov', h('h2', proveedorTxt(f.proveedor_nombre)), razonTxt(f.proveedor_nombre),
+          h('p.tenue', tipoDocTxt(f.tipo) + ' N.° ' + numFactura(f.consecutivo) + ' · emitida ' + diaTxt(f.fecha) + ' · cédula ' + (f.proveedor_cedula || 'sin dato'))),
+        h('div.rc-cab-datos', h('div.inv-fac-emp', h('small', 'A nombre de'), empresaChip(f.sociedad_nombre, f.sociedad_codigo)),
+          h('div.inv-fac-estado', chipContable(ec), h('span.inv-fac-total.cifra', 'Total con IVA ' + money(f.total)), f.moneda && f.moneda !== 'CRC' ? h('span.tenue', 'Factura en ' + f.moneda + ', tipo de cambio ' + num(f.tipo_cambio, 2)) : null),
+          contableAqui
+            ? h('button.btn.chico', { type: 'button', onclick: () => ctx.app.ir('contabilidad', { clave: f.clave, buscar: numFactura(f.consecutivo) }) }, 'Ir a Contabilidad')
+            : h('small.tenue', 'Es de ' + (f.sociedad_nombre || 'la otra empresa') + ': en Contable se responde desde una sesión de esa empresa.'))),
       !puede ? aviso('mal', h('p', h('strong', (ec.texto || 'Rechazada, no entra') + '. '), 'No se puede recibir al inventario. ' + (ec.estado === 'rechazada_por_hacienda' ? 'Espere la factura que la reemplace.' : 'Si la mercadería no se quedó, márquela «No es de inventario».')),
           // Lo mismo que le dice Contable antes de rechazar (m_recepcion.js): rechazar no mueve la bodega
           lineas.some((l) => l.estado === 'recibida') ? h('p', 'Lo que ya se recibió sigue en la bodega: rechazar la factura en Contable no lo saca. Para corregirlo, use «Deshacer la recepción» en cada línea (solo una persona administradora, y solo si ese lote todavía no se ha tocado) o registre una salida como «Devolución a proveedor», en «Salidas y mermas».') : null)
         : (f.aviso || ec.aviso) ? aviso('espera', h('p', f.aviso || ec.aviso)) : null,
-      h('div.inv-enlaces', contableAqui
-        ? h('button.btn', { type: 'button', onclick: () => ctx.app.ir('contabilidad', { clave: f.clave, buscar: numFactura(f.consecutivo) }) }, 'Ir a Contabilidad (factura N.° ' + numFactura(f.consecutivo) + ')')
-        : h('p.tenue.inv-chico', 'Esta factura es de ' + (f.sociedad_nombre || 'la otra empresa') + ': en Contable se responde desde una sesión de esa empresa.')),
-      pend.length ? h('section.inv-grupo', h('h3', 'Líneas por recibir', h('span.inv-cuenta', String(pend.length))),
-        puede ? h('p.tenue.inv-chico', 'Toque el grupo de cada línea. Lo que no es de inventario (costos, servicios) va en «No es de inventario».') : null,
+      pend.length ? h('section.inv-grupo.rc-lineas', h('h3', 'Líneas por recibir', h('span.inv-cuenta', String(pend.length))),
+        h('div.rc-barra',
+          puede ? btnRecibir : null,
+          puede ? h('label.inv-casilla.rc-recordar', recordar, h('span', 'Recordar estas decisiones para este proveedor')) : null,
+          ignorarToda),
+        zonaRecibir,
         puede ? resumenSem : null,
-        h('div.inv-lineas-acciones', puede ? marcarTodas : null, ignorarToda),
-        h('div.inv-lineas', formas.map((x) => x.el)),
-        puede ? h('div.inv-barra-recibir',
-          h('label.inv-casilla', recordar, h('span', 'Recordar estas decisiones para las próximas facturas de este proveedor')),
-          btnRecibir, zonaRecibir) : null)
+        h('div.rc-tabla', { role: 'list' },
+          puede ? h('div.rc-encab', { 'aria-hidden': 'true' }, h('span', 'Estado'), h('span', 'Lo que entendí'), h('span', 'Cantidad y costo sin IVA'), h('span', 'Rubro, categoría y dónde va'), h('span', 'Acción')) : null,
+          formas.map((x) => x.el)))
         : aviso('ok', h('p', 'Esta factura ya no tiene líneas por recibir.')),
-      otras.length ? h('section.inv-grupo', h('h3', 'Líneas ya decididas', h('span.inv-cuenta', String(otras.length))), h('div.inv-lineas', otras.map((l) => lineaDecidida(f, l)))) : null,
+      otras.length ? h('details.rc-decididas', { open: !pend.length }, h('summary', plural(otras.length, 'línea ya decidida', 'líneas ya decididas')), h('div.inv-lineas', otras.map((l) => lineaDecidida(f, l)))) : null,
       (d.notas_proveedor || []).length ? h('section.inv-grupo', h('h3', 'Notas del proveedor sobre esta factura'),
         h('ul.inv-datos-lista', d.notas_proveedor.map((n) => h('li', h('span', tipoDocTxt(n.tipo) + ' N.° ' + numFactura(n.consecutivo) + ' del ' + dma(n.fecha)), h('strong', ({ por_revisar: 'Por revisar', devuelta: 'Mercadería devuelta', ignorada: 'No afecta el inventario' })[n.estado] || n.estado || '')))),
         h('button.btn', { type: 'button', onclick: () => ctx.abrir('notas') }, 'Abrir Notas de proveedor')) : null);
-    // Decisión única: las líneas verdes ya vienen marcadas; la persona solo desmarca lo que no quiera y toca «Recibir» (autoRecibir marca por su cuenta)
-    if (puede && !autoRecibir) formas.forEach((x) => x.premarcar());
-    contar(); pintarResumenSem();
-    // «Recibir todas las líneas» desde la lista: se marcan las que traen rubro sugerido y, si todo está en orden, se reciben; si algo falla se queda la ventana abierta para revisarlo
+    pintarBarra();
+    if (scroller && yAntes && cuerpo.isConnected) scroller.scrollTop = yAntes;
+    // «Recibir las N líneas seguras» desde la lista: se aceptan las verdes y la comida preparada o suministros con rubro; si algo falla se avisa y la factura se puede abrir con «Revisar»
     if (autoRecibir && !puede) { autoRecibir = false; if (silencioso) { silencioso = false; vivo = false; toastMal('La factura de ' + proveedorTxt(f.proveedor_nombre) + ' no se puede recibir ahora.'); } alFin?.(); }
     if (autoRecibir && puede) {
       autoRecibir = false;
       (async () => {
         try {
-        // Verdes siempre; y las ámbar de comida preparada o suministros (entran por su valor en colones: no hay conversión que revisar y el artículo se crea solo con el rubro sugerido). Los unitarios se deciden uno a uno.
-        for (const x of formas) if (x.verde() || (x.porColones() && x.sugerida() && x.semaforo().nivel === 'ambar')) await x.marcarOCrear();
-        contar();
-        const sel = marcadas();
-        const mal = sel.map((x) => x.problema()).find(Boolean);
-        if (sel.length && !mal) { const r = await accRecibir.ejecutar(); if (r == null && silencioso) { silencioso = false; vivo = false; } }
-        else if (silencioso) { silencioso = false; vivo = false; toastMal('No se recibió la factura de ' + proveedorTxt(f.proveedor_nombre) + ': ' + (mal || 'ninguna línea está lista para recibirse sola (los unitarios y lo dudoso se deciden uno a uno)') + ' Use «Escoger qué líneas recibir» para revisarla.'); }
+          if (!seguras().length) { if (silencioso) { silencioso = false; vivo = false; toastMal('No se recibió la factura de ' + proveedorTxt(f.proveedor_nombre) + ': ninguna línea está lista para aceptarse sola (los unitarios y lo dudoso se deciden uno a uno). Toque «Revisar» en esa factura.'); } return; }
+          const r = await accRecibir.ejecutar();
+          if (r == null && silencioso) mostrar(); // no se pudo confirmar (red): se abre la ventana para que se vea el «Reintentar»
         } finally { alFin?.(); }
       })();
     }
   }
 
-  /* ---------- Una línea pendiente: lo que se va a recibir ---------- */
-  // Descripción de la línea tal como viene en la factura
+  // «No es de inventario» de UNA línea: un solo toque, sin ventana de confirmación; queda en «Líneas ya decididas» con su «Deshacer»
+  function botonIgnorar(f, l, clase, zona) {
+    return botonSeguro('No es de inventario', clase, { zona, ocupado: 'Guardando…',
+      hacer: (idem) => inv.ignorar(f.clave, [l.linea], null, recordar.checked, idem),
+      alTerminar: (r, { repetida }) => { toastOk('Línea ' + l.linea + ': no es de inventario. Si fue un error, use «Deshacer» en «Líneas ya decididas».' + repetidaTxt(repetida)); return cargar(); } });
+  }
+
+  /* ---------- Una línea pendiente: una fila; si hay algo que revisar se abre en la misma fila ---------- */
+  // Descripción de la línea tal como viene en la factura (filas bloqueadas)
   const descLinea = (l) => h('div.inv-linea-desc', h('strong', 'Línea ' + l.linea + ': ' + l.descripcion),
     h('small', 'En la factura: ' + num(l.cantidad, 3) + ' ' + uFac(l) + (unidadReal(l.cantidad, l.unidad).corregida ? ' (la factura dice «' + unidadReal(l.cantidad, l.unidad).original + '», pero por los decimales es peso)' : '') + ' a ' + costoTxt(l.costo_unitario_factura) + ' cada una, sin IVA · subtotal ' + money(l.subtotal_crc) + ' sin IVA' + (l.tarifa_iva != null ? ' · IVA ' + num(l.tarifa_iva, 2) + '%' : '')),
-    l.cabys ? h('small', 'CABYS ' + l.cabys + (l.cabys_descripcion ? ': ' + l.cabys_descripcion : '')) : null,
-    l.reabierta ? h('small.inv-marca', 'Volvió a pendiente después de una corrección') : null);
+    l.cabys ? h('small', 'CABYS ' + l.cabys + (l.cabys_descripcion ? ': ' + l.cabys_descripcion : '')) : null);
   function formaLinea(f, l, puede) {
     // Factura rechazada: la línea solo se lee; lo único que se puede hacer es marcarla «No es de inventario»
     if (!puede) {
-      const el = h('article.inv-linea.bloqueada', { 'data-linea': l.linea }, h('div.inv-linea-cab', descLinea(l)),
-        h('div.inv-linea-pie', h('button.btn', { type: 'button', onclick: () => pedirIgnorar(ctx, f, [l.linea], () => cargar()) }, 'No es de inventario')));
-      return { el, semaforo: () => ({ nivel: 'rojo' }), verde: () => false, sugerida: () => false, marcada: () => false, porColones: () => false, marcarSiTiene() {}, premarcar() {}, marcarOCrear: async () => {}, alCambiar() {}, problema: () => '', enfocarProblema() {}, datos: () => null };
+      const zonaB = h('div.rc-zona');
+      const { boton } = botonIgnorar(f, l, '', zonaB);
+      const el = h('article.inv-linea.rc-lin.bloqueada', { 'data-linea': l.linea, role: 'listitem' }, h('div.rc-fila.rc-fila-simple', h('div.rc-c-leido', descLinea(l)), h('div.rc-c-acc', boton)), zonaB);
+      return { el, semaforo: () => ({ nivel: 'rojo' }), verde: () => false, segura: () => false, sugerida: () => false, porColones: () => false, tieneArticulo: () => false, preparar: async () => false, alCambiar() {}, problema: () => '', enfocarProblema() {}, datos: () => null, aliasInfo: () => null };
     }
     const sug = l.sugerencia || recordados.get(l.linea) || {};
     const avisarCambio = [];
@@ -497,27 +616,24 @@ export async function abrirFactura(ctx, clave, { previa = null, recibirSugeridas
     let cantidadTocada = false;
     const enColones = () => !!art && art.unidad === 'colon';
     const valorLinea = () => Math.round(Number(l.subtotal_crc) * 100) / 100; // lo que cuesta la línea sin IVA, en colones
-    const chk = h('input', { type: 'checkbox', 'aria-label': 'Recibir la línea ' + l.linea });
+    const pres = leerPresentacion(l.descripcion, uFac(l));
     const nombreArt = h('strong.inv-art-nombre');
     const btnArt = h('button.btn', { type: 'button', onclick: () => escogerArticulo() }, 'Escoger artículo');
-    // Rubro (de él salen la bolsa, dónde se guarda y cuánto dura) y nombre del artículo que se crea solo al marcar la línea
-    const rubro = h('select.campo', { 'aria-label': 'Grupo de la línea ' + l.linea }, h('option', { value: '' }, 'Escoja la categoría…'),
+    // Rubro (de él salen la categoría, dónde se guarda y cuánto dura). El select vive fuera de la pantalla como modelo; lo que se ve es el buscador de rubros.
+    const rubro = h('select.campo', { 'aria-label': 'Rubro de la línea ' + l.linea }, h('option', { value: '' }, 'Escoja el rubro…'),
       ...(cat.categorias || []).filter((c) => c.activo !== false).map((c) => h('option', { value: c.id }, c.nombre)));
     rubro.value = (art && art.categoria_id) || sug.categoria_id || '';
     const nombreNuevo = h('input.campo', { type: 'text', maxlength: 120, autocomplete: 'off', 'aria-label': 'Nombre del artículo de la línea ' + l.linea, value: (sug.articulo || l.descripcion || '').slice(0, 120) });
-    // Lo que la persona decide es el rubro, y de él sale la bolsa (comida preparada, unitario o suministro). El nombre interno del artículo se toma de la factura y solo se cambia en «Detalles».
-    const bolsaEl = h('span.inv-bolsa-dice');
-    const pintarBolsa = () => { const c = (cat.categorias || []).find((x) => x.id === rubro.value); bolsaEl.textContent = c ? 'Va al grupo: ' + (GRUPOS[c.grupo] || 'sin grupo') + (c.grupo === 'unitario' ? '' : ' (se lleva en colones)') : ''; filaNombre.hidden = !!art || !c || c.grupo !== 'unitario'; el.classList.toggle('por-valor', !!c && c.grupo !== 'unitario'); };
-    rubro.addEventListener('change', () => { errorRubro.textContent = ''; pintarProducto(); if (art && art.categoria_id !== rubro.value) { art = null; chk.checked = false; el.classList.remove('marcada'); pintarArticulo(true); rubro.value = rubro.value; cambio(); } pintarBolsa(); pintarBotones(); });
-    const filaRubro = h('div.inv-rubro-fila', h('label.etq', h('span', 'Categoría'), rubro), bolsaEl);
-    const filaNombre = h('label.etq.inv-c-nombre', h('span', 'Nombre interno del artículo (sale de la factura; cámbielo solo si hace falta)'), nombreNuevo);
-    const errorRubro = h('small.inv-eco.mal');
+    const pintarBolsa = () => { const c = (cat.categorias || []).find((x) => x.id === rubro.value); filaNombre.hidden = !!art || !c || c.grupo !== 'unitario'; el.classList.toggle('por-valor', !!c && c.grupo !== 'unitario'); };
+    rubro.addEventListener('change', () => { errorRubro.textContent = ''; pintarProducto(); if (art && art.categoria_id !== rubro.value) { art = null; pintarArticulo(true); cambio(); } pintarBolsa(); pintarBotones(); pintarSem(); });
+    const filaNombre = h('label.etq.inv-c-nombre.rc-f-ancho', h('span', 'Nombre interno del artículo (sale de la factura; cámbielo solo si hace falta)'), nombreNuevo);
+    const errorRubro = h('small.inv-eco.mal', { role: 'alert' });
     const factor = h('input.campo.inv-num', { type: 'text', inputmode: 'decimal', autocomplete: 'off', 'aria-label': 'Cuántas unidades del artículo trae cada unidad de la factura' });
     const factorEco = h('small.inv-eco');
     let notaAuto = ''; // explicación de por qué la conversión arrancó en 1 aunque el nombre diga otra cosa
     const avisoConv = h('p.inv-costo-aviso', { role: 'status', hidden: true }); // sentido comercial: ¿el costo por unidad que sale de esta conversión es creíble?
     const cantidad = campoCantidad({ etiqueta: 'Cantidad que entra', unidad: art?.unidad || '', alCambiar: () => { cantidadTocada = true; pintarCosto(); cambio(); } });
-    const ubic = selectUbicacion(cat, { etiqueta: 'Dónde se guarda', alCambiar: cambio });
+    const ubic = selectUbicacion(cat, { etiqueta: 'Dónde se guarda', alCambiar: () => { pintarSem(); cambio(); } });
     let venceEditada = false; // solo si una persona escribe la fecha se manda; si no, la base aplica la misma regla desde la fecha de la factura
     const vence = h('input.campo', { type: 'date', 'aria-label': 'Fecha de vencimiento', oninput: () => { venceEditada = true; pintarVence(); } });
     const venceEco = h('small.inv-eco');
@@ -529,24 +645,22 @@ export async function abrirFactura(ctx, clave, { previa = null, recibirSugeridas
     const refCosto = new Map();
     const costoInput = h('input.campo.inv-num', { type: 'text', inputmode: 'decimal', autocomplete: 'off', 'aria-label': 'Costo sin IVA por unidad del artículo' });
     const costoDet = h('details.inv-corregir', h('summary', 'Corregir el costo'), h('label.etq', 'Costo sin IVA por unidad del artículo (₡)', costoInput, h('small', 'Solo si el costo de la factura no es el correcto. Déjelo vacío para usar el de la factura.')));
-    const zona = h('div');
-    const ignorarBtn = h('button.btn' + (sug.no_inventario ? '.ambar' : ''), { type: 'button', onclick: () => pedirIgnorar(ctx, f, [l.linea], () => cargar()) }, 'No es de inventario');
-    // Dos decisiones por línea, las dos ya sugeridas: el rubro (por CABYS o memoria) y la categoría (la bolsa a la que pertenece ese rubro)
-    // A qué cajón del menú va un producto nuevo según la categoría del inventario: confitería y snacks a Pulpería, energéticas y maltas a Deportivas y energéticas, aguas y yogures a Refrescos, batidos, aguas; lo demás a Gaseosas, tés y jugos
+    const zona = h('div.rc-zona');
+    // Dos decisiones por línea, las dos ya sugeridas: el rubro (por CABYS o memoria) y la categoría a la que pertenece ese rubro (comida preparada, unitarios, suministros)
+    // A qué cajón del menú va un producto nuevo según el rubro del inventario: confitería y snacks a Pulpería, energéticas y maltas a Deportivas y energéticas, aguas y yogures a Refrescos, batidos, aguas; lo demás a Gaseosas, tés y jugos
     const cajonDeRubro = (nom) => (/confiter|snack/i.test(nom) ? '17' : /energ|malta/i.test(nom) ? '12' : /agua|yogur|l[aá]cteo/i.test(nom) ? '13' : '11');
     const grupoDeRubro = (id) => (cat.categorias || []).find((x) => x.id === id)?.grupo || '';
     let bolsa = grupoDeRubro(rubro.value);
-    const selCat = h('select.campo', { 'aria-label': 'Grupo de la línea ' + l.linea }, ...['comida_preparada', 'unitario', 'suministro'].map((g) => h('option', { value: g }, GRUPOS[g])));
-    const llenarRubros = (g) => { const v = rubro.value; rubro.replaceChildren(h('option', { value: '' }, 'Escoja la categoría…'), ...(cat.categorias || []).filter((c) => c.activo !== false && c.grupo === g).map((c) => h('option', { value: c.id }, c.nombre))); rubro.value = grupoDeRubro(v) === g ? v : ''; if (!rubro.value) { const op = [...rubro.options].filter((o) => o.value); const sg = sug.categoria_id && op.find((o) => o.value === sug.categoria_id); rubro.value = sg ? sg.value : op[0]?.value || ''; } };
-    const pintarBotones = () => { bolsa = grupoDeRubro(rubro.value) || bolsa; selCat.value = bolsa || ''; el.dataset.bolsa = bolsa; if (typeof buscar !== 'undefined') buscar.value = (cat.categorias || []).find((x) => x.id === rubro.value)?.nombre || ''; };
-    selCat.addEventListener('change', () => { bolsa = selCat.value; errorRubro.textContent = ''; if (art && grupoDe(cat, art) !== bolsa) { art = null; pintarArticulo(true); } llenarRubros(bolsa); pintarBolsa(); pintarBotones(); });
-    filaRubro.append(h('label.etq', h('span', 'Grupo'), selCat));
+    const selCat = h('select.campo', { 'aria-label': 'Categoría de la línea ' + l.linea }, ...['comida_preparada', 'unitario', 'suministro'].map((g) => h('option', { value: g }, GRUPOS[g])));
+    const llenarRubros = (g) => { const v = rubro.value; rubro.replaceChildren(h('option', { value: '' }, 'Escoja el rubro…'), ...(cat.categorias || []).filter((c) => c.activo !== false && c.grupo === g).map((c) => h('option', { value: c.id }, c.nombre))); rubro.value = grupoDeRubro(v) === g ? v : ''; if (!rubro.value) { const op = [...rubro.options].filter((o) => o.value); const sg = sug.categoria_id && op.find((o) => o.value === sug.categoria_id); rubro.value = sg ? sg.value : op[0]?.value || ''; } };
+    const pintarBotones = () => { bolsa = grupoDeRubro(rubro.value) || bolsa; selCat.value = bolsa || ''; el.dataset.bolsa = bolsa; if (typeof buscar !== 'undefined') buscar.value = rubro.value || ''; };
+    selCat.addEventListener('change', () => { bolsa = selCat.value; errorRubro.textContent = ''; if (art && grupoDe(cat, art) !== bolsa) { art = null; pintarArticulo(true); } llenarRubros(bolsa); pintarBolsa(); pintarBotones(); pintarSem(); cambio(); });
     // Unitarios (gaseosas, bebidas): la línea se empareja con el producto del menú que se vende, 1 a 1. Cualquier nombre que el proveedor use después para eso se recuerda y entra al mismo producto.
     const prodInput = h('input.campo', { type: 'text', autocomplete: 'off', placeholder: 'Escriba para buscar el producto que usted vende (ej. fresca, coca)…', 'aria-label': 'Producto del menú que se vende, línea ' + l.linea });
     const prodEco = h('small.inv-eco');
     const prodRes = h('div.inv-prod-res', { role: 'listbox', hidden: true });
     let prodLista = null;
-    const filaProd = h('div.inv-prod-fila', { hidden: true }, h('label.etq', h('span', 'Producto del menú que se vende'), prodInput), prodRes, prodEco);
+    const filaProd = h('div.inv-prod-fila.rc-f-ancho', { hidden: true }, h('label.etq', h('span', 'Producto del menú que se vende'), prodInput), prodRes, prodEco);
     const malProd = (m) => { prodEco.textContent = m; prodEco.className = 'inv-eco mal'; };
     async function cargarProductos() {
       if (prodLista) return prodLista;
@@ -563,13 +677,13 @@ export async function abrirFactura(ctx, clave, { previa = null, recibirSugeridas
     }
     async function emparentar(pr) {
       prodRes.hidden = true;
-      if (!rubro.value) return malProd('Escoja primero la categoría de la línea.');
+      if (!rubro.value) return malProd('Escoja primero el rubro de la línea.');
       prodInput.disabled = true; prodEco.textContent = 'Emparentando…'; prodEco.className = 'inv-eco';
       try {
         const nuevo = await inv.productoArticulo(pr.id, rubro.value, l.cabys || '', unidadSugerida(uFac(l)));
         prodLista = null; ctx.articulos.olvidar(); articulos = await ctx.articulos.lista(true);
         art = articulos.find((a) => a.id === nuevo.id) || nuevo;
-        pintarArticulo(true); chk.checked = true; el.classList.add('marcada'); pintarBotones(); cambio(); guardarEstado();
+        pintarArticulo(true); pintarBotones(); cambio(); guardarEstado();
         prodInput.value = pr.nombre;
         prodEco.textContent = 'Emparentado con «' + pr.nombre + '». Con «Recordar» marcado, lo que este proveedor traiga con este nombre entrará solo a este producto.'; prodEco.className = 'inv-eco';
       } catch (e) { malProd((e && e.message) || 'No se pudo emparentar. Intente de nuevo.'); }
@@ -587,7 +701,7 @@ export async function abrirFactura(ctx, clave, { previa = null, recibirSugeridas
       prodRes.replaceChildren(...ps.map((x) => h('button.btn.inv-prod-op', { type: 'button', role: 'option', onclick: () => emparentar(x) }, h('strong', x.nombre), h('small', (x.precio > 0 ? ' · ' + money(x.precio) + ' con IVA' : ' · precio pendiente') + (x.articulo ? ' · ya enlazado con «' + x.articulo + '»' : '')))), agregar);
       prodRes.hidden = false;
     });
-    // El producto no está en el menú: se agrega en ese momento (cajón de gaseosas, tés y jugos, precio pendiente) y la línea se empareja con él
+    // El producto no está en el menú: se agrega en ese momento (cajón según el rubro, precio pendiente) y la línea se empareja con él
     async function agregarProducto(nombre) {
       prodRes.hidden = true; prodInput.disabled = true; prodEco.textContent = 'Agregando «' + nombre + '» al menú…'; prodEco.className = 'inv-eco';
       try {
@@ -598,45 +712,41 @@ export async function abrirFactura(ctx, clave, { previa = null, recibirSugeridas
         if (nuevo.nuevo) prodEco.textContent = 'Se agregó «' + nombre + '» al menú (código ' + nuevo.codigo + ', precio pendiente: fíjelo en Productos) y la línea quedó emparentada con él.';
       } catch (e) { malProd((e && e.message) || 'No se pudo agregar el producto. Intente de nuevo.'); prodInput.disabled = false; }
     }
-    // Buscador del rubro: se escribe parte del nombre (ej. «snack») y sale la lista de todos los rubros; al escoger uno, la categoría se ajusta sola
-    const idLista = 'rubros-' + String(f.clave).slice(-8) + '-' + l.linea;
-    const datos = h('datalist', { id: idLista }, ...(cat.categorias || []).filter((c) => c.activo !== false).map((c) => h('option', { value: c.nombre, label: GRUPOS[c.grupo] || '' })));
-    const buscar = h('input.campo.inv-buscar-rubro', { type: 'text', list: idLista, autocomplete: 'off', placeholder: 'Escriba para buscar la categoría…', 'aria-label': 'Buscar la categoría de la línea ' + l.linea, onfocus: (e) => { e.target.dataset.prev = e.target.value; e.target.placeholder = e.target.value || 'Escriba para buscar la categoría…'; e.target.value = ''; }, onblur: (e) => { if (!e.target.value.trim()) e.target.value = nombreRubro(); } });
+    // Rubro: una lista visible con TODOS los rubros, agrupados por cómo se llevan (uno a uno, o bolsa por monto). Al escoger uno, la categoría se ajusta sola.
+    const GRUPO_LISTA = { unitario: 'Unitarios · uno a uno (gaseosas, bebidas, confitería)', comida_preparada: 'Comida preparada · bolsa por monto (incluye Pulpería: snacks, caramelos, helados)', suministro: 'Suministros · bolsa por monto' };
     const nombreRubro = () => (cat.categorias || []).find((x) => x.id === rubro.value)?.nombre || '';
+    const buscar = h('select.campo.inv-buscar-rubro', { 'aria-label': 'Rubro de la línea ' + l.linea },
+      h('option', { value: '' }, 'Escoja el rubro…'),
+      ...['unitario', 'comida_preparada', 'suministro'].map((g) => h('optgroup', { label: GRUPO_LISTA[g] },
+        ...(cat.categorias || []).filter((c) => c.activo !== false && c.grupo === g).sort((x, y) => String(x.nombre).localeCompare(String(y.nombre), 'es')).map((c) => h('option', { value: c.id }, c.nombre)))));
+    buscar.value = rubro.value || '';
     buscar.addEventListener('change', () => {
-      const t = norm(buscar.value);
-      if (!t) { buscar.value = nombreRubro(); return; }
-      const cs = (cat.categorias || []).filter((c) => c.activo !== false);
-      const c = cs.find((x) => norm(x.nombre) === t) || (cs.filter((x) => norm(x.nombre).includes(t)).length === 1 ? cs.find((x) => norm(x.nombre).includes(t)) : null);
-      if (!c) { errorRubro.textContent = 'No hay una categoría con ese nombre: escoja una de la lista.'; return; }
+      const c = (cat.categorias || []).find((x) => x.id === buscar.value);
+      if (!c) { rubro.value = ''; rubro.dispatchEvent(new Event('change')); return; }
       errorRubro.textContent = ''; bolsa = c.grupo; llenarRubros(c.grupo); rubro.value = c.id; rubro.dispatchEvent(new Event('change'));
     });
-    rubro.hidden = true;
-    rubro.parentElement.append(buscar, datos);
-    const campos = h('div.inv-linea-campos',
-      h('label.etq.inv-c-conv', h('span', 'Conversión'), h('span.inv-con-unidad', h('span.inv-pre', 'Cada «' + (uFac(l) || 'unidad') + '» de la factura trae'), factor, h('span.inv-unidad.inv-u-art')), factorEco, avisoConv),
-      h('label.etq.inv-c-ubic', 'Dónde se guarda', ubic),
-      h('div.etq.inv-c-vence', h('span', 'Vence'), vence, venceEco, h('label.inv-casilla.chica', noVence, h('span', 'No vence'))),
-      h('div.inv-costo-fila', h('span.inv-costo-et', 'Costo sin IVA:'), costoTxtEl), // el costo sale de la factura: no se corrige a mano (si no cuadra, lo que se corrige es la conversión)
-      costoAviso, relEl);
-    const artFila = h('div.inv-campo-art', h('span.etq', 'Artículo del inventario'), h('div.inv-art-fila', nombreArt, btnArt));
-    const detalles = h('details.inv-detalles', h('summary', 'Detalles: conversión, dónde se guarda, vencimiento y costo'), artFila, filaNombre, campos);
+    const campoRubro = h('label.etq.rc-f-rubro', h('span', 'Rubro'), buscar);
+    const campoCat = h('label.etq.rc-f-cat', h('span', 'Categoría'), selCat);
+    const artFila = h('div.inv-campo-art.rc-f-art', h('span.etq', 'Artículo del inventario'), h('div.inv-art-fila', nombreArt, btnArt));
+    const campoConv = h('label.etq.inv-c-conv.rc-f-conv', h('span', 'Presentación y conversión de unidades'), h('span.inv-con-unidad', h('span.inv-pre', 'Cada «' + (uFac(l) || 'unidad') + '» de la factura trae'), factor, h('span.inv-unidad.inv-u-art')), factorEco, avisoConv);
+    const costoFila = h('div.inv-costo-fila.rc-costo', h('span.inv-costo-et', 'Costo sin IVA:'), costoTxtEl); // el costo sale de la factura: no se corrige a mano (si no cuadra, lo que se corrige es la conversión)
+    const mas = h('details.inv-detalles.rc-mas-campos', h('summary', 'Cantidad, dónde se guarda, vencimiento y costo'),
+      h('div.inv-linea-campos', cantidad.el, h('label.etq.inv-c-ubic', 'Dónde se guarda', ubic),
+        h('div.etq.inv-c-vence', h('span', 'Vence'), vence, venceEco, h('label.inv-casilla.chica', noVence, h('span', 'No vence'))), costoDet));
     const sugTxt = sugerenciaTxt(sug);
-    const simple = esSimple(cat);
-    const resumen = h('p.tenue.inv-chico.inv-resumen-simple');
+
     // Semáforo de la línea: verde = igual que una compra anterior de este proveedor y con sentido; ámbar = revisar; rojo = no se puede recibir así
     const ia = iaPorLinea.get(l.linea) || null;
     const iaEl = h('div.inv-ia', { hidden: !ia });
     const iaModelo = ia && /sonnet|opus/.test(ia.modelo || '') ? 'segunda revisión' : 'primera revisión';
-    const semEl = h('p.inv-semaforo', { role: 'status' });
     let sem = { nivel: 'rojo', razon: '' };
     function evaluarSem() {
       const fv = leerFactor();
       const rojo = (razon, bloquea) => ({ nivel: 'rojo', razon, bloquea: !!bloquea });
       if (sug.no_inventario) return rojo('Parece que no es de inventario (' + (sug.fuente === 'memoria' ? 'así se marcó la vez pasada' : sug.fuente === 'servicio' ? 'parece un servicio' : 'por su CABYS') + '). Si no lo es, toque «No es de inventario».');
-      if (!art && !rubro.value) return rojo('Falta escoger la categoría.');
-      if (!art && ia && ia.nivel === 'verde' && !sug.no_inventario) { const g0 = grupoDeRubro(rubro.value); if (g0 && g0 !== 'unitario') return { nivel: 'verde', razon: 'Entra por su valor en colones a «' + (nombreRubro() || 'la categoría') + '» (' + money(valorLinea()) + ' sin IVA). Claude la revisó: ' + ia.razon }; }
-      if (!art) return { nivel: 'ambar', razon: 'No hay un artículo igual todavía: al marcarla se crea uno nuevo en la categoría «' + (nombreRubro() || 'escogido') + '». Mire si no existe ya uno parecido.' };
+      if (!art && !rubro.value) return rojo('Falta escoger el rubro.');
+      if (!art && ia && ia.nivel === 'verde' && !sug.no_inventario) { const g0 = grupoDeRubro(rubro.value); if (g0 && g0 !== 'unitario') return { nivel: 'verde', razon: 'Entra por su valor a «' + (nombreRubro() || 'el rubro') + '» (' + money(valorLinea()) + ' sin IVA). Claude la revisó: ' + ia.razon }; }
+      if (!art) return { nivel: 'ambar', razon: 'No hay un artículo igual todavía: al recibirla se crea uno nuevo en el rubro «' + (nombreRubro() || 'escogido') + '». Mire si no existe ya uno parecido.' };
       if (!Number.isFinite(fv) || fv <= 0) return rojo('Revise la conversión: debe ser mayor que cero.');
       const rev = enColones() ? { aviso: '' } : revisarConversion({ descripcion: l.descripcion, subtotal: l.subtotal_crc, cantidad: l.cantidad, factorActual: fv }, (n) => money(n));
       if (rev.aviso) return rojo('El precio por unidad no tiene sentido con esta conversión. ' + rev.aviso, true);
@@ -644,9 +754,9 @@ export async function abrirFactura(ctx, clave, { previa = null, recibirSugeridas
       if (sug.fuente !== 'memoria') motivos.push(sug.fuente ? 'Es una sugerencia del sistema, no una compra anterior de este proveedor (' + String(FUENTES[sug.fuente] || 'por parecido').replace(/^./, (c) => c.toLowerCase()) + ').' : 'No hay una compra anterior de este proveedor con lo mismo.');
       else if (sug.articulo_id && sug.articulo_id !== art.id) motivos.push('Se cambió el artículo que recordaba el sistema.');
       if (sug.fuente === 'memoria' && sug.factor != null && Number(sug.factor) !== fv) motivos.push('La conversión es distinta a la de la vez pasada (' + num(sug.factor, 6) + ').');
-      if (notaAuto && fv === 1) motivos.push('La conversión se ajustó sola porque la del nombre daba un precio sin sentido.');
+      if (notaAuto && fv === 1) motivos.push('La conversión quedó en 1 porque el precio de la factura cuadra con unidades sueltas.');
       if (ia) {
-        if (ia.nivel !== 'verde') motivos.push('Claude pide revisarla (su razón está más abajo).');
+        if (ia.nivel !== 'verde') motivos.push('Claude pide revisarla.');
         if (!enColones() && ia.factor != null && Number(ia.factor) !== fv) motivos.push('Claude propone una conversión de ' + num(ia.factor, 6) + ' y aquí hay ' + num(fv, 6) + '.');
         if (ia.articulo_id && art && ia.articulo_id !== art.id) motivos.push('Claude propone otro artículo.');
       }
@@ -657,45 +767,131 @@ export async function abrirFactura(ctx, clave, { previa = null, recibirSugeridas
         if (hist > 0 && c > 0 && Number(r.lotes_anteriores) >= 1 && (c / hist > 1.35 || c / hist < 1 / 1.35)) motivos.push('El costo (' + money(c) + ') es ' + num(Math.abs(c / hist - 1) * 100, 0) + ' % ' + (c > hist ? 'más alto' : 'más bajo') + ' que el de las compras anteriores (' + money(hist) + ').');
       }
       if (motivos.length) return { nivel: 'ambar', razon: motivos.join(' ') };
-      return { nivel: 'verde', razon: 'Igual que la vez pasada con este proveedor: ' + art.nombre + (enColones() ? ', entra por su valor en colones' : ', cada una trae ' + num(fv, 6) + ' ' + unidadTxt(art.unidad, fv)) + '. El precio tiene sentido.' + (ia && ia.nivel === 'verde' ? ' Claude coincide.' : '') };
+      return { nivel: 'verde', razon: 'Igual que la vez pasada con este proveedor: ' + limpiaNombre(art.nombre) + (enColones() ? ', entra por su valor' : ', cada una trae ' + num(fv, 6) + ' ' + unidadTxt(art.unidad, fv)) + '. El precio tiene sentido.' + (ia && ia.nivel === 'verde' ? ' Claude coincide.' : '') };
     }
+
+    /* ----- La fila: estado, lo que se entendió, cantidad y costo, destino y la acción ----- */
+    const semPunto = h('span.rc-punto', { 'aria-hidden': 'true' }), semPalabra = h('span.rc-sem-pal');
+    const leidoNom = h('strong.rc-leido-nom'), leidoPres = h('span.rc-leido-pres'), leidoFac = h('small.rc-leido-fac');
+    const cantL1 = h('strong.rc-cant-l1'), cantL2 = h('small.rc-cant-l2');
+    const destL1 = h('strong.rc-dest-l1'), destL2 = h('small.rc-dest-l2');
+    const celdaAcc = h('div.rc-c-acc');
+    const filaEl = h('div.rc-fila',
+      h('div.rc-c-sem', semPunto, semPalabra),
+      h('div.rc-c-leido', h('div.rc-leido-l1', leidoNom, leidoPres), leidoFac),
+      h('div.rc-c-cant', cantL1, cantL2),
+      h('div.rc-c-dest', destL1, destL2),
+      celdaAcc);
+    // Botones de acción: «Recibir esta línea» (una sola línea, una sola clave), «No es de inventario» (un toque) y «Cambiar» (abre la fila de una verde)
+    const btnUna = h('button.btn.rc-recibir-una', { type: 'button' }, 'Recibir esta línea');
+    const aliasInfo = () => (art ? { detalle: l.descripcion, articuloNombre: art.nombre, articuloId: art.id, unidad: art.unidad, factor: Number(leerFactor()), sugerencia: sug } : null);
+    const accUna = accionSegura({ boton: btnUna, zona, ocupado: 'Recibiendo…',
+      hacer: async (idem) => {
+        if (!(await asegurarArticulo())) throw new Error(errorRubro.textContent || 'Línea ' + l.linea + ': falta completar el rubro.');
+        const p = problema(); if (p) { enfocarProblema(); throw new Error(p); }
+        const info = aliasInfo(), r = await inv.recibir([{ ...datosLinea(), recordar: recordar.checked }], idem);
+        await guardarAliases(ctx, f, [{ ...info, recordar: recordar.checked }]);
+        return r;
+      },
+      alTerminar: async (r, { repetida }) => { mostrarResultado(r, repetida); ctx.articulos.olvidar(); await cargar(); } });
+    btnUna.addEventListener('click', () => accUna.ejecutar());
+    const { boton: ignorarBtn } = botonIgnorar(f, l, '', zona);
+    const btnCambiar = h('button.btn.rc-cambiar', { type: 'button', onclick: () => { tocada = true; abierta = !abierta; pintarSem(); } }, 'Cambiar');
+    const panelAcc = h('div.rc-panel-acc');
+    // Dice «corto» lo que sea largo y deja «ver más»
+    const razonL = h('p.rc-razon'), verMas = h('button.rc-vermas', { type: 'button', 'aria-expanded': 'false', onclick: () => { const ab = masEl.hidden; masEl.hidden = !ab; verMas.textContent = ab ? 'ver menos' : 'ver más'; verMas.setAttribute('aria-expanded', String(ab)); } }, 'ver más');
+    const masEl = h('div.rc-mas', { hidden: true }, iaEl);
+    // Diccionario de siglas: «SIGLA = significado» con «Confirmar» y «Corregir» (solo en las ámbar)
+    const siglaEl = h('div.rc-siglas', { hidden: true });
+    const pintarSiglas = () => {
+      const ss = sem.nivel === 'ambar' ? siglasDe(ia) : [];
+      siglaEl.hidden = !ss.length;
+      poner(siglaEl, ...ss.map((s) => {
+        const msg = h('small.inv-eco'), editor = h('div.rc-sigla-ed', { hidden: true });
+        const nuevo = h('input.campo', { type: 'text', maxlength: 120, 'aria-label': 'Qué significa ' + s.sigla, placeholder: 'Qué significa' });
+        const hecho = (t) => {
+          msg.textContent = t; msg.className = 'inv-eco';
+          // «Deshacer» deja la sigla como estaba (pendiente, con el significado que propuso la IA)
+          const bD = h('button.btn.chico', { type: 'button', onclick: async () => { bD.disabled = true; try { const r = await DICCIONARIO.deshacer(s); s.confirmado = false; s.rechazada = false; if (r && r.significado) s.significado = r.significado; pintarSiglas(); } catch (e) { bD.disabled = false; msg.textContent = (e && e.message) || 'No se pudo deshacer.'; msg.className = 'inv-eco mal'; } } }, 'Deshacer');
+          msg.append(' ', bD);
+        };
+        const bConf = h('button.btn.chico', { type: 'button', onclick: async () => { bConf.disabled = true; try { await DICCIONARIO.confirmar(s); hecho('Confirmada: «' + s.sigla + '» = ' + s.significado + '.'); s.confirmado = true; bCorr.hidden = bNo.hidden = true; bConf.hidden = true; } catch (e) { bConf.disabled = false; msg.textContent = (e && e.message) || 'No se pudo confirmar.'; msg.className = 'inv-eco mal'; } } }, 'Confirmar');
+        const bGuardar = h('button.btn.chico.primario', { type: 'button', onclick: async () => { const t = nuevo.value.trim(); if (t.length < 2) { msg.textContent = 'Escriba qué significa (al menos 2 letras).'; msg.className = 'inv-eco mal'; return; } bGuardar.disabled = true; try { await DICCIONARIO.corregir(s, t); hecho('Corregida: «' + s.sigla + '» = ' + t + '.'); s.significado = t; s.confirmado = true; editor.hidden = true; bConf.hidden = bCorr.hidden = bNo.hidden = true; } catch (e) { bGuardar.disabled = false; msg.textContent = (e && e.message) || 'No se pudo corregir.'; msg.className = 'inv-eco mal'; } } }, 'Guardar el significado');
+        editor.append(nuevo, bGuardar);
+        const bCorr = h('button.btn.chico', { type: 'button', onclick: () => { editor.hidden = !editor.hidden; if (!editor.hidden) nuevo.focus(); } }, 'Corregir');
+        const bNo = h('button.btn.chico', { type: 'button', onclick: async () => { bNo.disabled = true; try { await DICCIONARIO.rechazar(s); hecho('Rechazada: la IA ya no usará «' + s.sigla + '» = ' + s.significado + '.'); s.rechazada = true; bConf.hidden = bCorr.hidden = bNo.hidden = true; editor.hidden = true; } catch (e) { bNo.disabled = false; msg.textContent = (e && e.message) || 'No se pudo rechazar.'; msg.className = 'inv-eco mal'; } } }, 'No es correcta');
+        return h('div.rc-sigla', h('span.rc-sigla-txt', h('strong', s.sigla), ' = ', s.significado), h('span.rc-sigla-bot', bConf, bCorr, bNo), editor, msg);
+      }));
+    };
+    const panel = h('div.rc-panel', { hidden: true },
+      h('div.rc-razon-fila', razonL, verMas), masEl, siglaEl,
+      h('div.rc-campos', campoRubro, campoCat, artFila, campoConv, costoFila, filaNombre, filaProd, errorRubro),
+      costoAviso, relEl, mas, panelAcc, zona);
+    let abierta = null, tocada = Boolean(memoria.get(l.linea)?.tocada2); // abierta: se abre sola si hay algo que revisar, salvo que la persona la haya abierto o cerrado
+    if (memoria.has(l.linea) && memoria.get(l.linea).abierta != null) abierta = memoria.get(l.linea).abierta;
     function pintarSem() {
       sem = evaluarSem();
-      semEl.className = 'inv-semaforo ' + sem.nivel;
-      semEl.replaceChildren(h('strong', { class: 'inv-sem-et' }, ({ verde: 'Verde: lista', ambar: 'Ámbar: revise', rojo: 'Rojo: no se puede' })[sem.nivel]), ' ' + sem.razon);
       el.dataset.semaforo = sem.nivel;
+      if (!tocada) abierta = sem.nivel === 'ambar' || (sem.nivel === 'rojo' && !sug.no_inventario);
+      razonL.textContent = frase(sem.razon);
+      // Lo largo (la razón completa, lo que sugiere el sistema, la propuesta de Claude) queda detrás de «ver más»
+      const completa = sem.razon.length > frase(sem.razon).length;
+      poner(masEl, completa ? h('p.rc-razon-full', sem.razon) : null, sugTxt ? h('p.inv-sug' + (sug.no_inventario ? '.no-inv' : ''), h('span.inv-sug-et', 'Sugerencia: '), sugTxt) : null, iaEl);
       if (ia) {
         const fv = leerFactor();
         const usar = !enColones() && ia.factor != null && Number.isFinite(fv) && Number(ia.factor) !== fv;
+        iaEl.hidden = false;
         iaEl.replaceChildren(...[h('strong', 'Propuesta de Claude (' + iaModelo + '): '), ia.razon + ' ',
           usar ? h('button.btn.chico', { type: 'button', onclick: () => { factor.value = String(ia.factor).replace('.', ','); factor.dispatchEvent(new Event('input', { bubbles: true })); } }, 'Usar la conversión propuesta (' + num(ia.factor, 6) + ')') : null].filter(Boolean));
       }
+      verMas.hidden = !masEl.childNodes.length || !(completa || sugTxt || ia);
+      pintarSiglas();
+      pintarFila();
+      pintarAccion();
+      el.classList.toggle('abierta', !!abierta);
+      panel.hidden = !abierta;
+      avisarCambio.forEach((fn) => fn());
     }
-    const el = h('article.inv-linea' + (simple ? '.inv-simple' : ''), { 'data-linea': l.linea },
-      h('div.inv-linea-cab',
-        h('label.inv-recibir-chk', chk, h('span', 'Recibir')),
-        descLinea(l)),
-      semEl, iaEl,
-      sugTxt ? h('p.inv-sug' + (sug.no_inventario ? '.no-inv' : ''), h('span.inv-sug-et', 'Sugerencia: '), sugTxt) : null,
-      resumen,
-      filaRubro, errorRubro,
-      filaProd,
-      h('div.inv-fila-cant', cantidad.el),
-      detalles,
-      h('div.inv-linea-pie', ignorarBtn, zona));
+    function pintarFila() {
+      semPunto.className = 'rc-punto ' + sem.nivel;
+      semPalabra.textContent = sug.no_inventario && sem.nivel === 'rojo' ? 'No es de inventario' : ({ verde: 'Segura', ambar: 'Revisar', rojo: 'Falta algo' })[sem.nivel];
+      const nom = art && !enColones() ? limpiaNombre(art.nombre) : ia && ia.articulo && !enColones() ? ia.articulo : pres.nombre;
+      leidoNom.textContent = nom;
+      const extra = art && !enColones() && !pres.texto.includes('de ') && Number(leerFactor()) > 1 ? 'cada ' + (uFac(l) || 'unidad').toLowerCase() + ' trae ' + num(leerFactor(), 6) : '';
+      leidoPres.textContent = [pres.texto, extra].filter(Boolean).length ? ' · ' + [pres.texto, extra].filter(Boolean).join(' · ') : '';
+      leidoFac.textContent = 'Línea ' + l.linea + ' · en la factura: «' + l.descripcion + '»';
+      cantL1.textContent = num(l.cantidad, 3) + ' ' + uFac(l) + ' × ' + costoTxt(l.costo_unitario_factura);
+      const c = costoCalculado(), r = art && refCosto.get(art.id), v = r && r.hay ? Number(r.precio_venta_sin_iva) : 0;
+      cantL2.textContent = enColones() ? 'Entra por su valor: ' + money(valorLinea()) + ' sin IVA' : art && c != null && c > 0 ? costoTxt(c) + ' por ' + unidadTxt(art.unidad, 1) + (v > 0 ? ' · ' + num(c / v * 100, 0) + ' % del precio de venta' : '') : 'sin IVA';
+      const g = bolsa || grupoDeRubro(rubro.value);
+      const donde = ubic.value ? (ubic.selectedOptions[0]?.textContent || '') : '';
+      destL1.textContent = nombreRubro() || (sug.no_inventario ? 'No es de inventario (sugerido)' : 'Falta escoger el rubro');
+      destL1.classList.toggle('falta', !nombreRubro() && !sug.no_inventario);
+      destL2.textContent = [GRUPOS[g] || '', donde].filter(Boolean).join(' · ') || ' ';
+    }
+    function pintarAccion() {
+      const principal = sem.nivel === 'verde' ? btnCambiar : (sem.nivel === 'rojo' && sug.no_inventario) ? ignorarBtn : btnUna;
+      celdaAcc.replaceChildren(principal);
+      panelAcc.replaceChildren(...[btnUna, ignorarBtn].filter((b) => b !== principal));
+      btnCambiar.textContent = abierta ? 'Cerrar' : 'Cambiar';
+      btnUna.classList.toggle('primario', principal === btnUna);
+      ignorarBtn.classList.toggle('primario', principal === ignorarBtn);
+      if (!btnUna.dataset.ocupado) btnUna.disabled = !!sem.bloquea;
+    }
+    const el = h('article.inv-linea.rc-lin', { 'data-linea': l.linea, role: 'listitem' }, filaEl, panel);
 
+    function ponerUnidadCant() { const u = el.querySelector('.inv-campo-cant .inv-unidad'); if (u && enColones()) u.textContent = '₡ sin IVA'; }
     function pintarArticulo(cambiar) {
       pintarProducto();
-      nombreArt.textContent = art ? (art.unidad === 'colon' ? art.nombre : art.nombre + ' (se cuenta en ' + unidadTxt(art.unidad, 2) + ')') : 'Sin escoger';
+      nombreArt.textContent = art ? (art.unidad === 'colon' ? limpiaNombre(art.nombre) : art.nombre + ' (se cuenta en ' + unidadTxt(art.unidad, 2) + ')') : 'Sin escoger';
       el.classList.toggle('en-colones', enColones());
       nombreArt.classList.toggle('falta', !art);
       btnArt.textContent = art ? 'Cambiar artículo' : 'Escoger uno que ya existe';
-      filaRubro.hidden = !!art && !simple; filaNombre.hidden = true; errorRubro.textContent = ''; if (art && art.categoria_id) rubro.value = art.categoria_id;
+      filaNombre.hidden = true; errorRubro.textContent = ''; if (art && art.categoria_id) rubro.value = art.categoria_id;
       el.querySelector('.inv-u-art').textContent = art ? unidadTxt(art.unidad, 2) + ' del artículo' : 'del artículo';
-      cantidad.unidad(art?.unidad || '');
+      cantidad.unidad(art?.unidad || ''); ponerUnidadCant();
       el.dataset.grupo = grupoDe(cat, art) || '';
-      if (simple && el.dataset.grupo === 'unitario') detalles.open = true; // en modo simple no hay cajón: los campos del unitario salen a la vista
-      if (!cambiar) { pintarResumen(); pintarSem(); return; }
+      if (!cambiar) { pintarSem(); return; }
       // Valores por omisión de ese artículo: los de la sugerencia si es el mismo; si no, la regla del contrato (3.3)
       const mismo = art && sug.articulo_id === art.id;
       let fac = mismo && sug.factor != null ? Number(sug.factor) : sug.factor_sugerido != null ? Number(sug.factor_sugerido) : 1;
@@ -708,24 +904,16 @@ export async function abrirFactura(ctx, clave, { previa = null, recibirSugeridas
       const ven = mismo ? sug.vence_en : venceDe(art);
       venceEditada = false; noVence.checked = !ven; vence.disabled = !ven; vence.value = ven || '';
       if (enColones()) aplicarColones();
-      pintarFactor(); pintarCosto(); pintarVence(); pintarResumen(); pintarSem();
+      pintarFactor(); pintarCosto(); pintarVence(); pintarSem();
     }
-    // Comida preparada y suministros se llevan en colones: la línea entra a la bolsa por lo que costó sin IVA (cada unidad de la factura trae su precio en colones)
+    // Comida preparada y suministros se llevan por su valor: la línea entra por lo que costó sin IVA (cada unidad de la factura trae su precio)
     function aplicarColones() {
       const q = Number(l.cantidad) || 1;
       const fac = Math.round((valorLinea() / q) * 1e6) / 1e6;
       factor.value = String(fac).replace('.', ',');
-      cantidad.poner(valorLinea());
+      cantidad.poner(valorLinea()); ponerUnidadCant();
       cantidadTocada = false;
       costoInput.value = '1'; costoDet.open = false;
-    }
-    // Modo simple: lo que no se pide se dice en una línea, para que se vea a dónde va la mercadería
-    function pintarResumen() {
-      if (!simple && !enColones()) return;
-      const g = grupoDe(cat, art);
-      el.classList.toggle('inv-ver-ubic', !ubic.value);
-      const donde = ubic.value ? (ubic.selectedOptions[0]?.textContent || '') : '';
-      resumen.textContent = !art ? '' : enColones() ? 'Entran ' + money(valorLinea()) + ' sin IVA al grupo ' + (GRUPOS[g] || '') + (donde ? ' · se guarda en ' + donde : '') + ' (referencia de la factura: ' + num(l.cantidad, 3) + ' ' + uFac(l) + ')' : 'Grupo: ' + (GRUPOS[g] || 'sin grupo') + (donde ? ' · se guarda en ' + donde : '') + (noVence.checked ? ' · no vence' : vence.value ? ' · vence el ' + dma(vence.value) : '');
     }
     function ubicacionPorOmision(a) {
       if (!a) return '';
@@ -752,8 +940,8 @@ export async function abrirFactura(ctx, clave, { previa = null, recibirSugeridas
       factorEco.className = 'inv-eco';
       const rev = enColones() ? { aviso: '' } : revisarConversion({ descripcion: l.descripcion, subtotal: l.subtotal_crc, cantidad: l.cantidad, factorActual: fv }, (n) => money(n));
       // Si la persona escribió una conversión creíble no se le dice nada; si no lo es, se le explica con la cifra (no se cambia lo que escribió)
-      avisoConv.textContent = rev.aviso && !rev.cambiado ? rev.aviso : (fv === 1 ? notaAuto : ''); avisoConv.hidden = !avisoConv.textContent;
-      factorEco.textContent = 'La factura dice ' + num(l.cantidad, 3) + ' × ' + num(fv, 6) + ' = ' + (art ? cantTxt(Math.round(Number(l.cantidad) * fv * 1000) / 1000, art.unidad) : num(Number(l.cantidad) * fv, 3)) + '. Si llegó menos, corrija la cantidad.';
+      const soloNota = !(rev.aviso && !rev.cambiado); avisoConv.textContent = rev.aviso && !rev.cambiado ? rev.aviso : (fv === 1 ? notaAuto : ''); avisoConv.classList.toggle('nota', soloNota && !!avisoConv.textContent); avisoConv.hidden = !avisoConv.textContent;
+      factorEco.textContent = 'La factura dice ' + num(l.cantidad, 3) + ' × ' + num(fv, 6) + ' = ' + (art ? cantR(Math.round(Number(l.cantidad) * fv * 1000) / 1000, art.unidad) : num(Number(l.cantidad) * fv, 3)) + '. Si llegó menos, corrija la cantidad.';
       pintarSem();
     }
     function costoCalculado() {
@@ -782,11 +970,11 @@ export async function abrirFactura(ctx, clave, { previa = null, recibirSugeridas
       if (!r || !r.hay) return;
       let t = '';
       const v = Number(r.precio_venta_sin_iva);
-      if (v > 0) { const pc = c / v * 100; relEl.textContent = 'Se vende a ' + money(v) + ' sin IVA y entra a ' + money(c) + ' sin IVA: el costo es el ' + num(pc, 0) + ' % del precio de venta' + (pc >= 15 && pc <= 110 ? ' (relación normal).' : ' (fuera de lo normal, revise).'); relEl.hidden = false; }
+      if (v > 0) { const pc = c / v * 100; relEl.textContent = 'Se vende a ' + money(v) + ' sin IVA y entra a ' + money(c) + ' sin IVA: el costo es el ' + num(pc, 0) + ' % del precio de venta' + (!banda ? '.' : pc >= banda.min && pc <= banda.max ? ' (relación normal).' : ' (fuera de lo normal, revise).'); relEl.hidden = false; }
       const hist = Number(r.costo_medio_anterior);
       if (v > 0) {
         const pct = c / v * 100;
-        if (pct < 15 || pct > 110) t = 'Este costo es el ' + num(pct, 0) + ' % del precio de venta sin IVA (' + money(v) + '). Lo normal está entre 15 % y 110 %. Revise cuántas unidades trae cada «' + (uFac(l) || 'unidad') + '» de la factura: casi seguro la conversión está mal.';
+        if (banda && (pct < banda.min || pct > banda.max)) t = 'Este costo es el ' + num(pct, 0) + ' % del precio de venta sin IVA (' + money(v) + '). Lo normal está entre ' + num(banda.min, 0) + ' % y ' + num(banda.max, 0) + ' %. Revise cuántas unidades trae cada «' + (uFac(l) || 'unidad') + '» de la factura: casi seguro la conversión está mal.';
       }
       if (!t && hist > 0 && Number(r.lotes_anteriores) >= 1) {
         const razon = c / hist;
@@ -796,19 +984,13 @@ export async function abrirFactura(ctx, clave, { previa = null, recibirSugeridas
       pintarSem();
     }
     factor.addEventListener('input', () => { cantidadTocada = false; const fv = leerFactor(); if (Number.isFinite(fv) && fv > 0) cantidad.poner(Math.round(Number(l.cantidad) * fv * 1000) / 1000); pintarFactor(); pintarCosto(); cambio(); });
-    chk.addEventListener('change', async () => {
-      if (chk.checked && !art) { chk.checked = false; if (await asegurarArticulo()) chk.checked = true; }
-      pintarSem();
-      if (chk.checked && sem.bloquea) { chk.checked = false; errorRubro.textContent = 'Línea ' + l.linea + ': ' + sem.razon; }
-      el.classList.toggle('marcada', chk.checked); pintarBotones(); cambio();
-    });
-    // Sin artículo todavía: se crea con el nombre y el rubro de esta línea (o se usa el que ya tenga ese nombre) y se llenan solos la bolsa, dónde se guarda y el vencimiento
+    // Sin artículo todavía: se crea con el nombre y el rubro de esta línea (o se usa el que ya tenga ese nombre) y se llenan solos la categoría, dónde se guarda y el vencimiento
     async function asegurarArticulo() {
       if (art) return true;
-      if (!rubro.value) { errorRubro.textContent = 'Escoja la categoría de la línea ' + l.linea + ' para poder recibirla.'; rubro.focus(); return false; }
+      if (!rubro.value) { errorRubro.textContent = 'Escoja el rubro de la línea ' + l.linea + ' para poder recibirla.'; abierta = true; tocada = true; pintarSem(); buscar.focus(); return false; }
       const nombre = nombreNuevo.value.trim();
       const crPre = (cat.categorias || []).find((x) => x.id === rubro.value);
-      if ((!crPre || crPre.grupo === 'unitario') && nombre.length < 2) { errorRubro.textContent = 'Escriba el nombre del artículo (al menos 2 letras).'; nombreNuevo.focus(); return false; }
+      if ((!crPre || crPre.grupo === 'unitario') && nombre.length < 2) { errorRubro.textContent = 'Escriba el nombre del artículo (al menos 2 letras).'; abierta = true; tocada = true; pintarSem(); nombreNuevo.focus(); return false; }
       errorRubro.textContent = ''; rubro.disabled = nombreNuevo.disabled = true;
       try {
         const cr = (cat.categorias || []).find((x) => x.id === rubro.value);
@@ -819,7 +1001,7 @@ export async function abrirFactura(ctx, clave, { previa = null, recibirSugeridas
         ctx.articulos.olvidar();
         articulos = await ctx.articulos.lista(true);
         art = articulos.find((a) => a.id === nuevo.id) || nuevo;
-        pintarArticulo(true); el.classList.add('marcada'); guardarEstado();
+        pintarArticulo(true); guardarEstado();
         return true;
       } catch (e) { errorRubro.textContent = (e && e.message) || 'No se pudo crear el artículo. Intente de nuevo.'; return false; }
       finally { rubro.disabled = nombreNuevo.disabled = false; }
@@ -840,11 +1022,29 @@ export async function abrirFactura(ctx, clave, { previa = null, recibirSugeridas
       if (!elegido) return;
       art = elegido.a || articulos.find((a) => a.id === elegido.id) || null;
       pintarArticulo(true);
-      chk.checked = true; el.classList.add('marcada'); cambio(); guardarEstado();
+      cambio(); guardarEstado();
     }
     function guardarEstado() {
-      memoria.set(l.linea, { art, factor: factor.value, cantidad: cantidad.leer(), tocada: cantidadTocada, ubic: ubic.value, vence: vence.value, editada: venceEditada, noVence: noVence.checked, costoAbierto: costoDet.open, costo: costoInput.value, marcada: chk.checked });
+      memoria.set(l.linea, { art, factor: factor.value, cantidad: cantidad.leer(), tocada: cantidadTocada, ubic: ubic.value, vence: vence.value, editada: venceEditada, noVence: noVence.checked, costoAbierto: costoDet.open, costo: costoInput.value, abierta, tocada2: tocada });
     }
+    function problema() {
+      if (!art) return 'Línea ' + l.linea + ': escoja el artículo.';
+      const fv = leerFactor();
+      if (!Number.isFinite(fv) || fv <= 0 || fv > 100000) return 'Línea ' + l.linea + ': revise la conversión (mayor que cero y hasta 100 000).';
+      if (!cantidad.valido()) return 'Línea ' + l.linea + ': revise la cantidad que entra.';
+      if (!ubic.value) return 'Línea ' + l.linea + ': escoja dónde se guarda.';
+      if (!noVence.checked) { if (!vence.value) return 'Línea ' + l.linea + ': escriba la fecha de vencimiento o marque «No vence».'; if (vence.value < ctx.hoy && venceEditada) return 'Línea ' + l.linea + ': la fecha de vencimiento no puede ser anterior a hoy.'; }
+      if (costoDet.open && costoInput.value.trim()) { const c = leerMonto(costoInput.value); if (!Number.isFinite(c) || c < 0) return 'Línea ' + l.linea + ': el costo corregido no es un monto válido.'; }
+      return '';
+    }
+    function enfocarProblema() { abierta = true; tocada = true; pintarSem(); el.scrollIntoView({ block: 'center' }); if (!art) buscar.focus({ preventScroll: true }); else if (cantidad.input && !cantidad.valido()) { mas.open = true; cantidad.input.focus({ preventScroll: true }); } }
+    function datosLinea() {
+      const x = { clave: f.clave, linea: l.linea, articulo_id: art.id, factor: String(leerFactor()), cantidad: cant(cantidad.leer()), ubicacion_id: ubic.value };
+      if (noVence.checked) x.sin_vencimiento = true; else if (venceEditada) x.vence_en = vence.value;
+      if (enColones()) x.costo_unitario = '1'; else if (costoDet.open && costoInput.value.trim()) x.costo_unitario = dinero(leerMonto(costoInput.value));
+      return x;
+    }
+
     if (bolsa) llenarRubros(bolsa); else if (art) bolsa = grupoDe(cat, art) || '';
     pintarArticulo(true); pintarBolsa(); pintarBotones();
     const previo = memoria.get(l.linea);
@@ -854,73 +1054,60 @@ export async function abrirFactura(ctx, clave, { previa = null, recibirSugeridas
       if (Number.isFinite(previo.cantidad)) cantidad.poner(previo.cantidad);
       ubic.value = previo.ubic; vence.value = previo.vence; venceEditada = !!previo.editada; noVence.checked = previo.noVence; vence.disabled = previo.noVence;
       costoDet.open = previo.costoAbierto; costoInput.value = previo.costo;
-      chk.checked = previo.marcada && !!art; el.classList.toggle('marcada', chk.checked);
       pintarFactor(); pintarCosto(); pintarVence();
     }
-    el.addEventListener('change', () => setTimeout(pintarBotones, 0)); chk.addEventListener('change', () => setTimeout(pintarBotones, 0));
+    pintarSem();
+    el.addEventListener('change', () => setTimeout(pintarBotones, 0));
     el.addEventListener('input', guardarEstado); el.addEventListener('change', guardarEstado); costoDet.addEventListener('toggle', guardarEstado);
+    btnCambiar.addEventListener('click', guardarEstado);
     return {
       el,
       semaforo: () => sem,
       verde: () => sem.nivel === 'verde',
       porColones: () => { const g = grupoDeRubro(rubro.value) || (art && grupoDe(cat, art)) || ''; return !!g && g !== 'unitario'; },
       sugerida: () => !!rubro.value && !sug.no_inventario && sug.fuente !== 'servicio' && !!(sug.categoria_id || art),
-      marcada: () => chk.checked,
-      marcarSiTiene: () => { if (art) { chk.checked = true; el.classList.add('marcada'); } },
-      // Decisión única (lote 4): una línea verde ya viene marcada para recibirse. Solo si la persona no la tocó antes (si la desmarcó, queda desmarcada). No escribe nada en la base: recibir sigue siendo el botón de abajo.
-      premarcar: () => { if (sem.nivel === 'verde' && art && !memoria.has(l.linea) && !chk.checked) { chk.checked = true; el.classList.add('marcada'); pintarBotones(); cambio(); } },
-      marcarOCrear: async () => { if (art || rubro.value) { if (await asegurarArticulo()) { chk.checked = true; el.classList.add('marcada'); pintarBotones(); } } },
+      // Segura = lo que «Aceptar las líneas seguras» recibe: las verdes y la comida preparada o suministro con rubro sugerido (entran por su valor: no hay conversión que revisar)
+      segura: () => sem.nivel === 'verde' || (sem.nivel === 'ambar' && !sug.no_inventario && !sem.bloquea && !!rubro.value && sug.fuente !== 'servicio' && !!(sug.categoria_id || art) && (grupoDeRubro(rubro.value) || (art && grupoDe(cat, art)) || '') !== 'unitario'),
+      tieneArticulo: () => !!art,
+      aliasInfo,
+      preparar: asegurarArticulo,
       alCambiar: (fn) => avisarCambio.push(fn),
-      problema() {
-        if (!art) return 'Línea ' + l.linea + ': escoja el artículo.';
-        const fv = leerFactor();
-        if (!Number.isFinite(fv) || fv <= 0 || fv > 100000) return 'Línea ' + l.linea + ': revise la conversión (mayor que cero y hasta 100 000).';
-        if (!cantidad.valido()) return 'Línea ' + l.linea + ': revise la cantidad que entra.';
-        if (!ubic.value) return 'Línea ' + l.linea + ': escoja dónde se guarda.';
-        if (!noVence.checked) { if (!vence.value) return 'Línea ' + l.linea + ': escriba la fecha de vencimiento o marque «No vence».'; if (vence.value < ctx.hoy && venceEditada) return 'Línea ' + l.linea + ': la fecha de vencimiento no puede ser anterior a hoy.'; }
-        if (costoDet.open && costoInput.value.trim()) { const c = leerMonto(costoInput.value); if (!Number.isFinite(c) || c < 0) return 'Línea ' + l.linea + ': el costo corregido no es un monto válido.'; }
-        return '';
-      },
-      enfocarProblema() { el.scrollIntoView({ block: 'center' }); if (!art || (cantidad.input && !cantidad.valido())) { if (!art) detalles.open = false; } (art ? cantidad.input : rubro).focus({ preventScroll: true }); },
-      datos() {
-        const x = { clave: f.clave, linea: l.linea, articulo_id: art.id, factor: String(leerFactor()), cantidad: cant(cantidad.leer()), ubicacion_id: ubic.value };
-        if (noVence.checked) x.sin_vencimiento = true; else if (venceEditada) x.vence_en = vence.value;
-        if (enColones()) x.costo_unitario = '1'; else if (costoDet.open && costoInput.value.trim()) x.costo_unitario = dinero(leerMonto(costoInput.value));
-        return x;
-      },
+      linea: l.linea, problema, enfocarProblema, datos: datosLinea,
     };
   }
   function sugerenciaTxt(s) {
     if (!s || !s.fuente) return null;
     if (s.no_inventario) return (s.fuente === 'memoria' ? 'la vez pasada esto se marcó «No es de inventario»' : s.fuente === 'servicio' ? 'parece un servicio: normalmente no es de inventario' : 'por su CABYS normalmente no es de inventario') + (s.motivo ? ' (' + s.motivo + ')' : '') + '. Si es así, toque «No es de inventario».';
-    if (s.articulo) return s.articulo + ' (' + FUENTES[s.fuente] + (s.factor != null && s.fuente === 'memoria' ? ', cada una trae ' + num(s.factor, 6) + ' ' + unidadTxt(s.unidad, s.factor) : s.factor_sugerido != null ? ', por el nombre parece que cada una trae ' + num(s.factor_sugerido, 6) + ' ' + unidadTxt(s.unidad, s.factor_sugerido) : '') + '). Revíselo antes de marcar la línea.';
-    if (s.categoria) return 'por su CABYS parece de la categoría «' + s.categoria + '». Márquela y el artículo se crea solo en esa categoría (en unitarios, escoja primero el producto del menú que se vende; si ya existe un artículo, está en «Detalles»).';
+    if (s.articulo) return limpiaNombre(s.articulo) + ' (' + FUENTES[s.fuente] + (s.factor != null && s.fuente === 'memoria' ? ', cada una trae ' + num(s.factor, 6) + ' ' + unidadTxt(s.unidad, s.factor) : s.factor_sugerido != null ? ', por el nombre parece que cada una trae ' + num(s.factor_sugerido, 6) + ' ' + unidadTxt(s.unidad, s.factor_sugerido) : '') + ').';
+    if (s.categoria) return 'por su CABYS parece del rubro «' + s.categoria + '». Al recibirla el artículo se crea solo en ese rubro (en unitarios, escoja primero el producto del menú que se vende; si ya existe un artículo, cámbielo arriba).';
     return null;
   }
 
-  /* ---------- Una línea ya decidida: recibida, «No es de inventario» o que no aplica ---------- */
+  /* ---------- Una línea ya decidida: recibida, «No es de inventario» o que no aplica (una sola línea cada una) ---------- */
   function lineaDecidida(f, l) {
     const quien = (l.decidido_por_nombre || l.decidido_por) ? ' · ' + (l.decidido_por_nombre || l.decidido_por) + (l.decidido_en ? ', ' + fechaHora(l.decidido_en) : '') : '';
-    const zona = h('div');
+    const zona = h('div.rc-zona');
     if (l.estado === 'recibida') {
       const r = l.recepcion || {};
       const deshacer = ctx.esAdmin ? h('button.btn.peligro', { type: 'button', onclick: () => pedirDeshacerRecepcion(f, l, () => cargar()) }, 'Deshacer la recepción') : null;
-      return h('article.inv-linea.decidida.recibida', { 'data-linea': l.linea },
-        h('div.inv-linea-desc', h('strong', 'Línea ' + l.linea + ': ' + l.descripcion), h('span.chip.ok', 'Recibida')),
-        h('p.inv-linea-res', `${r.articulo || 'Artículo'}: ${cantTxt(r.cantidad, r.unidad)} a ${r.ubicacion || 'sin dato'}` + (r.vence_en ? ', vence el ' + dma(r.vence_en) : ', no vence') + (r.costo_unitario != null ? ', ' + costoTxt(r.costo_unitario) + ' por ' + unidadTxt(r.unidad, 1) + ' sin IVA' : '') + quien),
-        r.lote_estado && r.lote_estado !== 'activo' ? h('p.tenue.inv-chico', 'El lote está ' + ({ agotado: 'agotado (ya se usó todo)', vencido: 'vencido', anulado: 'anulado' })[r.lote_estado] + (r.lote_cantidad_actual != null ? ' · quedan ' + cantTxt(r.lote_cantidad_actual, r.unidad) : '') + '.') : null,
-        deshacer ? h('div.inv-linea-pie', deshacer, zona) : null);
+      return h('article.inv-linea.rc-dec.decidida.recibida', { 'data-linea': l.linea },
+        h('span.chip.ok', 'Recibida'),
+        h('div.rc-dec-txt', h('strong', 'Línea ' + l.linea + ': ' + l.descripcion),
+          h('small', `${limpiaNombre(r.articulo) || 'Artículo'}: ${cantR(r.cantidad, r.unidad)} a ${r.ubicacion || 'sin dato'}` + (r.vence_en ? ', vence el ' + dma(r.vence_en) : ', no vence') + (r.costo_unitario != null && r.unidad !== 'colon' ? ', ' + costoTxt(r.costo_unitario) + ' por ' + unidadTxt(r.unidad, 1) + ' sin IVA' : '') + quien),
+          r.lote_estado && r.lote_estado !== 'activo' ? h('small.tenue', 'El lote está ' + ({ agotado: 'agotado (ya se usó todo)', vencido: 'vencido', anulado: 'anulado' })[r.lote_estado] + (r.lote_cantidad_actual != null ? ' · quedan ' + cantR(r.lote_cantidad_actual, r.unidad) : '') + '.') : null),
+        deshacer ? h('div.rc-dec-acc', deshacer, zona) : null);
     }
     if (l.estado === 'ignorada') {
-      const { boton } = botonSeguro('Deshacer: volver a «Por recibir»', '', { zona, ocupado: 'Deshaciendo…', hacer: (idem) => inv.deshacerIgnorar(f.clave, [l.linea], idem), alTerminar: (r, { repetida }) => { toastOk('La línea ' + l.linea + ' volvió a «Por recibir».' + repetidaTxt(repetida)); return cargar(); } });
-      return h('article.inv-linea.decidida.ignorada', { 'data-linea': l.linea },
-        h('div.inv-linea-desc', h('strong', 'Línea ' + l.linea + ': ' + l.descripcion), h('span.chip', 'No es de inventario')),
-        h('p.inv-linea-res', (l.motivo ? 'Motivo: ' + l.motivo : 'Sin motivo') + quien),
-        h('div.inv-linea-pie', boton, zona));
+      const { boton } = botonSeguro('Deshacer', '', { zona, ocupado: 'Deshaciendo…', hacer: (idem) => inv.deshacerIgnorar(f.clave, [l.linea], idem), alTerminar: (r, { repetida }) => { toastOk('La línea ' + l.linea + ' volvió a «Por recibir».' + repetidaTxt(repetida)); return cargar(); } });
+      boton.setAttribute('aria-label', 'Deshacer: la línea ' + l.linea + ' vuelve a «Por recibir»');
+      return h('article.inv-linea.rc-dec.decidida.ignorada', { 'data-linea': l.linea },
+        h('span.chip', 'No es de inventario'),
+        h('div.rc-dec-txt', h('strong', 'Línea ' + l.linea + ': ' + l.descripcion), h('small', (l.motivo ? 'Motivo: ' + l.motivo : 'Sin motivo') + quien)),
+        h('div.rc-dec-acc', boton, zona));
     }
-    return h('article.inv-linea.decidida.no-aplica', { 'data-linea': l.linea },
-      h('div.inv-linea-desc', h('strong', 'Línea ' + l.linea + ': ' + l.descripcion), h('span.chip', 'No aplica')),
-      h('p.tenue.inv-chico', Number(l.cantidad) > 0 ? 'Este tipo de documento no entra al inventario.' : 'La línea trae cantidad cero: no hay nada que recibir.'));
+    return h('article.inv-linea.rc-dec.decidida.no-aplica', { 'data-linea': l.linea },
+      h('span.chip', 'No aplica'),
+      h('div.rc-dec-txt', h('strong', 'Línea ' + l.linea + ': ' + l.descripcion), h('small', Number(l.cantidad) > 0 ? 'Este tipo de documento no entra al inventario.' : 'La línea trae cantidad cero: no hay nada que recibir.')));
   }
   // Administrador: deshacer una recepción (solo si el lote está intacto). Motivo obligatorio.
   function pedirDeshacerRecepcion(f, l, alTerminar) {

@@ -2,7 +2,7 @@
 // Plazo: 8 días hábiles contados desde el inicio del mes siguiente a la fecha de la factura (lo calcula SQL, fx_plazo_receptor). Datos: fx_recibidas / fx_recibida (solo lectura) y CONTRATO_CONTABLE.md.
 // Respuestas: función de borde facturador-receptor v8. Antes de enviar se pide «calcular» (no envía nada) y se muestra en palabras qué recibirá Hacienda, el IVA que se acredita y el gasto.
 import { h, money, num, fechaHora, horaCorta, debounce, modal, conBoton, toast, nombrePropio, nombreLocal, campoBusqueda, hoyCR, sumaDias } from './util.js';
-import { recibidas, recibida, respuestaGuardada, responder, calcularRespuesta, consultarRespuesta, revisarCorreo, alertasRecepcion, atenderAviso, otraCedula, ivaMes, ivaMesDetalle } from './api_recepcion.js';
+import { recibidas, recibida, respuestaGuardada, responder, calcularRespuesta, consultarRespuesta, revisarCorreo, alertasRecepcion, atenderAviso, otraCedula, ivaMes, ivaMesDetalle, plazoRecibidas, revisarCabysFactura } from './api_recepcion.js';
 import { mensajeAmable } from './api_documentos.js';
 import { inv } from './api_inventarios.js';
 import { selectorPeriodo, textoRango } from './periodo.js';
@@ -63,6 +63,14 @@ export function estadoFila(f) {
 }
 // Insignia del tipo de comprobante: la nota de crédito resta y la de débito suma (k)
 const chipTipo = (t) => (esNC(t) ? h('span.chip.rec-tipo.nc', 'Nota de crédito: resta') : esND(t) ? h('span.chip.rec-tipo.nd', 'Nota de débito: suma') : null);
+
+/** Aviso sobre una línea cuyo CABYS difiere del historial del proveedor (fx_cabys_revision_factura). null si la línea es normal. */
+export function avisoCabys(x) {
+  if (!x) return null;
+  const tar = (t) => (t == null ? '' : ` (IVA ${num(+t * 100, 0)} %)`);
+  return h('small.rec-cabys-dif', h('strong', 'CABYS distinto al habitual. '), `Con este proveedor este producto casi siempre fue ${x.habitual}${x.habitual_descripcion ? ' «' + x.habitual_descripcion + '»' : ''}${tar(x.habitual_tarifa)}, ${num(x.veces, 0)} de ${num(x.total, 0)} veces.`,
+    x.cambia_tarifa ? h('strong', ` Cambia la tarifa: ahora trae IVA ${num(+x.actual_tarifa * 100, 0)} %.`) : null);
+}
 
 /* ---------- Inventarios: lo que Contable le dice a la persona sobre la bodega ---------- */
 // Datos: fx_inv_factura_estado (CONTRATO_INVENTARIOS.md 5.6). La misma respuesta viene dentro del detalle de la factura, en «inventario».
@@ -135,6 +143,7 @@ export default {
     const buscarCaja = h('label.etq.rec-buscar', 'Buscar', campoBusqueda(buscar, () => { est.q = ''; cargar(); }));
     const avisosCaja = h('div.rec-avisos', { hidden: true, 'aria-live': 'polite' });
     const kpis = h('div.rejilla.rec-kpis');
+    const plazoCaja = h('section.rec-plazo', { hidden: true, 'aria-label': 'Plazo para responder' });
     const tabs = h('div.rec-vistas', { role: 'group', 'aria-label': 'Qué ver' });
     const vencFiltro = h('div.rec-venc-filtro', { hidden: true, role: 'group', 'aria-label': 'Qué facturas vencidas ver' });
     const rotulo = h('p.rec-rotulo');
@@ -148,7 +157,7 @@ export default {
       h('div.rec-cab', h('div', h('h2', 'Facturas de proveedores'),
         h('p.tenue', 'Facturas que llegaron a los correos de contabilidad a nombre de ', h('strong', nomLocal), soc?.cedula ? ` (cédula ${soc.cedula})` : '', '. Aquí no aparecen los comprobantes que la empresa se emite a sí misma.')),
         h('div.rec-cab-botones', btnCorreo)),
-      estadoCorreo, avisosCaja, kpis, tabs, vencFiltro, periodoCaja, buscarCaja, rotulo, resumen, lista, ivaCaja);
+      estadoCorreo, avisosCaja, kpis, plazoCaja, tabs, vencFiltro, periodoCaja, buscarCaja, rotulo, resumen, lista, ivaCaja);
 
     /* ---------- revisar el correo ---------- */
     async function buscarCorreo() {
@@ -166,7 +175,7 @@ export default {
           sinXml ? h('p', h('strong', sinXml === 1 ? '1 correo traía una factura sin XML' : `${num(sinXml, 0)} correos traían una factura sin XML`), ' (por ejemplo, solo el PDF). Sin el XML no se puede responder a Hacienda ni usar el IVA: pídale el XML al proveedor.') : null,
           ejemplos.length ? h('ul.rec-ejemplos', ejemplos.map((t) => h('li', String(t)))) : null,
           errs.length ? h('p', `${errs.length === 1 ? 'Un correo no se pudo leer' : errs.length + ' correos no se pudieron leer'}. Avise a la persona encargada.`) : null);
-        if (vivo) { await cargar(); cargarAvisos(); }
+        if (vivo) { await cargar(); cargarAvisos(); cargarPlazo(); }
       } catch (e) {
         const sinPuente = /failed to fetch|networkerror|load failed/i.test(String(e.message || e));
         estadoCorreo.className = 'rec-correo-estado ' + (sinPuente ? 'aviso' : 'error');
@@ -206,6 +215,24 @@ export default {
         })) : null);
     }
 
+    /* ---------- plazo de 8 días hábiles (art. 10 y 11, MH-DGT-RES-0027-2024): cuenta de días hábiles de Costa Rica ---------- */
+    async function cargarPlazo() {
+      let p;
+      try { p = await plazoRecibidas(soc.id); } catch { plazoCaja.hidden = true; return; } // sin el dato no se muestra nada; la lista sigue igual
+      if (!vivo) return;
+      const gs = Array.isArray(p.grupos) ? p.grupos : [];
+      if (!gs.length) { plazoCaja.hidden = true; plazoCaja.replaceChildren(); return; }
+      plazoCaja.hidden = false;
+      poner(plazoCaja,
+        h('div.rec-plazo-tit', h('strong', 'Plazo de 8 días hábiles para aceptar o rechazar'), h('span.tenue', p.presuncion || '')),
+        h('ul.rec-plazo-lista', gs.map((g) => {
+          const d = +g.dias, clase = d < 0 ? 'mal' : d <= 2 ? 'pronto' : '';
+          const cuando = d < 0 ? `venció hace ${plural(-d, 'día hábil', 'días hábiles')}` : d === 0 ? 'último día: hoy' : `quedan ${plural(d, 'día hábil', 'días hábiles')}`;
+          return h('li' + (clase ? '.' + clase : ''), h('span', `Facturas de ${nombreMes(g.mes)}`), h('span', `límite ${diaSemana(g.vence)}`), h('strong', cuando), h('span.der', plural(+g.n, 'factura', 'facturas')));
+        })),
+        h('small.tenue', (p.regla || '') + (p.proximo_feriado ? ' Próximo día no hábil entre semana: ' + diaSemana(p.proximo_feriado) + '.' : '')));
+    }
+
     /* ---------- carga ---------- */
     const modo = () => (est.vista === 'pendientes' ? 'pendientes' : est.vista === 'vencidas' ? 'vencidas' : 'todas');
     // La pestaña «Plazo vencido» abre con TODAS las vencidas (lo mismo que cuenta su número); se puede filtrar por fecha de llegada (M4)
@@ -230,6 +257,7 @@ export default {
         est.datos = d; est.conteo = d.conteo; est.rango = [desde, hasta];
         pintarKpis(); pintarTabs(); pintarLista();
         marcarPestana(d.conteo);
+        if (!est.plazoVisto) { est.plazoVisto = true; cargarPlazo(); }
       } catch (e) {
         if (mia !== ficha) return;
         poner(lista, h('div.vacio', h('p', 'No se pudieron traer las facturas.'), h('p.tenue', mensajeAmable(e, 'Revise la conexión e intente de nuevo.')), h('button.btn', { type: 'button', 'data-reintentar': '1', onclick: () => cargar() }, 'Intentar de nuevo')));
@@ -381,11 +409,12 @@ export default {
       await pintarDetalle(cuerpo, clave);
     }
     async function pintarDetalle(cuerpo, clave, aviso) {
-      let d, guardada = null;
+      let d, guardada = null, distintos = new Map();
       try {
-        const [a, b] = await Promise.allSettled([recibida(clave), respuestaGuardada(clave)]);
+        const [a, b, cb] = await Promise.allSettled([recibida(clave), respuestaGuardada(clave), revisarCabysFactura(clave)]);
         if (a.status === 'rejected') throw a.reason;
         d = a.value; guardada = b.status === 'fulfilled' ? b.value : null;
+        distintos = new Map((cb.status === 'fulfilled' ? cb.value?.lineas || [] : []).map((x) => [+x.linea, x]));
       } catch (e) {
         // Contable solo muestra las facturas de la empresa de la sesión (la base dice «Esta sesión es de otra empresa.» si la factura es de la otra, y «No se encontró esa factura» si no existe); Inventarios es de las dos
         const msg = String(e?.message || '');
@@ -421,8 +450,9 @@ export default {
           d.credito && d.credito.texto ? dato('Crédito fiscal', d.credito.texto) : null),
         bloqueInventario(leerInv(d.inventario, f.tipo), rechazada, btnInventarios),
         h('h3', 'Líneas de la factura'),
+        distintos.size ? h('p.lis-aviso.rec-cabys-nota', `${plural(distintos.size, 'línea trae', 'líneas traen')} un CABYS distinto al que este proveedor usó antes para el mismo producto. El CABYS cambia la tarifa y el IVA que se acredita: revíselo con el proveedor. No impide responder.`) : null,
         lineas.length ? h('div.tabla-caja', h('table.tabla', h('thead', h('tr', h('th', '#'), h('th', 'Detalle'), h('th.der', 'Cantidad'), h('th.der', 'Precio unitario'), h('th.der', 'Sin IVA'), h('th.der', 'IVA'), h('th.der', 'Total'))),
-          h('tbody', lineas.map((l) => h('tr', h('td', l.linea > 999 ? '' : l.linea), h('td', l.detalle || '', l.cabys ? h('small.tenue', ' CABYS ' + l.cabys) : null), h('td.der', { 'data-et': 'Cantidad' }, num(l.cantidad, 3)), h('td.der', { 'data-et': 'Precio' }, money(l.precio_unitario)), h('td.der', { 'data-et': 'Sin IVA' }, money(l.subtotal)), h('td.der', { 'data-et': 'IVA' }, money(l.impuesto)), h('td.der', { 'data-et': 'Total' }, money(l.total_linea)))))))
+          h('tbody', lineas.map((l) => h('tr', h('td', l.linea > 999 ? '' : l.linea), h('td', l.detalle || '', l.cabys ? h('small.tenue', ' CABYS ' + l.cabys) : null, avisoCabys(distintos.get(+l.linea))), h('td.der', { 'data-et': 'Cantidad' }, num(l.cantidad, 3)), h('td.der', { 'data-et': 'Precio' }, money(l.precio_unitario)), h('td.der', { 'data-et': 'Sin IVA' }, money(l.subtotal)), h('td.der', { 'data-et': 'IVA' }, money(l.impuesto)), h('td.der', { 'data-et': 'Total' }, money(l.total_linea)))))))
           : h('p.tenue', 'Esta factura no trae líneas guardadas.'),
         d.lineas_aviso ? h('p.lis-aviso', d.lineas_aviso) : null,
         desg.length ? h('details.rec-desglose.rec-tecnico', h('summary', 'Ver los impuestos de la factura, por tarifa'),
@@ -541,10 +571,22 @@ export default {
           const verPct = () => { const v = Number(pct.value); valores.proporcion = pct.value; pctTxt.textContent = pct.value !== '' && v > 0 && v < 100 ? `Unos ${montoTexto(Math.round(ivaF * v) / 100, mon)} de los ${montoTexto(ivaF, mon)} de IVA de esta factura. El cálculo exacto se muestra antes de enviar.` : 'Escriba un número entre 1 y 99.'; alCambiar?.(); };
           pct.addEventListener('input', verPct); if (valores.proporcion !== '') verPct();
           const grupo = h('div.rec-opciones', { role: 'radiogroup', 'aria-label': 'Cómo se usa el IVA de esta compra' }, CONDICIONES.map((o) => {
-            const r = h('input', { type: 'radio', name: 'cond-' + clave.slice(-8), value: o.c, checked: valores.condicion === o.c, onchange: () => { valores.condicion = o.c; pctCaja.hidden = o.c !== '02'; if (o.c === '02') pct.focus(); alCambiar?.(); } });
+            const r = h('input', { type: 'radio', name: 'cond-' + clave.slice(-8), value: o.c, checked: valores.condicion === o.c, onchange: () => { valores.condicion = o.c; pctCaja.hidden = o.c !== '02'; if (o.c === '02') pct.focus(); verNota(); alCambiar?.(); } });
             return h('label.rec-opcion', r, h('span', h('strong', o.t), h('small', o.d)));
           }));
-          return h('fieldset.rec-cond', h('legend', '¿Cómo se usa el IVA de esta compra?'), grupo, pctCaja);
+          // Aceptar parcialmente: el mensaje a Hacienda lleva el IVA de la factura COMPLETA; la rebaja llega después, con la nota de crédito del proveedor. Se dice aquí, donde se elige la condición.
+          const nota = tipo === 'parcial' ? h('p.lis-aviso.rec-cond-parcial', { 'aria-live': 'polite' }) : null;
+          const verNota = () => {
+            if (!nota) return;
+            const c = valores.condicion;
+            nota.replaceChildren(h('strong', 'Importante: el IVA se cuenta por la factura completa. '), c === '04'
+              ? 'Aunque acepte solo una parte de la compra, este mensaje le dice a Hacienda que todo el monto va al gasto y que no se usa IVA como crédito fiscal. Cuando el proveedor haga la nota de crédito por lo que usted no aceptó, el monto se corrige solo.'
+              : c === '02'
+              ? 'Aunque acepte solo una parte de la compra, el porcentaje que escriba se aplica al IVA de toda la factura, no solo al de lo que aceptó. Cuando el proveedor haga la nota de crédito por lo que usted no aceptó, el IVA se corrige solo.'
+              : 'Aunque acepte solo una parte de la compra, este mensaje le dice a Hacienda que usted usa como crédito todo el IVA de la factura. La rebaja llega después: cuando el proveedor haga la nota de crédito por lo que usted no aceptó y usted la acepte, ese IVA se resta.');
+          };
+          verNota();
+          return h('fieldset.rec-cond', h('legend', '¿Cómo se usa el IVA de esta compra?'), nota, grupo, pctCaja);
         }
         function pintarDatos() {
           if (tipo === 'aceptar') return pintarAceptar();

@@ -390,8 +390,8 @@ export function anularDocumento(app, d, { alTerminar, alVerNC, alCambiarCliente,
   function resultado(nc, { motivo, yaExistia, turno: turnoEnvio = 'pendiente' }) {
     const codigo = codigoDeNota(nc);
     const clienteMal = !yaExistia && motivo === M_CLIENTE;
-    // reimprimirComprobante pregunta Tiquete o Factura carta e imprime con el formato de la nota de crédito
-    const imp = nc?.id ? h('button.btn', { type: 'button', onclick: () => { reimprimirComprobante(nc.id); } }, 'Imprimir la nota de crédito') : null;
+    // reimprimirComprobante: la cajera imprime directo el tiquete; el administrador escoge Tiquete o Factura carta
+    const imp = nc?.id ? h('button.btn', { type: 'button', onclick: () => { reimprimirComprobante(nc.id, { admin: app.admin }); } }, 'Imprimir la nota de crédito') : null;
     // Copia los productos de la venta anulada a una cuenta nueva y recién entonces abre Facturación (fx_venta_clonar_con_cliente). Si la copia falla NO se abre Facturación ni se manda a armar la venta a mano:
     // se muestra lo que dijo la base y un botón «Intentar de nuevo» (la base no duplica: si la copia ya se había creado, devuelve esa misma).
     const fallo = h('div.an-clon-fallo', { hidden: true, role: 'alert' });

@@ -75,7 +75,7 @@
 .doc-filtros .btn.alerta[aria-pressed=true]{background:var(--rojo);color:#fff}
 
 /* Lista: cada fila tiene la zona que se toca (detalle) y los botones Reimprimir / Anular */
-.doc-lista{display:flex;flex-direction:column;gap:.5rem;--doc-cols:4.2rem minmax(0,1.5fr) minmax(0,1.4fr) 7.5rem 9.5rem;--doc-acc:26rem}
+.doc-lista{display:flex;flex-direction:column;gap:.5rem;--doc-cols:4.2rem minmax(0,1.5fr) minmax(0,1.4fr) 7.5rem 12rem;--doc-acc:26rem}
 .doc-dia{display:flex;flex-wrap:wrap;justify-content:space-between;gap:.2rem 1rem;align-items:baseline;margin-top:.8rem;padding:.2rem .2rem .4rem;border-bottom:1px solid var(--linea2)}
 .doc-dia span{color:var(--tinta2);font-size:.92rem}
 /* El día del documento más viejo cargado, cuando faltan documentos: su total no es el del día completo */
@@ -99,7 +99,8 @@
 .doc-ver .c-doc .sub.anul{color:var(--rojo-osc);font-weight:600}
 .doc-ver .c-cli{overflow-wrap:anywhere}
 .doc-ver .c-total{font-weight:700;font-size:1.05rem}
-.doc-ver .c-est{display:flex;flex-wrap:wrap;gap:.3rem}
+.doc-ver .c-est{display:flex;flex-wrap:wrap;gap:.3rem;min-width:0}
+.doc-ver .c-est .chip{max-width:100%;white-space:normal;line-height:1.2;overflow-wrap:anywhere} /* «Rechazado por Hacienda» baja de línea en lugar de salirse de su columna */
 .doc-fbot{display:flex;gap:.5rem;align-items:stretch}
 .doc-fbot .btn{flex:1 1 0;min-width:0;min-height:48px;padding-inline:.5rem}
 .doc-fbot.una .btn{flex:0 0 calc(50% - .25rem)}
@@ -115,7 +116,7 @@
 .chip.anulado{color:#4a443d;border-color:var(--borde-control,#8f8672);background:#efe9dd}
 /* Pantallas anchas (computadora y tableta horizontal): una sola fila con los cinco datos y los dos botones lado a lado */
 @media(max-width:1180px){
-  .doc-lista{--doc-cols:3.6rem minmax(0,1.5fr) minmax(0,1.3fr) 6.6rem 8.4rem;--doc-acc:22rem}
+  .doc-lista{--doc-cols:3.6rem minmax(0,1.5fr) minmax(0,1.3fr) 6.6rem 10rem;--doc-acc:22rem}
   .doc-ver{padding-inline:.8rem;gap:.3rem .6rem}
   .doc-cabeza-cols{gap:.3rem .6rem;padding:0 calc(.8rem + 1px)}
 }
@@ -168,10 +169,10 @@
 .doc-estado details{margin-top:.6rem}
 .doc-estado summary{list-style:none;cursor:pointer;display:inline-flex}
 .doc-estado summary::-webkit-details-marker{display:none}
-.doc-estado pre{white-space:pre-wrap;word-break:break-word;font:.82rem/1.4 "Courier New",monospace;margin:.6rem 0 0;padding:.6rem;background:#fff;border:1px solid var(--linea);border-radius:8px;max-height:11rem;overflow:auto}
+.doc-estado pre{white-space:pre-wrap;word-break:break-word;font:.82rem/1.4 var(--letra);font-variant-numeric:tabular-nums;margin:.6rem 0 0;padding:.6rem;background:#fff;border:1px solid var(--linea);border-radius:8px;max-height:11rem;overflow:auto}
 .doc-datos{display:grid;gap:.7rem 1.4rem;grid-template-columns:repeat(auto-fit,minmax(15rem,1fr))}
 .doc-dato{display:flex;flex-direction:column;gap:.1rem;min-width:0}
-.doc-dato .mono{font-family:"Courier New","Liberation Mono",monospace;font-size:.88rem;word-break:break-all}
+.doc-dato .mono{font-family:var(--letra);font-variant-numeric:tabular-nums;font-size:.88rem;word-break:break-all}
 .doc-seccion h3{margin-bottom:.5rem;font-size:1.02rem}
 .doc-cliente{display:flex;flex-direction:column;gap:.1rem}
 .doc-seccion p{margin:0}
@@ -255,3 +256,17 @@
 .doc-correo-op[aria-pressed=true] span{color:#fff}
 .doc-correo-campo[hidden],.doc-correo-nota[hidden]{display:none}
 @media(max-width:480px){.doc-correo-pie .btn{flex:1 1 100%}}
+
+/* ---------- Notas de crédito por hacer: un cliente rechazó (o aceptó en parte) una factura nuestra (migración 203) ---------- */
+.doc-propuestas:empty{display:none}
+.doc-propuestas{display:flex;flex-direction:column;gap:.7rem;margin:0 0 1rem}
+.doc-propuesta{padding:1rem 1.1rem;border:1px solid #e9b3b7;border-left:4px solid var(--rojo);border-radius:14px;background:var(--rojo-suave);display:flex;flex-direction:column;gap:.55rem}
+.doc-propuesta h3{margin:0;font-size:1.05rem;color:var(--rojo-osc)}
+.doc-propuesta dl{margin:0;display:grid;gap:.2rem}
+.doc-propuesta dl>div{display:grid;grid-template-columns:minmax(8rem,12rem) minmax(0,1fr);gap:.2rem .8rem}
+.doc-propuesta dt{color:var(--tinta2);font-size:.92rem}
+.doc-propuesta dd{margin:0;font-weight:600;overflow-wrap:anywhere}
+.doc-propuesta p{margin:0}
+.doc-propuesta-btns{display:flex;flex-wrap:wrap;gap:.5rem}
+.doc-propuesta-btns .btn{min-height:48px}
+@media (max-width:700px){.doc-propuesta dl>div{grid-template-columns:1fr}.doc-propuesta-btns .btn{flex:1 1 100%}}

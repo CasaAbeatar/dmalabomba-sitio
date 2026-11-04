@@ -52,6 +52,12 @@ function insigniaUsuarios(app) {
   return n > 0 ? { texto: n === 1 ? '1 aviso de ingreso' : n + ' avisos de ingreso', urgente: true } : null;
 }
 
+// Alertas de Hacienda (solo administradores): cuántas siguen por atender. Roja si hay alguna urgente.
+function insigniaAlertasHacienda(app) {
+  const n = Math.max(0, Number(app.alertasHacienda?.abiertas ?? 0) || 0);
+  return n > 0 ? { texto: n === 1 ? '1 por atender' : n + ' por atender', urgente: Number(app.alertasHacienda?.urgentes) > 0 } : null;
+}
+
 export const MODULOS = [
   // Inicio: los cinco módulos principales, en este orden (3 arriba y 2 más anchos abajo en pantalla ancha; una columna en celular)
   { id: 'caja', emite: true, titulo: 'Facturación', descripcion: 'Cobrar una venta, cuentas en espera, para llevar y express', grupo: 'principal', ruta: 'facturar', icono: 'facturar', orden: 10, destacado: true, cargar: () => import('./m_caja.js') },
@@ -68,7 +74,9 @@ export const MODULOS = [
   { id: 'inventarios', titulo: 'Inventarios', descripcion: 'Bodega central y locales: lo que entra, lo que sale y lo que vence', grupo: 'admin', ruta: 'admin/inventarios', icono: 'bodega', orden: 35, soloAdmin: true, insignia: insigniaInventarios, cargar: () => import('./m_inventarios.js') },
   { id: 'usuarios', titulo: 'Usuarios', descripcion: 'Las personas que usan el sistema, su PIN y quién ingresó', grupo: 'admin', ruta: 'admin/usuarios', icono: 'usuario', orden: 40, soloAdmin: true, insignia: insigniaUsuarios, cargar: () => import('./m_usuarios.js') },
   { id: 'numeracion', titulo: 'Numeración', descripcion: 'En qué modo está el sistema, qué número sigue y qué falta para facturar de verdad', grupo: 'admin', ruta: 'admin/numeracion', icono: 'numeracion', orden: 45, soloAdmin: true, cargar: () => import('./m_numeracion.js') },
+  { id: 'alertas_hacienda', alias: ['alertas-hacienda'], titulo: 'Alertas de Hacienda', descripcion: 'Rechazos, plazos y fallas con Hacienda: qué pasó y quién lo atendió', grupo: 'admin', ruta: 'admin/alertas-hacienda', icono: 'aviso', orden: 46, soloAdmin: true, insignia: insigniaAlertasHacienda, cargar: () => import('./m_alertas_hacienda.js') },
   { id: 'avisos', titulo: 'Avisos de efectivo', descripcion: 'Quién recibe por WhatsApp el aviso cuando hay mucho efectivo en la caja, y si le llegó', grupo: 'admin', ruta: 'admin/avisos', icono: 'aviso', orden: 47, soloAdmin: true, cargar: () => import('./m_avisos.js') },
+  { id: 'configuracion', titulo: 'Configuración', descripcion: 'La impresora de este aparato: papel, copias e impresión automática', grupo: 'admin', ruta: 'admin/configuracion', icono: 'impresora', orden: 55, soloAdmin: true, cargar: () => import('./m_configuracion.js') },
   { id: 'respaldos', titulo: 'Respaldos', descripcion: 'Estado de las copias de seguridad y de la última prueba', grupo: 'admin', ruta: 'admin/respaldos', icono: 'respaldo', orden: 50, soloAdmin: true, insignia: insigniaRespaldos, cargar: () => import('./m_respaldos.js') },
 ];
 

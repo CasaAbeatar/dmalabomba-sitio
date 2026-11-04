@@ -114,7 +114,7 @@ export const debounce = (fn, ms = 250) => { let t; return (...a) => { clearTimeo
 
 // Nombres para mostrar
 export const TIPOS_DOC = { '01': 'Factura electrónica', '02': 'Nota de débito', '03': 'Nota de crédito', '04': 'Tiquete electrónico' };
-export const TIPOS_SERVICIO = { buffet: 'Buffet', espera: 'En espera', llevar: 'Para llevar', express: 'Express' };
+export const TIPOS_SERVICIO = { buffet: 'Cuenta', espera: 'En espera', llevar: 'Para llevar', express: 'Express' };
 export const MEDIOS = { efectivo: 'Efectivo', tarjeta: 'Tarjeta', sinpe: 'SINPE Móvil', transferencia: 'Transferencia' };
 export const TIPOS_ID = { '01': 'Cédula física', '02': 'Cédula jurídica', '03': 'DIMEX', '04': 'NITE', '05': 'Extranjero no domiciliado', '06': 'No contribuyente' };
 

@@ -20,6 +20,7 @@ export const sb = createClient(SUPA_URL, SUPA_KEY, { auth: { storageKey: 'sb-fac
 // Así se pueden cambiar las palabras de cualquier mensaje sin romper el reintento, y un mensaje de negocio que por casualidad diga «tardó» o «conexión» no se toma por falla de red.
 const MSG_RED = MSG_SIN_INTERNET;
 const MSG_OCUPADO = 'El sistema está ocupado en este momento. Espere unos segundos e intente de nuevo.';
+const MSG_OCUPADO_NADA_GUARDADO = 'El sistema estaba ocupado y no guardó nada. Espere unos segundos y vuelva a intentarlo.';
 const MSG_TARDO = 'La respuesta tardó demasiado. Intente de nuevo.';
 const MSG_ACCESO_TARDO = 'La entrada tardó demasiado en responder. Intente de nuevo.';
 // Cuando lo que falló era un cambio (cobrar, agregar una línea...) no se sabe si llegó a guardarse: el texto pide revisar ANTES de repetir, para no cobrar ni agregar dos veces
@@ -30,7 +31,7 @@ const MSG_PERMISO = 'Su usuario no tiene permiso para hacer esto. Avise a la per
 export const MSG_SESION = 'Su sesión venció. Toque «Entrar de nuevo» para seguir donde estaba.';
 // Los textos de arriba son los únicos que este archivo fabrica para una falla transitoria o de sesión. Si otro archivo vuelve a envolver uno de ellos en un ErrorApi nuevo
 // (api_clientes.js, api_mantenimiento.js), el tipo se recupera por igualdad exacta con la constante, nunca por palabras sueltas.
-const TIPO_DE_MENSAJE = new Map([[MSG_RED, 'red'], [MSG_RED_ESCRIBIR, 'red'], [MSG_OCUPADO, 'ocupado'], [MSG_TARDO, 'tiempo'], [MSG_TARDO_ESCRIBIR, 'tiempo'], [MSG_ACCESO_TARDO, 'tiempo'], [MSG_SESION, 'sesion']]);
+const TIPO_DE_MENSAJE = new Map([[MSG_RED, 'red'], [MSG_RED_ESCRIBIR, 'red'], [MSG_OCUPADO, 'ocupado'], [MSG_OCUPADO_NADA_GUARDADO, 'ocupado'], [MSG_TARDO, 'tiempo'], [MSG_TARDO_ESCRIBIR, 'tiempo'], [MSG_ACCESO_TARDO, 'tiempo'], [MSG_SESION, 'sesion']]);
 const TRANSITORIOS = new Set(['red', 'tiempo', 'ocupado']);
 
 // Error con texto listo para mostrar. motivo = la razón que da el servicio de acceso cuando la hay ('empresa_desconocida', 'empresa_no_habilitada', 'sin_acceso_empresa'...)
@@ -63,6 +64,8 @@ function clasificarFalla(error, estado, escribe) {
   const m = String(error?.message || '');
   const codigo = String(error?.code || '');
   if (CODIGO_NUESTRO.test(codigo)) return { tipo: 'negocio', mensaje: m || MSG_GENERICO }; // mande el estado HTTP que mande: es una respuesta del negocio
+  // 57014 = la base cortó la instrucción por el límite de tiempo (8 s) y la deshizo entera: no se guardó nada, así que es seguro volver a intentar. Se avisa como «ocupado», no como «no sabemos si se guardó».
+  if (escribe && (codigo === '57014' || /canceling statement|statement timeout/i.test(m))) return { tipo: 'ocupado', mensaje: MSG_OCUPADO_NADA_GUARDADO };
   if (/AbortError|aborted/i.test(m) || codigo === '57014' || /canceling statement|statement timeout/i.test(m)) return { tipo: 'tiempo', mensaje: escribe ? MSG_TARDO_ESCRIBIR : MSG_TARDO };
   if (!estado) return { tipo: 'red', mensaje: escribe ? MSG_RED_ESCRIBIR : MSG_RED }; // sin respuesta HTTP: no hubo conexión (postgrest-js deja status 0)
   if (estado === 504 || estado === 408 || estado === 502) return { tipo: 'tiempo', mensaje: escribe ? MSG_TARDO_ESCRIBIR : MSG_TARDO };
@@ -218,7 +221,7 @@ export const api = {
   // Cierre: solo se cuenta el EFECTIVO. esperado = fondo + efectivo de ventas - salidas. Siempre deja cerrar; si no coincide queda discrepancia=true y diferencia_efectivo (contado - esperado).
   // El efectivo de ventas es lo que corresponde a cada venta (monto), nunca lo que entregó el cliente (recibido).
   turnoCerrar: (turno, c) => rpc('fx_turno_cerrar', { p_turno: turno, p_efectivo: c.efectivo, p_notas: c.notas ?? null, p_acepta_faltante: !!c.aceptaFaltante }),
-  // Cierre ciego: anota un conteo y devuelve solo { intento, faltante } (faltante vacío si no se le debe avisar). Nunca devuelve cuánto debía haber. Es una escritura: no se repite sola.
+  // Cierre ciego: anota un conteo y devuelve solo { intento, recontar, puede_cerrar } (recontar=true si no coincide, igual si falta que si sobra; puede_cerrar=false si es menor o igual al piso: sin monto, sin anotarse y sin dejar cerrar). Nunca devuelve cuánto debía haber. Es una escritura: no se repite sola.
   turnoConteo: (turno, efectivo) => rpc('fx_turno_conteo', { p_turno: turno, p_efectivo: efectivo }),
   // Solo administración: cierres con su informe (esperado, diferencia, conteos, envío por correo y WhatsApp) y el texto completo de uno.
   turnoInformes: (soc, limite = 60) => rpc('fx_turno_informes', { p_soc: soc, p_limite: limite }),
@@ -364,7 +367,7 @@ async function conReintento(hacer, alReintentar) {
 }
 // El estado que se anota en el error: el del servidor; si contestó 200 con ok:false, el que corresponde al motivo (así un rechazo esperado nunca se toma por una falla)
 const ESTADO_DE_MOTIVO = { falta_empresa: 400, empresa_desconocida: 404, empresa_no_habilitada: 403 };
-// El ingreso NUNCA se bloquea (decisión de Emil): no hay «intentos restantes», ni hora de desbloqueo, ni espera. Un PIN o un usuario que no coinciden dicen eso y se puede intentar de inmediato.
+// El ingreso NUNCA se bloquea (decisión de Emil): no hay «intentos restantes» ni hora de desbloqueo. Un PIN o un usuario que no coinciden dicen eso; tras un PIN equivocado solo hay una espera corta y fija de 1 o 2 segundos (3 nov 2026), que no crece.
 // Un 5xx o un 429 del servicio (saturado) es una falla transitoria; todo lo demás es una respuesta clara del acceso y no se repite sola.
 // Un 429 sigue siendo transitorio (en el primer paso deja usar la empresa de respaldo, así nadie queda sin poder llegar al usuario y al PIN) pero conReintento no lo repite
 // y su texto no promete una espera: dice que hay mucho movimiento y que se puede intentar otra vez.
@@ -373,7 +376,7 @@ const MSG_ACCESO_MUCHOS = 'Hay mucho movimiento en este momento y no se pudo ent
 function errorDeAcceso(r, j) {
   const estado = r.ok ? (ESTADO_DE_MOTIVO[j.motivo] || 400) : r.status;
   const motivo = j.motivo || '';
-  // Ronda 5: el servidor pide esperar unos segundos (demora acotada, no bloqueo). No se repite solo (tipo negocio); la pantalla muestra una cuenta regresiva y vuelve a habilitar el botón.
+  // El servidor pide esperar 1 o 2 segundos (espera corta y fija, no bloqueo). No se repite solo (tipo negocio); la pantalla muestra una cuenta regresiva y vuelve a habilitar el botón.
   if (r.status === 429 && motivo === 'espera') {
     const s = Math.max(1, Math.min(60, Number(j.espera) || 5));
     const e = new ErrorApi(typeof j.error === 'string' && j.error.trim() ? j.error : `Espere ${s} segundos e intente de nuevo.`, { tipo: 'negocio', estado: 429, motivo: 'espera' });
@@ -450,7 +453,7 @@ export async function salir() {
     faltoCerrar = !!res?.error; // sin conexión, error del servidor o tiempo agotado; un 401/403/404 no cuenta: esa sesión ya no existe
   } catch { faltoCerrar = true; /* sin conexión: se borra solo aquí */ }
   // Solo se anota el código de acceso (y la hora): el código de refresco NO se guarda, porque serviría para pedir sesiones nuevas mientras el cierre no llegue al servidor.
-  // Si el de acceso ya venció cuando vuelva la conexión, esa sesión queda sin nadie que pueda renovarla y se cierra sola por su tope del servidor.
+  // Si el de acceso ya venció cuando vuelva la conexión, esa sesión queda sin nadie que pueda renovarla (el código de refresco no se guarda aquí), así que no la puede usar nadie.
   if (faltoCerrar && guardada) { guardarSalidas([...leerSalidas().filter((x) => x.a !== guardada.a), { a: guardada.a, t: Date.now() }]); vigilarSalidas(); }
   try { localStorage.removeItem('sb-facturador'); localStorage.removeItem('sb-facturador-code-verifier'); } catch { /* sin almacenamiento */ }
   invalidarCatalogo();
@@ -459,7 +462,7 @@ export async function salir() {
 
 /* ---------- Cierres de sesión pendientes ---------- */
 // Cuando el cierre de sesión no llega al servidor (sin internet, servidor caído o tiempo agotado), la sesión de ESTE aparato se borra igual, pero la del servidor sigue viva
-// hasta su tope de 16 horas. Para no dejarla abierta, el cierre se anota en una cola corta de este aparato (máximo 3 anotaciones, que se descartan a las 16 horas) y se repite
+// hasta que alguien la cierre: la sesión de caja no caduca por tiempo (decisión de Emil, 3 nov 2026). Para no dejarla abierta, el cierre se anota en una cola corta de este aparato (máximo 3 anotaciones, que se descartan a las 16 horas) y se repite
 // cuando vuelve la conexión, al abrir la página, después de entrar y cada minuto mientras haya algo pendiente. De cada sesión solo se anota su código de acceso y la hora
 // (nunca el de refresco: ese sí serviría para pedir sesiones nuevas); se borra apenas el servidor confirma (o contesta que esa sesión ya no existe).
 // El código de acceso dura poco y solo sirve para cerrar esa sesión. Una anotación vieja de versiones anteriores puede traer también el de refresco: se usa una vez para
