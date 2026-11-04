@@ -1,0 +1,39 @@
+/* Pago sin factura (Administración). Se suma a app.css y mantenimiento.css. */
+.psf{max-width:860px;margin:0 auto;display:flex;flex-direction:column;gap:1rem}
+.psf-intro{margin:0;color:var(--tinta2);line-height:1.45}
+.psf-cuerpo{display:flex;flex-direction:column;gap:1rem}
+.psf-seccion{display:flex;flex-direction:column;gap:.7rem}
+.psf-seccion h2{font-size:1.15rem}
+.psf-prov,.psf-lineas{display:flex;flex-direction:column;gap:.6rem}
+.psf-prov-sel{display:flex;flex-wrap:wrap;gap:.6rem 1rem;align-items:center;justify-content:space-between;padding:.7rem .9rem}
+.psf-resultados{display:flex;flex-direction:column;gap:.35rem}
+.psf-res{display:flex;flex-direction:column;align-items:flex-start;gap:.1rem;min-height:48px;padding:.5rem .8rem;text-align:left;background:#fff;border:1px solid var(--linea2);border-radius:var(--r);cursor:pointer;overflow-wrap:anywhere}
+.psf-res:hover{border-color:var(--tinta)}
+.psf-linea{margin:0;padding:.7rem .8rem .8rem;border:1px solid var(--linea2);border-radius:var(--r);display:flex;flex-direction:column;gap:.6rem;min-width:0}
+.psf-linea legend{font-weight:700;padding:0 .3rem}
+.psf-dos{display:grid;grid-template-columns:1fr 1fr;gap:.7rem}
+.psf-tres{display:grid;grid-template-columns:1fr 1.4fr 1.6fr;gap:.7rem}
+.psf-hint{color:#6b4500;background:var(--ambar-suave);border:1px solid var(--borde-ambar);border-radius:var(--r);padding:.4rem .6rem}
+.psf-hint:empty{display:none}
+.psf-suma{margin:0;font-size:1.1rem}
+.psf-total{font-size:1.3rem;font-variant-numeric:tabular-nums}
+.psf-foto{display:flex;flex-wrap:wrap;gap:.6rem;align-items:flex-end}
+.psf-foto img,.psf-fotos img{max-width:100%;max-height:260px;border:1px solid var(--linea2);border-radius:var(--r)}
+.psf-fotos{display:flex;flex-direction:column;gap:.6rem}
+.psf-conta{padding:0 .9rem .8rem;border:1px solid var(--linea2);border-radius:var(--r);background:#fff}
+.psf-check{display:grid;grid-template-columns:auto 1fr;gap:.2rem .6rem;align-items:center;margin-top:.6rem}
+.psf-check small{grid-column:2;color:var(--tinta2)}
+.psf-enviar{display:flex;justify-content:flex-end}
+.psf-enviar .btn{width:100%}
+.psf-resultado{display:flex;flex-direction:column;gap:.5rem}
+.psf-lista{display:flex;flex-direction:column;gap:.7rem}
+.psf-pago{display:flex;flex-direction:column;gap:.45rem;padding:.8rem .9rem}
+.psf-pago-cab{display:flex;flex-wrap:wrap;gap:.4rem .8rem;align-items:center;justify-content:space-between}
+.psf-pago-cab strong{overflow-wrap:anywhere}
+.psf-pago-datos{color:var(--tinta2);font-size:.95rem;overflow-wrap:anywhere}
+.psf-pago-btns{display:flex;flex-wrap:wrap;gap:.5rem}
+.psf-vacio{margin:.4rem 0;padding:1rem;text-align:center;color:var(--tinta2);border:1px dashed var(--linea2);border-radius:var(--r)}
+.psf-err{color:var(--rojo-osc);margin:.2rem 0}
+.psf-clave{overflow-wrap:anywhere;font-size:.85rem}
+.psf-detalle p{margin:.35rem 0}
+@media(max-width:560px){.psf-dos,.psf-tres{grid-template-columns:1fr}.psf-enviar .btn{width:100%}}
