@@ -1,0 +1,42 @@
+/* Análisis de un CABYS distinto (bandeja de alertas y pantalla de la factura). Una sola tipografía: la de la app. Los colores son los de siempre. */
+.cb{display:flex;flex-direction:column;gap:.8rem;margin:.4rem 0}
+.cb p{margin:0}
+.cb-resumen{padding:.6rem .8rem;background:var(--fondo);border-radius:8px}
+.cb-lineas{display:flex;flex-direction:column;gap:.8rem}
+.cb-linea{padding:.8rem .9rem;border:1px solid var(--linea2);border-left-width:6px;border-radius:var(--r);background:#fff;display:flex;flex-direction:column;gap:.5rem}
+.cb-linea.cambia{border-left-color:var(--rojo)}
+.cb-lt{overflow-wrap:anywhere}
+.cb-ver{font-size:1.02rem}
+.cb-ver.mal{color:var(--rojo-osc)}
+.cb-ver.espera{color:#7a5300}
+.cb-ver.neutro{color:var(--tinta2)}
+.cb-por{color:var(--tinta)}
+.cb-compara{display:grid;grid-template-columns:1fr 1fr;gap:.6rem}
+.cb-lado{padding:.6rem .7rem;border-radius:8px;border:1px solid var(--linea);display:flex;flex-direction:column;gap:.25rem;min-width:0}
+.cb-lado.ahora{background:var(--ambar-suave)}
+.cb-lado.antes{background:var(--fondo)}
+.cb-lado-t{font-weight:700;font-size:.92rem;color:var(--tinta2)}
+.cb-cabys code{font:inherit;font-weight:700;overflow-wrap:anywhere}
+.cb-tar{color:var(--rojo-osc)}
+.cb-desc{overflow-wrap:anywhere}
+.cb-peq{font-size:.88rem;color:var(--tinta2);overflow-wrap:anywhere}
+.cb-ojo{color:var(--rojo-osc);font-weight:600}
+.cb-dinero{padding:.5rem .7rem;background:#fff;border-top:1px dashed var(--linea2);display:flex;flex-direction:column;gap:.25rem}
+.cb-acciones{display:flex;flex-direction:column;gap:.6rem;padding:.8rem .9rem;border:1px solid var(--linea2);border-radius:var(--r);background:#fff}
+.cb-pasos{margin:0;padding-left:1.2rem;display:flex;flex-direction:column;gap:.35rem}
+.cb-copiar{display:flex;flex-direction:column;gap:.5rem}
+.cb-mensaje{width:100%;box-sizing:border-box;font:inherit;font-size:.92rem;padding:.6rem .7rem;border:1px solid var(--borde-control);border-radius:8px;background:var(--fondo);color:var(--tinta);resize:vertical}
+.cb-botones{display:flex;flex-wrap:wrap;gap:.6rem}
+.cb-botones .btn{flex:1 1 200px}
+.rec-modal .cb{margin:.2rem 0 .8rem}
+@media(max-width:620px){.cb-compara{grid-template-columns:1fr}}
+.cb-linea.sube{border-left-color:var(--rojo)}
+.cb-linea.baja{border-left-color:var(--verde)}
+.cb-ver.bien{color:var(--verde)}
+.cb-tres{display:flex;flex-direction:column;border:1px solid var(--linea);border-radius:8px;overflow:hidden}
+.cb-fila{display:flex;flex-wrap:wrap;gap:.2rem .8rem;justify-content:space-between;align-items:baseline;padding:.45rem .7rem;border-bottom:1px solid var(--linea);background:#fff}
+.cb-fila:last-child{border-bottom:0}
+.cb-fila.marca{background:var(--verde-suave)}
+.cb-fila small{flex:1 1 100%;color:var(--verde);font-weight:600}
+.cb-notas{padding:.6rem .8rem;background:var(--fondo);border-radius:8px}
+.cb-notas ul{margin:.3rem 0 0;padding-left:1.1rem;color:var(--tinta2);font-size:.9rem}

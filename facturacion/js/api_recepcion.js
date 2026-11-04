@@ -49,3 +49,5 @@ export const plazoRecibidas = (soc) => rpc('fx_recibidas_plazo', { p_soc: soc })
 export const revisarCabysFactura = (clave) => rpc('fx_cabys_revision_factura', { p_clave: clave });
 // Un artículo propio contra el CABYS de sus ventas: {hay_historial, distinto, habitual, veces, habitual_descripcion, habitual_tarifa, nuevo_tarifa}
 export const revisarCabysProducto = (soc, producto, cabys) => rpc('fx_cabys_revision_producto', { p_soc: soc, p_producto: producto, p_cabys: cabys });
+// Facturas con CABYS distinto que siguen por revisar (alertas abiertas): {n, items:[{alerta_id, clave, proveedor, numero, fecha_texto, total, n_lineas, n_cambia_tarifa, veredicto}]}
+export const cabysEnRevision = (soc) => rpc('fx_cabys_en_revision', { p_soc: soc });

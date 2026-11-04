@@ -2,7 +2,9 @@
 // Plazo: 8 días hábiles contados desde el inicio del mes siguiente a la fecha de la factura (lo calcula SQL, fx_plazo_receptor). Datos: fx_recibidas / fx_recibida (solo lectura) y CONTRATO_CONTABLE.md.
 // Respuestas: función de borde facturador-receptor v8. Antes de enviar se pide «calcular» (no envía nada) y se muestra en palabras qué recibirá Hacienda, el IVA que se acredita y el gasto.
 import { h, money, num, fechaHora, horaCorta, debounce, modal, conBoton, toast, nombrePropio, nombreLocal, campoBusqueda, hoyCR, sumaDias } from './util.js';
-import { recibidas, recibida, respuestaGuardada, responder, calcularRespuesta, consultarRespuesta, revisarCorreo, alertasRecepcion, atenderAviso, otraCedula, ivaMes, ivaMesDetalle, plazoRecibidas, revisarCabysFactura } from './api_recepcion.js';
+import { recibidas, recibida, respuestaGuardada, responder, calcularRespuesta, consultarRespuesta, revisarCorreo, alertasRecepcion, atenderAviso, otraCedula, ivaMes, ivaMesDetalle, plazoRecibidas, revisarCabysFactura, cabysEnRevision } from './api_recepcion.js';
+import { alertasHacienda } from './api_alertas_hacienda.js';
+import { panelCabys, pedirNotaAtencion } from './cabys_analisis.js';
 import { mensajeAmable } from './api_documentos.js';
 import { inv } from './api_inventarios.js';
 import { selectorPeriodo, textoRango } from './periodo.js';
@@ -135,7 +137,7 @@ export default {
     let guardaHasta = 0;
     const guardar = () => { guardaHasta = Date.now() + 750; };
     const tocable = (fn) => (e) => { if (Date.now() < guardaHasta) { e?.preventDefault?.(); return; } fn(e); };
-    const est = { vista: 'pendientes', q: '', datos: null, conteo: null, per: { todas: 'hoy', vencidas: 'mes' }, vencTodo: true, mes: mesDe(hoyCR()), avisos: null };
+    const est = { vista: 'pendientes', q: '', datos: null, conteo: null, per: { todas: 'hoy', vencidas: 'mes' }, vencTodo: true, mes: mesDe(hoyCR()), avisos: null, cabysRev: null };
 
     const periodo = selectorPeriodo({ inicial: 'hoy', alCambiar: () => cargar() });
     const periodoCaja = h('div.tarjeta.rec-periodo', periodo.el);
@@ -239,6 +241,7 @@ export default {
     const rangoActual = () => (est.vista === 'vencidas' && est.vencTodo ? [sumaDias(hoyCR(), -800), hoyCR()] : est.vista === 'pendientes' ? [null, null] : periodo.rango());
     async function cargar() {
       if (est.vista === 'iva') return cargarIva();
+      if (est.vista === 'cabys') return cargarCabys();
       const mia = ++ficha;
       const [desde, hasta] = rangoActual();
       const lst = est.vista !== 'iva';
@@ -289,7 +292,7 @@ export default {
       const c = est.conteo || {};
       const venc = (c.vencidas_recientes || 0) + (c.vencidas_antiguas || 0);
       const b = (id, t, n) => h('button.btn.rec-vista', { type: 'button', 'aria-pressed': String(est.vista === id), onclick: tocable(() => irA(id)) }, t, n != null ? h('span.rec-n', num(n, 0)) : null);
-      poner(tabs, b('pendientes', 'Pendientes de responder', c.pendientes_en_plazo ?? null), b('todas', 'Todas las facturas', null), b('vencidas', 'Plazo vencido', venc || null), b('iva', 'IVA del mes', null));
+      poner(tabs, b('pendientes', 'Pendientes de responder', c.pendientes_en_plazo ?? null), b('todas', 'Todas las facturas', null), b('vencidas', 'Plazo vencido', venc || null), est.cabysRev?.n || est.vista === 'cabys' ? b('cabys', 'En revisión (IVA y precio)', est.cabysRev?.n ?? null) : null, b('iva', 'IVA del mes', null));
     }
     function pintarVencFiltro() {
       vencFiltro.hidden = est.vista !== 'vencidas';
@@ -408,13 +411,27 @@ export default {
       m.el.parentElement.style.gridTemplateColumns = 'minmax(0, 1fr)'; // evita que una tabla ancha empuje la ventana fuera del celular
       await pintarDetalle(cuerpo, clave);
     }
+    // «Ya lo atendí» desde la misma factura: pide la nota (obligatoria) y cierra la alerta de CABYS de esa factura
+    async function atenderCabys(rev, btn, cuerpo, clave) {
+      const nota = await pedirNotaAtencion(`CABYS distinto en la factura n.º ${rev.numero} de ${rev.proveedor}.`);
+      if (nota == null || !vivo) return;
+      await conBoton(btn, async () => {
+        await alertasHacienda.atender(rev.alerta_id, nota);
+        toast('Anotado: usted atendió esta alerta.');
+        app.alertas?.refrescar?.();
+        document.dispatchEvent(new CustomEvent('app:alertas-hacienda-cambio'));
+        cargarCabysRev();
+        await pintarDetalle(cuerpo, clave);
+      });
+    }
     async function pintarDetalle(cuerpo, clave, aviso) {
-      let d, guardada = null, distintos = new Map();
+      let d, guardada = null, distintos = new Map(), revCabys = null;
       try {
         const [a, b, cb] = await Promise.allSettled([recibida(clave), respuestaGuardada(clave), revisarCabysFactura(clave)]);
         if (a.status === 'rejected') throw a.reason;
         d = a.value; guardada = b.status === 'fulfilled' ? b.value : null;
-        distintos = new Map((cb.status === 'fulfilled' ? cb.value?.lineas || [] : []).map((x) => [+x.linea, x]));
+        revCabys = cb.status === 'fulfilled' ? cb.value : null;
+        distintos = new Map((revCabys?.lineas || []).map((x) => [+x.linea, x]));
       } catch (e) {
         // Contable solo muestra las facturas de la empresa de la sesión (la base dice «Esta sesión es de otra empresa.» si la factura es de la otra, y «No se encontró esa factura» si no existe); Inventarios es de las dos
         const msg = String(e?.message || '');
@@ -450,7 +467,8 @@ export default {
           d.credito && d.credito.texto ? dato('Crédito fiscal', d.credito.texto) : null),
         bloqueInventario(leerInv(d.inventario, f.tipo), rechazada, btnInventarios),
         h('h3', 'Líneas de la factura'),
-        distintos.size ? h('p.lis-aviso.rec-cabys-nota', `${plural(distintos.size, 'línea trae', 'líneas traen')} un CABYS distinto al que este proveedor usó antes para el mismo producto. El CABYS cambia la tarifa y el IVA que se acredita: revíselo con el proveedor. No impide responder.`) : null,
+        (distintos.size || revCabys?.tarifa?.length || revCabys?.precio?.length || revCabys?.notas?.length) ? panelCabys(revCabys, { sinEncabezado: true, alAtender: revCabys?.alerta_abierta ? (btn) => atenderCabys(revCabys, btn, cuerpo, clave) : null }) : null,
+        revCabys?.alerta_id && !revCabys.alerta_abierta && revCabys.atendida_por ? h('p.lis-aviso', `La alerta de CABYS de esta factura ya la atendió ${revCabys.atendida_por}${revCabys.nota ? '. Nota: ' + revCabys.nota : ''}.`) : null,
         lineas.length ? h('div.tabla-caja', h('table.tabla', h('thead', h('tr', h('th', '#'), h('th', 'Detalle'), h('th.der', 'Cantidad'), h('th.der', 'Precio unitario'), h('th.der', 'Sin IVA'), h('th.der', 'IVA'), h('th.der', 'Total'))),
           h('tbody', lineas.map((l) => h('tr', h('td', l.linea > 999 ? '' : l.linea), h('td', l.detalle || '', l.cabys ? h('small.tenue', ' CABYS ' + l.cabys) : null, avisoCabys(distintos.get(+l.linea))), h('td.der', { 'data-et': 'Cantidad' }, num(l.cantidad, 3)), h('td.der', { 'data-et': 'Precio' }, money(l.precio_unitario)), h('td.der', { 'data-et': 'Sin IVA' }, money(l.subtotal)), h('td.der', { 'data-et': 'IVA' }, money(l.impuesto)), h('td.der', { 'data-et': 'Total' }, money(l.total_linea)))))))
           : h('p.tenue', 'Esta factura no trae líneas guardadas.'),
@@ -813,6 +831,35 @@ export default {
     }
 
     /* ---------- IVA del mes (fx_iva_mes y fx_iva_mes_detalle) ---------- */
+    /* ---------- facturas con CABYS distinto por revisar (alertas abiertas) ---------- */
+    async function cargarCabysRev() {
+      try { est.cabysRev = await cabysEnRevision(soc.id); } catch { est.cabysRev = null; }
+      if (vivo) pintarTabs();
+    }
+    async function cargarCabys() {
+      const mia = ++ficha;
+      [buscarCaja, resumen, periodoCaja, vencFiltro, ivaCaja].forEach((x) => { x.hidden = true; });
+      [rotulo, lista].forEach((x) => { x.hidden = false; });
+      pintarTabs();
+      rotulo.textContent = 'Facturas de proveedores con una alerta por atender: tarifa del IVA distinta a la habitual, precio distinto al habitual o CABYS distinto. Toque una para ver el análisis y decidir.';
+      poner(lista, h('p.cargando', 'Buscando facturas…'));
+      try {
+        const r = await cabysEnRevision(soc.id);
+        if (mia !== ficha || !vivo) return;
+        est.cabysRev = r; pintarTabs();
+        const items = r.items || [];
+        if (!items.length) { poner(lista, h('div.vacio', h('p', 'No hay facturas con CABYS distinto por revisar.'))); return; }
+        const VER = { probable_error: 'Probable error', revisar: 'Revisar con el proveedor', cambio_legitimo_probable: 'Cambio legítimo probable', poco_relevante: 'Poco relevante' };
+        poner(lista, ...items.map((x) => h('button.rec-fila.rec-fila-iva', { type: 'button', onclick: tocable(() => abrirDetalle(x.clave)), 'aria-label': `Ver el análisis de la factura ${x.numero} de ${x.proveedor}` },
+          h('span.rec-fecha', h('strong', x.fecha_texto || '')),
+          h('span.rec-prov', h('strong', x.proveedor || 'Proveedor'), h('small', `Factura n.º ${x.numero || ''} · ${plural(+x.n_lineas, 'línea', 'líneas')} · ${x.tipo === 'precio_distinto' ? 'precio distinto' : x.tipo === 'tarifa_distinta' ? 'tarifa de IVA distinta' : 'CABYS distinto' + (+x.n_cambia_tarifa ? ' y cambia la tarifa' : '')}`)),
+          h('span.rec-monto.der', h('small.rec-et', 'Total'), money(x.total)),
+          h('span.rec-estado', h('span.chip' + (x.veredicto === 'probable_error' || x.veredicto === 'sube' ? '.mal' : x.veredicto === 'baja' ? '' : '.espera'), VER[x.veredicto] || (x.veredicto === 'sube' ? 'Precio más alto' : x.veredicto === 'baja' ? 'Precio más bajo' : 'Revisar')), h('small', 'Ver análisis')))));
+      } catch (e) {
+        if (mia !== ficha) return;
+        poner(lista, h('div.vacio', h('p', 'No se pudieron traer las facturas.'), h('p.tenue', mensajeAmable(e, 'Revise la conexión e intente de nuevo.')), h('button.btn', { type: 'button', onclick: () => cargar() }, 'Intentar de nuevo')));
+      }
+    }
     async function cargarIva() {
       const mia = ++ficha;
       [buscarCaja, rotulo, resumen, lista, periodoCaja, vencFiltro].forEach((x) => { x.hidden = true; });
@@ -948,7 +995,7 @@ export default {
       est.vista = 'todas'; est.q = textoDePedido; buscar.value = textoDePedido;
       periodo.elegir('mes');
     } else cargar();
-    cargarAvisos();
+    cargarAvisos(); cargarCabysRev();
     // Un instante después de que main.js termine de mostrar la pantalla, para que su foco inicial no le quite el foco a la ventana
     if (abrirPedido) setTimeout(() => { if (vivo) abrirDetalle(claveDePedido).catch(() => {}); }, 0);
     return () => { vivo = false; ficha++; };

@@ -1,12 +1,14 @@
 // Alertas de Hacienda (Administración, solo administradores): todo lo importante que dijo o dejó de decir Hacienda, en un solo lugar.
 // La misma alerta también llega al teléfono (Panel) y al correo del administrador; aquí se ve cuáles ya llegaron y quién la atendió.
 // «Ya lo atendí» pide una nota (obligatoria) y deja constancia de quién y cuándo. Una cajera no ve esta pantalla ni la tarjeta.
-import { h, esqueleto, bloqueError, textoDeError, conBoton, toast, fechaHora, modal } from './util.js';
+import { h, esqueleto, bloqueError, textoDeError, conBoton, toast, fechaHora, money } from './util.js';
 import { alertasHacienda } from './api_alertas_hacienda.js';
 import { haceCuanto } from './api_respaldos.js';
 import { cargarHoja } from './ui_hojas.js';
+import { panelCabys, pedirNotaAtencion } from './cabys_analisis.js';
 
 // A dónde lleva el botón «Ir a…» (módulo del facturador donde se resuelve cada tipo de alerta)
+const TIPOS_FACTURA = ['cabys_distinto', 'tarifa_distinta', 'precio_distinto']; // alertas con análisis de una factura de proveedor
 const IR = {
   emitidas: { texto: 'Ir a Facturas emitidas', ir: (app) => app.ir('emitidas') },
   contabilidad: { texto: 'Ir a Contabilidad', ir: (app) => app.ir('contabilidad') },
@@ -27,25 +29,6 @@ function entregas(e) {
     h('li', h('b', 'En el facturador'), h('span', b.en ? 'Desde ' + hora(b.en) : 'Ahora')),
     h('li', h('b', 'En el teléfono'), h('span', panel)),
     h('li', h('b', 'Por correo'), h('span', correo)));
-}
-
-// Ventana para escribir qué se hizo. La nota es obligatoria: sin ella el botón avisa y no guarda.
-function pedirNota(titulo) {
-  return new Promise((ok) => {
-    let hecho = false;
-    const area = h('textarea.campo', { rows: 4, maxlength: 300, 'aria-label': 'Qué hizo', placeholder: 'Por ejemplo: Ya se corrigió y se volvió a enviar.' });
-    const err = h('p.ah-error', { role: 'alert', hidden: true }, 'Escriba qué hizo. Es obligatorio.');
-    const fin = (v, c) => { hecho = true; c?.(); ok(v); };
-    modal({
-      titulo: 'Ya lo atendí', ancho: 460, alCerrar: () => { if (!hecho) ok(null); },
-      contenido: h('div.ah-nota-campo', h('p.conf', titulo), h('label.etq', 'Escriba qué hizo (obligatorio)', area), err),
-      botones: [
-        { texto: 'Cancelar', onclick: (c) => fin(null, c) },
-        { texto: 'Guardar que ya lo atendí', clase: 'primario', onclick: (c) => { const v = area.value.trim(); if (v.length < 3) { err.hidden = false; area.focus(); return; } fin(v, c); } },
-      ],
-    });
-    setTimeout(() => area.focus(), 50);
-  });
 }
 
 export default {
@@ -70,8 +53,8 @@ export default {
       cargar();
     }
 
-    async function atender(it, btn) {
-      const nota = await pedirNota(it.titulo + '. ' + it.texto);
+    async function atenderAlerta(it, btn) {
+      const nota = await pedirNotaAtencion(it.titulo + '. ' + it.texto);
       if (nota == null || !vivo) return;
       await conBoton(btn, async () => {
         await alertasHacienda.atender(it.id, nota);
@@ -82,21 +65,54 @@ export default {
       });
     }
 
+    // Lo que se ve según el tipo de alerta: quién, cuál, con qué impacto y qué hacer, sin salir de la tarjeta
+    const datosFactura = (d) => h('p.ah-factura', h('strong', d.proveedor), ` · factura n.º ${d.numero}`, d.fecha_texto ? ` · del ${d.fecha_texto}` : '', d.total != null ? ` · total ${money(d.total)}` : '');
+    function cuerpoPorTipo(it, d) {
+      if (TIPOS_FACTURA.includes(it.tipo) && d.proveedor) {
+        return h('div', datosFactura(d), panelCabys(d, { sinEncabezado: true, solo: it.tipo === 'tarifa_distinta' ? 'tarifa' : it.tipo === 'precio_distinto' ? 'precio' : 'cabys' }));
+      }
+      if (it.tipo === 'plazo_8_dias' && d.proveedor) {
+        const dias = +d.dias_habiles;
+        return h('div.ah-bloque', datosFactura(d),
+          h('p', h('strong', 'Fecha límite: '), d.vence_texto || '', Number.isFinite(dias) ? (dias <= 0 ? ' (es hoy o ya pasó)' : ` (quedan ${dias} ${dias === 1 ? 'día hábil' : 'días hábiles'})`) : ''),
+          h('p', h('strong', 'Si no responde: '), d.que_pasa_si_no || ''),
+          h('p', h('strong', 'Cómo responder: '), d.como || ''));
+      }
+      if (d.numero && (d.campo || d.motivo || d.tipo_nombre)) {
+        return h('div.ah-bloque',
+          h('p.ah-factura', h('strong', `${(d.tipo_nombre || 'Comprobante').replace(/^./, (c) => c.toUpperCase())} n.º ${d.numero}`), d.fecha_texto ? ` · del ${d.fecha_texto}` : '', d.total != null ? ` · ${money(d.total)}` : ''),
+          d.motivo ? h('p', h('strong', 'Lo que dijo Hacienda: '), d.motivo) : null,
+          d.campo ? h('p', h('strong', 'Qué falló: '), d.campo) : null,
+          d.como_corregir ? h('p', h('strong', 'Cómo corregirlo: '), d.como_corregir) : null);
+      }
+      return null;
+    }
+
     function tarjeta(it) {
+      const d = it.detalle && typeof it.detalle === 'object' ? it.detalle : {};
       const quien = it.atendida_en ? h('p.ah-quien', h('b', 'Atendida por ' + (it.atendida_por || 'un administrador')), ' · ' + hora(it.atendida_en) + (it.nota ? '. Nota: ' + it.nota : ''))
         : it.cerrada_en ? h('p.ah-quien', 'Se resolvió sola · ' + hora(it.cerrada_en)) : null;
       const destino = IR[it.destino];
+      const clave = d.clave || it.clave_ref;
+      const conFactura = (TIPOS_FACTURA.includes(it.tipo) || it.tipo === 'plazo_8_dias') && /^\d{50}$/.test(String(clave || ''));
+      const atender = (btn) => atenderAlerta(it, btn);
+      const detalleCuerpo = cuerpoPorTipo(it, d);
+      const trae = TIPOS_FACTURA.includes(it.tipo) && d.proveedor; // el panel de CABYS ya explica cómo atenderla
+      // Un solo botón grande con palabras para ir a la factura; «Ya lo atendí» (con nota obligatoria) queda al lado. El panel de CABYS ya trae su propio «Ya lo atendí».
       const botones = estado === 'abiertas' ? h('div.ah-botones',
-        h('button.btn.primario', { type: 'button', onclick: (e) => atender(it, e.currentTarget) }, 'Ya lo atendí'),
-        destino ? h('button.btn', { type: 'button', onclick: () => destino.ir(app) }, destino.texto) : null) : null;
+        conFactura ? h('button.btn.primario.grande', { type: 'button', onclick: () => app.ir('contabilidad', { clave }) }, 'Abrir esta factura') : null,
+        h('button.btn' + (conFactura ? '' : '.primario'), { type: 'button', onclick: (e) => atender(e.currentTarget) }, 'Ya lo atendí'),
+        !conFactura && destino ? h('button.btn', { type: 'button', onclick: () => destino.ir(app) }, destino.texto) : null) : null;
       return h('li.ah-item.' + (it.cerrada_en ? 'atendida' : it.severidad),
-        h('div.ah-fila', h('span.chip.' + (it.severidad === 'urgente' ? 'mal' : 'espera'), it.severidad === 'urgente' ? 'Urgente' : 'Importante'), it.es_prueba ? h('span.chip', 'Prueba') : null,
+        h('div.ah-fila', h('span.chip.' + (it.severidad === 'urgente' ? 'mal' : 'espera'), it.severidad === 'urgente' ? 'Urgente' : 'Importante'), it.es_prueba ? h('span.chip', 'Prueba') : (it.ambiente && it.ambiente !== 'produccion' ? h('span.chip', 'Ambiente de pruebas') : null),
           h('span.ah-sub', it.empresa + ' · ' + haceCuanto(it.creada_en) + ' · ' + hora(it.creada_en))),
         h('p.ah-t', it.titulo),
         h('p.ah-m', it.texto),
-        estado === 'abiertas' && it.que_hacer ? h('p.ah-hacer', h('b', 'Qué hacer: '), it.que_hacer) : null,
+        detalleCuerpo,
+        estado === 'abiertas' && it.que_hacer && !trae ? h('p.ah-hacer', h('b', 'Qué hacer: '), it.que_hacer) : null,
+        botones,
         entregas(it.entregas),
-        quien, botones);
+        quien);
     }
 
     async function cargar() {
