@@ -145,3 +145,4 @@ table.ct-tabla{width:100%;border-collapse:collapse;margin-top:2mm}
 .fx-estado{margin-top:.5rem;padding:.55rem .75rem;border-radius:var(--r);border:1px solid var(--borde-control,#8f8672);background:#fff;font-weight:600;line-height:1.35}
 .fx-estado.si{border-color:var(--borde-ok,#3f8f66);background:var(--verde-suave);color:#14583a}
 .fx-estado.no{border-color:var(--borde-ambar,#a87400);background:var(--ambar-suave);color:#5c3d00}
+.tq .lin .desc-lin{font-size:.9em}

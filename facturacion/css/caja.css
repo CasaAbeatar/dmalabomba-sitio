@@ -635,3 +635,51 @@ body.fx-caja .sin-red-in{max-width:2200px}
 
 /* En la pantalla de Facturación no va el aviso rojo de Hacienda: no es de quien cobra (decisión de Emil, 3 nov 2026). En las demás pantallas lo ve el administrador. */
 .cabecera[data-vista=facturar] .alerta-cab{display:none}
+
+/* ---------- Descuento por línea ---------- */
+/* La fila sin descuento no cambia nada: todo lo de abajo solo se ve en una línea que tiene descuento o con el panel abierto. */
+.linea .linea-total.con-desc{display:flex;flex-direction:column;align-items:flex-end;line-height:1.1;gap:.05rem}
+.linea .linea-total .bruto{font-weight:400;font-size:.8rem;color:var(--tinta2);text-decoration:line-through;text-decoration-thickness:1px}
+.linea .linea-total .neto{font-weight:700}
+.linea.con-descuento{box-shadow:inset 3px 0 0 var(--verde);padding-left:.6rem;margin-left:-.6rem}
+.linea.con-descuento.editada,.linea.con-descuento.personalizada{box-shadow:inset 3px 0 0 var(--verde)}
+.linea-sub .desc-marca{display:inline-flex;align-items:center;min-height:24px;padding:0 .55rem;border:1px solid var(--borde-ok,#3f8f66);border-radius:99px;background:var(--verde-suave);color:var(--verde);font-weight:700}
+.linea-sub .desc-det{color:var(--tinta2)}
+.desglose .desg-desc{color:var(--verde)}
+
+.desc-fila{grid-column:1/-1;display:flex;flex-direction:column;gap:.35rem}
+.desc-etq{font-size:.85rem;font-weight:600;color:var(--tinta2)}
+.desc-atajos{display:flex;gap:.45rem;flex-wrap:wrap}
+.desc-atajos[hidden]{display:none}
+.desc-op{flex:1 1 0;min-height:48px;min-width:6rem}
+.desc-op[aria-pressed=true]{background:var(--tinta);border-color:var(--tinta);color:#fff}
+.desc-motivo{display:flex;flex-direction:column;gap:.35rem}
+.desc-panel{grid-column:1/-1;display:flex;flex-direction:column;gap:.55rem;margin-top:.1rem;padding:.8rem .85rem;border:1px solid var(--linea2);border-radius:12px;background:#fff}
+.desc-tit{font-weight:700;font-size:1rem}
+.desc-ayuda{margin:0;font-size:.88rem;color:var(--tinta2);line-height:1.35}
+.desc-pcts{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:.45rem}
+.desc-pct{min-height:52px;font-size:1.05rem;font-variant-numeric:tabular-nums}
+.desc-pct[aria-pressed=true]{background:var(--rojo);border-color:var(--rojo);color:#fff}
+.desc-panel .etq{font-size:.85rem;font-weight:600;color:var(--tinta2);gap:.25rem}
+.desc-panel .campo{min-height:48px;font-size:1rem;color:var(--tinta)}
+.desc-panel .desc-otro-etq[hidden]{display:none}
+.desc-campos{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr);gap:.6rem}
+.desc-prev{border:1px solid var(--linea);border-radius:10px;padding:.55rem .75rem;background:#fffdf8;display:flex;flex-direction:column;gap:.15rem;font-variant-numeric:tabular-nums}
+.desc-prev-fila{display:flex;justify-content:space-between;gap:.6rem;font-size:.92rem}
+.desc-prev-fila.tenue{color:var(--tinta2)}
+.desc-prev-fila.total{border-top:1px solid var(--linea);margin-top:.15rem;padding-top:.25rem;font-size:1rem}
+.desc-prev-fila .tachado{text-decoration:line-through;text-decoration-thickness:1px;color:var(--tinta2)}
+.desc-aviso{font-size:.84rem;color:#5c3d00;line-height:1.3}
+.desc-botones{display:flex;gap:.5rem}
+.desc-botones .btn{flex:1 1 0;min-height:48px}
+.cobro-cortesia{display:flex;flex-direction:column;gap:.15rem;padding:.7rem .9rem;border:1px solid var(--borde-ok,#3f8f66);border-radius:12px;background:var(--verde-suave);color:var(--verde)}
+.cobro-cortesia[hidden]{display:none}
+.cobro-cortesia span{color:var(--tinta);font-size:.92rem}
+@media(max-width:700px){
+  .desc-campos{grid-template-columns:minmax(0,1fr)}
+  .desc-botones{flex-direction:column-reverse}
+}
+
+.desc-pct{white-space:nowrap;padding-inline:.25rem}
+.desc-panel{border:0;padding:.1rem 0;background:none}
+.desc-botones{scroll-margin-bottom:calc(var(--barra-h,84px) + 18px)}

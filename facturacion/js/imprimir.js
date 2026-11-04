@@ -222,6 +222,17 @@ const UNIDAD_LLANA = { Unid: 'Unidad', Sp: 'Servicio', Spe: 'Servicio', Os: 'Ser
 const unidadDeLinea = (l) => { const u = String(l?.unidad ?? '').trim() || (l?.es_servicio ? 'Sp' : 'Unid'); return UNIDAD_LLANA[u] || u; };
 // Código de referencia de una nota o de un reemplazo, con la descripción oficial (Anexos v4.4, nota 9)
 const DESC_REF = { '01': 'Anula documento de referencia', '02': 'Corrige monto', '04': 'Referencia a otro documento', '06': 'Devolución de mercancía', '07': 'Sustituye comprobante electrónico', '13': 'Anula documento de referencia por error material', '14': 'Corrige monto por error material', '15': 'Sustituye comprobante electrónico por error material', '16': 'Sustituye comprobante electrónico rechazado' };
+// Descuento de una línea (columna venta_lineas.descuento, que también viaja en lineas_snapshot). El total de la línea ya viene rebajado; el monto del descuento es la
+// diferencia con cantidad por precio. Una línea sin descuento devuelve null y su impresión queda igual que antes.
+function descuentoDe(l) {
+  const d = l && l.descuento;
+  if (!d || typeof d !== 'object' || !(Number(d.porcentaje) > 0)) return null;
+  const monto = r2(r2(Number(l.cantidad) * Number(l.precio_final)) - (Number(l.total_linea) || 0));
+  const p = String(Number(d.porcentaje)).replace('.', ',');
+  return { monto, texto: Number(d.porcentaje) >= 100 ? 'Cortesía 100 %' : 'Descuento ' + p + ' %' };
+}
+const totalDescuentos = (lineas) => r2(lineas.reduce((a, l) => a + (descuentoDe(l)?.monto || 0), 0));
+
 // Qué dice el bloque de referencia de una nota de crédito o de débito. Lo que sale de la base manda: codigo_nombre (descripción oficial) y nombre_simple («Devolución», «Corrección de monto», «Anulación total»...).
 // Sin esas llaves queda como antes: una nota de crédito sin código se lee como anulación (código 01).
 function referenciaNota(m) {
@@ -390,11 +401,13 @@ function nodoTiquete(m, { papel, logo, copia }) {
     raiz.append(h('div.lin',
       h('div.d', l.descripcion || ''),
       h('div.q', h('span', pre ? `${num(l.cantidad)} x ${money(l.precio_final)}` : `${num(l.cantidad)} ${unidadDeLinea(l)} x ${money(l.precio_final)}`), h('b', money(l.total_linea))),
+      descuentoDe(l) ? h('div.q.desc-lin', h('span', descuentoDe(l).texto), h('b', '- ' + money(descuentoDe(l).monto))) : null,
       tarifaDeLinea(l).pct !== 13 ? h('div.iva-lin', etiquetaIva(tarifaDeLinea(l).pct, tarifaDeLinea(l).codigo)) : null,
       l.exoneracion ? h('div.iva-lin', textoExoneracion(l)) : null,
       l.nota ? h('div.nota', l.nota) : null));
   }
   raiz.append(linea('doble'));
+  if (totalDescuentos(m.lineas) > 0) raiz.append(fila('Descuentos ya restados', '- ' + money(totalDescuentos(m.lineas))));
   if (pre) raiz.append(fila('Subtotal sin IVA', money(m.subtotal)));
   else {
     // Mercancías y servicios, gravados y exentos; después el precio neto de venta (no hay descuentos, así que es la suma de lo anterior)
@@ -501,7 +514,7 @@ function nodoCarta(m, { logo, copia }) {
     h('thead', h('tr', h('th', 'CABYS'), h('th', 'Descripción'), h('th', 'Unidad'), h('th.der', 'Cant.'), h('th.der', 'Precio unit.'), h('th.der', 'IVA'), h('th.der', 'Total'))),
     h('tbody', m.lineas.map((l) => h('tr',
       h('td.cod', l.cabys || ''),
-      h('td', h('div', l.descripcion || ''), l.exoneracion ? h('div.ct-tenue', textoExoneracion(l)) : null, l.nota ? h('div.ct-tenue', l.nota) : null),
+      h('td', h('div', l.descripcion || ''), descuentoDe(l) ? h('div.ct-tenue', descuentoDe(l).texto + ': - ' + money(descuentoDe(l).monto)) : null, l.exoneracion ? h('div.ct-tenue', textoExoneracion(l)) : null, l.nota ? h('div.ct-tenue', l.nota) : null),
       h('td.uni', unidadDeLinea(l)),
       h('td.der', num(l.cantidad)),
       h('td.der', money(l.precio_final)),
@@ -519,6 +532,7 @@ function nodoCarta(m, { logo, copia }) {
     }
   } else pagos.append(h('div.ct-tenue', 'Sin pagos registrados'));
   const tot = h('div.ct-totales',
+    totalDescuentos(m.lineas) > 0 ? h('div.ct-fila', h('span', 'Descuentos ya restados de cada línea'), h('span.v', '- ' + money(totalDescuentos(m.lineas)))) : null,
     (m.tipos || []).map((t) => h('div.ct-fila', h('span', t.etq), h('span.v', money(t.monto)))),
     h('div.ct-fila.neto', h('span', 'Precio neto de venta (sin IVA)'), h('span.v', money(m.subtotal))),
     m.desglose.map((f) => h('div.ct-fila', h('span', f.etqLarga), h('span.v', money(f.iva)))),

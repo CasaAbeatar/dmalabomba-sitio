@@ -103,7 +103,19 @@ function describirCobro(estado, mensaje) {
   return d;
 }
 // Firma de una cuenta (para saber si un cambio que falló por la red sí llegó al servidor)
-const firmaCuenta = (c) => JSON.stringify([c.venta.total, c.venta.estado, (c.lineas || []).map((l) => [l.id, Number(l.cantidad), cents(l.precio_final), l.nota || '', l.producto_id, l.descripcion, l.codigo_tarifa_iva || '', Number(l.tarifa_iva)])]);
+const firmaCuenta = (c) => JSON.stringify([c.venta.total, c.venta.estado, (c.lineas || []).map((l) => [l.id, Number(l.cantidad), cents(l.precio_final), l.nota || '', l.producto_id, l.descripcion, l.codigo_tarifa_iva || '', Number(l.tarifa_iva), l.descuento ? [l.descuento.porcentaje, l.descuento.codigo] : null])]);
+
+/* ---------- Descuento por línea ---------- */
+// La columna venta_lineas.descuento llega en cada línea de fx_venta ({ porcentaje, codigo, motivo, completo? }); sin descuento es null.
+// total_linea ya viene rebajado de la base; el precio original (cantidad por precio de cada uno) se calcula aquí solo para mostrarlo tachado.
+const descDe = (l) => (l && l.descuento && typeof l.descuento === 'object' && Number(l.descuento.porcentaje) > 0 ? l.descuento : null);
+const pctTxt = (p) => String(Number(p)).replace('.', ',') + ' %';
+const brutoLinea = (l) => Math.round(Number(l.cantidad) * cents(l.precio_final)) / 100;
+const NOMBRE_DESC = { '07': 'Descuento comercial', '05': 'Descuento de temporada', '06': 'Descuento promocional', '01': 'Cortesía (regalía)', '03': 'Cortesía (bonificación)' };
+const rotuloDesc = (d) => (Number(d.porcentaje) >= 100 ? 'Cortesía 100 %' : 'Descuento ' + pctTxt(d.porcentaje));
+// Una cuenta donde TODAS las líneas son cortesía al 100 % queda en total cero y se registra sin cobrar nada (la base lo permite: fx_cobrar con pagos vacíos)
+const esCortesiaTotal = (c) => !!c && (c.lineas || []).length > 0 && c.lineas.every((l) => Number(descDe(l)?.porcentaje) >= 100);
+const sePuedeCobrar = (c) => !!c && (c.lineas || []).length > 0 && (Number(c.venta.total) > 0 || esCortesiaTotal(c));
 
 const RAPIDOS = [1000, 2000, 5000, 10000, 20000];
 
@@ -189,7 +201,7 @@ function calcularPagos(entradas, totalC) {
   const efectivos = aplicados.filter((a) => a.medio === 'efectivo');
   efectivos.forEach((a) => { a.recibido = a.monto; });
   if (efectivos.length && vuelto > 0) { const u = efectivos[efectivos.length - 1]; u.recibido = (Math.round(u.monto * 100) + vuelto) / 100; }
-  return { ok: falta === 0 && aplicados.length > 0, error: null, falta, vuelto, aplicados };
+  return { ok: falta === 0 && (aplicados.length > 0 || totalC === 0), error: null, falta, vuelto, aplicados }; // total cero (cortesía completa): no hay pagos y está bien
 }
 
 export default {
@@ -892,6 +904,88 @@ export default {
     const lineasAbiertas = new Set();
     // Lo que se lee bajo el nombre de una línea cuya tarifa no es la normal
     const rotuloIva = (t) => t.pct > 0 ? 'IVA ' + String(t.pct).replace('.', ',') + ' %' : t.codigo === '01' ? 'IVA 0 % (no sujeto)' : t.codigo === '11' ? 'IVA 0 % sin derecho a crédito' : 'Exenta de IVA';
+
+    /* ---------- Descuento de una línea ---------- */
+    // La cajera ya pidió la autorización a la administradora (en persona, por llamada o por WhatsApp). Con las opciones de la línea abiertas ve los botones 10 %, 20 %, 50 % y Otro:
+    // tocar uno despliega el motivo, si se quiere (atajos de un toque), y «Aplicar». No se pide quién autorizó (decisión de Emil, 4 nov 2026). Desde la línea: nombre, porcentaje, Aplicar.
+    // Lo escrito se conserva en descBorrador aunque la cuenta se repinte. La base valida y deja la auditoría; sin motivo anota el nombre del código.
+    const MOTIVOS_DESC = [{ clave: 'promo', texto: 'Promoción', codigo: '06' }, { clave: 'temp', texto: 'Temporada', codigo: '05' }];
+    const descBorrador = new Map(); // línea -> { pct, otro, otroTxt, atajo, motivo }
+    const prefCambiada = new Set(); // cuentas con prefactura impresa a las que se les cambió un descuento después (la base todavía no marca la prefactura como vieja por eso)
+    function elegirPct(l, n) { // n: 10, 20, 50 o 'otro'
+      let b = descBorrador.get(l.id);
+      if (!b) {
+        const d = descDe(l);
+        b = { pct: null, otro: false, otroTxt: '', atajo: null, motivo: '' };
+        if (d) {
+          const a = MOTIVOS_DESC.find((x) => x.codigo === d.codigo); if (a) b.atajo = a.clave;
+        }
+        descBorrador.set(l.id, b);
+      }
+      if (n === 'otro') b.otro = true; else { b.otro = false; b.pct = n; }
+      pintarCuenta();
+      setTimeout(() => asideCuenta?.querySelector('[data-linea="' + l.id + '"] .desc-botones')?.scrollIntoView({ block: 'nearest' }), 30);
+    }
+    // Quitar el descuento es un solo toque, sin motivo
+    function quitarDescuento(l) {
+      const vid = cur.venta.id, estabaPref = cur.venta.estado === 'prefacturada';
+      return accion(async () => { await api.lineaDescuentoQuitar(l.id); cur = await api.venta(vid); if (estabaPref) prefCambiada.add(vid); descBorrador.delete(l.id); repintar(); toast('Descuento quitado: ' + l.descripcion + ' vuelve a su precio normal.'); });
+    }
+    // Los cuatro botones de porcentaje (siempre a la vista en las opciones de la línea)
+    function botonesDescuento(l) {
+      const b = descBorrador.get(l.id);
+      const mk = (n, txt) => h('button.btn.desc-pct', { type: 'button', 'aria-pressed': String(!!b && (n === 'otro' ? b.otro : !b.otro && b.pct === n)), onclick: () => elegirPct(l, n) }, txt);
+      return h('div.desc-fila', h('div.desc-etq', descDe(l) ? 'Cambiar el descuento' : 'Descuento (pídalo antes a la administradora)'),
+        h('div.desc-pcts', { role: 'group', 'aria-label': 'Porcentaje de descuento' }, mk(10, '10 %'), mk(20, '20 %'), mk(50, '50 %'), mk('otro', 'Otro')));
+    }
+    function panelDescuento(l, b) {
+      const bruto = brutoLinea(l);
+      const cerrar = () => { descBorrador.delete(l.id); pintarCuenta(); };
+      const err = h('div.error-caja', { hidden: true, role: 'alert' });
+      const muestra = (t, foco) => { err.textContent = t; err.hidden = false; foco?.focus(); };
+      const valor = () => (b.otro ? leerNumero(b.otroTxt) : b.pct);
+      const prev = h('div.desc-prev', { 'aria-live': 'polite' });
+      const otroInp = h('input.campo.desc-otro', { type: 'text', inputmode: 'decimal', autocomplete: 'off', maxlength: 5, value: b.otroTxt || '', placeholder: 'Ej. 15', 'aria-label': 'Otro porcentaje de descuento, de 1 a 100' });
+      const otroEtq = h('label.etq.desc-otro-etq', { hidden: !b.otro }, 'Porcentaje (de 1 a 100)', otroInp);
+      const bAtajo = new Map();
+      const cien = () => valor() >= 100;
+      const motivoBloque = h('div.desc-motivo');
+      function pinta() {
+        for (const [k, bt] of bAtajo) bt.setAttribute('aria-pressed', String(b.atajo === k));
+        otroEtq.hidden = !b.otro;
+        motivoBloque.querySelector('.desc-atajos').hidden = cien();
+        const v = valor();
+        if (Number.isFinite(v) && v > 0 && v <= 100) {
+          const queda = Math.round(bruto * 100 * (100 - v) / 100) / 100;
+          prev.replaceChildren(
+            h('div.desc-prev-fila', h('span', 'Precio sin descuento'), h('span.tachado', money(bruto))),
+            h('div.desc-prev-fila', h('span', v >= 100 ? 'Cortesía: se regala la línea' : 'Descuento ' + pctTxt(v)), h('span', '− ' + money(bruto - queda))),
+            h('div.desc-prev-fila.total', h('span', 'La línea queda en'), h('b', money(queda))),
+            ...(v >= 100 ? [h('div.desc-aviso', 'Al 100 % la línea sale gratis. El IVA de la cortesía lo asume la empresa, sobre el costo del producto.')] : []));
+        } else prev.replaceChildren(h('div.desc-prev-fila.tenue', h('span', 'Escriba el porcentaje'), h('span', '')));
+      }
+      for (const m of MOTIVOS_DESC) bAtajo.set(m.clave, h('button.btn.desc-op', { type: 'button', onclick: () => { b.atajo = b.atajo === m.clave ? null : m.clave; pinta(); } }, m.texto));
+      motivoBloque.append(h('div.desc-etq', 'Motivo (opcional; sin elegir queda «descuento comercial»)'), h('div.desc-atajos', [...bAtajo.values()]));
+      otroInp.addEventListener('input', () => { b.otroTxt = otroInp.value; pinta(); });
+      const ok = h('button.btn.primario', { type: 'button' }, 'Aplicar');
+      ok.addEventListener('click', () => conBoton(ok, async () => {
+        const v = valor();
+        if (!Number.isFinite(v) || !(v > 0)) { muestra('Escriba el porcentaje, un número de 1 a 100.', otroInp); return; }
+        if (v > 100) { muestra('El descuento no puede pasar de 100 %.', otroInp); return; }
+        err.hidden = true;
+        const codigo = v >= 100 ? null : MOTIVOS_DESC.find((x) => x.clave === b.atajo)?.codigo || null;
+        const vid = cur.venta.id, estabaPref = cur.venta.estado === 'prefacturada';
+        const st = {};
+        await accion(async () => { await api.lineaDescuento(l.id, v, { codigo }); cur = await api.venta(vid); if (estabaPref) prefCambiada.add(vid); descBorrador.delete(l.id); repintar(); }, st);
+        if (!st.error) toast((v >= 100 ? 'Cortesía aplicada: ' : 'Descuento ' + pctTxt(v) + ' aplicado: ') + l.descripcion + '.');
+      }));
+      pinta();
+      return h('div.desc-panel', { 'data-desc': 'aplicar' },
+        otroEtq,
+        motivoBloque,
+        prev, err,
+        h('div.desc-botones', h('button.btn', { type: 'button', onclick: cerrar }, 'Cancelar'), ok));
+    }
     function filaLinea(l) {
       const prod = prodPorId.get(l.producto_id);
       const editada = !!prod && !prod.precio_abierto && cents(l.precio_final) !== cents(prod.precio_final);
@@ -927,6 +1021,8 @@ export default {
       if (tarifaCambiada || tar.pct !== 13) marcas.push(h('span' + (tarifaCambiada ? '.amb' : ''), rotuloIva(tar)));
       if (detalleCambiado) marcas.push(h('span.amb', 'Detalle cambiado'));
       if (editada) marcas.push(h('span.amb', 'Precio cambiado (el menú dice ' + money(prod.precio_final) + ')'));
+      const desc = descDe(l);
+      if (desc) marcas.unshift(h('span.desc-marca', rotuloDesc(desc)), h('span.desc-det', desc.motivo || NOMBRE_DESC[desc.codigo] || 'Descuento'));
       if (l.nota && !abierta) marcas.push(h('span.nota-vista', 'Nota: ' + l.nota));
       const id = l.id;
       // Nombre corto: lo que se lleva el cliente (la opción), sin repetir el producto. Si la línea tiene un detalle propio, se muestra ese.
@@ -938,9 +1034,10 @@ export default {
       };
       const nombreBtn = h('button.linea-nombre', { type: 'button', 'aria-expanded': String(abierta), title: l.descripcion, 'aria-label': (abierta ? 'Cerrar las opciones de ' : 'Abrir las opciones de ') + l.descripcion, onclick: alternar }, corto);
       const quitar = h('button.linea-x', { type: 'button', 'aria-label': 'Quitar ' + l.descripcion + ' de la cuenta', title: 'Quitar de la cuenta', onclick: () => accion(async () => { cur = await api.lineaQuitar(l.id); lineasAbiertas.delete(l.id); repintar(); toast('Quitado: ' + l.descripcion); }) }, '×');
-      return h('div.linea' + (editada ? '.editada' : '') + (detalleCambiado || tarifaCambiada ? '.personalizada' : '') + (abierta ? '.abierta' : ''), { 'data-linea': l.id },
+      const bd = descBorrador.get(l.id);
+      return h('div.linea' + (editada ? '.editada' : '') + (desc ? '.con-descuento' : '') + (detalleCambiado || tarifaCambiada ? '.personalizada' : '') + (abierta ? '.abierta' : ''), { 'data-linea': l.id },
         nombreBtn, qty, precio,
-        h('div.linea-total', money(l.total_linea).replace(/,00$/, '')),
+        desc ? h('div.linea-total.con-desc', h('s.bruto', { title: 'Precio sin descuento' }, money(brutoLinea(l)).replace(/,00$/, '')), h('span.neto', money(l.total_linea).replace(/,00$/, ''))) : h('div.linea-total', money(l.total_linea).replace(/,00$/, '')),
         quitar,
         marcas.length ? h('div.linea-sub', marcas) : null,
         abierta ? h('div.linea-pie',
@@ -948,7 +1045,10 @@ export default {
           h('div.pie-botones',
             h('button.btn', { type: 'button', onclick: () => dialogoLinea({ linea: l }) }, 'Editar detalle e IVA'),
             h('button.btn', { type: 'button', onclick: () => cambiarProducto(l) }, 'Cambiar producto'),
-            h('button.btn.peligro', { type: 'button', 'aria-label': 'Quitar ' + l.descripcion + ' de la cuenta', onclick: () => accion(async () => { cur = await api.lineaQuitar(l.id); lineasAbiertas.delete(l.id); repintar(); toast('Quitado: ' + l.descripcion); }) }, 'Quitar de la cuenta'))) : null);
+            desc ? h('button.btn.btn-desc-quitar', { type: 'button', onclick: () => quitarDescuento(l) }, 'Quitar descuento') : null,
+            h('button.btn.peligro', { type: 'button', 'aria-label': 'Quitar ' + l.descripcion + ' de la cuenta', onclick: () => accion(async () => { cur = await api.lineaQuitar(l.id); lineasAbiertas.delete(l.id); repintar(); toast('Quitado: ' + l.descripcion); }) }, 'Quitar de la cuenta')),
+          botonesDescuento(l),
+          bd ? panelDescuento(l, bd) : null) : null);
     }
 
     /* ---------- Cliente de la cuenta y tarifa de IVA habitual ---------- */
@@ -1030,7 +1130,9 @@ export default {
         const n = r2(Number(l.total_linea) / (1 + pct / 100)); neto += n; iva += r2(Number(l.total_linea) - n);
       }
       const rot = tasas.size === 1 ? 'IVA ' + String([...tasas][0]).replace('.', ',') + ' %' : 'IVA';
-      return h('div.desglose', h('div', h('span', 'Neto sin IVA'), h('span', money(r2(neto)))), h('div', h('span', rot), h('span', money(r2(iva)))));
+      const rebajado = cur.lineas.reduce((a, l) => a + (descDe(l) ? Math.max(0, brutoLinea(l) - Number(l.total_linea)) : 0), 0);
+      return h('div.desglose', rebajado > 0 ? h('div.desg-desc', h('span', 'Descuentos ya restados'), h('span', '− ' + money(r2(rebajado)))) : null,
+        h('div', h('span', 'Neto sin IVA'), h('span', money(r2(neto)))), h('div', h('span', rot), h('span', money(r2(iva)))));
     }
 
     // Entradas y salidas de efectivo: un botón siempre a la vista; las cajas se abren en una ventana y no ocupan lugar junto a la cuenta
@@ -1061,11 +1163,12 @@ export default {
         return;
       }
       const v = cur.venta;
-      const puede = cur.lineas.length > 0 && Number(v.total) > 0 && !cur.lineas.some(sinPrecioLinea);
+      const puede = sePuedeCobrar(cur) && !cur.lineas.some(sinPrecioLinea);
+      const prefVieja = v.prefactura_vigente === false || prefCambiada.has(v.id); // un descuento cambiado después de imprimir también deja vieja la prefactura
       const detalle = [v.referencia, v.telefono].filter(Boolean).join(' · ');
       // Clientes en espera, para llevar y express pueden pedir ver su cuenta antes de pagar: la prefactura NO es un comprobante
       const prefBtn = (v.tipo_servicio === 'espera' || v.tipo_servicio === 'llevar' || v.tipo_servicio === 'express')
-        ? h('button.btn.ambar', { type: 'button', disabled: !cur.lineas.length, onclick: (e) => prefacturar(e.currentTarget) }, v.estado === 'prefacturada' ? (v.prefactura_vigente === false ? 'Imprimir prefactura nueva' : 'Imprimir prefactura otra vez') : 'Prefactura (no es factura)')
+        ? h('button.btn.ambar', { type: 'button', disabled: !cur.lineas.length, onclick: (e) => prefacturar(e.currentTarget) }, v.estado === 'prefacturada' ? (prefVieja ? 'Imprimir prefactura nueva' : 'Imprimir prefactura otra vez') : 'Prefactura (no es factura)')
         : null;
       // El cliente y su aviso de tarifa van dentro de la parte que se desliza: así nunca le quitan lugar a las líneas
       const lineas = h('div.cuenta-lineas', panelCliente(),
@@ -1076,8 +1179,8 @@ export default {
           v.tipo_servicio === 'buffet' ? null : h('button.btn.chico', { type: 'button', onclick: seguro(cambiarNombre) }, 'Cambiar nombre')),
         lineas,
         h('div.cuenta-pie',
-          v.estado === 'prefacturada' ? h('div.aviso-pref' + (v.prefactura_vigente === false ? '.vieja' : ''), h('strong', 'PREFACTURA N.° ' + (v.prefactura_numero || '') + (Number(v.prefactura_revision) > 1 ? ' · revisión ' + v.prefactura_revision : '')),
-            v.prefactura_vigente === false ? 'La cuenta cambió después de imprimir la prefactura. Imprima una nueva para que el cliente vea el total correcto.' : 'No es una factura: es solo para que el cliente revise su cuenta.') : null,
+          v.estado === 'prefacturada' ? h('div.aviso-pref' + (prefVieja ? '.vieja' : ''), h('strong', 'PREFACTURA N.° ' + (v.prefactura_numero || '') + (Number(v.prefactura_revision) > 1 ? ' · revisión ' + v.prefactura_revision : '')),
+            prefVieja ? 'La cuenta cambió después de imprimir la prefactura. Imprima una nueva para que el cliente vea el total correcto.' : 'No es una factura: es solo para que el cliente revise su cuenta.') : null,
           pieDesgloseIva(),
           h('div.pie-cobro',
             h('div.total-fila', h('span.et', 'Total a pagar (IVA incluido)'), h('div.total-monto', { 'aria-live': 'polite' }, money(v.total))),
@@ -1095,7 +1198,7 @@ export default {
       if (!barraMovil) return;
       const total = cur ? money(cur.venta.total) : '';
       const n = cur ? cur.lineas.length : 0;
-      const puede = !!cur && n > 0 && Number(cur.venta.total) > 0 && !cur.lineas.some(sinPrecioLinea);
+      const puede = !!cur && n > 0 && sePuedeCobrar(cur) && !cur.lineas.some(sinPrecioLinea);
       barraMovil.classList.toggle('sin-cobro', !puede);
       const cobrar = puede ? h('button.btn.primario.bm-cobrar', { type: 'button', 'aria-label': 'Cobrar ' + total, onmousedown: sinQuitarFoco, onclick: seguro(abrirCobro) }, 'Cobrar', h('span.bm-total', ' ' + total)) : null;
       if (vista === 'productos') {
@@ -1120,7 +1223,7 @@ export default {
           await accion(async () => { cur = await api.prefacturar(id); repintar(); }, st);
           if (st.error) return; // no se pudo crear: no se imprime nada que parezca prefactura
         }
-        try { await (await imp()).imprimirPrefactura(id); toast('Se abrió la impresión de la prefactura. Recuerde: esto no es una factura.'); }
+        try { await (await imp()).imprimirPrefactura(id); prefCambiada.delete(id); pintarCuenta(); toast('Se abrió la impresión de la prefactura. Recuerde: esto no es una factura.'); }
         catch (e) { toast('La prefactura quedó creada pero no se pudo imprimir: ' + textoDeError(e) + ' Toque «Imprimir prefactura otra vez».', 'error', 8000); }
       });
     }
@@ -1140,11 +1243,11 @@ export default {
     }
     async function abrirCobroVentana(avisarCreada) {
       await cola;
-      if (!cur || !cur.lineas.length || !(Number(cur.venta.total) > 0)) { toast('La cuenta está vacía. Agregue productos antes de cobrar.', 'error'); return; }
+      if (!sePuedeCobrar(cur)) { toast('La cuenta está vacía. Agregue productos antes de cobrar.', 'error'); return; }
       // Antes de mostrar el total se lee la cuenta del servidor: una lectura vieja del refresco no puede dejar un total distinto del real
       try { cur = await api.venta(cur.venta.id); cambios++; sincronizarBarra(); pintarCuenta(); pintarMovil(); }
       catch (e) { toast(textoDeError(e), 'error', 6000); return; }
-      if (!cur.lineas.length || !(Number(cur.venta.total) > 0)) { toast('La cuenta está vacía. Agregue productos antes de cobrar.', 'error'); return; }
+      if (!sePuedeCobrar(cur)) { toast('La cuenta está vacía. Agregue productos antes de cobrar.', 'error'); return; }
       let venta = cur.venta;
       const ventaId = venta.id;
       if (ventasEnCobro.has(ventaId)) { toast('Esta cuenta tiene un cobro en camino. Espere unos segundos a que termine.', 'error'); return; }
@@ -1263,6 +1366,11 @@ export default {
       // Franja fija arriba (no se desplaza con el resto): el total, cuánto falta o el vuelto y qué documento se va a emitir se ven siempre,
       // aunque el cuerpo de la ventana baje hasta el campo del monto (computadora baja y celular).
       const docLinea = h('div.cobro-doc-linea', { role: 'status' });
+      // Cuenta donde todas las líneas son cortesía al 100 %: el total es cero, no se pide forma de pago y el botón registra la cortesía
+      const cortesia = totalC === 0 && esCortesiaTotal(cur);
+      const avisoCortesia = h('div.cobro-cortesia', { hidden: !cortesia, role: 'status' }, h('strong', 'Cuenta de cortesía: no se cobra nada.'), h('span', 'Todas las líneas tienen descuento del 100 %. Toque «Registrar cortesía» para emitir el comprobante en cero.'));
+      const formaPago = h('div.col', { hidden: cortesia }, h('strong', 'Forma de pago'), h('div.medios', mediosBtns));
+      const etqMonto = h('label.etq', { hidden: cortesia }, lblMonto, inpMonto);
       const vistaPago = h('div.cobro',
         h('div.cobro-fijo',
           h('div.cobro-total', h('div.et', 'Total a cobrar (IVA incluido)'), montoTotal),
@@ -1276,8 +1384,8 @@ export default {
         tarEl,
         exoEl,
         actEl,
-        h('div.col', h('strong', 'Forma de pago'), h('div.medios', mediosBtns)),
-        h('label.etq', lblMonto, inpMonto),
+        avisoCortesia,
+        formaPago, etqMonto,
         refEtq, btnOtro, errEl, btnRevisar,
         h('div.cobro-pie', razonCobro, btnVolver, btnCobrar));
 
@@ -1442,7 +1550,7 @@ export default {
       function actualizar() {
         mediosBtns.forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.medio === medio)));
         lblMonto.textContent = medio === 'efectivo' ? 'Efectivo que entrega el cliente (₡)' : 'Monto a cobrar con ' + MEDIOS[medio] + ' (₡)';
-        refEtq.hidden = medio === 'efectivo';
+        refEtq.hidden = medio === 'efectivo' || cortesia; btnOtro.hidden = cortesia;
         refTxt.textContent = medio === 'tarjeta' ? 'Número de autorización o voucher (opcional)'
           : medio === 'sinpe' ? 'Número de comprobante del SINPE Móvil (recomendado: ayuda a cuadrar la caja)'
           : 'Número de referencia de la transferencia (recomendado: ayuda a cuadrar la caja)';
@@ -1458,11 +1566,12 @@ export default {
         if (r.error) { resumen.replaceChildren(h('span', 'Revise los montos')); resumen.classList.add('falta'); }
         else if (r.falta > 0) { resumen.classList.add('falta'); resumen.replaceChildren(h('span', 'Falta por pagar'), h('span.grande', money(r.falta / 100))); }
         else if (r.vuelto > 0) { resumen.classList.add('vuelto'); resumen.replaceChildren(h('span', 'Pago completo. Entregue de vuelto'), h('span.grande', money(r.vuelto / 100))); }
+        else if (cortesia && r.ok) { resumen.classList.add('ok'); resumen.replaceChildren(h('span', 'Cortesía: no hay nada que cobrar'), h('span.grande', '✓')); }
         else if (r.ok) { resumen.classList.add('ok'); resumen.replaceChildren(h('span', 'Pago completo, sin vuelto'), h('span.grande', '✓')); }
         else { resumen.classList.add('falta'); resumen.replaceChildren(h('span', 'Falta por pagar'), h('span.grande', money(totalC / 100))); }
         // Con el cobro bloqueado no se habla de vuelto (no se va a cobrar): se dice qué hacer con el dinero
         if (bloqueo) { resumen.className = 'cobro-resumen falta'; resumen.replaceChildren(h('span', 'No se cobra esta cuenta: no entregue vuelto. Si ya recibió dinero por ella, devuélvalo.')); }
-        btnCobrar.textContent = cobrando ? 'Cobrando…' : 'Cobrar ' + money(venta.total);
+        btnCobrar.textContent = cobrando ? (cortesia ? 'Registrando…' : 'Cobrando…') : cortesia ? 'Registrar cortesía' : 'Cobrar ' + money(venta.total);
         // Con el cobro bloqueado el botón se ve apagado pero sigue recibiendo el toque (aunque falte el monto): el toque lleva la vista al aviso (no cobra) y al lado se dice por qué
         btnCobrar.disabled = cobrando || cedulaPendiente() || (!bloqueo && (duda || !r.ok || !!b.malo));
         btnCobrar.classList.toggle('bloqueado', !!bloqueo); if (bloqueo) btnCobrar.setAttribute('aria-disabled', 'true'); else btnCobrar.removeAttribute('aria-disabled');

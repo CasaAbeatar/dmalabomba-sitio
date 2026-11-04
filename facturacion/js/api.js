@@ -246,6 +246,12 @@ export const api = {
   lineaEditar: (linea, c = {}) => rpc('fx_linea_editar', { p_linea: linea, p_cantidad: c.cantidad ?? null, p_precio: c.precio ?? null, p_nota: c.nota ?? null, p_descripcion: c.descripcion ?? null,
     ...(c.codigoTarifa ? { p_codigo_tarifa: c.codigoTarifa } : {}) }),
   lineaQuitar: (linea) => rpc('fx_linea_quitar', { p_linea: linea }),
+  // Descuento por línea (la cajera lo pide a la administradora y escribe aquí solo el porcentaje (quién lo aplica queda registrado por la sesión; no se pide quién autorizó); el motivo es opcional y, si falta, la base anota el nombre del código).
+  // Sin código es 07 Descuento Comercial (05 temporada, 06 promocional; el 100 % es regalía 01). Devuelve { linea_id, porcentaje, codigo, total_linea }; la cuenta completa se vuelve a leer con venta().
+  lineaDescuento: (linea, porcentaje, extra = {}) => rpc('fx_linea_descuento', { p_linea: linea, p_porcentaje: porcentaje,
+    ...(extra.codigo ? { p_codigo: extra.codigo } : {}), ...(extra.motivo ? { p_motivo: extra.motivo } : {}) }),
+  // Quitar un descuento no pide motivo (decisión de Emil, 4 nov 2026): la base deja la auditoría igual.
+  lineaDescuentoQuitar: (linea) => rpc('fx_linea_descuento_quitar', { p_linea: linea }),
   ventaAnular: (id, motivo = null) => rpc('fx_venta_anular', { p_venta: id, p_motivo: motivo }),
   prefacturar: (id) => rpc('fx_prefacturar', { p_venta: id }),
   // Cobro: pagos = [{medio:'efectivo|tarjeta|sinpe|transferencia', monto, referencia?, recibido?}] y la suma de los montos debe ser igual al total.
