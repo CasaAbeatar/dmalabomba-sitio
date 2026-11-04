@@ -906,85 +906,72 @@ export default {
     const rotuloIva = (t) => t.pct > 0 ? 'IVA ' + String(t.pct).replace('.', ',') + ' %' : t.codigo === '01' ? 'IVA 0 % (no sujeto)' : t.codigo === '11' ? 'IVA 0 % sin derecho a crédito' : 'Exenta de IVA';
 
     /* ---------- Descuento de una línea ---------- */
-    // La cajera ya pidió la autorización a la administradora (en persona, por llamada o por WhatsApp). Con las opciones de la línea abiertas ve los botones 10 %, 20 %, 50 % y Otro:
-    // tocar uno despliega el motivo, si se quiere (atajos de un toque), y «Aplicar». No se pide quién autorizó (decisión de Emil, 4 nov 2026). Desde la línea: nombre, porcentaje, Aplicar.
-    // Lo escrito se conserva en descBorrador aunque la cuenta se repinte. La base valida y deja la auditoría; sin motivo anota el nombre del código.
-    const MOTIVOS_DESC = [{ clave: 'promo', texto: 'Promoción', codigo: '06' }, { clave: 'temp', texto: 'Temporada', codigo: '05' }];
-    const descBorrador = new Map(); // línea -> { pct, otro, otroTxt, atajo, motivo }
+    // La cajera ya pidió la autorización a la administradora (en persona, por llamada o por WhatsApp). Con las opciones de la línea abiertas ve UN solo campo pequeño «Desc %»
+    // junto a la nota: escribe el porcentaje y lo aplica con Enter o con «Aplicar»; nunca se aplica solo al tocar fuera (decisión de Emil, 4 nov 2026, como lo hace Prisma).
+    // Sin motivo: el código queda 07 Descuento Comercial (lo pone la base) y al 100 % la base lo vuelve cortesía (01). No se pide quién autorizó.
+    // Lo escrito se conserva en descBorrador (texto) aunque la cuenta se repinte. La base valida (0,01 a 99,99 o 100, hasta 2 decimales) y deja la auditoría.
+    const descBorrador = new Map(); // línea -> texto escrito en el campo «Desc %»
+    const descError = new Map(); // línea -> último aviso junto al campo (sobrevive al repintado que sigue a un rechazo del servidor)
     const prefCambiada = new Set(); // cuentas con prefactura impresa a las que se les cambió un descuento después (la base todavía no marca la prefactura como vieja por eso)
-    function elegirPct(l, n) { // n: 10, 20, 50 o 'otro'
-      let b = descBorrador.get(l.id);
-      if (!b) {
-        const d = descDe(l);
-        b = { pct: null, otro: false, otroTxt: '', atajo: null, motivo: '' };
-        if (d) {
-          const a = MOTIVOS_DESC.find((x) => x.codigo === d.codigo); if (a) b.atajo = a.clave;
-        }
-        descBorrador.set(l.id, b);
-      }
-      if (n === 'otro') b.otro = true; else { b.otro = false; b.pct = n; }
-      pintarCuenta();
-      setTimeout(() => asideCuenta?.querySelector('[data-linea="' + l.id + '"] .desc-botones')?.scrollIntoView({ block: 'nearest' }), 30);
+    const pctCampo = (p) => String(Number(p)).replace('.', ',');
+    // Lee lo escrito: { vacio } | { error } | { v }. Acepta coma o punto como decimal, hasta 2 decimales.
+    function leerPct(txt) {
+      const t = String(txt ?? '').replace(/[\s%]/g, '');
+      if (!t) return { vacio: true };
+      if (!/^\d{1,3}([.,]\d*)?$/.test(t)) return { error: 'Escriba solo números, por ejemplo 15 o 12,5.' };
+      if ((t.split(/[.,]/)[1] || '').length > 2) return { error: 'Use hasta 2 decimales, por ejemplo 12,5 o 12,25.' };
+      const v = Number(t.replace(',', '.'));
+      if (!(v > 0)) return { error: 'El descuento debe ser mayor que 0. Para no dar descuento deje el campo vacío.' };
+      if (v > 100) return { error: 'El descuento no puede pasar de 100 %. Con 100 la línea sale de cortesía.' };
+      return { v };
     }
     // Quitar el descuento es un solo toque, sin motivo
     function quitarDescuento(l) {
       const vid = cur.venta.id, estabaPref = cur.venta.estado === 'prefacturada';
-      return accion(async () => { await api.lineaDescuentoQuitar(l.id); cur = await api.venta(vid); if (estabaPref) prefCambiada.add(vid); descBorrador.delete(l.id); repintar(); toast('Descuento quitado: ' + l.descripcion + ' vuelve a su precio normal.'); });
+      return accion(async () => { await api.lineaDescuentoQuitar(l.id); cur = await api.venta(vid); if (estabaPref) prefCambiada.add(vid); descBorrador.delete(l.id); descError.delete(l.id); repintar(); toast('Descuento quitado: ' + l.descripcion + ' vuelve a su precio normal.'); });
     }
-    // Los cuatro botones de porcentaje (siempre a la vista en las opciones de la línea)
-    function botonesDescuento(l) {
-      const b = descBorrador.get(l.id);
-      const mk = (n, txt) => h('button.btn.desc-pct', { type: 'button', 'aria-pressed': String(!!b && (n === 'otro' ? b.otro : !b.otro && b.pct === n)), onclick: () => elegirPct(l, n) }, txt);
-      return h('div.desc-fila', h('div.desc-etq', descDe(l) ? 'Cambiar el descuento' : 'Descuento (pídalo antes a la administradora)'),
-        h('div.desc-pcts', { role: 'group', 'aria-label': 'Porcentaje de descuento' }, mk(10, '10 %'), mk(20, '20 %'), mk(50, '50 %'), mk('otro', 'Otro')));
-    }
-    function panelDescuento(l, b) {
-      const bruto = brutoLinea(l);
-      const cerrar = () => { descBorrador.delete(l.id); pintarCuenta(); };
-      const err = h('div.error-caja', { hidden: true, role: 'alert' });
-      const muestra = (t, foco) => { err.textContent = t; err.hidden = false; foco?.focus(); };
-      const valor = () => (b.otro ? leerNumero(b.otroTxt) : b.pct);
+    // El campo «Desc %» (va en las opciones de la línea, a la par de la nota)
+    function campoDescuento(l) {
+      const aplicado = descDe(l), bruto = brutoLinea(l);
+      const inp = h('input.campo.desc-inp', { type: 'text', inputmode: 'decimal', autocomplete: 'off', maxlength: 6, placeholder: 'Ej. 15', 'aria-label': 'Descuento en porcentaje para ' + l.descripcion + ', de 0,01 a 99,99, o 100 para cortesía' });
+      inp.value = descBorrador.has(l.id) ? descBorrador.get(l.id) : aplicado ? pctCampo(aplicado.porcentaje) : '';
       const prev = h('div.desc-prev', { 'aria-live': 'polite' });
-      const otroInp = h('input.campo.desc-otro', { type: 'text', inputmode: 'decimal', autocomplete: 'off', maxlength: 5, value: b.otroTxt || '', placeholder: 'Ej. 15', 'aria-label': 'Otro porcentaje de descuento, de 1 a 100' });
-      const otroEtq = h('label.etq.desc-otro-etq', { hidden: !b.otro }, 'Porcentaje (de 1 a 100)', otroInp);
-      const bAtajo = new Map();
-      const cien = () => valor() >= 100;
-      const motivoBloque = h('div.desc-motivo');
-      function pinta() {
-        for (const [k, bt] of bAtajo) bt.setAttribute('aria-pressed', String(b.atajo === k));
-        otroEtq.hidden = !b.otro;
-        motivoBloque.querySelector('.desc-atajos').hidden = cien();
-        const v = valor();
-        if (Number.isFinite(v) && v > 0 && v <= 100) {
-          const queda = Math.round(bruto * 100 * (100 - v) / 100) / 100;
-          prev.replaceChildren(
-            h('div.desc-prev-fila', h('span', 'Precio sin descuento'), h('span.tachado', money(bruto))),
-            h('div.desc-prev-fila', h('span', v >= 100 ? 'Cortesía: se regala la línea' : 'Descuento ' + pctTxt(v)), h('span', '− ' + money(bruto - queda))),
-            h('div.desc-prev-fila.total', h('span', 'La línea queda en'), h('b', money(queda))),
-            ...(v >= 100 ? [h('div.desc-aviso', 'Al 100 % la línea sale gratis. El IVA de la cortesía lo asume la empresa, sobre el costo del producto.')] : []));
-        } else prev.replaceChildren(h('div.desc-prev-fila.tenue', h('span', 'Escriba el porcentaje'), h('span', '')));
-      }
-      for (const m of MOTIVOS_DESC) bAtajo.set(m.clave, h('button.btn.desc-op', { type: 'button', onclick: () => { b.atajo = b.atajo === m.clave ? null : m.clave; pinta(); } }, m.texto));
-      motivoBloque.append(h('div.desc-etq', 'Motivo (opcional; sin elegir queda «descuento comercial»)'), h('div.desc-atajos', [...bAtajo.values()]));
-      otroInp.addEventListener('input', () => { b.otroTxt = otroInp.value; pinta(); });
-      const ok = h('button.btn.primario', { type: 'button' }, 'Aplicar');
+      const err = h('div.desc-err', { hidden: true, role: 'alert' });
+      const muestra = (t, enfocar = true) => {
+        err.textContent = t; err.hidden = !t; inp.setAttribute('aria-invalid', t ? 'true' : 'false');
+        if (t) descError.set(l.id, t); else descError.delete(l.id);
+        if (t && enfocar) { inp.focus(); err.scrollIntoView?.({ block: 'nearest' }); }
+      };
+      if (descError.has(l.id)) muestra(descError.get(l.id), false);
+      const pinta = () => {
+        const r = leerPct(inp.value);
+        if (r.v) {
+          const queda = Math.round(bruto * 100 - Math.round(bruto * r.v + 1e-9)) / 100; // el descuento se redondea al céntimo como en la base, y la línea queda en lo que resta
+          prev.replaceChildren(h('s', money(bruto).replace(/,00$/, '')), ' → ', h('b', r.v >= 100 ? 'Cortesía ₡0' : money(queda).replace(/,00$/, '')));
+        } else prev.replaceChildren(aplicado && r.vacio ? 'Vacío y «Aplicar» quita el descuento' : '');
+      };
+      const ok = h('button.btn.desc-ok', { type: 'button', 'aria-label': 'Aplicar el descuento a ' + l.descripcion }, 'Aplicar');
       ok.addEventListener('click', () => conBoton(ok, async () => {
-        const v = valor();
-        if (!Number.isFinite(v) || !(v > 0)) { muestra('Escriba el porcentaje, un número de 1 a 100.', otroInp); return; }
-        if (v > 100) { muestra('El descuento no puede pasar de 100 %.', otroInp); return; }
-        err.hidden = true;
-        const codigo = v >= 100 ? null : MOTIVOS_DESC.find((x) => x.clave === b.atajo)?.codigo || null;
+        const r = leerPct(inp.value);
+        if (r.error) { muestra(r.error); return; }
+        if (r.vacio) {
+          if (aplicado) { muestra(''); await quitarDescuento(l); return; }
+          muestra('Escriba el porcentaje, por ejemplo 15, y toque «Aplicar».'); return;
+        }
+        muestra('');
         const vid = cur.venta.id, estabaPref = cur.venta.estado === 'prefacturada';
         const st = {};
-        await accion(async () => { await api.lineaDescuento(l.id, v, { codigo }); cur = await api.venta(vid); if (estabaPref) prefCambiada.add(vid); descBorrador.delete(l.id); repintar(); }, st);
-        if (!st.error) toast((v >= 100 ? 'Cortesía aplicada: ' : 'Descuento ' + pctTxt(v) + ' aplicado: ') + l.descripcion + '.');
+        await accion(async () => { await api.lineaDescuento(l.id, r.v); cur = await api.venta(vid); if (estabaPref) prefCambiada.add(vid); descBorrador.delete(l.id); descError.delete(l.id); repintar(); }, st);
+        if (st.error) { descError.set(l.id, textoDeError(st.error)); pintarCuenta(); asideCuenta?.querySelector('[data-linea="' + l.id + '"] .desc-inp')?.focus(); } // el mensaje del servidor queda a la vista junto al campo, además del aviso
+        else toast((r.v >= 100 ? 'Cortesía aplicada: ' : 'Descuento ' + pctTxt(r.v) + ' aplicado: ') + l.descripcion + '.');
       }));
+      inp.addEventListener('input', () => { descBorrador.set(l.id, inp.value); if (!err.hidden) muestra(''); pinta(); });
+      inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); ok.click(); } });
       pinta();
-      return h('div.desc-panel', { 'data-desc': 'aplicar' },
-        otroEtq,
-        motivoBloque,
-        prev, err,
-        h('div.desc-botones', h('button.btn', { type: 'button', onclick: cerrar }, 'Cancelar'), ok));
+      return h('div.desc-cel', { 'data-desc': 'campo' },
+        h('div.desc-rot', 'Desc %'),
+        h('div.desc-ctl', inp, ok, aplicado ? h('button.btn.desc-quitar', { type: 'button', 'aria-label': 'Quitar el descuento de ' + l.descripcion, onclick: () => quitarDescuento(l) }, 'Quitar') : null),
+        prev, err);
     }
     function filaLinea(l) {
       const prod = prodPorId.get(l.producto_id);
@@ -1034,7 +1021,6 @@ export default {
       };
       const nombreBtn = h('button.linea-nombre', { type: 'button', 'aria-expanded': String(abierta), title: l.descripcion, 'aria-label': (abierta ? 'Cerrar las opciones de ' : 'Abrir las opciones de ') + l.descripcion, onclick: alternar }, corto);
       const quitar = h('button.linea-x', { type: 'button', 'aria-label': 'Quitar ' + l.descripcion + ' de la cuenta', title: 'Quitar de la cuenta', onclick: () => accion(async () => { cur = await api.lineaQuitar(l.id); lineasAbiertas.delete(l.id); repintar(); toast('Quitado: ' + l.descripcion); }) }, '×');
-      const bd = descBorrador.get(l.id);
       return h('div.linea' + (editada ? '.editada' : '') + (desc ? '.con-descuento' : '') + (detalleCambiado || tarifaCambiada ? '.personalizada' : '') + (abierta ? '.abierta' : ''), { 'data-linea': l.id },
         nombreBtn, qty, precio,
         desc ? h('div.linea-total.con-desc', h('s.bruto', { title: 'Precio sin descuento' }, money(brutoLinea(l)).replace(/,00$/, '')), h('span.neto', money(l.total_linea).replace(/,00$/, ''))) : h('div.linea-total', money(l.total_linea).replace(/,00$/, '')),
@@ -1042,13 +1028,11 @@ export default {
         marcas.length ? h('div.linea-sub', marcas) : null,
         abierta ? h('div.linea-pie',
           h('label.etq.pie-nota', 'Nota para esta línea', nota),
+          campoDescuento(l),
           h('div.pie-botones',
             h('button.btn', { type: 'button', onclick: () => dialogoLinea({ linea: l }) }, 'Editar detalle e IVA'),
             h('button.btn', { type: 'button', onclick: () => cambiarProducto(l) }, 'Cambiar producto'),
-            desc ? h('button.btn.btn-desc-quitar', { type: 'button', onclick: () => quitarDescuento(l) }, 'Quitar descuento') : null,
-            h('button.btn.peligro', { type: 'button', 'aria-label': 'Quitar ' + l.descripcion + ' de la cuenta', onclick: () => accion(async () => { cur = await api.lineaQuitar(l.id); lineasAbiertas.delete(l.id); repintar(); toast('Quitado: ' + l.descripcion); }) }, 'Quitar de la cuenta')),
-          botonesDescuento(l),
-          bd ? panelDescuento(l, bd) : null) : null);
+            h('button.btn.peligro', { type: 'button', 'aria-label': 'Quitar ' + l.descripcion + ' de la cuenta', onclick: () => accion(async () => { cur = await api.lineaQuitar(l.id); lineasAbiertas.delete(l.id); repintar(); toast('Quitado: ' + l.descripcion); }) }, 'Quitar de la cuenta'))) : null);
     }
 
     /* ---------- Cliente de la cuenta y tarifa de IVA habitual ---------- */
