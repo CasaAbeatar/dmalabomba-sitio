@@ -30,3 +30,10 @@
 .ah-nota-campo textarea{min-height:96px}
 .ah-nota-campo .ah-error{color:var(--rojo);font-weight:600;margin:0}
 @media(max-width:520px){.ah-entregas li{flex-direction:column;gap:0}.ah-entregas b{min-width:0}}
+
+/* Detalle dentro de la tarjeta (migración 210): quién, cuál y qué hacer */
+.ah{padding-bottom:calc(6rem + env(safe-area-inset-bottom,0px))} /* margen para que la barra inferior del navegador no tape el último botón */
+.ah-factura{margin:0;overflow-wrap:anywhere}
+.ah-bloque{display:flex;flex-direction:column;gap:.35rem;padding:.6rem .8rem;border:1px solid var(--linea);border-radius:8px;background:var(--fondo)}
+.ah-bloque p{margin:0;overflow-wrap:anywhere}
+.ah-botones .btn.grande{flex:1 1 100%;min-height:52px;font-size:1.05rem}

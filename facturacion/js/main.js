@@ -639,6 +639,9 @@ function destinoDe(clave) {
   try { k = decodeURIComponent(String(clave ?? '')); } catch { k = String(clave ?? ''); }
   k = k.replace(/^#\/?/, '').trim().toLowerCase();
   if (!k || k === 'inicio') return INICIO;
+  // Enlace directo a una factura de proveedor (lo usan el correo y el aviso del teléfono): #admin/contabilidad/factura/<clave de 50 dígitos>. Solo administradores.
+  const enlaceFactura = /^(?:admin\/)?(?:contabilidad|contable|recepcion)\/(?:factura|clave)[\/=](\d{50})$/.exec(k);
+  if (enlaceFactura && app.admin) { app.pedido = { clave: enlaceFactura[1] }; return buscar('contabilidad') || INICIO; }
   const m = buscar(k);
   if (!m || (m.soloAdmin && !app.admin)) return INICIO;
   return m;
