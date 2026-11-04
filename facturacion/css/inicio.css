@@ -70,8 +70,3 @@
 .solo-recepcion h1{margin:0;font-size:1.5rem}
 .solo-recepcion p{margin:0;line-height:1.5}
 .admin-pie{margin-top:1.2rem;padding-top:1rem;border-top:1px solid var(--linea);display:flex;justify-content:flex-start}
-
-/* Inicio de la contadora (rol 65 a 67): una sola tarjeta, Contabilidad, centrada y del mismo tamaño que las demás */
-.inicio.contadora .inicio-contadora{margin:0;font-size:1.05rem;color:var(--tinta2)}
-.inicio.contadora .mod-rejilla.principal{grid-template-columns:minmax(0,min(100%,560px));justify-content:center;grid-auto-rows:minmax(240px,auto);flex:0 0 auto}
-.inicio.contadora .mod-rejilla.principal .mod-tarjeta{grid-column:auto}

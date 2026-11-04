@@ -242,11 +242,3 @@
   .mt-lista:has(.mt-btns .btn:nth-child(3)) .mt-item .mt-btns{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.5rem}
   .mt-lista:has(.mt-btns .btn:nth-child(3)) .mt-item .mt-btns .btn{white-space:normal;line-height:1.15;min-height:48px;padding-inline:.5rem}
 }
-
-/* Usuarios: elegir el tipo de usuario (cajera, contadora o administrador) con una frase que explica cada uno */
-.mt-tipos{display:grid;gap:.5rem}
-.mt-tipo{display:flex;align-items:flex-start;gap:.7rem;padding:.7rem .9rem;border:1.5px solid var(--linea2);border-radius:12px;background:var(--papel);cursor:pointer;min-height:48px}
-.mt-tipo:has(input:checked){border-color:var(--tinta);background:#fcf9f3}
-.mt-tipo input{margin-top:.25rem;width:1.15rem;height:1.15rem;flex:0 0 auto}
-.mt-tipo span{display:grid;gap:.15rem}
-.mt-tipo small{font-size:.92rem;line-height:1.35}

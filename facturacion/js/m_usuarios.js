@@ -15,20 +15,6 @@ function pinAzar() {
 }
 const usuarioLimpio = (s) => s.toLowerCase().replace(/\s+/g, '');
 
-// Los tres tipos de usuario, dichos en palabras simples (la base los guarda como rol: 'caja', 'contadora' o 'admin')
-const TIPOS = {
-  caja: { chip: 'Cajera o cajero', corto: 'Cajera o cajero', desc: 'Factura, anula y reimprime, atiende clientes y abre o cierra la caja. No ve nada de administración.', efecto: 'Solo podrá facturar, anular y reimprimir, atender clientes y abrir o cerrar la caja.' },
-  contadora: { chip: 'Contadora', corto: 'Contadora', desc: 'Entra solo a Contabilidad: cuentas, asientos, IVA, formularios, planilla y las decisiones de la contadora. No factura, no maneja la caja y no responde a Hacienda.', efecto: 'Solo podrá entrar a Contabilidad. No podrá facturar, usar la caja ni responder facturas de proveedores a Hacienda.' },
-  admin: { chip: 'Administrador', corto: 'Administrador', desc: 'Ve y hace todo: crea usuarios, reinicia claves, responde a Hacienda, y maneja productos, precios e inventarios.', efecto: 'Podrá crear usuarios, reiniciar claves, desactivar personas y verá todo el sistema.' },
-};
-// Tres opciones grandes con una línea que explica cada una; alElegir(k) avisa cuál quedó marcada
-function opcionesTipo(inicial, alElegir) {
-  const nombre = 'tipo' + Math.random().toString(36).slice(2, 7);
-  return h('div.mt-tipos', ['caja', 'contadora', 'admin'].map((k) => h('label.mt-tipo',
-    h('input', { type: 'radio', name: nombre, value: k, checked: k === inicial, onchange: () => alElegir(k) }),
-    h('span', h('strong', TIPOS[k].corto), h('small.tenue', TIPOS[k].desc)))));
-}
-
 export default {
   id: 'usuarios',
   titulo: 'Usuarios',
@@ -48,7 +34,6 @@ export default {
     const otrasEmpresas = (u) => (u?.empresas || []).filter((e) => e.id !== app.socId);
     const otrasMias = () => otrasEmpresas(usuarios.find(esYo)); // empresas a las que el administrador también puede dar acceso
     const adminsActivos = () => usuarios.filter((u) => u.admin && u.activo).length;
-    const rolDe = (u) => (u.rol === 'contadora' ? 'contadora' : u.admin ? 'admin' : 'caja'); // con una base anterior a la 65 no viene `rol`
 
     let nCarga = 0; // cada carga lleva su número: si llega tarde la respuesta de una anterior (dos cambios seguidos), se descarta
     async function cargar() {
@@ -84,7 +69,7 @@ export default {
       const ultimo = u.ultimo_ingreso ? 'Último ingreso: ' + fechaHora(u.ultimo_ingreso) : 'Todavía no ha ingresado';
       const btnNombre = h('button.btn', { type: 'button', onclick: () => cambiarNombre(u) }, 'Cambiar nombre');
       const btnPin = yo ? null : h('button.btn', { type: 'button', onclick: (e) => reiniciarPin(u, e.currentTarget) }, 'Reiniciar clave');
-      const btnAdmin = yo ? null : h('button.btn', { type: 'button', onclick: (e) => cambiarTipo(u, e.currentTarget) }, 'Cambiar tipo de usuario');
+      const btnAdmin = yo ? null : h('button.btn', { type: 'button', onclick: (e) => cambiarAdmin(u, e.currentTarget) }, u.admin ? 'Quitar administrador' : 'Hacer administrador');
       const btnActivo = yo ? null : h('button.btn' + (u.activo ? '.peligro' : ''), { type: 'button', onclick: (e) => cambiarActivo(u, e.currentTarget) }, u.activo ? 'Desactivar' : 'Activar de nuevo');
       return h('div.mt-item' + (u.activo ? '' : '.apagado'),
         h('div.mt-datos',
@@ -93,7 +78,7 @@ export default {
           h('span.mt-sub', ultimo),
           h('div.fila', { style: 'gap:.4rem;margin-top:.2rem' },
             yo ? h('span.chip.ok', 'Es usted') : null,
-            h('span.chip' + (rolDe(u) === 'admin' ? '.ok' : '.gris'), TIPOS[rolDe(u)].chip),
+            h('span.chip' + (u.admin ? '.ok' : '.gris'), u.admin ? 'Administrador' : 'Usuario normal'),
             u.activo ? null : h('span.chip.mal', 'Desactivado: no puede entrar'),
             otrasEmpresas(u).map((e) => h('span.chip.gris', 'También entra a ' + nombreLocal(e))),
             u.debe_cambiar_pin ? h('span.chip.espera', 'Debe cambiar su clave al entrar') : null)),
@@ -259,28 +244,11 @@ export default {
       });
     }
 
-    // Cambiar el tipo de usuario (administrador, contadora o cajera): una ventana con las tres opciones dichas en palabras simples
-    function cambiarTipo(u, btn) {
-      const actual = rolDe(u);
-      let elegido = actual;
-      const nombre = u.nombre || u.usuario;
-      const opciones = opcionesTipo(actual, (k) => { elegido = k; });
-      const err = h('div.error-caja', { hidden: true, role: 'alert' });
-      const m = modal({
-        titulo: 'Tipo de usuario de ' + nombre, ancho: 560,
-        contenido: h('div.mt-form', h('p', 'Escoja qué puede hacer ', h('strong', nombre), ' en el sistema.'), opciones, err),
-        botones: [{ texto: 'Cancelar', clase: 'suave', onclick: (c) => c() }, { texto: 'Guardar el tipo', clase: 'primario', onclick: async (c) => {
-          err.hidden = true;
-          if (elegido === actual) return c();
-          if (u.admin && u.activo && elegido !== 'admin' && adminsActivos() <= 1) { err.textContent = 'Tiene que quedar al menos un administrador activo. Primero haga administrador a otra persona.'; err.hidden = false; return; }
-          const ok = await confirmar('¿Cambiar a ' + nombre + ' a «' + TIPOS[elegido].corto + '»? ' + TIPOS[elegido].efecto);
-          if (!ok) return;
-          await conBoton(m.el.querySelector('.modal-pie .primario'), async () => {
-            try { await api.usuarioGuardar({ id: u.id, rol: elegido, admin: elegido === 'admin' }); toast('Ahora es ' + TIPOS[elegido].corto.toLowerCase() + '.'); c(); await cargar(); }
-            catch (e) { err.textContent = conPunto(textoDeError(e)); err.hidden = false; }
-          });
-        } }],
-      });
+    async function cambiarAdmin(u, btn) {
+      if (u.admin && u.activo && adminsActivos() <= 1) return toast('Tiene que quedar al menos un administrador activo. Primero haga administrador a otra persona.', 'error', 7000);
+      const ok = await confirmar(u.admin ? '¿Quitarle a ' + (u.nombre || u.usuario) + ' el permiso de administrador? Ya no podrá ver esta pantalla de Usuarios.' : '¿Hacer administrador a ' + (u.nombre || u.usuario) + '? Podrá crear usuarios, reiniciar claves y desactivar personas.');
+      if (!ok) return;
+      await guardar(btn, { id: u.id, admin: !u.admin }, u.admin ? 'Ya no es administrador.' : 'Ahora es administrador.');
     }
 
     async function cambiarActivo(u, btn) {
@@ -297,7 +265,9 @@ export default {
       estiloUsuario(usr, usuarioLimpio); // se ve «Maria»; lo que se guarda es siempre «maria» (usuarioLimpio al enviar)
       const nom = h('input.campo', { type: 'text', autocomplete: 'off', 'aria-label': 'Nombre' });
       const pin = soloDigitos(h('input.campo', { type: 'text', inputmode: 'numeric', autocomplete: 'off', maxlength: 4, 'aria-label': 'clave de 4 números' }), 4);
-      let tipo = 'caja';
+      let admin = false;
+      const rNo = h('input', { type: 'radio', name: 'adm', checked: true, onchange: () => { admin = false; } });
+      const rSi = h('input', { type: 'radio', name: 'adm', onchange: () => { admin = true; } });
       // Otras empresas a las que este administrador también tiene acceso: una casilla por cada una
       const extras = otrasMias().map((e) => ({ id: e.id, nombre: nombreLocal(e), cb: h('input', { type: 'checkbox' }) }));
       const m = modal({
@@ -311,7 +281,9 @@ export default {
           campo('Nombre de la persona', nom, 'Ejemplo: María Rodríguez'),
           h('div.col', { style: 'gap:.3rem' }, campo('Clave temporal (4 números)', pin, 'La persona tendrá que cambiarla la primera vez que entre.'),
             h('div.fila', h('button.btn', { type: 'button', onclick: () => { pin.value = pinAzar(); } }, 'Generar una clave al azar'))),
-          h('div.col', { style: 'gap:.3rem' }, h('span.etq', '¿Qué tipo de usuario es?'), opcionesTipo('caja', (k) => { tipo = k; }))),
+          h('div.col', { style: 'gap:.3rem' }, h('span.etq', '¿Es administrador?'),
+            h('div.mt-radios', h('label', rNo, 'No, usuario normal'), h('label', rSi, 'Sí, administrador')),
+            h('small.tenue', 'Un administrador puede crear usuarios y reiniciar claves. Todos los usuarios ven todo lo demás.'))),
         botones: [{ texto: 'Cancelar', clase: 'suave', onclick: (c) => c() }, { texto: 'Crear usuario', clase: 'primario', onclick: async (c) => {
           mostrar('');
           const u = usuarioLimpio(usr.value);
@@ -323,7 +295,7 @@ export default {
           const btn = m.el.querySelector('.modal-pie .primario');
           await conBoton(btn, async () => {
             const ids = extras.filter((x) => x.cb.checked).map((x) => x.id);
-            await api.usuarioGuardar({ usuario: u, nombre: nom.value.trim(), rol: tipo, admin: tipo === 'admin', pin: pin.value, sociedad_id: app.socId, ...(ids.length ? { empresas: ids } : {}) });
+            await api.usuarioGuardar({ usuario: u, nombre: nom.value.trim(), admin, pin: pin.value, sociedad_id: app.socId, ...(ids.length ? { empresas: ids } : {}) });
             toast('Usuario creado. Al entrar por primera vez tendrá que cambiar su clave.');
             c(); await cargar();
           });
@@ -346,7 +318,7 @@ export default {
           h('li', 'Si alguien olvida su clave, use «Reiniciar clave»: se le da una temporal que tendrá que cambiar apenas entre.'),
           h('li', 'Nadie puede ver la clave de otra persona, ni siquiera un administrador.'),
           h('li', 'Cada persona entra solo a la empresa que se le dio. Aquí se ven y se crean los usuarios de ' + miEmpresa + '.'),
-          h('li', 'La cajera o el cajero usa Facturación, Anular y reimprimir, Clientes y la caja. La contadora entra solo a Contabilidad. El administrador ve todo y es el único que usa esta pantalla de Usuarios.'))));
+          h('li', 'Dentro de la empresa todos los usuarios tienen acceso a todo. Solo esta pantalla de Usuarios es exclusiva de los administradores.'))));
     pintarSeguridad(); // «Revisando…» mientras llega
     pintarAparatos();
     cargarSeguridad(); // en paralelo con la lista de usuarios: si falla, la lista igual se ve
