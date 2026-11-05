@@ -34,6 +34,32 @@ export function montosDe(cur) {
   return { lineas: out, subtotal: r2(total + descuento), descuento, iva: r2(iva), total };
 }
 
+// Cliente elegido en la cuenta (cur.cliente, ya guardado en la base) -> lo que ve el cliente para confirmar sus datos de factura.
+// Solo viajan estos seis campos. Nunca notas, teléfono, dirección, ids internos ni nada de la caja. Sin cliente elegido: null (tiquete).
+// nombre = el que está en la ficha (verificado con Hacienda en casi todos); nombre_personal queda null porque la ficha no guarda un segundo nombre.
+const TIPOS_ID = ['01', '02', '03', '04', '05', '06'];
+const textoONulo = (x) => { const t = String(x ?? '').replace(/\s+/g, ' ').trim(); return t || null; };
+export function clienteDe(cur) {
+  try {
+    const c = cur?.cliente;
+    if (!c || typeof c !== 'object') return null;
+    const tipo = String(c.tipo_id ?? '').trim();
+    const nombre = textoONulo(c.nombre);
+    if (!TIPOS_ID.includes(tipo) || !nombre) return null;
+    const comercial = textoONulo(c.nombre_comercial);
+    return {
+      tipo_id: tipo,
+      identificacion: String(c.identificacion ?? '').replace(/\D/g, ''),
+      nombre,
+      nombre_comercial: comercial && comercial.toLowerCase() !== nombre.toLowerCase() ? comercial : null,
+      nombre_personal: null,
+      correo: textoONulo(c.correo),
+    };
+  } catch { return null; }
+}
+// En «pagado» el cliente ya no corrige nada: solo se muestra adónde se enviará la factura
+const soloCorreo = (c) => (c && c.correo ? { tipo_id: null, identificacion: null, nombre: null, nombre_comercial: null, nombre_personal: null, correo: c.correo } : null);
+
 export function iniciar(app, opciones = {}) {
   const BC = opciones.BroadcastChannel || (typeof BroadcastChannel !== 'undefined' ? BroadcastChannel : null);
   let activo = true;       // el emisor sigue vivo (la caja está en pantalla)
@@ -125,9 +151,9 @@ export function iniciar(app, opciones = {}) {
   }
   const cuerpo = (estado, cur, extra = {}) => {
     const m = montosDe(cur);
-    return { estado, empresa: empresa(), lineas: m.lineas, subtotal: m.subtotal, descuento: m.descuento, iva: m.iva, total: m.total, medio: null, recibido: null, vuelto: null, ...extra };
+    return { estado, empresa: empresa(), lineas: m.lineas, subtotal: m.subtotal, descuento: m.descuento, iva: m.iva, total: m.total, medio: null, recibido: null, vuelto: null, cliente: clienteDe(cur), ...extra };
   };
-  const cuerpoEspera = () => ({ estado: 'espera', empresa: empresa(), lineas: [], subtotal: 0, descuento: 0, iva: 0, total: 0, medio: null, recibido: null, vuelto: null });
+  const cuerpoEspera = () => ({ estado: 'espera', empresa: empresa(), lineas: [], subtotal: 0, descuento: 0, iva: 0, total: 0, medio: null, recibido: null, vuelto: null, cliente: null });
 
   /* ---------- Segunda ventana: se abre sola en la otra pantalla (Window Management API); si no se puede, no pasa nada ---------- */
   async function abrirVentanaCliente() {
@@ -175,7 +201,7 @@ export function iniciar(app, opciones = {}) {
         modo = 'cuenta';
         retieneHasta = Date.now() + RETENCION_PAGADO;
         clearTimeout(timerRetencion);
-        const base = { ...ultimo, estado: 'pagado', medio, recibido: conEfectivo && recibido > 0 ? r2(recibido) : null, vuelto };
+        const base = { ...ultimo, estado: 'pagado', medio, recibido: conEfectivo && recibido > 0 ? r2(recibido) : null, vuelto, cliente: soloCorreo(ultimo.cliente) };
         ultimoJson = JSON.stringify(base); ultimo = base;
         enviar('estado', { ...base, ts: Date.now() });
         timerRetencion = setTimeout(() => { if (activo && ultimo && ultimo.estado === 'pagado') publicar(cuerpoEspera()); }, RETENCION_PAGADO);
