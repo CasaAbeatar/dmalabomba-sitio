@@ -11,7 +11,7 @@ export const FORMATOS = {
 };
 export const EMPRESAS = { soda: 'Soda La Bomba', pollos: 'Pollos La Bomba', papea: 'Papea', grupo: 'Todo el grupo' };
 export const SEG_MIN = 3, SEG_MAX = 60;
-export const GRACIAS_MIN = 1, GRACIAS_MAX = 15;
+export const GRACIAS_MIN = 3, GRACIAS_MAX = 15;
 
 const lista = (d, clave) => (Array.isArray(d) ? d : Array.isArray(d?.[clave]) ? d[clave] : []);
 const entero = (x, def = null) => { const n = Number(x); return Number.isFinite(n) ? Math.floor(n) : def; };
