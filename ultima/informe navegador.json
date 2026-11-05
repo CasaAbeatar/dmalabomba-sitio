@@ -12,9 +12,64 @@
       "detalle": ""
     },
     {
-      "nombre": "Pantalla del cliente",
+      "nombre": "Cliente espera 1920x1080: sin barras de desplazamiento",
       "ok": true,
-      "detalle": "todavia no existe en esta rama; se omite"
+      "detalle": ""
+    },
+    {
+      "nombre": "Cliente cuenta 1920x1080: sin barras de desplazamiento",
+      "ok": true,
+      "detalle": ""
+    },
+    {
+      "nombre": "Cliente cuenta 1920x1080: muestra el total",
+      "ok": true,
+      "detalle": "Su cuenta SODA LA BOMBA 2 × Casado con pollo Descuento 10 % ₡7 500 1 × Fresco natural ₡1 500 Subtotal ₡9 000 Descuento"
+    },
+    {
+      "nombre": "Cliente pago 1920x1080: sin barras de desplazamiento",
+      "ok": true,
+      "detalle": ""
+    },
+    {
+      "nombre": "Cliente pagado 1920x1080: sin barras de desplazamiento",
+      "ok": true,
+      "detalle": ""
+    },
+    {
+      "nombre": "Cliente 1920x1080: sin errores de JavaScript",
+      "ok": true,
+      "detalle": ""
+    },
+    {
+      "nombre": "Cliente espera 1366x768: sin barras de desplazamiento",
+      "ok": true,
+      "detalle": ""
+    },
+    {
+      "nombre": "Cliente cuenta 1366x768: sin barras de desplazamiento",
+      "ok": true,
+      "detalle": ""
+    },
+    {
+      "nombre": "Cliente cuenta 1366x768: muestra el total",
+      "ok": true,
+      "detalle": "Su cuenta SODA LA BOMBA 2 × Casado con pollo Descuento 10 % ₡7 500 1 × Fresco natural ₡1 500 Subtotal ₡9 000 Descuento"
+    },
+    {
+      "nombre": "Cliente pago 1366x768: sin barras de desplazamiento",
+      "ok": true,
+      "detalle": ""
+    },
+    {
+      "nombre": "Cliente pagado 1366x768: sin barras de desplazamiento",
+      "ok": true,
+      "detalle": ""
+    },
+    {
+      "nombre": "Cliente 1366x768: sin errores de JavaScript",
+      "ok": true,
+      "detalle": ""
     }
   ]
 }
