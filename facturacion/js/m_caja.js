@@ -1401,7 +1401,7 @@ export default {
             try {
               const nuevo = await accion(inp.value);
               cliente = { ...cliente, ...nuevo };
-              if (cur?.cliente?.id === cliente.id) cur = { ...cur, cliente: { ...cur.cliente, ...nuevo } };
+              if (cur?.cliente?.id === cliente.id) { cur = { ...cur, cliente: { ...cur.cliente, ...nuevo } }; pantalla?.cuenta(cur); } // la pantalla del cliente ve el dato corregido
               toast(ok);
               pintarCliente(); actualizar();
             } catch (e) { err.textContent = textoDeError(e); err.hidden = false; btn.disabled = false; }
