@@ -3,6 +3,7 @@
 // Cada mensaje es { evento: 'estado' | 'latido' | 'ack' | 'hola', payload }. La caja manda «estado» y «latido»; la ventana del cliente contesta «ack» a cada latido y «hola» al abrirse.
 // Los montos son los mismos que muestra la caja (misma fórmula de IVA y de descuentos que el pie de la cuenta en m_caja.js).
 import { tarifaDeLinea } from './iva.js';
+import { abrirClienteEnOtraPantalla, detenerVentana } from './pantalla_ventana.js';
 
 export const NOMBRE_CANAL = 'lb-pantalla-cliente'; // BroadcastChannel entre la ventana de la caja y la ventana del cliente (mismo navegador y mismo origen)
 export const RUTA_CLIENTE = new URL('../cliente/', import.meta.url).href;
@@ -156,18 +157,8 @@ export function iniciar(app, opciones = {}) {
   const cuerpoEspera = () => ({ estado: 'espera', empresa: empresa(), lineas: [], subtotal: 0, descuento: 0, iva: 0, total: 0, medio: null, recibido: null, vuelto: null, cliente: null });
 
   /* ---------- Segunda ventana: se abre sola en la otra pantalla (Window Management API); si no se puede, no pasa nada ---------- */
-  async function abrirVentanaCliente() {
-    try {
-      if (!activo || !encendida || !configLista || abierta() || typeof window === 'undefined' || typeof window.getScreenDetails !== 'function') return;
-      if (!window.screen?.isExtended) return; // una sola pantalla: no hay a dónde abrirla
-      const d = await window.getScreenDetails();
-      const otras = d.screens.filter((p) => p !== d.currentScreen);
-      if (!otras.length || !activo || abierta()) return;
-      const pref = String(opciones.monitor || '').toLowerCase();
-      const otra = (pref && otras.find((p) => String(p.label || '').toLowerCase().includes(pref))) || otras.find((p) => p.isInternal) || otras[0];
-      const w = window.open(RUTA_CLIENTE, 'lb-cliente', 'popup=yes,left=' + otra.availLeft + ',top=' + otra.availTop + ',width=' + otra.availWidth + ',height=' + otra.availHeight);
-      if (w) { try { w.document.documentElement.requestFullscreen?.({ screen: otra }).catch(() => {}); } catch { /* sin pantalla completa: queda en ventana */ } }
-    } catch { /* sin permiso o sin la API: no se molesta a nadie */ }
+  function abrirVentanaCliente() {
+    if (activo && encendida && configLista) abrirClienteEnOtraPantalla({ rutaCliente: RUTA_CLIENTE, monitorCliente: opciones.monitor });
   }
 
   const api = {
@@ -212,6 +203,7 @@ export function iniciar(app, opciones = {}) {
       if (!activo) return;
       try { publicar(cuerpoEspera()); } catch { /* sin aviso */ }
       activo = false;
+      detenerVentana();
       timers.forEach(clearInterval); clearTimeout(timerRetencion); clearTimeout(timerEtiqueta);
       try { window.removeEventListener('pointerdown', alPrimerToque, true); } catch { /* ya quitado */ }
       const b = bc; bc = null;
