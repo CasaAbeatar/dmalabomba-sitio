@@ -1,0 +1,61 @@
+/* Pantalla del cliente (Administración): pantallas emparejadas y publicidad. Se suma a app.css, no lo reemplaza. */
+.pc{max-width:980px;margin:0 auto;display:flex;flex-direction:column;gap:1.2rem}
+.pc h2{font-size:1.25rem}
+.pc-sec{display:flex;flex-direction:column;gap:.8rem}
+.pc-nota{margin:.1rem 0;color:var(--tinta2);font-size:.92rem;line-height:1.4}
+.pc-recordatorio{margin:0;color:var(--tinta2);font-size:.85rem;border-left:3px solid var(--linea2);padding-left:.6rem}
+.pc-err{padding:.6rem .8rem;border:1px solid var(--borde-mal);background:var(--rojo-suave);color:var(--rojo-osc);border-radius:var(--r);font-weight:600}
+
+/* Lista de filas (pantallas y anuncios) */
+.pc-filas{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:.6rem}
+.pc-fila{display:flex;flex-wrap:wrap;gap:.6rem 1rem;align-items:center;padding:.7rem .8rem;background:var(--papel);border:1px solid var(--linea);border-radius:12px}
+.pc-fila.apagado{opacity:.75}
+.pc-fila-t{flex:1 1 14rem;min-width:0;display:flex;flex-direction:column;gap:.15rem}
+.pc-fila-t strong{overflow-wrap:anywhere}
+.pc-fila-t span{color:var(--tinta2);font-size:.9rem}
+.pc-visto{font-weight:700}
+.pc-visto.ok{color:var(--verde)}
+.pc-visto.mal{color:var(--rojo)}
+.pc-acciones{display:flex;flex-wrap:wrap;gap:.4rem;align-items:center}
+.pc-conf{flex:1 1 100%;display:flex;flex-wrap:wrap;gap:.5rem 1rem;align-items:center;padding:.6rem .8rem;background:var(--rojo-suave);border:1px solid var(--borde-mal);border-radius:var(--r)}
+.pc-conf p{margin:0;flex:1 1 16rem;font-weight:600;color:var(--rojo-osc)}
+
+/* Emparejar */
+.pc-form{display:flex;flex-wrap:wrap;gap:.8rem;align-items:flex-end}
+.pc-form .etq{flex:1 1 11rem}
+.pc-codigo{font-size:1.6rem;letter-spacing:.35em;text-align:center;font-weight:700;font-variant-numeric:tabular-nums}
+.pc-usar{display:flex;gap:.6rem;align-items:flex-start;flex:1 1 100%}
+.pc-usar span{display:flex;flex-direction:column;gap:.1rem;font-weight:600}
+.pc-usar small{font-weight:400;color:var(--tinta2)}
+
+/* Publicidad: formulario y vista previa lado a lado */
+.pc-nuevo{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);gap:1rem;align-items:start}
+.pc-campos{display:flex;flex-direction:column;gap:.7rem}
+.pc-fechas{display:grid;grid-template-columns:1fr 1fr;gap:.7rem}
+.pc-seg{display:grid;grid-template-columns:7rem 1fr;gap:.7rem}
+@media(max-width:760px){.pc-nuevo{grid-template-columns:1fr}.pc-fechas{grid-template-columns:1fr}.pc-seg{grid-template-columns:1fr}}
+.pc-prev h3{margin-bottom:.4rem}
+.pc-marco{position:relative;width:100%;aspect-ratio:16/9;background:#14110f;border-radius:var(--r);overflow:hidden;display:flex;align-items:center;justify-content:center;border:1px solid var(--linea2)}
+.pc-marco img,.pc-marco video{width:100%;height:100%;object-fit:contain;display:block}
+.pc-marco-vacio{color:#d8d0c3;font-size:.95rem;text-align:center;padding:1rem}
+.pc-pie-prev{margin:.4rem 0 0;color:var(--tinta2);font-size:.88rem}
+
+/* Anuncios */
+.pc-mini{flex:0 0 9.6rem;width:9.6rem;aspect-ratio:16/9;padding:0;border:1px solid var(--linea2);border-radius:8px;overflow:hidden;background:#14110f;cursor:pointer;display:flex;align-items:center;justify-content:center;color:#d8d0c3;font-size:.8rem;position:relative}
+.pc-mini img,.pc-mini video{width:100%;height:100%;object-fit:cover;display:block;pointer-events:none}
+.pc-mini:hover,.pc-mini[aria-pressed=true]{border-color:var(--rojo);box-shadow:0 0 0 2px rgba(184,22,34,.2)}
+.pc-orden{display:flex;flex-direction:column;gap:.3rem}
+.pc-orden .btn{min-width:48px;padding:.25rem .5rem}
+@media(max-width:560px){.pc-mini{flex:1 1 100%;width:100%}.pc-orden{flex-direction:row}}
+.pc .chip.gris{color:var(--tinta2);background:#f1ece1}
+.pc-cfg{display:flex;flex-direction:column;gap:.8rem}
+.pc-gracias{max-width:22rem}
+.pc-gracias .campo{max-width:6rem}
+.pc-guardado{min-height:1.2em;margin:0;color:var(--verde);font-weight:600}
+.pc-abrir{display:flex;flex-wrap:wrap;gap:.6rem 1rem;align-items:center}
+.pc-abrir .pc-nota{flex:1 1 16rem;margin:0}
+.pc a.btn{text-decoration:none}
+.pc-aviso-formato{color:#8a5a00;font-weight:600}
+@supports not (aspect-ratio:16/9){.pc-marco,.pc-mini{height:0;padding-bottom:56.25%}.pc-marco>*,.pc-mini>*{position:absolute;inset:0}}
+.pc-sec-cuerpo{display:flex;flex-direction:column;gap:.8rem}
+@media(max-width:560px){.pc-mini{max-width:16rem}}

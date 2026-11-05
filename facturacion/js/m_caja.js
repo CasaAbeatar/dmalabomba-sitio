@@ -215,6 +215,8 @@ export default {
     const api = app.api;
     const socId = app.soc.id;
     let vivo = true;
+    let pantalla = null; // pantalla del cliente (módulo aparte y opcional; si falla o no hay pantalla emparejada, no pasa nada)
+    import('./pantalla_emisor.js').then((m) => { if (vivo) { pantalla = m.iniciar(app); pantalla.cuenta(cur); } }).catch(() => {});
     document.body.classList.add('fx-caja');
 
     /* ---------- Estado ---------- */
@@ -1119,6 +1121,7 @@ export default {
 
     function pintarCuenta(irAlFinal) {
       if (!asideCuenta) return;
+      pantalla?.cuenta(cur);
       const scroll = asideCuenta.querySelector('.cuenta-lineas')?.scrollTop || 0;
       if (!cur) {
         const abrirC = (c) => { accion(async () => { cur = await api.venta(c.id); guardarActiva(); repintar(); }); cambiarVista('cuenta'); };
@@ -1398,7 +1401,7 @@ export default {
             try {
               const nuevo = await accion(inp.value);
               cliente = { ...cliente, ...nuevo };
-              if (cur?.cliente?.id === cliente.id) cur = { ...cur, cliente: { ...cur.cliente, ...nuevo } };
+              if (cur?.cliente?.id === cliente.id) { cur = { ...cur, cliente: { ...cur.cliente, ...nuevo } }; pantalla?.cuenta(cur); } // la pantalla del cliente ve el dato corregido
               toast(ok);
               pintarCliente(); actualizar();
             } catch (e) { err.textContent = textoDeError(e); err.hidden = false; btn.disabled = false; }
@@ -1658,6 +1661,7 @@ export default {
       }
       async function terminar(comp, aviso, vueltoLocal) {
         terminado = true;
+        pantalla?.pagado(comp, vueltoLocal);
         duda = false; ventasEnDuda.delete(ventaId); ventasEnCobro.delete(ventaId);
         m.cerrar();
         if (!vivo) { avisoCobroSinCaja(comp, app, aviso); return; } // la Caja ya no está en pantalla: se avisa igual
@@ -1739,8 +1743,9 @@ export default {
       // Con el cobro en camino la ventana no se puede cerrar (ni con Escape, ni tocando fuera, ni con «Volver», ni con el botón Atrás)
       m = modal({ titulo: 'Cobrar', contenido: raiz, ancho: 720,
         bloqueo: () => (cobrando ? 'El cobro va en camino. Espere a que termine; la ventana se cierra sola.' : ''),
-        alCerrar: () => { cobroAbierto = false; vigilaAjustes.disconnect(); if (vivo && !terminado && buscador && fino()) buscador.inp.focus(); } });
+        alCerrar: () => { cobroAbierto = false; if (!terminado) pantalla?.cerrarPago(cur); vigilaAjustes.disconnect(); if (vivo && !terminado && buscador && fino()) buscador.inp.focus(); } });
       avisarCreada();
+      pantalla?.pago(cur);
       mostrar(vistaPago);
       pintarCliente(); pintarImp(); sugerir(); actualizar();
       if (duda) { conErr('El cobro anterior de esta cuenta no se pudo confirmar. No lo repita todavía: toque «Revisar si se cobró».'); btnRevisar.hidden = false; }
@@ -1939,6 +1944,7 @@ export default {
 
     return () => {
       vivo = false;
+      pantalla?.detener();
       timers.forEach(clearInterval);
       roCajones?.disconnect(); roCajones = null;
       ['--cab-h', '--bus-h', '--cajones-h', '--opc-h', '--barra-h'].forEach((v) => document.documentElement.style.removeProperty(v));

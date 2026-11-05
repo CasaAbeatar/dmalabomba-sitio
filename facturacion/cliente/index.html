@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data: blob: https://dwlbcbtwdungyrykgahm.supabase.co; media-src 'self' blob: https://dwlbcbtwdungyrykgahm.supabase.co; connect-src 'self' https://dwlbcbtwdungyrykgahm.supabase.co; worker-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
+<meta name="referrer" content="no-referrer">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<meta name="robots" content="noindex,nofollow">
+<meta name="theme-color" content="#fbf8f2">
+<title>Pantalla del cliente · La Bomba</title>
+<link rel="icon" href="../img/logo-soda.svg" type="image/svg+xml">
+<link rel="stylesheet" href="cliente.css">
+</head>
+<body data-vista="espera">
+<main id="raiz" aria-live="off">
+
+  <!-- Cuenta: líneas y total -->
+  <section id="v-cuenta" class="vista" aria-label="Su cuenta">
+    <header class="cu-cab">
+      <p class="cu-tit">Su cuenta</p>
+      <p class="cu-emp" id="cu-emp"></p>
+    </header>
+    <div class="cli" id="cu-cli" hidden></div>
+    <div class="cu-lista" id="cu-lista"></div>
+    <footer class="cu-pie">
+      <dl class="cu-sub" id="cu-sub"></dl>
+      <div class="cu-total">
+        <span class="cu-total-r">Total</span>
+        <span class="monto" id="cu-total"></span>
+      </div>
+    </footer>
+  </section>
+
+  <!-- Pago y pagado: total a pantalla completa -->
+  <section id="v-pago" class="vista" aria-label="Pago">
+    <p class="pg-rotulo" id="pg-rotulo">Total a pagar</p>
+    <p class="pg-total monto" id="pg-total"></p>
+    <p class="pg-medio" id="pg-medio"></p>
+    <div class="cli" id="pg-cli" hidden></div>
+  </section>
+
+  <section id="v-pagado" class="vista" aria-label="Pago recibido">
+    <p class="pd-gracias" id="pd-gracias">Muchas gracias</p>
+    <p class="pd-rotulo">Total pagado</p>
+    <p class="pd-total monto" id="pd-total"></p>
+    <dl class="pd-det" id="pd-det"></dl>
+    <p class="pd-vuelto-r" id="pd-vuelto-r" hidden>Su vuelto</p>
+    <p class="pd-vuelto monto" id="pd-vuelto" hidden></p>
+    <div class="cli cli-pd" id="pd-cli" hidden></div>
+  </section>
+
+  <!-- Publicidad: una sola capa que cambia de lugar según la vista -->
+  <aside id="anuncios" class="anuncios" aria-hidden="true">
+    <div class="an-capa" id="an-a"></div>
+    <div class="an-capa" id="an-b"></div>
+    <div class="an-vacio" id="an-vacio"><span>La Bomba</span></div>
+  </aside>
+</main>
+<script type="module" src="cliente.js"></script>
+</body>
+</html>
