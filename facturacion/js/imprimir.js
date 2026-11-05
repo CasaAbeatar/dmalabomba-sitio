@@ -363,7 +363,7 @@ function nodoTiquete(m, { papel, logo, copia }) {
     raiz.append(h('div.dato', 'Cuenta para revisar con el cliente'));
   } else {
     // Tipo de documento (el título), consecutivo y clave juntos (Anexos v4.4, nota 1)
-    raiz.append(h('div.etq-chica', 'Consecutivo'), h('div.mono', m.consecutivo));
+    raiz.append(h('div.etq-chica', 'Consecutivo'), h('div.mono.consec-caja', m.consecutivo)); // en recuadro negro y letra un poco mayor para encontrarlo rápido
     raiz.append(h('div.etq-chica', 'Clave numérica'), ...partir(m.clave, 25).map((p) => h('div.mono', p)));
   }
   raiz.append(fila('Fecha', fechaLinea(m.fecha)));
