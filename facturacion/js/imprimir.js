@@ -263,17 +263,11 @@ export { direccionCliente as formatoDireccion, fmtCedula as formatoCedula, fmtTe
 
 /* ------------------------------------------------------------------ modelo del documento (lo que se dibuja) */
 
-const CONTACTO_IMPRESO = {
-  soda: { tel: '72777303', correo: 'contacto@sodalabomba.com' },
-  pollos: { tel: '62019644', correo: 'contacto@polloslabomba.com' },
-};
-
 function datosSoc(s = {}) {
   const codigo = s.codigo === 'pollos' ? 'pollos' : 'soda';
   return {
     codigo, comercial: nombreComercial(s.nombre_comercial || s.nombre || ''), razon: nombrePropio(s.nombre), cedula: fmtCedula(s.cedula, s.cedula_tipo || '02'),
-    // Solo diseño: teléfono y correo de contacto impresos, según el RUT / ficha de cada empresa. Los datos del emisor en el XML no se tocan.
-    tel: fmtTel(CONTACTO_IMPRESO[codigo].tel), dir: direccion(s), correo: CONTACTO_IMPRESO[codigo].correo, ambiente: s.ambiente,
+    tel: fmtTel(s.telefono), dir: direccion(s), correo: s.correo || '', ambiente: s.ambiente,
   };
 }
 function datosCliente(c) {
