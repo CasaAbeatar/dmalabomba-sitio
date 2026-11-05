@@ -3,7 +3,7 @@
 // Cada mensaje es { evento: 'estado' | 'latido' | 'ack' | 'hola', payload }. La caja manda «estado» y «latido»; la ventana del cliente contesta «ack» a cada latido y «hola» al abrirse.
 // Los montos son los mismos que muestra la caja (misma fórmula de IVA y de descuentos que el pie de la cuenta en m_caja.js).
 import { tarifaDeLinea } from './iva.js';
-import { abrirClienteEnOtraPantalla, detenerVentana } from './pantalla_ventana.js';
+import { abrirClienteEnOtraPantalla, abrirManual, detenerVentana } from './pantalla_ventana.js';
 
 export const NOMBRE_CANAL = 'lb-pantalla-cliente'; // BroadcastChannel entre la ventana de la caja y la ventana del cliente (mismo navegador y mismo origen)
 export const RUTA_CLIENTE = new URL('../cliente/', import.meta.url).href;
@@ -73,48 +73,45 @@ export function iniciar(app, opciones = {}) {
   let ultimo = null;       // último cuerpo de «estado» publicado (sin ts)
   let ultimoJson = '';
   let retieneHasta = 0, timerRetencion = null;
-  let punto = null, etiqueta = null, enlace = null, txt = null, timerEtiqueta = null;
+  let punto = null, txt = null;
   const timers = [];
 
   const empresa = () => (/soda/i.test(String(app?.empresa?.codigo || app?.soc?.codigo_acceso || app?.soc?.codigo || '')) ? 'soda' : 'pollos');
   const abierta = () => Date.now() - ackEn < VIDA_ACK;
   const textoEstado = () => (abierta() ? 'abierta' : 'cerrada');
 
-  /* ---------- Puntito para el cajero: una esquina; al tocarlo dice el estado con palabras ---------- */
+  /* ---------- Botón para el cajero en el encabezado de la caja: dice el estado con palabras y, al tocarlo, abre la pantalla del cliente ---------- */
   function pintarPunto() {
     try {
       if (!activo || !encendida || typeof document === 'undefined') return;
-      const texto = 'Pantalla del cliente: ' + textoEstado();
+      const texto = 'Pantalla del cliente: ' + (abierta() ? 'abierta' : 'cerrada');
       if (!punto) {
-        punto = document.createElement('div');
+        // Botón visible en el encabezado de la caja (junto a «Caja abierta desde...»); si no hay encabezado, queda fijo abajo a la izquierda
+        const cabEstado = document.querySelector('.cab-estado');
+        punto = document.createElement('button');
+        punto.type = 'button';
         punto.className = 'pc-punto';
-        punto.setAttribute('role', 'status');
-        punto.style.cssText = 'position:fixed;left:2px;bottom:2px;z-index:30;display:flex;align-items:center;gap:6px;padding:7px;cursor:default;font-family:inherit;font-size:12px;line-height:1.2;color:inherit;-webkit-tap-highlight-color:transparent';
+        punto.style.cssText = (cabEstado ? '' : 'position:fixed;left:6px;bottom:6px;z-index:30;') + 'display:inline-flex;align-items:center;gap:.45rem;padding:.3rem .8rem;border-radius:99px;border:1px solid var(--borde-control,#8f8672);background:#fff;color:#1d1a16;font:inherit;font-size:.88rem;line-height:1.2;white-space:nowrap;flex:0 1 auto;min-width:0;max-width:100%;cursor:pointer;-webkit-tap-highlight-color:transparent;min-height:2.3rem';
         const dot = document.createElement('span');
         dot.className = 'pc-punto-dot';
-        dot.style.cssText = 'width:9px;height:9px;border-radius:50%;display:block;flex:none;opacity:.85';
-        etiqueta = document.createElement('span');
-        etiqueta.style.cssText = 'display:none;background:rgba(20,20,20,.88);color:#fff;border-radius:6px;padding:4px 8px;white-space:nowrap';
-        // Enlace manual (sin API de ventanas, p. ej. Safari): solo se ofrece cuando la pantalla del cliente está cerrada
-        enlace = document.createElement('a');
-        enlace.href = RUTA_CLIENTE; enlace.target = 'lb-cliente'; enlace.rel = 'noopener'; enlace.className = 'pc-punto-enlace';
-        enlace.textContent = 'Abrir pantalla del cliente';
-        enlace.style.cssText = 'color:#fff;text-decoration:underline;margin-left:10px';
+        dot.style.cssText = 'width:.7rem;height:.7rem;border-radius:50%;display:block;flex:none';
         txt = document.createElement('span');
-        etiqueta.append(txt, enlace);
-        punto.append(dot, etiqueta);
+        txt.style.cssText = 'min-width:0;overflow:hidden;text-overflow:ellipsis'; // en pantallas angostas el texto se acorta con «…» en lugar de empujar a los demás
+        punto.append(dot, txt);
+        // Un toque abre la pantalla del cliente en el otro monitor (o la trae al frente si ya está abierta)
         punto.addEventListener('click', () => {
-          etiqueta.style.display = 'block';
-          clearTimeout(timerEtiqueta);
-          timerEtiqueta = setTimeout(() => { if (etiqueta) etiqueta.style.display = 'none'; }, 4000);
+          try {
+            if (abierta()) { abrirManual(RUTA_CLIENTE); return; }
+            abrirClienteEnOtraPantalla({ rutaCliente: RUTA_CLIENTE, monitorCliente: opciones.monitor });
+            setTimeout(() => { try { if (activo && encendida && !abierta()) abrirManual(RUTA_CLIENTE); } catch { /* sin ventana */ } }, 1800);
+          } catch { /* el botón nunca estorba */ }
         });
-        document.body.append(punto);
+        if (cabEstado) cabEstado.append(punto); else document.body.append(punto);
       }
       punto.title = texto;
-      punto.setAttribute('aria-label', texto);
+      punto.setAttribute('aria-label', abierta() ? texto : 'Abrir pantalla del cliente');
       punto.dataset.estado = textoEstado();
-      txt.textContent = texto;
-      enlace.style.display = abierta() ? 'none' : 'inline';
+      txt.textContent = abierta() ? 'Pantalla del cliente: abierta' : 'Abrir pantalla del cliente';
       punto.firstChild.style.background = abierta() ? '#2e9e5b' : '#9aa0a6';
     } catch { /* el puntito nunca estorba */ }
   }
@@ -204,12 +201,12 @@ export function iniciar(app, opciones = {}) {
       try { publicar(cuerpoEspera()); } catch { /* sin aviso */ }
       activo = false;
       detenerVentana();
-      timers.forEach(clearInterval); clearTimeout(timerRetencion); clearTimeout(timerEtiqueta);
+      timers.forEach(clearInterval); clearTimeout(timerRetencion);
       try { window.removeEventListener('pointerdown', alPrimerToque, true); } catch { /* ya quitado */ }
       const b = bc; bc = null;
       setTimeout(() => { try { b?.close(); } catch { /* ya cerrado */ } }, 100);
       try { punto?.remove(); } catch { /* ya no está */ }
-      punto = null; etiqueta = null;
+      punto = null; txt = null;
       if (typeof window !== 'undefined' && window.pantallaEmisor === api) delete window.pantallaEmisor;
     },
     get fallos() { return fallos; },
