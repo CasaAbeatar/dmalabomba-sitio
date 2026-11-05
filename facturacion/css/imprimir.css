@@ -66,7 +66,7 @@
 .ct .marca-agua{position:fixed;left:0;right:0;top:42%;text-align:center;font-size:150px;font-weight:800;letter-spacing:.08em;color:rgba(184,22,34,.07);transform:rotate(-28deg);pointer-events:none;z-index:0}
 .ct>*:not(.marca-agua){position:relative;z-index:1}
 .ct-cab{display:flex;justify-content:space-between;align-items:flex-start;gap:6mm}
-.ct-logo{height:17mm;width:auto}
+.ct-logo{height:auto;width:62mm;max-height:24mm;object-fit:contain}
 .ct-nombre-grande{font-size:22px;font-weight:700}
 .ct-titulo{text-align:right;max-width:72%}
 .ct-clave-enc{margin-top:.5mm;font-size:9px;line-height:1.25;color:#3a352f}
