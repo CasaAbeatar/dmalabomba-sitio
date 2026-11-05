@@ -45,8 +45,8 @@ p,dl,dd,dt,h1,h2{margin:0}
 body[data-vista=cuenta] #v-cuenta,body[data-vista=pago] #v-pago,body[data-vista=pagado] #v-pagado{opacity:1;visibility:visible;transition:opacity .6s ease,visibility 0s}
 
 /* ---------- Cuenta ---------- */
-#v-cuenta{right:33.3333%;padding:6rem 7rem 5rem}
-@media(orientation:portrait){#v-cuenta{right:0;bottom:33.3333%;padding:5rem 6rem 4rem}}
+#v-cuenta{right:50%;padding:6rem 7rem 5rem}
+@media(orientation:portrait){#v-cuenta{right:0;bottom:50%;padding:5rem 6rem 4rem}}
 .cu-cab{display:flex;align-items:baseline;justify-content:space-between;gap:3rem;padding-bottom:2.4rem;border-bottom:var(--fino) solid var(--linea2)}
 .cu-tit{font-size:2.8rem;letter-spacing:.22em;text-transform:uppercase;color:var(--tinta2)}
 .cu-emp{font-size:3.2rem;font-weight:800;letter-spacing:.02em;color:var(--emp)}
@@ -108,9 +108,9 @@ body[data-vista=cuenta] #v-cuenta,body[data-vista=pago] #v-pago,body[data-vista=
   transition:opacity .6s ease,visibility 0s linear .6s}
 body[data-vista=cuenta] .anuncios,body[data-vista=pago] .anuncios,body[data-vista=pagado] .anuncios{opacity:0}
 body[data-vista=espera] .anuncios{opacity:1;visibility:visible;transition:opacity .6s ease,visibility 0s}
-body[data-vista=cuenta] .anuncios{opacity:1;visibility:visible;left:66.6667%;border-left:var(--fino) solid var(--linea2);transition:opacity .6s ease,visibility 0s}
+body[data-vista=cuenta] .anuncios{opacity:1;visibility:visible;left:50%;border-left:var(--fino) solid var(--linea2);transition:opacity .6s ease,visibility 0s}
 @media(orientation:portrait){
-  body[data-vista=cuenta] .anuncios{left:0;top:66.6667%;border-left:0;border-top:var(--fino) solid var(--linea2)}
+  body[data-vista=cuenta] .anuncios{left:0;top:50%;border-left:0;border-top:var(--fino) solid var(--linea2)}
 }
 .an-capa{will-change:opacity;position:absolute;top:0;right:0;bottom:0;left:0;opacity:0;transition:opacity 1s ease;display:flex;align-items:center;justify-content:center}
 .an-capa.on{opacity:1}
