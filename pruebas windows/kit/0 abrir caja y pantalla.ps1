@@ -68,7 +68,8 @@ while ($true) {
     $hayCaja = $false; $hayCliente = $false
     foreach ($h in $hs) {
       $t = [W32]::Titulo($h)
-      if ($t -like "*$TituloCliente*") { $hayCliente = $true } else { $hayCaja = $true }   # cualquier otra ventana nuestra es la caja, aunque este en Clientes, Anular o Administracion (el titulo cambia por modulo)
+      if ([string]::IsNullOrWhiteSpace($t)) { continue }
+      if (Es-Titulo-Cliente $t) { $hayCliente = $true } else { $hayCaja = $true }   # cualquier otra ventana nuestra es la caja, aunque este en Clientes, Anular o Administracion (el titulo cambia por modulo)
     }
     if ($hayCaja) { $cajaVista = $true }
     $exe = Buscar-Navegador
