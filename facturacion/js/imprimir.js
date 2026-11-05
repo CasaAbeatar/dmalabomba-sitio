@@ -58,7 +58,8 @@ const MARCA = {
   pollos: {
     correo: 'contacto@polloslabomba.com', web: 'www.polloslabomba.com', facebook: 'Pollos La Bomba y Papea',
     historia: null, // el sitio no tiene una historia propia de Pollos La Bomba: se usa solo su descripción
-    lema: 'El mejor pollo al mejor precio, de la familia de Soda La Bomba.',
+    lema: 'El mejor pollo al mejor precio.',
+    propia: true, // empresa con cédula jurídica propia: no se presenta como parte de Soda ni de DMA
   },
 };
 
@@ -552,7 +553,7 @@ function nodoCarta(m, { logo, copia }) {
   const pieIzq = h('div.ct-quienes',
     h('div.ct-etq', marca.historia ? 'Quiénes somos' : m.soc.comercial),
     h('p', marca.historia || marca.lema),
-    marca.historia ? null : h('p.ct-tenue', 'Grupo DMA La Bomba, empresa familiar de la Ruta 4, Horquetas de Sarapiquí.'));
+    (marca.historia || marca.propia) ? null : h('p.ct-tenue', 'Grupo DMA La Bomba, empresa familiar de la Ruta 4, Horquetas de Sarapiquí.'));
   const pieDer = h('div.ct-contacto',
     h('div.ct-etq', 'Contáctenos'),
     h('div', marca.correo),
