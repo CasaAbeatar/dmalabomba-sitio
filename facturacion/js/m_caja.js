@@ -65,8 +65,6 @@ function llevarALaVista(el) {
 }
 // Envuelve lo que hace un botón: si algo falla, se avisa en palabras en vez de dejar un error sin atender en la consola
 const seguro = (fn) => (...a) => Promise.resolve().then(() => fn(...a)).catch((e) => { console.error(e); toast(textoDeError(e), 'error', 7000); });
-// Motivos que se tocan de un solo toque al anular una cuenta abierta
-const MOTIVOS_ANULAR = ['El cliente se fue', 'Error al digitar', 'El cliente no recogió el pedido', 'Cuenta repetida'];
 let moduloImp = null;
 const imp = async () => {
   try { moduloImp = await import('./imprimir.js'); return moduloImp; }
@@ -718,26 +716,18 @@ export default {
       if (!ref) return;
       accion(async () => { cur = await api.ventaDatos(id, { tipo: v.tipo_servicio === 'buffet' ? 'espera' : v.tipo_servicio, referencia: ref, telefono: v.telefono || '' }); repintar(); toast('Nombre guardado.'); });
     }
+    // Decisión de Emil (5 nov 2026): anular una cuenta no pregunta nada; con tocar «Anular esta cuenta» basta (sin motivo ni confirmación).
+    const anulando = new Set(); // cuentas cuya anulación ya se mandó: un segundo toque rápido no la manda otra vez
     function anularCuenta() {
       if (!cur) return;
-      const v = cur.venta, id = v.id, n = cur.lineas.length;
-      const nombreCuenta = (TIPOS_SERVICIO[v.tipo_servicio] || '') + ' ' + (v.referencia || numCuenta(v.numero));
-      const motivo = h('textarea.campo', { rows: 3, maxlength: 200, placeholder: 'Ej. el cliente se fue, error al digitar', 'aria-label': 'Motivo de la anulación' });
-      const err = h('div.error-caja', { hidden: true, role: 'alert' });
-      const rapidos = h('div.fila', MOTIVOS_ANULAR.map((t) => h('button.btn.chico', { type: 'button', onclick: () => { motivo.value = t; err.hidden = true; motivo.focus(); } }, t)));
-      modal({ titulo: 'Anular cuenta', ancho: 480,
-        contenido: h('div.col',
-          h('p.conf', 'Va a anular la cuenta ' + nombreCuenta.trim() + (n ? ' con ' + n + (n === 1 ? ' producto' : ' productos') + ' por ' + money(v.total) : ' (está vacía)') + '. No se cobra nada y no se puede deshacer.'),
-          v.estado === 'prefacturada' ? h('p.tenue-linea', 'Esta cuenta ya tenía prefactura. La prefactura no es una factura, así que no hay nada que anular en Hacienda.') : null,
-          h('label.etq', 'Motivo (obligatorio)', motivo),
-          h('div.etq', 'O toque uno de estos:'), rapidos, err),
-        botones: [{ texto: 'No, volver', onclick: (c) => c() }, { texto: 'Sí, anular esta cuenta', clase: 'peligro', onclick: (c) => {
-          const txt = motivo.value.trim();
-          if (txt.length < 3) { err.textContent = 'Escriba el motivo de la anulación (por ejemplo: el cliente se fue).'; err.hidden = false; motivo.focus(); return; }
-          c();
-          accion(async () => { await api.ventaAnular(id, txt); sacarDeLista(id); await pasarALaSiguiente(); repintar(); toast('Cuenta anulada.'); });
-        } }] });
-      motivo.focus();
+      const id = cur.venta.id;
+      if (anulando.has(id)) return;
+      anulando.add(id);
+      accion(async () => {
+        try { await api.ventaAnular(id, null); }
+        catch (e) { anulando.delete(id); throw e; } // si falló, la cuenta sigue ahí y se puede volver a intentar
+        sacarDeLista(id); await pasarALaSiguiente(); repintar(); toast('Cuenta anulada.');
+      });
     }
 
     /* ---------- Productos en la cuenta ---------- */
