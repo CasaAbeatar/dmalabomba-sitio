@@ -708,6 +708,9 @@ body.fx-caja .sin-red-in{max-width:2200px}
   .cuentas-lista .cuenta-btn{flex:1 1 calc(50% - .25rem);min-width:0;max-width:none;min-height:0;padding:.35rem .6rem}
   .cuentas-lista .cuenta-btn .c-tot{font-size:.82rem}
 }
+.correos-elegir{display:grid;gap:.25rem;padding:.5rem .75rem;border:1px solid var(--linea2);border-radius:var(--r)}
+.correo-op{display:flex;align-items:center;gap:.5rem;min-height:2.6rem;font-size:1rem;overflow-wrap:anywhere}
+.correo-op input{width:1.4rem;height:1.4rem;flex:none}
 
 /* Cuentas en espera: tira de una sola fila, chips compactos; avisos «‹ N» y «N ›» cuando hay cuentas fuera de la vista (pedido de Emil, 5 nov 2026) */
 .cuentas-lista{flex-wrap:nowrap;overflow-x:auto;gap:.4rem;padding:2px 2px .3rem;scrollbar-width:thin;-webkit-overflow-scrolling:touch;scroll-snap-type:x proximity}
