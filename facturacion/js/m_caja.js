@@ -371,9 +371,9 @@ export default {
       barraCuentas = h('div.cuentas-bar');
       buscador = crearBuscador({ alElegir: (p) => agregarProducto(p), enLinea: false });
       buscadorWrap = h('div.buscador', buscador.el);
-      tabsCajon = h('div.cajones', { role: 'group', 'aria-label': 'Cajones de productos', onscroll: bordeCajones });
+      tabsCajon = h('div.cajones', { role: 'group', 'aria-label': 'Cajones de productos' });
       roCajones?.disconnect();
-      if (typeof ResizeObserver === 'function') { roCajones = new ResizeObserver(bordeCajones); roCajones.observe(tabsCajon); }
+      if (typeof ResizeObserver === 'function') { roCajones = new ResizeObserver(midePegajosos); roCajones.observe(tabsCajon); }
       gridProd = h('div.productos', { role: 'group', 'aria-label': 'Productos del cajón' });
       panelOpc = h('aside.opciones#panel-opciones', { 'aria-label': 'Opciones del producto elegido', hidden: true });
       medioCat = h('div.catalogo-medio', gridProd, panelOpc);
@@ -480,18 +480,11 @@ export default {
     }
 
     /* ---------- Cajones y productos ---------- */
-    // Los cajones están siempre arriba. En pantalla ancha se ven los 16 a la vez; en pantalla angosta son una tira que se desliza de lado,
-    // y un desvanecido en el borde avisa que hay más cajones hacia ese lado.
-    function bordeCajones() {
-      if (!tabsCajon) return;
-      const sobra = tabsCajon.scrollWidth - tabsCajon.clientWidth;
-      tabsCajon.classList.toggle('mas-der', sobra > 6 && sobra - tabsCajon.scrollLeft > 6);
-      tabsCajon.classList.toggle('mas-izq', sobra > 6 && tabsCajon.scrollLeft > 6);
-    }
+    // Los cajones están siempre arriba. En pantalla ancha se ven los 16 a la vez; en pantalla angosta se acomodan en filas (nunca una tira que se deslice de lado).
     // Alto de lo que queda pegado arriba en el celular (buscador + tira de cajones): hasta ahí hay que bajar la lista para que no quede tapada
     const altoPegado = () => {
-      const bus = buscadorWrap?.offsetHeight || 0, caj = tabsCajon?.offsetHeight || 0;
-      return bus + caj + 8;
+      const bus = buscadorWrap?.offsetHeight || 0;
+      return bus + 8;
     };
     function pintarCajones() {
       // Cada cajón es un mosaico del mismo alto que los productos y las opciones, numerado con su código (01, 02…), que es también el comienzo del código de sus productos
@@ -508,10 +501,6 @@ export default {
         },
       }, h('span.mos-nombre', h('span.mos-num', { 'aria-hidden': 'true' }, c.codigo), c.nombre))));
       requestAnimationFrame(() => {
-        // En la tira, el cajón elegido se deja en el centro (solo se mueve la tira, no la página)
-        const elegido = tabsCajon.querySelector('[aria-pressed=true]');
-        if (elegido && tabsCajon.scrollWidth > tabsCajon.clientWidth + 6) tabsCajon.scrollLeft = Math.max(0, elegido.offsetLeft - (tabsCajon.clientWidth - elegido.offsetWidth) / 2);
-        bordeCajones();
         midePegajosos();
       });
     }
@@ -667,24 +656,12 @@ export default {
         h('span.c-ref', c.referencia || numCuenta(c.numero)),
         h('span.c-tot', c.lineas + (Number(c.lineas) === 1 ? ' producto · ' : ' productos · ') + money(c.total)));
       });
-      // La tira se desliza de lado a lado: un degradado en el borde y un texto avisan que hay más cuentas fuera de la pantalla
+      // Las cuentas se acomodan en filas: todas a la vista, sin tira que se deslice de lado
       const lista = h('div.cuentas-lista', { role: 'group', 'aria-label': 'Cuentas abiertas' }, botones.length ? botones : h('span.cuentas-vacio', 'No hay cuentas abiertas. Toque un producto para empezar una.'));
-      const pista = h('div.cuentas-pista', { 'aria-hidden': 'true' }, 'Hay ' + abiertas.length + ' cuentas abiertas. Deslice hacia los lados para ver todas ›');
-      const envoltura = h('div.cuentas-envoltura', lista, h('span.cuentas-borde.izq', { 'aria-hidden': 'true' }), h('span.cuentas-borde.der', { 'aria-hidden': 'true' }), pista);
-      const pistaViva = () => {
-        const mas = lista.scrollWidth - lista.clientWidth - lista.scrollLeft > 6;
-        envoltura.classList.toggle('mas-der', mas);
-        envoltura.classList.toggle('mas-izq', lista.scrollLeft > 6);
-      };
-      lista.addEventListener('scroll', pistaViva, { passive: true });
+      const envoltura = h('div.cuentas-envoltura', lista);
       // Los ajustes de la impresora ya no están aquí: viven en Administración, Configuración
       barraCuentas.replaceChildren(envoltura, h('button.btn.primario', { type: 'button', onclick: seguro(nuevaCuenta) }, 'Nueva cuenta'),
         h('button.btn.btn-efectivo', { type: 'button', onclick: seguro(abrirEfectivo) }, 'Efectivo'));
-      // La cuenta activa se deja a la vista y se revisa si quedan cuentas escondidas hacia un lado
-      requestAnimationFrame(() => {
-        lista.querySelector('.cuenta-btn[aria-pressed=true]')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
-        pistaViva();
-      });
     }
 
     /* ---------- Cuenta nueva, poner en espera y cambiar nombre ---------- */

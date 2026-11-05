@@ -14,15 +14,13 @@
 /* ---------- Estructura de la caja ---------- */
 .caja{display:flex;flex-direction:column;gap:.9rem}
 .cuentas-bar{display:flex;gap:.6rem;align-items:stretch}
-.cuentas-lista{display:flex;gap:.5rem;overflow-x:auto;flex:1 1 auto;min-width:0;padding:2px 2px .35rem;scrollbar-width:thin;scroll-snap-type:x proximity;-webkit-overflow-scrolling:touch}
-.cuentas-lista .cuenta-btn{scroll-snap-align:start}
+.cuentas-lista{display:flex;flex-wrap:wrap;gap:.5rem;flex:1 1 auto;min-width:0;padding:2px 2px .35rem}
 .cuentas-envoltura{position:relative;flex:1 1 auto;min-width:0;display:flex;flex-direction:column}
-.cuentas-borde{position:absolute;top:0;bottom:.35rem;width:38px;pointer-events:none;opacity:0;transition:opacity .15s}
+.cuentas-borde{display:none;position:absolute;top:0;bottom:.35rem;width:38px;pointer-events:none;opacity:0;transition:opacity .15s}
 .cuentas-borde.der{right:0;background:linear-gradient(90deg,rgba(251,248,242,0),var(--fondo) 88%)}
 .cuentas-borde.izq{left:0;background:linear-gradient(270deg,rgba(251,248,242,0),var(--fondo) 88%)}
 .cuentas-envoltura.mas-der .cuentas-borde.der,.cuentas-envoltura.mas-izq .cuentas-borde.izq{opacity:1}
-.cuentas-pista{display:none;font-size:.86rem;font-weight:600;color:var(--tinta2);padding:0 44px .1rem .25rem;white-space:normal;overflow-wrap:anywhere}
-.cuentas-envoltura.mas-der .cuentas-pista{display:block}
+.cuentas-pista{display:none!important;font-size:.86rem;font-weight:600;color:var(--tinta2);padding:0 44px .1rem .25rem;white-space:normal;overflow-wrap:anywhere}
 .cuenta-btn{flex:0 0 auto;min-width:158px;max-width:230px;min-height:60px;padding:.45rem .8rem;text-align:left;border:1px solid var(--borde-control,#8f8672);border-left:4px solid var(--borde-control,#8f8672);border-radius:var(--r);background:var(--papel);cursor:pointer;display:flex;flex-direction:column;gap:.1rem}
 .cuenta-btn:hover{border-color:var(--tinta)}
 .cuenta-btn[aria-pressed=true]{border-color:var(--tinta);border-left-color:var(--ambar);background:#fff;box-shadow:0 0 0 1px var(--tinta) inset}
@@ -113,13 +111,9 @@
   .catalogo-medio{flex:1 1 0;min-height:0;align-items:stretch;grid-template-rows:minmax(0,1fr)}
   .productos{overflow-y:auto;overscroll-behavior:contain;min-height:0}
 }
-/* Pantalla angosta (celular y tableta): los cajones son una tira de una sola fila que se desliza de lado; las opciones se abren debajo de los productos */
+/* Pantalla angosta (celular y tableta): los cajones se acomodan en filas, todos a la vista, sin tiras que se deslicen de lado; las opciones se abren debajo de los productos */
 @media(max-width:1179px){
-  .cajones{display:flex;gap:var(--mos-gap);overflow-x:auto;overflow-y:hidden;overscroll-behavior-x:contain;scroll-snap-type:x proximity;scrollbar-width:thin;scrollbar-color:var(--niv1-borde) transparent;-webkit-overflow-scrolling:touch}
-  .cajones .mos{flex:0 0 118px;scroll-snap-align:start}
-  .cajones.mas-der{-webkit-mask-image:linear-gradient(90deg,#000 calc(100% - 30px),transparent);mask-image:linear-gradient(90deg,#000 calc(100% - 30px),transparent)}
-  .cajones.mas-izq{-webkit-mask-image:linear-gradient(270deg,#000 calc(100% - 30px),transparent);mask-image:linear-gradient(270deg,#000 calc(100% - 30px),transparent)}
-  .cajones.mas-der.mas-izq{-webkit-mask-image:linear-gradient(90deg,transparent,#000 30px,#000 calc(100% - 30px),transparent);mask-image:linear-gradient(90deg,transparent,#000 30px,#000 calc(100% - 30px),transparent)}
+  .cajones{display:grid;grid-template-columns:repeat(auto-fill,minmax(104px,1fr));gap:var(--mos-gap)}
   .catalogo-medio.con-opciones{grid-template-columns:minmax(0,1fr)}
 }
 @media(min-width:980px) and (max-width:1179px){
@@ -127,14 +121,13 @@
 }
 @media(max-width:979px){
   .catalogo-medio,.catalogo-medio.con-opciones{display:block}
-  .cajones{position:sticky;top:var(--bus-h,92px);z-index:14;box-shadow:0 6px 10px -8px rgba(29,26,23,.35)}
   /* Las opciones quedan fijas arriba de la barra de abajo; su alto (--opc-h, lo mide m_caja.js) se reserva al final de la lista y
      los productos se traen a la franja libre entre la tira de cajones y el panel, así la lista completa siempre se puede ver. */
   .opciones{position:fixed;left:.7rem;right:.7rem;bottom:calc(var(--barra-h,84px) + 8px);z-index:12;max-height:42vh;max-height:42dvh;box-shadow:0 -8px 22px rgba(29,26,23,.2)}
   .catalogo-medio.con-opciones{padding-bottom:calc(var(--opc-h,0px) + .6rem)}
   .caja.bus-activo .opciones{display:none}
-  .caja-catalogo .productos{scroll-margin-top:calc(var(--bus-h,92px) + var(--cajones-h,70px) + 8px)}
-  .productos .mos{scroll-margin-top:calc(var(--bus-h,92px) + var(--cajones-h,70px) + 8px);scroll-margin-bottom:calc(var(--opc-h,0px) + 96px + env(safe-area-inset-bottom))}
+  .caja-catalogo .productos{scroll-margin-top:calc(var(--bus-h,92px) + 8px)}
+  .productos .mos{scroll-margin-top:calc(var(--bus-h,92px) + 8px);scroll-margin-bottom:calc(var(--opc-h,0px) + 96px + env(safe-area-inset-bottom))}
 }
 @media(min-width:701px) and (max-width:979px){
   .opciones{left:1rem;right:1rem}
@@ -706,4 +699,10 @@ body.fx-caja .sin-red-in{max-width:2200px}
   .catalogo-medio.con-opciones .productos .mos{min-height:34px;padding:.2rem .4rem;font-size:.8rem;line-height:1.1}
   .catalogo-medio.con-opciones .productos .prod-pie,.catalogo-medio.con-opciones .productos .prod-opciones{display:none}
   .catalogo-medio.con-opciones .productos .mos-num{min-width:18px;height:14px;font-size:.62rem;padding:0 .2rem}
+}
+
+/* Celular: las cuentas abiertas se acomodan de dos en dos, todas a la vista (sin tira que se deslice de lado) */
+@media(max-width:700px){
+  .cuentas-lista .cuenta-btn{flex:1 1 calc(50% - .25rem);min-width:0;max-width:none;min-height:0;padding:.35rem .6rem}
+  .cuentas-lista .cuenta-btn .c-tot{font-size:.82rem}
 }
