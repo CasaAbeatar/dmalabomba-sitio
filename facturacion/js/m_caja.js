@@ -594,7 +594,7 @@ export default {
       panelOpc.replaceChildren(
         h('div.opciones-cab',
           h('div.opciones-tit', h('strong', g.nombre), h('small', 'Toque la opción que desea agregar a la cuenta')),
-          h('button.btn.cerrar-opc', { type: 'button', onclick: cerrarPanel, 'aria-label': 'Cerrar las opciones de ' + g.nombre }, h('span.t-cerrar', 'Cerrar opciones'), h('span.t-volver', '‹ Volver a los productos'))),
+          h('button.btn.cerrar-opc', { type: 'button', onclick: cerrarPanel, 'aria-label': 'Cerrar las opciones de ' + g.nombre }, 'Cerrar opciones')),
         h('div.opciones-grid', { role: 'group', 'aria-label': 'Opciones de ' + g.nombre }, ...g.opciones.map((p, i) => tarjetaArticulo(p, p.modificador_nombre, null, i + 1, 3, tarjetasMod))));
       actualizarInsignias();
       midePegajosos();
@@ -1144,8 +1144,8 @@ export default {
           h('small', (TIPOS_SERVICIO[c.tipo_servicio] || '') + (c.estado === 'prefacturada' ? ' · prefactura' : '')),
           h('span', c.lineas + (Number(c.lineas) === 1 ? ' producto · ' : ' productos · ') + money(c.total))));
         asideCuenta.replaceChildren(h('div.vacio-cuenta',
-          h('h2', abiertas.length ? 'Cuentas abiertas' : 'No hay cuentas abiertas'),
-          abiertas.length ? h('div.esquema', tarjetas) : h('p', 'Toque «Nueva cuenta», escriba el nombre y cree la cuenta. Después toque los productos.'),
+          h('h2', abiertas.length ? 'Cuentas abiertas' : 'Cuenta nueva'),
+          abiertas.length ? h('div.esquema', tarjetas) : h('p', 'Ya puede tocar los productos: la cuenta se crea sola con el primero. «Nueva cuenta» solo hace falta si quiere ponerle nombre.'),
           h('button.btn.primario.grande', { type: 'button', onclick: seguro(nuevaCuenta) }, 'Nueva cuenta')));
         return;
       }

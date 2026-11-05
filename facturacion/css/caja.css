@@ -700,10 +700,10 @@ body.fx-caja .sin-red-in{max-width:2200px}
   .cajones .mos{padding:.2rem .35rem .22rem;font-size:.8rem;line-height:1.12}
   .cajon-btn.mos .mos-nombre{-webkit-line-clamp:3}
   .cajones .mos-num{min-width:20px;height:16px;padding:0 .25rem;font-size:.68rem;margin-right:.2rem}
-  /* Segundo nivel minimizado: al abrir las opciones de un producto, los productos se pliegan y las opciones ocupan el ancho; «Volver a los productos» los trae de vuelta */
-  .catalogo-medio.con-opciones{grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,1fr)}
-  .catalogo-medio.con-opciones .productos{display:none}
-  .cerrar-opc .t-cerrar{display:none}
+  /* Segundo nivel semiminimizado: al abrir las opciones de un producto, los productos se quedan a la vista pero chicos (solo el nombre, en una columna angosta) y las opciones toman el resto */
+  .catalogo-medio.con-opciones{grid-template-columns:minmax(0,.55fr) minmax(0,1.45fr);grid-template-rows:minmax(0,1fr)}
+  .catalogo-medio.con-opciones .productos{grid-template-columns:minmax(0,1fr);--mos-min:0;padding:.3rem}
+  .catalogo-medio.con-opciones .productos .mos{min-height:34px;padding:.2rem .4rem;font-size:.8rem;line-height:1.1}
+  .catalogo-medio.con-opciones .productos .prod-pie,.catalogo-medio.con-opciones .productos .prod-opciones{display:none}
+  .catalogo-medio.con-opciones .productos .mos-num{min-width:18px;height:14px;font-size:.62rem;padding:0 .2rem}
 }
-.cerrar-opc .t-volver{display:none}
-@media(min-width:980px) and (max-height:760px){.cerrar-opc .t-volver{display:inline}}
