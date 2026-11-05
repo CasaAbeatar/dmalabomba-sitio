@@ -34,7 +34,26 @@
 .rp-estado.ok{border-color:#b9dcc8;background:var(--verde-suave)}
 .rp-estado.mal{border-color:#e9b3b7;background:var(--rojo-suave)}
 .rp-estado.espera{background:var(--ambar-suave);border-color:#efd08f}
+/* Líneas editables (REEMPLAZO 02) */
+.rp-tr.rp-edit{grid-template-columns:5rem 1fr auto;align-items:start}
+.rp-edit .campo{width:100%;min-height:44px}
+.rp-edit .rp-num{text-align:right;font-variant-numeric:tabular-nums}
+.rp-col{display:flex;flex-direction:column;gap:.3rem}
+.rp-precio{display:grid;grid-template-columns:auto 9rem;gap:.5rem;align-items:center}
+.rp-tot{padding-top:.7rem;font-variant-numeric:tabular-nums}
+.rp-tot.cambiado,.rp-total-cambio b{color:var(--rojo-osc);font-weight:700}
+.rp-total-cambio s{color:var(--tinta2);margin-right:.3rem}
+.rp-err{color:var(--rojo-osc)}
+.rp-monto{margin:0;border:1px solid #efd08f;background:var(--ambar-suave);border-radius:var(--r);padding:.5rem .8rem}
+.rp-motivo-nc{display:flex;flex-direction:column;gap:.5rem}
+.rp-etq{display:flex;flex-direction:column;gap:.25rem;font-weight:700}
+.rp-etq .campo{min-height:48px;font-weight:400}
+.rp-doble{margin:0}
+.rp-doble .btn.enlace{border:0;background:none;padding:0;min-height:0;color:var(--rojo-osc);text-decoration:underline;display:inline}
 @media (max-width:700px){
+  .rp-tr.rp-edit{grid-template-columns:4.2rem 1fr}
+  .rp-tr.rp-edit .rp-tot{grid-column:1 / -1;text-align:right;padding-top:0}
+  .rp-precio{grid-template-columns:1fr 8rem}
   .rp-fila-btn,.rp-datos{grid-template-columns:1fr}
   .rp-pie .btn{flex:1 1 100%}
   .rp-pie .btn.primario{order:-1}  /* en el celular «Generar» va arriba del «Volver»: es lo primero que se alcanza con el pulgar */

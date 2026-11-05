@@ -1,6 +1,7 @@
 // «Corregir y generar de nuevo»: reemplaza un documento rechazado por Hacienda (o que no llegó a Hacienda, o que se anuló con nota de crédito) con uno nuevo, en un solo paso.
-// Función de la base: fx_reemplazar_documento(p_original, p_cliente, p_terminal, p_actividad_receptor). Hace TODO en una sola transacción: copia la venta, repite el pago,
-// cobra como reemplazo (consecutivo nuevo, referencia al anterior) y cierra la alerta de Hacienda del documento viejo. Propuesta en sql/REEMPLAZO 01 propuesta.sql.
+// Función de la base: fx_reemplazar_documento(p_original, p_cliente, p_terminal, p_actividad_receptor, p_cambios, p_motivo). Con un documento ACEPTADO por Hacienda hace antes la nota de crédito por el total (motivo obligatorio);
+// p_cambios lleva el detalle, la cantidad y el precio corregidos de cada línea. Hace TODO en una sola transacción: copia la venta, repite el pago,
+// cobra como reemplazo (consecutivo nuevo, referencia al anterior) y cierra la alerta de Hacienda del documento viejo. Propuesta en sql/REEMPLAZO 02 propuesta con edicion.sql.
 // Mientras esa función no exista en la base se usa el camino de siempre en tres llamadas (fx_venta_clonar, fx_cobrar_reemplazo y, si es administración, fx_alerta_atender):
 // el resultado es el mismo documento nuevo, solo que la alerta de Hacienda no se cierra sola para quien no es administrador y no es una sola transacción.
 import { rpc } from './api.js';
@@ -19,23 +20,27 @@ export function pagosParaReemplazo(original) {
   });
 }
 
-// Lo que se puede reemplazar: rechazados, con error (no llegaron a Hacienda) y aceptados que ya tienen una nota de crédito viva.
-// Devuelve 'rechazado' | 'error' | 'anulado' | null.
+// Lo que se puede reemplazar: rechazados, con error (no llegaron a Hacienda), aceptados que ya tienen una nota de crédito viva y aceptados vigentes (se anulan en el mismo paso).
+// Devuelve 'rechazado' | 'error' | 'anulado' | 'aceptado' | null.
 export function tipoDeReemplazo(c, nc) {
   if (!c || !['01', '04'].includes(c.tipo_doc) || !c.venta_id) return null;
   if (c.estado === 'rechazado') return 'rechazado';
   if (c.estado === 'error') return SOPORTA_ERROR ? 'error' : null; // un documento que no llegó a Hacienda: ver el informe (hace falta cambiar la función de borde)
   if (c.estado === 'aceptado' && nc && nc.estado !== 'rechazado') return 'anulado';
+  if (c.estado === 'aceptado' && !nc) return 'aceptado';
   return null;
 }
 
-export async function reemplazarDocumento({ original, clienteId = null, actividad = null, esAdmin = false }) {
+export async function reemplazarDocumento({ original, clienteId = null, actividad = null, esAdmin = false, cambios = [], motivo = null }) {
   try {
-    const r = await rpc('fx_reemplazar_documento', { p_original: original.id, p_cliente: clienteId || null, p_terminal: original.terminal || null, p_actividad_receptor: actividad || null });
+    const r = await rpc('fx_reemplazar_documento', { p_original: original.id, p_cliente: clienteId || null, p_terminal: original.terminal || null, p_actividad_receptor: actividad || null,
+      p_cambios: cambios && cambios.length ? cambios : null, p_motivo: motivo || null });
     return { comprobante: r, alertaCerrada: Number(r?.alertas_cerradas || 0) > 0, unaSolaTransaccion: true };
   } catch (e) {
     if (!faltaFuncion(e)) throw e;
   }
+  // Camino de respaldo con las funciones que ya existen. No sabe corregir líneas ni anular un documento aceptado en el mismo paso: en esos casos se dice claro, sin hacer nada.
+  if ((cambios && cambios.length) || original.estado === 'aceptado') throw new Error('Esta corrección necesita la actualización del sistema que todavía no está activa. Use «Anular» y luego haga la venta de nuevo en Facturación.');
   // Camino de respaldo con las funciones que ya existen. fx_venta_clonar copia también los descuentos; el cliente elegido viaja en el cobro.
   const copia = await ventaClonar(original.venta_id);
   const ventaId = copia?.venta?.id || copia?.id || null;

@@ -17,7 +17,12 @@ const AVISO = {
   rechazado: '***Este proceso reemplaza un documento rechazado***',
   error: '***Este proceso reemplaza un documento que no llegó a Hacienda***',
   anulado: '***Este proceso reemplaza un documento anulado***',
+  aceptado: '***Este proceso anula el documento con una nota de crédito y emite uno nuevo***',
 };
+// Motivos de la nota de crédito cuando el documento está aceptado (los mismos de «Anular»). «Se cobró dos veces» no genera documento nuevo: va solo a la nota de crédito.
+const MOTIVOS_NC = ['Error en el cliente (cédula o nombre)', 'Error en el detalle de los productos', 'Error en el precio o el monto', 'Otro motivo'];
+const M_DOBLE = 'Se cobró dos veces';
+const redondea = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
 const enCurso = new Set();
 const pagoTxt = (p) => (MEDIOS[p.medio] || p.medio) + (p.referencia ? ' (ref. ' + p.referencia + ')' : '');
 
@@ -53,7 +58,7 @@ function faltasDelCliente(cl) {
   return f;
 }
 
-export function abrirReemplazo(app, comprobante, { nc = null, alTerminar, alVerNuevo } = {}) {
+export function abrirReemplazo(app, comprobante, { nc = null, alTerminar, alVerNuevo, alSoloAnular } = {}) {
   const c = comprobante;
   const motivoTipo = tipoDeReemplazo(c, nc);
   if (!motivoTipo) { toast('Este documento no se puede reemplazar desde aquí.', 'error'); return null; }
@@ -74,7 +79,25 @@ export function abrirReemplazo(app, comprobante, { nc = null, alTerminar, alVerN
   const items = [...th.items.filter((i) => i.codigo !== '-37'), ...th.items.filter((i) => i.codigo === '-37')];
   const aviso = h('div.rp-aviso', { role: 'note' }, AVISO[motivoTipo]);
 
+  // Motivo de la nota de crédito (solo documento aceptado): obligatorio, de 3 a 180 letras. «Se cobró dos veces» no emite documento nuevo.
+  let motivoNC = '', otroNC = '';
+  const textoMotivoNC = () => (motivoNC === 'Otro motivo' ? otroNC.trim() : motivoNC);
+  const zonaMotivoNC = h('div.rp-motivo-nc');
+  function pintarMotivoNC() {
+    const sel = h('select.campo', { 'aria-label': 'Motivo de la nota de crédito', onchange: (e) => { motivoNC = e.target.value; pintarMotivoNC(); pintarPie(); } },
+      h('option', { value: '' }, 'Elija por qué se corrige…'), MOTIVOS_NC.map((m) => h('option', { value: m }, m)));
+    sel.value = motivoNC;
+    zonaMotivoNC.replaceChildren(...[h('label.rp-etq', h('span', 'Por qué se corrige (Hacienda lo pide en la nota de crédito)'), sel),
+      motivoNC === 'Otro motivo' ? h('input.campo', { type: 'text', maxlength: 160, placeholder: 'Escriba el motivo (3 a 160 letras)', 'aria-label': 'Otro motivo', value: otroNC, oninput: (e) => { otroNC = e.target.value; pintarPie(); } }) : null,
+      alSoloAnular ? h('p.tenue.rp-doble', `Si el problema fue que se cobró dos veces, no hace falta documento nuevo: `, h('button.btn.enlace', { type: 'button', onclick: () => { m.cerrar(); alSoloAnular(M_DOBLE); } }, 'solo anular con nota de crédito')) : null].filter(Boolean)); // replaceChildren escribiría «null» como texto
+  }
+
   const motivoCaja = (() => {
+    if (motivoTipo === 'aceptado') {
+      return h('section.rp-bloque', h('h3', 'Qué va a pasar'),
+        h('p', `Hacienda ya aceptó este documento, así que no se puede cambiar: se anula con una nota de crédito por ${money(c.total)} y se emite uno nuevo con lo que corrija abajo. Todo en un solo paso: si algo falla, no queda nada a medias.`),
+        zonaMotivoNC);
+    }
     if (motivoTipo === 'anulado') {
       return h('section.rp-bloque', h('h3', 'Por qué se reemplaza'),
         h('p', `Este documento se anuló con la nota de crédito N.° ${numeroCorto(nc?.consecutivo)}. El documento nuevo lo reemplaza y llevará la referencia a él.`));
@@ -113,17 +136,59 @@ export function abrirReemplazo(app, comprobante, { nc = null, alTerminar, alVerN
   }
   function elegirOtro() { selectorCliente(app, { titulo: 'Elegir el cliente del documento nuevo', alElegir: (cl) => { if (cl) { cliente = cl; pintarCliente(); } } }); }
 
-  const lineas = (Array.isArray(c.lineas_snapshot) ? c.lineas_snapshot : []).filter((l) => !l.quitada);
+  const lineas = (Array.isArray(c.lineas_snapshot) ? c.lineas_snapshot : []).filter((l) => !l.quitada).slice().sort((a, b) => (a.orden || 0) - (b.orden || 0));
   const pagos = (Array.isArray(c.pagos_snapshot) ? c.pagos_snapshot : []).filter((p) => Number(p.monto) > 0);
+  // Lo que se puede cambiar en cada línea: el detalle (3 a 200 letras), la cantidad y el precio unitario con IVA. Lo demás (producto, código CABYS, IVA, descuento) se copia igual.
+  const edit = new Map(lineas.map((l) => [l.id, { det: l.descripcion || '', cant: String(Number(l.cantidad)), precio: String(Number(l.precio_final)) }]));
+  const pctDesc = (l) => (l.descuento && Number(l.descuento.porcentaje) > 0 ? Math.min(100, Number(l.descuento.porcentaje)) : 0);
+  const totalLinea = (l) => { const e = edit.get(l.id); const t = redondea(Number(e.cant) * Number(e.precio)); return redondea(t - redondea(t * pctDesc(l) / 100)); };
+  const totalNuevo = () => redondea(lineas.reduce((a, l) => a + (Number.isFinite(totalLinea(l)) ? totalLinea(l) : 0), 0));
+  const cambioLinea = (l) => { const e = edit.get(l.id); return { det: e.det.trim() !== String(l.descripcion || '').trim(), cant: Number(e.cant) !== Number(l.cantidad), precio: Number(e.precio) !== Number(l.precio_final) }; };
+  const hayCambios = () => lineas.some((l) => { const k = cambioLinea(l); return k.det || k.cant || k.precio; });
+  const errorLinea = (l) => {
+    const e = edit.get(l.id), d = e.det.trim();
+    if (d.length < 3) return 'El detalle debe tener al menos 3 letras.';
+    if (d.length > 200) return 'El detalle puede tener hasta 200 letras.';
+    if (!(Number(e.cant) > 0) || Number(e.cant) > 99999) return 'La cantidad no es válida.';
+    if (!(Number(e.precio) > 0) || Number(e.precio) > 99999999.99) return 'El precio no es válido.';
+    return '';
+  };
+  const filasLineas = h('div.rp-tabla', { role: 'table', 'aria-label': 'Productos del documento' });
+  const celdaTotal = new Map(), celdaErr = new Map();
+  const totalesTxt = h('div.rp-totales');
+  const avisoMonto = h('p.rp-monto', { role: 'status', hidden: true });
+  function pintarTotales() {
+    for (const l of lineas) {
+      const k = cambioLinea(l), ce = celdaTotal.get(l.id);
+      ce.textContent = money(totalLinea(l)); ce.classList.toggle('cambiado', k.cant || k.precio);
+      const er = errorLinea(l), ee = celdaErr.get(l.id); ee.textContent = er; ee.hidden = !er;
+    }
+    const tn = totalNuevo(), cambia = tn !== redondea(c.total);
+    totalesTxt.replaceChildren(h('span', 'Total'), cambia ? h('span.rp-total-cambio', h('s', money(c.total)), ' ', h('b', money(tn))) : h('b', money(c.total)));
+    avisoMonto.hidden = !cambia;
+    avisoMonto.textContent = !cambia ? '' : pagos.length === 1
+      ? `El monto cambia de ${money(c.total)} a ${money(tn)}. El pago (${MEDIOS[pagos[0].medio] || pagos[0].medio}) se ajusta al monto nuevo.`
+      : `El monto cambia de ${money(c.total)} a ${money(tn)}, pero el documento se pagó con ${pagos.length} medios y el sistema no adivina cómo repartir la diferencia. Deje el monto igual, o anule con la nota de crédito y haga la venta de nuevo en Facturación.`;
+    avisoMonto.classList.toggle('rp-falta', cambia && pagos.length !== 1);
+    pintarPie();
+  }
+  filasLineas.append(h('div.rp-th', { role: 'row' }, h('span', 'Cant.'), h('span', 'Descripción y precio'), h('span.der', 'Total')));
+  for (const l of lineas) {
+    const e = edit.get(l.id);
+    const desc = pctDesc(l);
+    const iDet = h('input.campo', { type: 'text', maxlength: 200, value: e.det, 'aria-label': 'Descripción de la línea', oninput: (ev) => { e.det = ev.target.value; pintarTotales(); } });
+    const iCant = h('input.campo.rp-num', { type: 'number', inputmode: 'decimal', step: '0.001', min: '0', value: e.cant, 'aria-label': 'Cantidad', oninput: (ev) => { e.cant = ev.target.value; pintarTotales(); } });
+    const iPre = h('input.campo.rp-num', { type: 'number', inputmode: 'decimal', step: '0.01', min: '0', value: e.precio, 'aria-label': 'Precio unitario con IVA', oninput: (ev) => { e.precio = ev.target.value; pintarTotales(); } });
+    const tot = h('span.der.rp-tot'), er = h('small.rp-err', { role: 'alert', hidden: true });
+    celdaTotal.set(l.id, tot); celdaErr.set(l.id, er);
+    filasLineas.append(h('div.rp-tr.rp-edit', { role: 'row' }, iCant,
+      h('span.rp-col', iDet, h('label.rp-precio', h('small.tenue', 'Precio con IVA'), iPre), desc ? h('small.tenue', desc >= 100 ? 'Cortesía' : 'Descuento ' + String(desc).replace('.', ',') + ' %') : null, er), tot));
+  }
+  const notaPago = h('p.tenue.rp-nota');
   const zonaDatos = h('section.rp-bloque',
     h('h3', 'Lo que se factura'),
-    h('div.rp-tabla', { role: 'table', 'aria-label': 'Productos del documento' },
-      h('div.rp-th', { role: 'row' }, h('span', 'Cant.'), h('span', 'Descripción'), h('span.der', 'Total')),
-      ...lineas.map((l) => h('div.rp-tr', { role: 'row' },
-        h('span', String(Number(l.cantidad))),
-        h('span', l.descripcion || '', l.descuento && Number(l.descuento.porcentaje) > 0 ? h('small.tenue', ' · ' + (Number(l.descuento.porcentaje) >= 100 ? 'Cortesía' : 'Descuento ' + String(Number(l.descuento.porcentaje)).replace('.', ',') + ' %')) : null),
-        h('span.der', money(l.total_linea))))),
-    h('div.rp-totales', h('span', 'Total'), h('b', money(c.total))),
+    h('p.tenue.rp-nota', 'Puede corregir el detalle y el monto de cada línea. Lo que no toque sale igual.'),
+    filasLineas, totalesTxt, avisoMonto,
     h('dl.rp-datos',
       h('div', h('dt', 'Condición de venta'), h('dd', 'Contado')),
       h('div', h('dt', 'Forma de pago'), h('dd', pagos.length ? pagos.map((p) => h('div', pagoTxt(p) + ': ' + money(p.monto))) : 'Sin pagos registrados'))),
@@ -143,13 +208,16 @@ export function abrirReemplazo(app, comprobante, { nc = null, alTerminar, alVerN
   const porque = h('small.rp-porque');
   const volver = h('button.btn', { type: 'button', onclick: () => m.cerrar() }, 'Volver sin cambiar nada');
   const generar = h('button.btn.primario.grande', { type: 'button', onclick: () => ejecutar() }, 'Generar');
-  const queHace = h('small.rp-quehace', 'Se emite un documento nuevo con número nuevo, con la referencia a este, y este queda reemplazado.');
+  const queHace = h('small.rp-quehace', motivoTipo === 'aceptado' ? 'Se anula este documento con una nota de crédito por el total y se emite uno nuevo con número nuevo y la referencia a este.' : 'Se emite un documento nuevo con número nuevo, con la referencia a este, y este queda reemplazado.');
   function pintarPie() {
     const f = faltas();
     let motivo = '';
     if (!lineas.length || !pagos.length && Number(c.total) > 0) motivo = 'Este documento no trae los productos o el pago guardados; hay que hacer la venta de nuevo en Facturación.';
     else if (motivoTipo !== 'anulado' && !cliente && c.tipo_doc === '01') motivo = 'Primero elija al cliente.';
     else if (f.length) motivo = 'Primero corrija los datos del cliente.';
+    else if (lineas.some((l) => errorLinea(l))) motivo = 'Revise las líneas marcadas en rojo.';
+    else if (motivoTipo === 'aceptado' && (textoMotivoNC().length < 3 || textoMotivoNC().length > 160)) motivo = 'Elija por qué se corrige el documento: Hacienda lo pide en la nota de crédito.';
+    else if (totalNuevo() !== redondea(c.total) && pagos.length !== 1) motivo = 'El monto cambió y el documento se pagó con varios medios: deje el monto igual.';
     else if (turno === 'cerrado') motivo = 'Primero hay que abrir la caja.';
     generar.disabled = enVuelo || !!motivo;
     generar.textContent = enVuelo ? 'Generando, espere…' : 'Generar';
@@ -163,7 +231,8 @@ export function abrirReemplazo(app, comprobante, { nc = null, alTerminar, alVerN
     try {
       turno = await leerTurno(app); pintarCaja();
       if (turno === 'cerrado') return;
-      const r = await reemplazarDocumento({ original: c, clienteId: cliente?.id || null, actividad: actividadFactura, esAdmin: !!app.admin });
+      const cambios = lineas.flatMap((l) => { const k = cambioLinea(l), e = edit.get(l.id); if (!(k.det || k.cant || k.precio)) return []; return [{ linea: l.id, ...(k.det ? { descripcion: e.det.trim() } : {}), ...(k.cant ? { cantidad: Number(e.cant) } : {}), ...(k.precio ? { precio: Number(e.precio) } : {}) }]; });
+      const r = await reemplazarDocumento({ original: c, clienteId: cliente?.id || null, actividad: actividadFactura, esAdmin: !!app.admin, cambios, motivo: motivoTipo === 'aceptado' ? textoMotivoNC() : null });
       hecho = r;
       try { await alTerminar?.(r.comprobante); } catch { /* la lista se actualiza sola */ }
       mostrarResultado(r);
@@ -191,7 +260,8 @@ export function abrirReemplazo(app, comprobante, { nc = null, alTerminar, alVerN
     const cuerpo = m.el.querySelector('.rp-dlg');
     cuerpo.replaceChildren(
       h('div.rp-ok', h('b', `Listo: ${NOMBRES_DOCUMENTO[n.tipo_doc] || 'documento'} N.° ${nuevoNum}`),
-        h('div', `Reemplaza a ${nombreDoc.toLowerCase()} N.° ${num}. Total ${money(n.total ?? c.total)}.`)),
+        h('div', `Reemplaza a ${nombreDoc.toLowerCase()} N.° ${num}. Total ${money(n.total ?? c.total)}.`),
+        motivoTipo === 'aceptado' ? h('div', `El documento anterior se anuló con una nota de crédito por ${money(c.total)}.`) : null),
       estado,
       h('p.tenue', 'El estado se actualiza solo mientras Hacienda responde. No tiene que hacer nada más.'),
       r.alertaCerrada ? h('p.tenue', 'El aviso rojo de Hacienda del documento anterior quedó cerrado.')
@@ -206,7 +276,8 @@ export function abrirReemplazo(app, comprobante, { nc = null, alTerminar, alVerN
     bloqueo: () => (enVuelo ? 'Espere un momento: se está generando el documento.' : ''),
     contenido: h('div.rp-dlg', aviso, motivoCaja, zonaCliente, zonaDatos, zonaCaja) });
   m.el.append(h('div.modal-pie.rp-pie', error, porque, queHace, volver, generar));
-  pintarCliente(); pintarCaja();
+  if (motivoTipo === 'aceptado') pintarMotivoNC();
+  pintarCliente(); pintarCaja(); pintarTotales();
   leerTurno(app).then((t) => { if (vivo) { turno = t; pintarCaja(); pintarPie(); } });
   return m;
 }
