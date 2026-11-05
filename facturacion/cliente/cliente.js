@@ -37,7 +37,7 @@ function limpiarCliente(c) {
   const tipo = /^0[1-6]$/.test(String(c.tipo_id)) ? String(c.tipo_id) : '';
   const id = limpioTxt(c.identificacion, 25).replace(/\s+/g, '');
   const nombre = limpioTxt(c.nombre, 140), comercial = limpioTxt(c.nombre_comercial, 140), personal = limpioTxt(c.nombre_personal, 140);
-  const correo = limpioTxt(c.correo, 160).replace(/\s+/g, '');
+  const correo = limpioTxt(c.correo, 160).replace(/\s*[,;\s]\s*/g, ',').replace(/^,|,$/g, ''); // varios correos: coma entre ellos (la caja también los separa por espacio)
   if (!id && !nombre && !comercial && !personal && !correo) return null;
   const off = Array.isArray(c.correo_off) ? c.correo_off.map((x) => limpioTxt(x, 160).replace(/\s+/g, '').toLowerCase()).filter(Boolean).slice(0, 8) : [];
   return { tipo, id, nombre, comercial, personal, correo, off };
@@ -96,8 +96,8 @@ function rotCorreo(c) {
   const todos = listaCorreos(c.correo), act = todos.filter((x) => !(c.off || []).includes(x.toLowerCase()));
   return act.length === 0 ? 'No se le enviará la factura por correo' : act.length < todos.length ? 'Le enviaremos su factura solo a:' : 'Le enviaremos su factura a:';
 }
-// Puede haber varios correos en un solo texto, separados por coma o punto y coma: cada uno va en su línea
-function listaCorreos(t) { return String(t).split(/[,;]+/).map((x) => x.trim()).filter(Boolean).slice(0, 8); }
+// Puede haber varios correos en un solo texto, separados por coma, punto y coma o espacio (igual que en la caja): cada uno va en su línea
+function listaCorreos(t) { return String(t).split(/[,;\s]+/).map((x) => x.trim()).filter(Boolean).slice(0, 8); }
 function partirCorreo(el) { el.querySelectorAll('.cli-cor-l').forEach((l) => { const t = l.textContent; vaciar(l); (t.match(/[^.@_-]*[.@_-]?/g) || []).filter(Boolean).forEach((trozo) => { l.append(document.createTextNode(trozo)); l.append(document.createElement('wbr')); }); }); }
 const nodo = (tag, cls, txt) => { const e = document.createElement(tag); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; };
 // Pinta el bloque en `host`. modo: 'completo' (cuenta y pago) o 'pagado' (solo el aviso del correo)
