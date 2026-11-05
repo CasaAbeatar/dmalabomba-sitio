@@ -1,0 +1,20 @@
+{
+  "navegador": "156.0.8078.80",
+  "pruebas": [
+    {
+      "nombre": "Caja sin desborde horizontal a 1366x768",
+      "ok": true,
+      "detalle": ""
+    },
+    {
+      "nombre": "Caja sin errores de JavaScript al cargar",
+      "ok": true,
+      "detalle": ""
+    },
+    {
+      "nombre": "Pantalla del cliente",
+      "ok": true,
+      "detalle": "todavia no existe en esta rama; se omite"
+    }
+  ]
+}
