@@ -115,10 +115,11 @@ body[data-vista=cuenta] .anuncios{opacity:1;visibility:visible;left:50%;border-l
 .an-capa{will-change:opacity;position:absolute;top:0;right:0;bottom:0;left:0;opacity:0;transition:opacity 1s ease;display:flex;align-items:center;justify-content:center}
 .an-capa.on{opacity:1}
 .an-capa img,.an-capa video{width:100%;height:100%;object-fit:contain;display:block;background:var(--papel);pointer-events:none}
-.an-vacio{position:absolute;top:0;right:0;bottom:0;left:0;display:none;align-items:center;justify-content:center;font-size:9rem;letter-spacing:.5em;text-transform:uppercase;color:var(--tinta2);padding-left:.5em}
-.an-vacio span{padding:4rem 6rem;border-top:var(--fino) solid var(--linea2);border-bottom:var(--fino) solid var(--linea2)}
+.an-vacio{position:absolute;top:0;right:0;bottom:0;left:0;display:none;align-items:center;justify-content:center;font-size:7rem;letter-spacing:.35em;text-transform:uppercase;color:var(--tinta2);padding:0 4rem 0 4.35rem;text-align:center}
+.an-vacio span{max-width:100%;padding:4rem 4rem;border-top:var(--fino) solid var(--linea2);border-bottom:var(--fino) solid var(--linea2)}
 .anuncios.sin-anuncios .an-vacio{display:flex}
-body[data-vista=cuenta] .an-vacio{font-size:4.6rem}
+body[data-vista=cuenta] .an-vacio{font-size:3.6rem;padding:0 2rem 0 2.35rem}
+body[data-vista=cuenta] .an-vacio span{padding:2.5rem 2rem}
 @media(prefers-reduced-motion:reduce){*{transition-duration:.01s!important}}
 
 /* Ajuste por caja: publicidad_en_cuenta = false deja la cuenta a pantalla completa */

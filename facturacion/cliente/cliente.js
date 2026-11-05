@@ -291,7 +291,11 @@ function limpiar(m) {
 let firmaPintada = '';
 const firmaDe = (s) => JSON.stringify([s.estado, s.empresa, s.lineas, s.subtotal, s.descuento, s.iva, s.total, s.medio, s.cliente]);
 const temaDe = (e) => (e === 'soda' ? 'soda' : e === 'pollos' ? 'pollos' : 'neutro');
+// Cuando no hay publicidad cargada, la pantalla de espera muestra el nombre de la empresa que factura en esa caja
+const MARCAS = { soda: 'Soda La Bomba', pollos: 'Pollos La Bomba' };
+function marcaEmpresa(e) { const sp = document.querySelector('#an-vacio span'); const t = MARCAS[e] || 'La Bomba'; if (sp && sp.textContent !== t) sp.textContent = t; }
 function aplicar(s) {
+  marcaEmpresa(s.empresa);
   if (s.estado !== 'espera' && document.body.dataset.tema !== temaDe(s.empresa)) { document.body.dataset.tema = temaDe(s.empresa); if (cliente) repintarCliente(); }
   if (s.ts && s.ts < ultimoTs) return;           // un mensaje viejo llegado tarde no pisa a uno más nuevo
   const anteriorTs = ultimoTs; ultimoTs = Math.max(ultimoTs, s.ts || 0);
