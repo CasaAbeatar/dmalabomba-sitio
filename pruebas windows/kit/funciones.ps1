@@ -186,12 +186,18 @@ function Abrir-Ventana($exe, $url, $perfil, $pantalla, $completa = $true) {
   }
   return $h
 }
+function Es-Titulo-Cliente($t) {
+  # La ventana del cliente: por su titulo, o por la direccion que muestra Chrome mientras la pagina todavia carga (sin eso se confundia con la caja).
+  return (($t -like "*$TituloCliente*") -or ($t -like "*facturacion/cliente*"))
+}
 function Afinar-Ventanas($pantallas, $perfil, $procesos) {
   # Cada ventana nuestra (por el titulo) va a su monitor: el cliente en pantalla completa y la caja maximizada (o completa si $CajaPantallaCompleta). Otras ventanas del navegador no se tocan.
   foreach ($h in (Ventanas-Nuestras $perfil $procesos)) {
     $t = [W32]::Titulo($h)
-    if ($pantallas.Cliente -and $t -like "*$TituloCliente*") { [void](Poner-En-Pantalla $h $pantallas.Cliente) }
-    else {   # la ventana que no es del cliente es la caja, en el modulo que este (el titulo cambia por modulo)
+    if ([string]::IsNullOrWhiteSpace($t)) { continue }
+    if (Es-Titulo-Cliente $t) {
+      if ($pantallas.Cliente) { [void](Poner-En-Pantalla $h $pantallas.Cliente) }
+    } else {   # la ventana que no es del cliente es la caja, en el modulo que este (el titulo cambia por modulo)
       if ($CajaPantallaCompleta) { [void](Poner-En-Pantalla $h $pantallas.Caja) } else { [void](Poner-Maximizada $h $pantallas.Caja $false) }
     }
   }
