@@ -27,6 +27,8 @@ const lsGet = (k) => { try { return localStorage.getItem('fx_' + k); } catch { r
 const lsSet = (k, v) => { try { localStorage.setItem('fx_' + k, v); } catch { /* sin almacenamiento */ } };
 const cents = (n) => Math.round((Number(n) || 0) * 100);
 const norm = (s) => String(s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+const AUTO_NOMBRE = /^Cuenta (\d+)$/;
+const esNombreAuto = (r) => AUTO_NOMBRE.test(String(r || '').trim());
 const numCuenta = (n) => '#' + String(n || '').split('-').pop();
 const leerCant = (s) => Number(String(s ?? '').trim().replace(',', '.'));
 const r3 = (n) => Math.round((n + Number.EPSILON) * 1000) / 1000;
@@ -312,10 +314,11 @@ export default {
     }
     async function cargarAbiertas() { abiertas = (await api.ventasAbiertas(socId)) || []; }
     async function elegirInicial() {
+      // La caja siempre queda en una cuenta lista para llenar (5 nov 2026): si no hay ninguna que no esté en espera (cuentas todas en espera, o ninguna),
+      // se usa la vacía que ya exista o se abre una nueva. Una cuenta en espera no se abre sola: se toca su nombre en la barra.
       const guardada = lsGet('cuenta_' + socId);
-      const id = abiertas.find((a) => a.id === guardada)?.id || abiertas[0]?.id || null;
-      cur = id ? await api.venta(id) : null;
-      guardarActiva();
+      const id = (abiertas.find((a) => a.id === guardada && a.tipo_servicio !== 'espera') || abiertas.find((a) => a.tipo_servicio !== 'espera'))?.id || null;
+      if (id) { cur = await api.venta(id); guardarActiva(); } else await abrirCuentaParaElSiguiente();
     }
     function ventaVacia(v) { return { venta: v, lineas: [], pagos: [], cliente: null, comprobante: null }; }
     let lugarQueQuedo = -1; // dónde estaba la cuenta que se acaba de cobrar o anular: la caja sigue en la vecina, no salta a la más antigua
@@ -323,14 +326,15 @@ export default {
     async function pasarALaSiguiente() {
       const vecina = lugarQueQuedo >= 0 && abiertas.length ? abiertas[Math.min(lugarQueQuedo, abiertas.length - 1)] : null;
       lugarQueQuedo = -1;
-      const sig = vecina || abiertas.find((a) => a.id === lsGet('cuenta_' + socId)) || abiertas[0];
-      cur = sig ? await api.venta(sig.id) : null;
-      guardarActiva();
+      const lista = (a) => a && a.tipo_servicio !== 'espera';
+      const sig = [vecina, abiertas.find((a) => a.id === lsGet('cuenta_' + socId)), ...abiertas].find(lista);
+      // Sin otra cuenta lista para llenar (todas en espera, o ninguna): se abre una nueva, la caja nunca queda sin cuenta activa
+      if (sig) { cur = await api.venta(sig.id); guardarActiva(); } else await abrirCuentaParaElSiguiente();
     }
     // Al cobrar, la caja siempre queda en una cuenta nueva y vacía para el siguiente cliente, haya o no otras cuentas abiertas (4 nov 2026).
     // Si ya hay una vacía y sin nombre (la de un cobro anterior), se usa esa en lugar de abrir otra.
     async function abrirCuentaParaElSiguiente() {
-      const vacia = abiertas.find((a) => a.estado === 'abierta' && Number(a.lineas) === 0 && !String(a.referencia || '').trim());
+      const vacia = abiertas.find((a) => a.estado === 'abierta' && Number(a.lineas) === 0 && (!String(a.referencia || '').trim() || esNombreAuto(a.referencia)));
       if (vacia) { cur = await api.venta(vacia.id); guardarActiva(); } else await crearCuentaBuffet();
     }
     function guardarActiva() { if (cur) lsSet('cuenta_' + socId, cur.venta.id); }
@@ -652,7 +656,7 @@ export default {
         return h('button.cuenta-btn' + (c.estado === 'prefacturada' ? '.prefact' : ''), {
           type: 'button', 'aria-pressed': String(!!act), 'data-id': c.id,
           onclick: () => { if (!act) accion(async () => { cur = await api.venta(c.id); guardarActiva(); repintar(); }); cambiarVista('cuenta'); },
-        }, h('span.c-tipo', (TIPOS_SERVICIO[c.tipo_servicio] || c.tipo_servicio) + (c.estado === 'prefacturada' ? (c.prefactura_vigente === false ? ' · cambió, imprima otra prefactura' : ' · prefactura') : '')),
+        }, h('span.c-tipo', (c.tipo_servicio === 'buffet' && c.referencia ? numCuenta(c.numero) : (TIPOS_SERVICIO[c.tipo_servicio] || c.tipo_servicio)) + (c.estado === 'prefacturada' ? (c.prefactura_vigente === false ? ' · cambió, imprima otra prefactura' : ' · prefactura') : '')),
         h('span.c-ref', c.referencia || numCuenta(c.numero)),
         h('span.c-tot', c.lineas + (Number(c.lineas) === 1 ? ' producto · ' : ' productos · ') + money(c.total)));
       });
@@ -660,7 +664,7 @@ export default {
       const lista = h('div.cuentas-lista', { role: 'group', 'aria-label': 'Cuentas abiertas' }, botones.length ? botones : h('span.cuentas-vacio', 'No hay cuentas abiertas. Toque un producto para empezar una.'));
       const envoltura = h('div.cuentas-envoltura', lista);
       // Los ajustes de la impresora ya no están aquí: viven en Administración, Configuración
-      barraCuentas.replaceChildren(envoltura, h('button.btn.primario', { type: 'button', onclick: seguro(nuevaCuenta) }, 'Nueva cuenta'),
+      barraCuentas.replaceChildren(envoltura,
         h('button.btn.btn-efectivo', { type: 'button', onclick: seguro(abrirEfectivo) }, 'Efectivo'));
     }
 
@@ -687,27 +691,61 @@ export default {
       });
     }
 
+    // Ya no hay botón «Nueva cuenta» en la barra: la caja siempre abre sola la cuenta siguiente. Esta función queda para «Siguiente cliente» (tras un cobro)
+    // y para «Intentar de nuevo» cuando la red falló al abrirla. Reutiliza la vacía que exista: nunca hay más de una cuenta nueva vacía.
     async function nuevaCuenta() {
       await accion(async () => {
-        await crearCuentaBuffet();
+        await abrirCuentaParaElSiguiente();
         repintar();
-        toast('Cuenta nueva.');
       });
       cambiarVista('productos');
-      if (fino()) buscador.inp.focus();
+      if (fino() && cur) buscador.inp.focus();
     }
-    async function ponerEnEspera() {
-      if (!cur) return;
-      const v = cur.venta, id = v.id;
-      // Si ya se eligió el cliente, su nombre es el nombre de la cuenta y no se pregunta nada
-      const ref = cur.cliente?.nombre ? String(cur.cliente.nombre).trim().slice(0, 60) : await dialogoNombre({ titulo: 'Poner en espera', boton: 'Poner en espera', inicial: v.referencia || '' });
-      if (!ref) return;
-      accion(async () => {
-        cur = await api.ventaDatos(id, { tipo: 'espera', referencia: ref, telefono: v.telefono || '' });
-        sincronizarBarra(); cur = null; repintar();
-        toast('En espera: ' + ref + '. Toque su nombre arriba para seguir con ella.');
+    // Decisión de Emil (5 nov 2026): toda cuenta nace con nombre «Cuenta N» (N = el menor número que no usa otra cuenta abierta o en espera; al quedar
+    // vacía la caja el conteo vuelve a 1, y un número que se liberó se reutiliza). «Poner en espera» ya no pregunta nada: es un toque, y la caja
+    // queda en una cuenta nueva lista para llenar. «En espera e imprimir prefactura» hace además la prefactura y la imprime (tiquete).
+    function nombreLibre() {
+      const usados = new Set(abiertas.map((a) => AUTO_NOMBRE.exec(String(a.referencia || '').trim())).filter(Boolean).map((m) => Number(m[1])));
+      let n = 1; while (usados.has(n)) n++;
+      return 'Cuenta ' + n;
+    }
+    let esperando = false; // un segundo toque mientras se guarda no hace nada
+    async function ponerEnEspera(imprimir) {
+      if (!cur || esperando) return;
+      esperando = true;
+      try {
+        await cola;
+        if (!cur || !cur.lineas.length) return;
+        const v = cur.venta, id = v.id;
+        // Un nombre escrito por la cajera se respeta; si no, el del cliente elegido; si no, el «Cuenta N» que ya tenía (o uno nuevo)
+        const real = v.referencia && !esNombreAuto(v.referencia) ? String(v.referencia).trim() : '';
+        const ref = real || (cur.cliente?.nombre ? String(cur.cliente.nombre).trim().slice(0, 60) : '') || String(v.referencia || '').trim() || nombreLibre();
+        const st = {}, fallas = {};
+        await accion(async () => {
+          cur = await api.ventaDatos(id, { tipo: 'espera', referencia: ref, telefono: v.telefono || '' });
+          sincronizarBarra();
+          if (imprimir) {
+            try { cur = await api.prefacturar(id); sincronizarBarra(); fallas.prefOk = true; } catch (e) { fallas.pref = e; }
+          }
+          cur = null;
+          // Sigue una cuenta nueva y vacía (o la vacía que ya haya); si falla, lo ya puesto en espera no se pierde
+          try { await abrirCuentaParaElSiguiente(); } catch (e) { cur = null; fallas.nueva = e; }
+          repintar();
+        }, st);
+        if (st.error) return;
         cambiarVista('productos');
-      });
+        if (cur && fino()) buscador.inp.focus();
+        let msg = 'En espera: ' + ref + '. Toque su nombre arriba para seguir con ella.', error = false;
+        if (imprimir) {
+          if (fallas.pref) { error = true; msg = 'La cuenta quedó en espera («' + ref + '») pero no se pudo crear la prefactura: ' + textoDeError(fallas.pref) + ' Ábrala arriba y toque «Prefactura (no es factura)».'; }
+          else {
+            try { await (await imp()).imprimirPrefactura(id); prefCambiada.delete(id); msg = 'En espera: ' + ref + '. Se abrió la impresión de la prefactura. Recuerde: esto no es una factura.'; }
+            catch (e) { error = true; msg = 'La cuenta quedó en espera («' + ref + '») y la prefactura quedó creada, pero no se pudo imprimir: ' + textoDeError(e) + ' Ábrala arriba y toque «Imprimir prefactura otra vez».'; }
+          }
+        }
+        if (fallas.nueva) { error = true; msg += ' No se pudo abrir la cuenta nueva (' + textoDeError(fallas.nueva) + '): toque «Intentar de nuevo» en la pantalla de la cuenta.'; }
+        toast(msg, error ? 'error' : undefined, error ? 9000 : undefined);
+      } finally { esperando = false; }
     }
     async function cambiarNombre() {
       if (!cur) return;
@@ -732,8 +770,8 @@ export default {
 
     /* ---------- Productos en la cuenta ---------- */
     async function crearCuentaBuffet() {
-      const v = await api.ventaCrear(socId, 'buffet', null, null, app.terminal);
-      cur = ventaVacia(v); guardarActiva();
+      const v = await api.ventaCrear(socId, 'buffet', nombreLibre(), null, app.terminal);
+      cur = ventaVacia(v); guardarActiva(); sincronizarBarra();
     }
     const PRECIO_PENDIENTE = 1; // marcador: la línea libre todavía no tiene precio (no se puede cobrar así)
     const sinPrecioLinea = (l) => !!prodPorId.get(l.producto_id)?.descripcion_libre && cents(l.precio_final) === cents(PRECIO_PENDIENTE);
@@ -1121,8 +1159,9 @@ export default {
           h('span', c.lineas + (Number(c.lineas) === 1 ? ' producto · ' : ' productos · ') + money(c.total))));
         asideCuenta.replaceChildren(h('div.vacio-cuenta',
           h('h2', abiertas.length ? 'Cuentas abiertas' : 'No hay cuentas abiertas'),
-          abiertas.length ? h('div.esquema', tarjetas) : h('p', 'Toque «Nueva cuenta», escriba el nombre y cree la cuenta. Después toque los productos.'),
-          h('button.btn.primario.grande', { type: 'button', onclick: seguro(nuevaCuenta) }, 'Nueva cuenta')));
+          abiertas.length ? h('div.esquema', tarjetas) : null,
+          h('p', 'La caja abre sola una cuenta nueva para el siguiente cliente (Cuenta 1, Cuenta 2…). Esta vez no se pudo: toque «Intentar de nuevo».'),
+          h('button.btn.primario.grande', { type: 'button', onclick: seguro(nuevaCuenta) }, 'Intentar de nuevo')));
         return;
       }
       const v = cur.venta;
@@ -1138,7 +1177,7 @@ export default {
         h('div.cuenta-items', cur.lineas.length ? [h('div.lineas-cab', { 'aria-hidden': 'true' }, h('span', 'Producto'), h('span', 'Cant.'), h('span', 'Precio'), h('span', 'Total'), h('span')), ...cur.lineas.map(filaLinea)] : h('div.vacio', { style: 'margin:.8rem 0' }, 'La cuenta está vacía. Toque un producto o búsquelo arriba.')));
       asideCuenta.replaceChildren(
         h('div.cuenta-cab',
-          h('div', h('h2', (TIPOS_SERVICIO[v.tipo_servicio] || v.tipo_servicio) + ' ' + numCuenta(v.numero)), h('div.sub', detalle || (v.tipo_servicio === 'buffet' ? 'Cuenta nueva' : 'Falta el nombre'))),
+          h('div', h('h2', v.tipo_servicio === 'buffet' && v.referencia ? v.referencia : (TIPOS_SERVICIO[v.tipo_servicio] || v.tipo_servicio) + ' ' + numCuenta(v.numero)), h('div.sub', (v.tipo_servicio === 'buffet' && v.referencia ? [numCuenta(v.numero), v.telefono].filter(Boolean).join(' · ') : detalle) || (v.tipo_servicio === 'buffet' ? 'Cuenta nueva' : 'Falta el nombre'))),
           v.tipo_servicio === 'buffet' ? null : h('button.btn.chico', { type: 'button', onclick: seguro(cambiarNombre) }, 'Cambiar nombre')),
         lineas,
         h('div.cuenta-pie',
@@ -1148,7 +1187,9 @@ export default {
           h('div.pie-cobro',
             h('div.total-fila', h('span.et', 'Total a pagar (IVA incluido)'), h('div.total-monto', { 'aria-live': 'polite' }, money(v.total))),
             h('button.btn.primario.grande.btn-cobrar-aside', { type: 'button', disabled: !puede, onclick: seguro(abrirCobro) }, 'Cobrar'),
-            v.tipo_servicio === 'buffet' ? h('button.btn.ambar.grande.btn-espera', { type: 'button', disabled: !cur.lineas.length, onclick: seguro(ponerEnEspera) }, 'Poner en espera') : null),
+            v.tipo_servicio === 'buffet' ? h('div.fila-espera',
+              h('button.btn.ambar.grande.btn-espera', { type: 'button', disabled: !cur.lineas.length, onclick: seguro(() => ponerEnEspera(false)) }, 'Poner en espera'),
+              h('button.btn.ambar.grande.btn-espera-pref', { type: 'button', disabled: !cur.lineas.length, onclick: seguro(() => ponerEnEspera(true)) }, 'En espera e imprimir prefactura')) : null),
           h('div.acciones-cuenta', prefBtn, h('button.btn.peligro' + (prefBtn ? '' : '.ancho'), { type: 'button', onclick: anularCuenta }, 'Anular esta cuenta'))));
       const nuevo = asideCuenta.querySelector('.cuenta-lineas');
       nuevo.scrollTop = irAlFinal ? nuevo.scrollHeight : scroll;
@@ -1786,7 +1827,7 @@ export default {
       let cerrarM;
       const fmtPrincipal = aj.formato === 'carta' ? 'carta' : 'tiquete';
       const nombrePrincipal = fmtPrincipal === 'carta' ? 'factura carta' : 'tiquete';
-      const btnNueva = h('button.btn' + (aj.auto ? '.primario.grande' : '.grande'), { type: 'button', onclick: () => { cerrarM(); nuevaCuenta(); } }, 'Nueva cuenta');
+      const btnNueva = h('button.btn' + (aj.auto ? '.primario.grande' : '.grande'), { type: 'button', onclick: () => { cerrarM(); nuevaCuenta(); } }, 'Siguiente cliente');
       const btnImprimir = h('button.btn' + (aj.auto ? '' : '.primario.grande'), { type: 'button', onclick: () => imprimir(fmtPrincipal) }, aj.auto ? 'Imprimir otra vez' : 'Imprimir ' + nombrePrincipal);
       const btnOtroFormato = h('button.btn', { type: 'button', onclick: () => imprimir(fmtPrincipal === 'carta' ? 'tiquete' : 'carta') }, fmtPrincipal === 'carta' ? 'Imprimir tiquete' : 'Imprimir factura carta');
       const contenido = h('div.exito',
@@ -1797,7 +1838,7 @@ export default {
         vuelto > 0 ? h('div.vuelto-caja', h('div', 'Entregue de vuelto'), h('div.monto', money(vuelto))) : h('p.tenue-linea', 'Sin vuelto.'),
         h('div.estado-caja', chip), msgEstado, impEstado,
         h('div.botones',
-          // Si la impresión automática está apagada (su valor de fábrica en el celular), lo primero es entregar el comprobante: «Imprimir» va primero y destacado, y «Nueva cuenta» pasa a segundo
+          // Si la impresión automática está apagada (su valor de fábrica en el celular), lo primero es entregar el comprobante: «Imprimir» va primero y destacado, y «Siguiente cliente» pasa a segundo
           ...(aj.auto ? [btnNueva, btnImprimir] : [btnImprimir, btnNueva]), ...(app.admin ? [btnOtroFormato] : []), // la cajera solo imprime tiquete; la factura carta es del administrador
           h('button.btn.suave', { type: 'button', onclick: () => cerrarM() }, 'Listo, cerrar'),
           h('button.btn.peligro', { type: 'button', onclick: () => { cerrarM(); app.ir('anular', comp.id ? { comprobante: String(comp.id) } : null); } }, 'Me equivoqué: anular esta factura')));
