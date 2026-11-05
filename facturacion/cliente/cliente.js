@@ -39,7 +39,8 @@ function limpiarCliente(c) {
   const nombre = limpioTxt(c.nombre, 140), comercial = limpioTxt(c.nombre_comercial, 140), personal = limpioTxt(c.nombre_personal, 140);
   const correo = limpioTxt(c.correo, 160).replace(/\s+/g, '');
   if (!id && !nombre && !comercial && !personal && !correo) return null;
-  return { tipo, id, nombre, comercial, personal, correo };
+  const off = Array.isArray(c.correo_off) ? c.correo_off.map((x) => limpioTxt(x, 160).replace(/\s+/g, '').toLowerCase()).filter(Boolean).slice(0, 8) : [];
+  return { tipo, id, nombre, comercial, personal, correo, off };
 }
 // Cédula con separadores: física 1-0234-0567, jurídica 3-101-123456, DIMEX 3-4-4 (11) o 4-4-4 (12), NITE 3-3-4; extranjero y no contribuyente, tal cual
 function formatoId(tipo, id) {
@@ -84,9 +85,19 @@ function achicar(el, max, minUna, minParte, lineas, siempreParte) {
   return f;
 }
 // El correo se escribe completo; solo si hay que partirlo, se parte después de . @ - _ (no cambia el texto)
-function ponCorreo(el, t) { vaciar(el); listaCorreos(t).forEach((x) => { const l = document.createElement('span'); l.className = 'cli-cor-l'; l.textContent = x; el.append(l); }); }
+// `off` = correos que la cajera desactivó: no se muestran; el cliente ve solo los correos a los que sí se enviará la factura
+function ponCorreo(el, t, off = []) {
+  vaciar(el);
+  listaCorreos(t).filter((x) => !off.includes(x.toLowerCase())).forEach((x) => { const l = document.createElement('span'); l.className = 'cli-cor-l'; l.textContent = x; el.append(l); });
+  el.hidden = !el.children.length;
+}
+// Texto sobre los correos según lo que eligió la cajera
+function rotCorreo(c) {
+  const todos = listaCorreos(c.correo), act = todos.filter((x) => !(c.off || []).includes(x.toLowerCase()));
+  return act.length === 0 ? 'No se le enviará la factura por correo' : act.length < todos.length ? 'Le enviaremos su factura solo a:' : 'Le enviaremos su factura a:';
+}
 // Puede haber varios correos en un solo texto, separados por coma o punto y coma: cada uno va en su línea
-function listaCorreos(t) { return String(t).split(/[,;]+/).map((x) => x.trim()).filter(Boolean).slice(0, 5); }
+function listaCorreos(t) { return String(t).split(/[,;]+/).map((x) => x.trim()).filter(Boolean).slice(0, 8); }
 function partirCorreo(el) { el.querySelectorAll('.cli-cor-l').forEach((l) => { const t = l.textContent; vaciar(l); (t.match(/[^.@_-]*[.@_-]?/g) || []).filter(Boolean).forEach((trozo) => { l.append(document.createTextNode(trozo)); l.append(document.createElement('wbr')); }); }); }
 const nodo = (tag, cls, txt) => { const e = document.createElement(tag); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; };
 // Pinta el bloque en `host`. modo: 'completo' (cuenta y pago) o 'pagado' (solo el aviso del correo)
@@ -101,10 +112,10 @@ function pintarCliente(host, modo, forzar) {
   host._h = huella;
   host.hidden = false;
   if (modo === 'pagado') {
-    host.append(nodo('p', 'cli-hint', 'Le enviaremos su factura a:'));
-    const v = nodo('p', 'cli-cor-v'); ponCorreo(v, c.correo); host.append(v);
+    host.append(nodo('p', 'cli-hint', rotCorreo(c)));
+    const v = nodo('p', 'cli-cor-v'); ponCorreo(v, c.correo, c.off); host.append(v);
     const varios = v.children.length > 1;
-    achicar(v, varios ? 3.8 : 4.6, 3.2, 2.4, 2 * v.children.length); return;
+    if (v.children.length) achicar(v, varios ? 3.8 : 4.6, 3.2, 2.4, 2 * v.children.length); return;
   }
   const nom = c.nombre || c.personal;
   const nombreEl = nom || (c.comercial && c.comercial !== nom) ? nodo('p', 'cli-nom') : null;
@@ -120,8 +131,8 @@ function pintarCliente(host, modo, forzar) {
   }
   const f2 = nodo('div', 'cli-fila');
   if (c.correo) {
-    const r = nodo('div', 'cli-rotl'); r.append(nodo('p', 'cli-rot', 'Confirme su correo'), nodo('p', 'cli-hint', 'Le enviaremos su factura a:'));
-    const v = nodo('p', 'cli-cor-v'); ponCorreo(v, c.correo); f2.append(r, v);
+    const r = nodo('div', 'cli-rotl'); r.append(nodo('p', 'cli-rot', 'Confirme su correo'), nodo('p', 'cli-hint', rotCorreo(c)));
+    const v = nodo('p', 'cli-cor-v'); ponCorreo(v, c.correo, c.off); f2.append(r, v);
   } else f2.append(nodo('p', 'cli-sin', 'Sin correo registrado'));
   host.append(f2);
   fitCliente(host);
@@ -133,7 +144,7 @@ function fitCliente(host) {
   const tam = (v) => { const t = getComputedStyle(host).getPropertyValue(v).trim(); return parseFloat(t) || 0; };
   if (nom) achicar(nom, tam('--sz-nom'), 2.8, 0, host.querySelector('.cli-com') ? 3.4 : 2, true);
   if (ced) achicar(ced, tam('--sz-ced'), 3.6, 0);
-  if (cor) {
+  if (cor && !cor.hidden) {
     // un correo: a la misma altura que la cédula; si no cabe en una línea baja solo lo necesario (hasta 4,6 rem) y, si aun así no cabe, pasa a dos líneas cortando después de . @ - _
     const szc = tam('--sz-cor') * (cor.children.length > 1 ? 0.78 : 1);
     achicar(cor, szc, 4.6, 3.0, 2 * cor.children.length);

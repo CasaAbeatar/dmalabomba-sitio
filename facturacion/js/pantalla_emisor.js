@@ -40,7 +40,7 @@ export function montosDe(cur) {
 // nombre = el que está en la ficha (verificado con Hacienda en casi todos); nombre_personal queda null porque la ficha no guarda un segundo nombre.
 const TIPOS_ID = ['01', '02', '03', '04', '05', '06'];
 const textoONulo = (x) => { const t = String(x ?? '').replace(/\s+/g, ' ').trim(); return t || null; };
-export function clienteDe(cur) {
+export function clienteDe(cur, correosOff = []) {
   try {
     const c = cur?.cliente;
     if (!c || typeof c !== 'object') return null;
@@ -55,11 +55,13 @@ export function clienteDe(cur) {
       nombre_comercial: comercial && comercial.toLowerCase() !== nombre.toLowerCase() ? comercial : null,
       nombre_personal: null,
       correo: textoONulo(c.correo),
+      // correos que la cajera desactivó para esta venta: la pantalla del cliente los muestra tachados («no se enviará»)
+      correo_off: (Array.isArray(correosOff) ? correosOff : []).map((x) => String(x).trim().toLowerCase()).filter(Boolean).slice(0, 8),
     };
   } catch { return null; }
 }
 // En «pagado» el cliente ya no corrige nada: solo se muestra adónde se enviará la factura
-const soloCorreo = (c) => (c && c.correo ? { tipo_id: null, identificacion: null, nombre: null, nombre_comercial: null, nombre_personal: null, correo: c.correo } : null);
+const soloCorreo = (c) => (c && c.correo ? { tipo_id: null, identificacion: null, nombre: null, nombre_comercial: null, nombre_personal: null, correo: c.correo, correo_off: c.correo_off || [] } : null);
 
 export function iniciar(app, opciones = {}) {
   const BC = opciones.BroadcastChannel || (typeof BroadcastChannel !== 'undefined' ? BroadcastChannel : null);
@@ -68,6 +70,7 @@ export function iniciar(app, opciones = {}) {
   let configLista = false; // ya se leyó el ajuste (o se agotó la espera): hasta entonces no sale nada
   let bc = null;
   let fallos = 0;
+  let correosOff = [];     // correos desactivados por la cajera en el cobro (solo de la venta en curso)
   let ackEn = 0;           // cuándo contestó por última vez la ventana del cliente
   let modo = 'cuenta';     // cuenta | pago (hay una ventana de cobro abierta)
   let ultimo = null;       // último cuerpo de «estado» publicado (sin ts)
@@ -149,7 +152,7 @@ export function iniciar(app, opciones = {}) {
   }
   const cuerpo = (estado, cur, extra = {}) => {
     const m = montosDe(cur);
-    return { estado, empresa: empresa(), lineas: m.lineas, subtotal: m.subtotal, descuento: m.descuento, iva: m.iva, total: m.total, medio: null, recibido: null, vuelto: null, cliente: clienteDe(cur), ...extra };
+    return { estado, empresa: empresa(), lineas: m.lineas, subtotal: m.subtotal, descuento: m.descuento, iva: m.iva, total: m.total, medio: null, recibido: null, vuelto: null, cliente: clienteDe(cur, correosOff), ...extra };
   };
   const cuerpoEspera = () => ({ estado: 'espera', empresa: empresa(), lineas: [], subtotal: 0, descuento: 0, iva: 0, total: 0, medio: null, recibido: null, vuelto: null, cliente: null });
 
@@ -172,6 +175,13 @@ export function iniciar(app, opciones = {}) {
     // Se abrió la ventana de cobro
     pago(cur) {
       try { if (!activo || !cur || !(cur.lineas || []).length) return; modo = 'pago'; publicar(cuerpo('pago', cur)); } catch { fallos++; }
+    },
+    // La cajera destildó o volvió a marcar un correo del cliente: la pantalla del cliente lo muestra al instante
+    correos(lista) {
+      try {
+        correosOff = Array.isArray(lista) ? lista.map((x) => String(x).trim().toLowerCase()).filter(Boolean).slice(0, 8) : [];
+        if (activo && ultimo && ultimo.cliente && ultimo.estado !== 'pagado') publicar({ ...ultimo, cliente: { ...ultimo.cliente, correo_off: correosOff } });
+      } catch { fallos++; }
     },
     // La ventana de cobro se cerró sin cobrar
     cerrarPago(cur) { modo = 'cuenta'; api.cuenta(cur); },
