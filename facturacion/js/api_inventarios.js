@@ -56,6 +56,8 @@ export const inv = {
   articulos: (q = '', categoria = null, incluirInactivos = false) => leer('fx_inv_articulos', { p_q: q, p_categoria: categoria, p_incluir_inactivos: !!incluirInactivos }),
   // Productos del menú que se venden (de una empresa), con el artículo con que ya están enlazados
   productosMenu: (sociedad = null, q = '') => leer('fx_inv_productos_menu', { p_sociedad: sociedad, p_q: q }),
+  // Empresa única: el menú de las DOS empresas, con el producto que ambas venden igual una sola vez (la copia de la empresa preferida, la de la factura)
+  productosMenuGrupo: (preferida = null, q = '') => leer('fx_inv_productos_menu_grupo', { p_preferida: preferida, p_q: q }),
   iaPropuestas: (clave) => leer('fx_ia_propuestas', { p_clave: clave }),
   costoReferencia: (articulo) => leer('fx_inv_costo_referencia', { p_articulo: articulo }),
   aliases: (articulo = null, q = '') => leer('fx_inv_aliases', { p_articulo: articulo, p_q: q }),
