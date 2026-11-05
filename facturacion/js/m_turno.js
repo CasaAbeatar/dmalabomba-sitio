@@ -77,6 +77,8 @@ function datosResumen(est) {
     totalNetas: est.total_ventas_netas != null && Number.isFinite(Number(est.total_ventas_netas)) ? Number(est.total_ventas_netas) : null,
     // Líneas cobradas con un precio distinto al del catálogo (fx_turno_estado.precios_cambiados). Solo es rastro: la cajera puede cambiar todo y nada se bloquea.
     preciosCambiados: Math.max(0, Math.floor(Number(est.precios_cambiados || 0))),
+    // Líneas cobradas con una tarifa de IVA distinta de la del catálogo (fx_turno_estado.tarifas_distintas, solo administración). También es rastro, no bloquea nada.
+    tarifasDistintas: Math.max(0, Math.floor(Number(est.tarifas_distintas || 0))),
     // Ventas cobradas cuyo documento Hacienda no aceptó (fx_turno_estado.rechazadas_n y rechazadas_total). Siguen contadas en el total: la plata sí se cobró.
     rechazadasN: Number(est.rechazadas_n || 0), rechazadasTotal: Number(est.rechazadas_total || 0),
     // Notas hechas en este turno sobre una venta de otro turno o sin turno (fx_turno_estado.notas_otros_turnos_n y notas_otros_turnos_total; el total ya trae el signo: crédito resta, débito suma).
@@ -103,6 +105,7 @@ function textoRechazadas(d) {
 
 // «Productos cobrados con precio distinto del catálogo: 3» (discreto: es un dato para saber, no una alarma)
 const textoPreciosCambiados = (d) => 'Productos cobrados con precio distinto del catálogo: ' + d.preciosCambiados;
+const textoTarifasDistintas = (d) => 'Productos cobrados con tarifa de IVA distinta del catálogo: ' + d.tarifasDistintas;
 
 // Qué se le resta o se le suma al total vendido: ventas anuladas, devoluciones o correcciones parciales (notas de crédito) y notas de débito.
 // Con solo ventas anuladas el texto es el de siempre; si hay otros ajustes, los nombra y dice cuánto es lo vendido con todos ellos (total_ventas_netas, que calcula la base).
@@ -157,6 +160,7 @@ function bloqueVentas(d, { alVer, nota } = {}) {
     textoOtrosTurnos(d),
     nota || null,
     d.preciosCambiados > 0 ? h('p.precios-cambiados', textoPreciosCambiados(d)) : null,
+    d.tarifasDistintas > 0 ? h('p.precios-cambiados', textoTarifasDistintas(d)) : null,
     h('p.tenue-linea', 'Solo el efectivo se cuenta a mano. Tarjeta, SINPE Móvil y transferencia los suma el sistema con cada cobro.'));
 }
 
@@ -205,6 +209,7 @@ function nodoImpresion(d, soc) {
     d.ndN > 0 ? fila('Notas de débito', money(d.ndTotal)) : null,
     d.parcN > 0 ? fila('Devoluciones y correcciones', money(d.parcTotal)) : null,
     d.preciosCambiados > 0 ? h('div.c.p', textoPreciosCambiados(d)) : null,
+    d.tarifasDistintas > 0 ? h('div.c.p', textoTarifasDistintas(d)) : null,
     h('hr'),
     h('div.c', h('b', 'EFECTIVO EN LA CAJA')),
     fila('Efectivo con que abrió', money(d.fondo)),

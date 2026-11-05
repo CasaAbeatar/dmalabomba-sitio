@@ -122,9 +122,10 @@ const dm = (x) => { const d = ymdCR(x); return d ? d.split('-').reverse().slice(
 
 async function abrirLista(ctx) {
   const cat = ctx.cat;
-  const propia = (cat.empresas || []).some((e) => e.id === ctx.app.socId) ? ctx.app.socId : null;
+  // Empresa única: la bodega y los proveedores son del grupo. La primera vez la lista muestra las facturas de las dos empresas; si la persona filtra por una, se recuerda.
+  const propia = (cat.empresas || []).some((e) => e.id === ctx.app.socId) ? ctx.app.socId : null; // solo ordena los botones: la de la sesión va primero
   const g = leerLista();
-  const empresaGuardada = 'sociedad' in g ? (g.sociedad === 'todas' ? null : (cat.empresas || []).some((e) => e.id === g.sociedad) ? g.sociedad : propia) : propia;
+  const empresaGuardada = 'sociedad' in g ? (g.sociedad === 'todas' ? null : (cat.empresas || []).some((e) => e.id === g.sociedad) ? g.sociedad : null) : null;
   const est = {
     sociedad: empresaGuardada, q: String(g.q || ''), proveedor: String(g.proveedor || ''),
     estado: ESTADOS.some(([v]) => v === g.estado) ? g.estado : 'todas', orden: g.orden === 'recientes' || g.orden === 'lineas' ? g.orden : 'proveedor', sel: new Map(), mostrarL: 120,
@@ -667,7 +668,7 @@ export async function abrirFactura(ctx, clave, { previa = null, recibirSugeridas
     const malProd = (m) => { prodEco.textContent = m; prodEco.className = 'inv-eco mal'; };
     async function cargarProductos() {
       if (prodLista) return prodLista;
-      try { prodLista = ((await inv.productosMenu(f.sociedad_id)) || {}).filas || []; } catch { prodLista = []; }
+      try { prodLista = ((await inv.productosMenuGrupo(f.sociedad_id)) || {}).filas || []; } catch { prodLista = []; }
       return prodLista;
     }
     async function pintarProducto() {
@@ -701,7 +702,7 @@ export async function abrirFactura(ctx, clave, { previa = null, recibirSugeridas
       const ps = (await cargarProductos()).filter((x) => norm(x.nombre).includes(t)).slice(0, 8);
       const nombreNuevo2 = texto.charAt(0).toUpperCase() + texto.slice(1);
       const agregar = h('button.btn.inv-prod-op.inv-prod-nuevo', { type: 'button', onclick: () => agregarProducto(nombreNuevo2) }, h('strong', '＋ Agregar «' + nombreNuevo2 + '» al menú'), h('small', ' · con precio pendiente, igual que el yogur; se agrega en Soda y en Pollos'));
-      prodRes.replaceChildren(...ps.map((x) => h('button.btn.inv-prod-op', { type: 'button', role: 'option', onclick: () => emparentar(x) }, h('strong', x.nombre), h('small', (x.precio > 0 ? ' · ' + money(x.precio) + ' con IVA' : ' · precio pendiente') + (x.articulo ? ' · ya enlazado con «' + x.articulo + '»' : '')))), agregar);
+      prodRes.replaceChildren(...ps.map((x) => h('button.btn.inv-prod-op', { type: 'button', role: 'option', onclick: () => emparentar(x) }, h('strong', x.nombre), h('small', (x.precio > 0 ? ' · ' + money(x.precio) + ' con IVA' : ' · precio pendiente') + (x.sociedad_id && f.sociedad_id && x.sociedad_id !== f.sociedad_id ? ' · solo lo vende ' + (x.sociedad_nombre || 'la otra empresa') : '') + (x.articulo ? ' · ya enlazado con «' + x.articulo + '»' : '')))), agregar);
       prodRes.hidden = false;
     });
     // El producto no está en el menú: se agrega en ese momento (cajón según el rubro, precio pendiente) y la línea se empareja con él

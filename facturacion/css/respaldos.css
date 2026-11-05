@@ -10,6 +10,14 @@
 /* En pantalla baja app.css corta el aviso rojo con «…» en una línea. Aquí el aviso de respaldos es lo único que explica qué pasó: puede ocupar hasta 3 líneas y no se corta a la mitad. */
 .alerta-resp .alerta-texto strong{white-space:normal;text-overflow:clip;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;overflow:hidden;overflow-wrap:anywhere}
 
+/* Celular: el aviso de respaldos se lee completo. El texto ocupa todo el ancho y el botón queda debajo (antes el texto se cortaba con «…» a la mitad de la frase) */
+@media(max-width:700px){
+  .alerta-resp .alerta-in{flex-wrap:wrap}
+  .alerta-resp .alerta-texto{flex:1 1 100%}
+  .alerta-resp .alerta-texto strong{-webkit-line-clamp:8}
+  .alerta-resp .btn.alerta-ver{margin-left:auto}
+}
+
 /* Pantalla */
 .rsp{max-width:980px;margin:0 auto;display:flex;flex-direction:column;gap:1rem}
 .rsp-cab{display:flex;flex-wrap:wrap;gap:.6rem 1rem;align-items:center;justify-content:space-between}

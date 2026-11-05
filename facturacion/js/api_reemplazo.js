@@ -7,8 +7,6 @@
 import { rpc } from './api.js';
 import { faltaFuncion, ventaClonar, alertaAtender } from './api_documentos.js';
 
-// Se enciende cuando la base y la función de borde sepan reemplazar un documento en estado «error» (sin referencia, porque Hacienda nunca lo vio).
-const SOPORTA_ERROR = false;
 const MEDIOS_VALIDOS = ['efectivo', 'tarjeta', 'sinpe', 'transferencia'];
 
 // El mismo pago del documento original, tal como lo espera fx_cobrar (en efectivo el recibido es el monto: no hay vuelto nuevo que dar)
@@ -25,7 +23,9 @@ export function pagosParaReemplazo(original) {
 export function tipoDeReemplazo(c, nc) {
   if (!c || !['01', '04'].includes(c.tipo_doc) || !c.venta_id) return null;
   if (c.estado === 'rechazado') return 'rechazado';
-  if (c.estado === 'error') return SOPORTA_ERROR ? 'error' : null; // un documento que no llegó a Hacienda: ver el informe (hace falta cambiar la función de borde)
+  // Un documento en error solo se reemplaza si la base confirma que nunca llegó a Hacienda (nunca_enviado, de fx_comprobante tras el SQL REEMPLAZO 03) y no se reemplazó ya.
+  // Se emite uno nuevo SIN referencia (Hacienda nunca vio el primero) y el número gastado queda registrado. Sin ese campo (SQL sin aplicar) no se ofrece.
+  if (c.estado === 'error') return c.nunca_enviado === true && !c.sustituido_por ? 'error' : null;
   if (c.estado === 'aceptado' && nc && nc.estado !== 'rechazado') return 'anulado';
   if (c.estado === 'aceptado' && !nc) return 'aceptado';
   return null;

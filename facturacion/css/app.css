@@ -259,7 +259,9 @@ body:has(.modal-fondo) #toasts{bottom:6.2rem}
   .cab-estado{display:none}
   .marca img{height:34px}
   .cabecera:not([data-vista=inicio]) .cab-fila{grid-template-columns:auto 1fr auto;grid-template-areas:'volver anular menu' 'titulo titulo titulo'}
+  /* El título de las pantallas de Administración se acomoda en dos renglones si no cabe (antes se cortaba con «…»: «Venta de conting…») */
   .cabecera[data-vista=sub] .cab-fila{grid-template-columns:auto auto 1fr;grid-template-areas:'volver inicio menu' 'titulo anular anular'}
+  .cabecera[data-vista=sub] .cab-titulo{white-space:normal;overflow:visible;text-overflow:clip;overflow-wrap:anywhere}
   .cabecera[data-vista=sub] .cab-usuario{justify-self:end}
   .cabecera[data-vista=sub] .btn.cab-anular{justify-self:end}
   .cab-titulo{font-size:1.4rem}
@@ -314,6 +316,7 @@ table.hist th{min-width:0}
 
 /* Dato discreto de una sola línea (por ejemplo «Líneas con precio distinto del catálogo: 3» en el resumen del turno): línea fina arriba, sin color de alarma */
 .precios-cambiados{margin:.2rem 0 0;padding-top:.6rem;border-top:1px solid var(--linea);color:var(--tinta2);font-size:.95rem}
+.precios-cambiados + .precios-cambiados{margin-top:0;padding-top:0;border-top:0}
 .contador-notas{align-self:flex-end;font-weight:400;color:var(--tinta2);font-variant-numeric:tabular-nums}
 
 button,input,select,textarea{font-family:inherit}
