@@ -1156,6 +1156,7 @@ export default {
       } else {
         // pendiente, enviado o con error: todavía no hay nada que anular. Se explica qué significa y qué hacer, sin prometer cuánto tarda Hacienda.
         const pend = c.estado === 'pendiente' || c.estado === 'enviado';
+        if (c.estado === 'error' && c.sustituido_por) g.append(h('p.tenue', 'Este documento nunca llegó a Hacienda. Lo reemplazó el documento N.° ' + (String(c.sustituido_por.consecutivo || '').slice(-10).replace(/^0+/, '') || '?') + '; el número de este queda registrado como no enviado.'));
         g.append(h('div.doc-espera-caja',
           h('p', h('b', pend ? 'Todavía no se puede anular: Hacienda debe aceptar este documento primero.' : 'Todavía no se puede anular: este documento no ha llegado a Hacienda.')),
           h('p', 'Qué significa: una nota de crédito solo se puede hacer sobre un documento que Hacienda ya aceptó.'),
