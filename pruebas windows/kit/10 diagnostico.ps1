@@ -33,6 +33,15 @@ foreach ($h in (Ventanas-Nuestras $Perfil $procs)) {
   $r = New-Object W32+RECT; [void][W32]::GetWindowRect($h, [ref]$r)
   $sal.Add(("'{0}'  en {1},{2}  tamano {3}x{4}" -f [W32]::Titulo($h), $r.Left, $r.Top, ($r.Right - $r.Left), ($r.Bottom - $r.Top)))
 }
+$sal.Add("--- Publicidad de la pantalla del cliente ---")
+try {
+  $r = Invoke-WebRequest -UseBasicParsing -Uri "http://127.0.0.1:$PuertoPublicidad/salud" -Headers @{ Origin = $Sitio } -TimeoutSec 3
+  $sal.Add("Servidor local: funcionando (puerto $PuertoPublicidad)")
+} catch { $sal.Add("Servidor local: NO responde ($($_.Exception.Message)). Use REPARAR.") }
+foreach ($c in @("soda", "pollos", "todas")) {
+  $n = @(Get-ChildItem -Path (Join-Path $CarpetaPublicidad $c) -File -ErrorAction SilentlyContinue).Count
+  $sal.Add("Carpeta ${c}: $n archivos")
+}
 $sal.Add("--- Registro del kit (ultimas 15 lineas) ---")
 if (Test-Path "$Carpeta\registro.txt") { Get-Content "$Carpeta\registro.txt" -Tail 15 | ForEach-Object { $sal.Add($_) } }
 $sal | Set-Content -Encoding UTF8 "$Carpeta\diagnostico.txt"

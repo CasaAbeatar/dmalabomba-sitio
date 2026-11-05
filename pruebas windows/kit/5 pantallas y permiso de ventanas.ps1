@@ -5,7 +5,7 @@ param([switch]$Silencioso)
 Pedir-Admin $MyInvocation.MyCommand.Path
 Extender-Pantallas
 # Listas de origenes (valores "1", "2"...). Solo cuenta el origen, la ruta se ignora.
-$listas = @("WindowManagementAllowedForUrls", "PopupsAllowedForUrls", "AutomaticFullscreenAllowedForUrls")
+$listas = @("WindowManagementAllowedForUrls", "PopupsAllowedForUrls", "AutomaticFullscreenAllowedForUrls", "LocalNetworkAccessAllowedForUrls")   # la ultima deja que la pagina lea la publicidad del servidor local sin preguntar
 foreach ($marca in @("Google\Chrome", "Microsoft\Edge")) {
   foreach ($lista in $listas) {
     $ruta = "HKLM:\SOFTWARE\Policies\$marca\$lista"

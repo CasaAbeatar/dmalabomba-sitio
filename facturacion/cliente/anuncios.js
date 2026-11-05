@@ -83,7 +83,7 @@ export function crearRotador({ escena, capaA, capaB }) {
     let listo = false;
     const fallo = () => { if (listo) return; listo = true; fallas++; programar(fallas >= lista.length ? 5000 : 300, true); };
     if (a.tipo === 'video') {
-      el.muted = true; el.defaultMuted = true; el.autoplay = true; el.loop = true; el.controls = false;
+      el.muted = true; el.defaultMuted = true; el.autoplay = true; el.loop = lista.length <= 1; el.controls = false;
       el.playsInline = true; el.setAttribute('playsinline', ''); el.setAttribute('webkit-playsinline', ''); el.disablePictureInPicture = true; el.preload = 'auto'; el.setAttribute('muted', '');
       el.addEventListener('loadeddata', () => ok(), { once: true });
     } else {
@@ -101,7 +101,9 @@ export function crearRotador({ escena, capaA, capaB }) {
       if (el.play) el.play().catch(() => { /* sin autoplay permitido: queda el primer cuadro */ });
       listaVisible();
       escena.dataset.actual = a.id;
-      if (lista.length > 1 || a.tipo === 'video') programar(a.segundos * 1000, false);
+      // El video dura lo que dura (entre 3 y 120 s); la foto, sus segundos
+      const dur = a.tipo === 'video' && Number.isFinite(el.duration) && el.duration > 0 ? Math.min(120, Math.max(3, el.duration)) : a.segundos;
+      if (lista.length > 1 || a.tipo === 'video') programar(dur * 1000, false);
     }
     capa.appendChild(el);
     el.src = src;
@@ -130,12 +132,15 @@ export function crearRotador({ escena, capaA, capaB }) {
 
   function reemplazarLista(nueva) {
     const actual = escena.dataset.actual;
+    const eran = lista.length;
     lista = nueva;
     const pos = lista.findIndex((x) => x.id === actual);
     if (pos >= 0) indice = pos; else if (indice >= lista.length) indice = -1;
     listaVisible();
     if (!lista.length) { for (const c of capas) limpiarCapa(c); delete escena.dataset.actual; clearTimeout(temporizador); }
     else if (activo && (pos < 0) && !capas.some((c) => c.firstElementChild)) arrancar();
+    // Había una sola foto (sin cambio programado) y ahora hay más: se programa el siguiente cambio
+    else if (activo && eran <= 1 && lista.length > 1 && actual) { const a = lista.find((x) => x.id === actual); programar(((a && a.segundos) || SEG_DEF) * 1000, false); }
   }
 
   return {

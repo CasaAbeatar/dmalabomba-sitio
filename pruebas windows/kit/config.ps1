@@ -3,6 +3,8 @@ $UrlCaja        = "https://dmalabomba.com/facturacion/"
 $UrlCliente     = "https://dmalabomba.com/facturacion/cliente/"
 $Sitio          = "https://dmalabomba.com"         # origen al que se le concede el manejo de ventanas, ventanas emergentes y pantalla completa
 $Carpeta        = "C:\PantallaCliente"
+$CarpetaPublicidad = "C:\PantallaCliente\publicidad"   # fotos y videos de la pantalla del cliente: subcarpetas soda, pollos y todas (las dos empresas)
+$PuertoPublicidad  = 8766                            # puerto del servidor local de publicidad (solo esta computadora). Si se cambia, tambien hay que cambiarlo en la pagina
 $Perfil         = "C:\PantallaCliente\perfil"      # el MISMO perfil para las dos ventanas (perfil normal, no InPrivate)
 $UsuarioCaja    = ""                               # cuenta de Windows de la caja, por ejemplo "Caja". Vacio = cualquier cuenta que inicie sesion
 $CajaEnPantalla = "principal"                      # "principal" o "otra": en que pantalla va la caja (el AON). Recomendado: el AON como pantalla principal
