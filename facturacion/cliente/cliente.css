@@ -1,0 +1,105 @@
+/* Pantalla del cliente. Sin cursor, sin barras, sin selección, sin botones.
+   Medidas en rem: 1rem = 10 px a 1920x1080 y escala con la pantalla (1366x768, 1280x720) sin perder proporción.
+   En vertical (1080x1920) la base cambia para que 1rem = 10 px a 1080x1920.
+   Un solo tipo de letra (el mismo del facturador); el ₡ sale en el mismo estilo y grosor que el número que lo acompaña. */
+:root{
+  --letra:"Helvetica Neue",Helvetica,Arial,"Liberation Sans",sans-serif;
+  --fondo:#fbf8f2;--papel:#fff;--tinta:#1d1a17;--tinta2:#5d564d;--linea:#d9cfbd;--linea2:#c2b6a0;
+  --rojo:#b81622;--verde:#14573a;--verde-suave:#e6f4ec;
+  --fino:max(1px,.15rem);
+  --ajuste:1;
+}
+*{box-sizing:border-box;cursor:none!important;-webkit-user-select:none;user-select:none;-webkit-user-drag:none}
+html{-webkit-text-size-adjust:100%;font-size:min(.5208333vw,.9259259vh);overflow:hidden;background:var(--fondo)}
+@media(orientation:portrait){html{-webkit-text-size-adjust:100%;font-size:min(.9259259vw,.5208333vh)}}
+html,body{margin:0;height:100%;width:100%;overflow:hidden}
+body{font-family:var(--letra);font-size:3rem;line-height:1.2;color:var(--tinta);background:var(--fondo);-webkit-font-smoothing:antialiased;touch-action:none}
+::-webkit-scrollbar{display:none}
+p,dl,dd,dt,h1,h2{margin:0}
+#raiz{position:fixed;top:0;right:0;bottom:0;left:0;overflow:hidden}
+.monto{font-variant-numeric:tabular-nums;font-feature-settings:"tnum";white-space:nowrap}
+
+/* Vistas */
+.vista{position:absolute;top:0;right:0;bottom:0;left:0;opacity:0;visibility:hidden;transition:opacity .6s ease,visibility 0s linear .6s;display:flex;flex-direction:column}
+body[data-vista=cuenta] #v-cuenta,body[data-vista=pago] #v-pago,body[data-vista=pagado] #v-pagado{opacity:1;visibility:visible;transition:opacity .6s ease,visibility 0s}
+
+/* ---------- Cuenta ---------- */
+#v-cuenta{right:33.3333%;padding:6rem 7rem 5rem;transition:opacity .6s ease,visibility 0s linear .6s,right .6s ease,bottom .6s ease}
+@media(orientation:portrait){#v-cuenta{right:0;bottom:33.3333%;padding:5rem 6rem 4rem}}
+.cu-cab{display:flex;align-items:baseline;justify-content:space-between;gap:3rem;padding-bottom:2.4rem;border-bottom:var(--fino) solid var(--linea2)}
+.cu-tit{font-size:4rem;letter-spacing:.02em}
+.cu-emp{font-size:2.8rem;letter-spacing:.3em;text-transform:uppercase;color:var(--tinta2)}
+.cu-lista{flex:1 1 auto;min-height:0;overflow:hidden;display:flex;flex-direction:column;justify-content:flex-start;padding-top:1.2rem;--fl:4.2rem;--hl:6.6rem}
+.cu-lista[data-n="1"]{--fl:3.5rem;--hl:5.5rem}
+.cu-lista[data-n="2"]{--fl:2.9rem;--hl:4.5rem}
+.cu-lista[data-n="3"]{--fl:2.5rem;--hl:3.8rem}
+.cu-fila{display:grid;grid-template-columns:minmax(7rem,auto) minmax(0,1fr) auto;align-items:center;column-gap:2.4rem;min-height:var(--hl);font-size:var(--fl);border-bottom:var(--fino) solid var(--linea);flex:0 0 auto}
+.cu-cant{color:var(--tinta2);text-align:right;font-variant-numeric:tabular-nums}
+.cu-nombre{min-width:0;overflow:hidden;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;line-height:1.15;overflow-wrap:anywhere}
+.cu-lista:not([data-n="0"]) .cu-nombre{-webkit-line-clamp:1}
+.cu-desc{display:block;font-size:.62em;color:var(--rojo);margin-top:.15em;line-height:1.1}
+.cu-imp{text-align:right}
+.cu-previas{color:var(--tinta2);font-style:normal}
+.cu-previas .cu-nombre{-webkit-line-clamp:1}
+.cu-pie{padding-top:2.4rem;border-top:var(--fino) solid var(--linea2);display:flex;align-items:flex-end;justify-content:space-between;gap:4rem}
+.cu-sub{display:grid;grid-template-columns:auto auto;column-gap:3rem;row-gap:.8rem;font-size:3rem;color:var(--tinta2);align-self:flex-end;padding-bottom:1.4rem}
+.cu-sub dd{text-align:right}
+.cu-sub .neg dd,.cu-sub .neg dt{color:var(--rojo)}
+.cu-total{display:flex;flex-direction:column;align-items:flex-end;min-width:0}
+.cu-total-r{font-size:3.4rem;letter-spacing:.3em;text-transform:uppercase;color:var(--tinta2);margin-bottom:-.4rem;padding-left:.3em}
+.cu-total .monto{font-size:calc(13rem*var(--ajuste));line-height:1.05;color:var(--tinta)}
+@media(orientation:portrait){
+  .cu-pie{flex-direction:column;align-items:stretch;gap:1.6rem}
+  .cu-sub{align-self:stretch;grid-template-columns:1fr auto;padding-bottom:0}
+  .cu-total{align-items:flex-end}
+  .cu-total .monto{font-size:calc(12.5rem*var(--ajuste))}
+}
+
+/* ---------- Pago ---------- */
+#v-pago{align-items:center;justify-content:center;text-align:center;padding:6rem}
+.pg-rotulo{font-size:5rem;letter-spacing:.3em;text-transform:uppercase;color:var(--tinta2);padding-left:.3em}
+.pg-total{font-size:calc(30rem*var(--ajuste));line-height:1.05;margin:2.4rem 0 3rem;max-width:100%}
+.pg-medio{font-size:5.4rem;color:var(--tinta);padding-top:3rem;border-top:var(--fino) solid var(--linea2);min-width:60%}
+.pg-medio:empty{display:none}
+@media(orientation:portrait){.pg-total{font-size:calc(26rem*var(--ajuste))}.pg-rotulo{font-size:4.4rem}}
+
+/* ---------- Pagado ---------- */
+#v-pagado{align-items:center;justify-content:center;text-align:center;padding:6rem}
+.pd-gracias{font-size:6rem;letter-spacing:.02em;margin-bottom:4rem}
+.pd-rotulo{font-size:4rem;letter-spacing:.3em;text-transform:uppercase;color:var(--tinta2);padding-left:.3em}
+.pd-total{font-size:calc(22rem*var(--ajuste));line-height:1.05;margin:1.6rem 0 2rem;max-width:100%}
+#v-pagado.sin-vuelto .pd-total{font-size:calc(30rem*var(--ajuste))}
+.pd-det{display:grid;grid-template-columns:auto auto;column-gap:5rem;row-gap:.6rem;font-size:3.6rem;color:var(--tinta2);margin-bottom:3rem}
+.pd-det:empty{display:none}
+.pd-det dd{text-align:right}
+.pd-vuelto-r{font-size:5.2rem;letter-spacing:.3em;text-transform:uppercase;color:var(--verde);padding-left:.3em;margin-top:1rem}
+.pd-vuelto{font-size:calc(20rem*var(--ajuste));line-height:1.05;color:var(--verde);padding:2rem 6rem;border:var(--fino) solid var(--verde);background:var(--verde-suave);margin-top:1.6rem;max-width:100%}
+@media(orientation:portrait){
+  .pd-total{font-size:calc(17rem*var(--ajuste))}
+  #v-pagado.sin-vuelto .pd-total{font-size:calc(24rem*var(--ajuste))}
+  .pd-vuelto{font-size:calc(15rem*var(--ajuste));padding:2rem 3rem}
+}
+
+/* ---------- Publicidad ---------- */
+.anuncios{position:absolute;background:var(--papel);overflow:hidden;opacity:0;visibility:hidden;
+  top:0;bottom:0;left:0;right:0;
+  transition:opacity .6s ease,visibility 0s linear .6s,left .6s ease,top .6s ease}
+body[data-vista=cuenta] .anuncios,body[data-vista=pago] .anuncios,body[data-vista=pagado] .anuncios{opacity:0}
+body[data-vista=espera] .anuncios{opacity:1;visibility:visible;transition:opacity .6s ease,visibility 0s,left .6s ease,top .6s ease}
+body[data-vista=cuenta] .anuncios{opacity:1;visibility:visible;left:66.6667%;border-left:var(--fino) solid var(--linea2);transition:opacity .6s ease,visibility 0s,left .6s ease,top .6s ease}
+@media(orientation:portrait){
+  body[data-vista=cuenta] .anuncios{left:0;top:66.6667%;border-left:0;border-top:var(--fino) solid var(--linea2)}
+}
+.an-capa{position:absolute;top:0;right:0;bottom:0;left:0;opacity:0;transition:opacity 1s ease;display:flex;align-items:center;justify-content:center}
+.an-capa.on{opacity:1}
+.an-capa img,.an-capa video{width:100%;height:100%;object-fit:contain;display:block;background:var(--papel);pointer-events:none}
+.an-vacio{position:absolute;top:0;right:0;bottom:0;left:0;display:none;align-items:center;justify-content:center;font-size:9rem;letter-spacing:.5em;text-transform:uppercase;color:var(--tinta2);padding-left:.5em}
+.an-vacio span{padding:4rem 6rem;border-top:var(--fino) solid var(--linea2);border-bottom:var(--fino) solid var(--linea2)}
+.anuncios.sin-anuncios .an-vacio{display:flex}
+body[data-vista=cuenta] .an-vacio{font-size:4.6rem}
+@media(prefers-reduced-motion:reduce){*{transition-duration:.01s!important}}
+
+/* Ajuste por caja: publicidad_en_cuenta = false deja la cuenta a pantalla completa */
+body[data-pub-cuenta=no][data-vista=cuenta] .anuncios{opacity:0;visibility:hidden}
+body[data-pub-cuenta=no] #v-cuenta{right:0}
+@media(orientation:portrait){body[data-pub-cuenta=no] #v-cuenta{bottom:0}}
