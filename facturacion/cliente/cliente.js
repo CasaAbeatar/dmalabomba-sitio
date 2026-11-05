@@ -29,11 +29,146 @@ const esNum = (x) => typeof x === 'number' && Number.isFinite(x);
 const EMPRESAS = { soda: 'Soda La Bomba', pollos: 'Pollos La Bomba' };
 const MEDIOS = { efectivo: 'Pago en efectivo', tarjeta: 'Pago con tarjeta', sinpe: 'Pago con SINPE Móvil', mixto: 'Pago combinado' };
 
+/* ---------- Datos del cliente (solo en memoria: nunca a localStorage, Cache Storage, IndexedDB ni consola) ---------- */
+let cliente = null;           // cliente ya limpio, o null
+const limpioTxt = (x, max) => (x == null ? '' : String(x)).replace(/[\u0000-\u001f\u007f-\u009f​-‏‪-‮⁦-⁩﻿]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, max);
+function limpiarCliente(c) {
+  if (!c || typeof c !== 'object' || Array.isArray(c)) return null;
+  const tipo = /^0[1-6]$/.test(String(c.tipo_id)) ? String(c.tipo_id) : '';
+  const id = limpioTxt(c.identificacion, 25).replace(/\s+/g, '');
+  const nombre = limpioTxt(c.nombre, 140), comercial = limpioTxt(c.nombre_comercial, 140), personal = limpioTxt(c.nombre_personal, 140);
+  const correo = limpioTxt(c.correo, 160).replace(/\s+/g, '');
+  if (!id && !nombre && !comercial && !personal && !correo) return null;
+  return { tipo, id, nombre, comercial, personal, correo };
+}
+// Cédula con separadores: física 1-0234-0567, jurídica 3-101-123456, DIMEX 3-4-4 (11) o 4-4-4 (12), NITE 3-3-4; extranjero y no contribuyente, tal cual
+function formatoId(tipo, id) {
+  if (!/^\d+$/.test(id)) return id;
+  const L = id.length;
+  if (tipo === '01' && L === 9) return id[0] + '-' + id.slice(1, 5) + '-' + id.slice(5);
+  if (tipo === '02' && L === 10) return id[0] + '-' + id.slice(1, 4) + '-' + id.slice(4);
+  if (tipo === '03' && L === 11) return id.slice(0, 3) + '-' + id.slice(3, 7) + '-' + id.slice(7);
+  if (tipo === '03' && L === 12) return id.slice(0, 4) + '-' + id.slice(4, 8) + '-' + id.slice(8);
+  if (tipo === '04' && L === 10) return id.slice(0, 3) + '-' + id.slice(3, 6) + '-' + id.slice(6);
+  return id;
+}
+const ROT_ID = { '01': 'Confirme su cédula', '02': 'Confirme su cédula jurídica', '03': 'Confirme su DIMEX', '04': 'Confirme su NITE' };
+const rotId = (tipo) => ROT_ID[tipo] || 'Confirme su identificación';
+// Letra que se achica sola hasta caber en su espacio, sin cortar ni abreviar.
+// Primero en una línea hasta `minUna`; si aún no cabe, la parte en varias líneas (en puntos naturales) y sigue achicando hasta `minParte`.
+// Modo «partido»: el texto sigue completo; solo se permiten saltos de línea (en el correo, después de . @ - _)
+function ponParte(el) {
+  if (el.classList.contains('parte')) return;
+  el.classList.add('parte');
+  if (el.classList.contains('cli-cor-v')) { partirCorreo(el); }
+}
+function quitaParte(el) {
+  if (!el.classList.contains('parte')) return;
+  el.classList.remove('parte');
+  if (el.classList.contains('cli-cor-v')) el.querySelectorAll('.cli-cor-l').forEach((l) => { l.textContent = l.textContent; });
+}
+function achicar(el, max, minUna, minParte, lineas, siempreParte) {
+  quitaParte(el); el.style.fontSize = max + 'rem';
+  const una = () => !el.clientWidth || el.scrollWidth <= el.clientWidth + 1;
+  const altoOk = () => !el.clientWidth || el.scrollHeight <= (lineas || 1) * parseFloat(getComputedStyle(el).fontSize) * 1.25 + 2;
+  let f = max;
+  if (!siempreParte) {
+    while (!una() && f > minUna) { f = Math.max(minUna, f - Math.max(0.1, f * 0.04)); el.style.fontSize = f + 'rem'; }
+    if (una() || !minParte) return f;
+    ponParte(el); f = Math.min(f, minUna + 0.4); el.style.fontSize = f + 'rem';
+    while (!altoOk() && f > minParte) { f = Math.max(minParte, f - 0.1); el.style.fontSize = f + 'rem'; }
+    return f;
+  }
+  ponParte(el);
+  while (!altoOk() && f > minUna) { f = Math.max(minUna, f - Math.max(0.1, f * 0.03)); el.style.fontSize = f + 'rem'; }
+  return f;
+}
+// El correo se escribe completo; solo si hay que partirlo, se parte después de . @ - _ (no cambia el texto)
+function ponCorreo(el, t) { vaciar(el); listaCorreos(t).forEach((x) => { const l = document.createElement('span'); l.className = 'cli-cor-l'; l.textContent = x; el.append(l); }); }
+// Puede haber varios correos en un solo texto, separados por coma o punto y coma: cada uno va en su línea
+function listaCorreos(t) { return String(t).split(/[,;]+/).map((x) => x.trim()).filter(Boolean).slice(0, 5); }
+function partirCorreo(el) { el.querySelectorAll('.cli-cor-l').forEach((l) => { const t = l.textContent; vaciar(l); (t.match(/[^.@_-]*[.@_-]?/g) || []).filter(Boolean).forEach((trozo) => { l.append(document.createTextNode(trozo)); l.append(document.createElement('wbr')); }); }); }
+const nodo = (tag, cls, txt) => { const e = document.createElement(tag); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; };
+// Pinta el bloque en `host`. modo: 'completo' (cuenta y pago) o 'pagado' (solo el aviso del correo)
+function pintarCliente(host, modo, forzar) {
+  const c = cliente;
+  // Si es el mismo cliente y el mismo tamaño de pantalla, no se vuelve a armar ni a medir (solo cambió otra parte de la cuenta)
+  const huella = c ? modo + '|' + document.documentElement.clientWidth + 'x' + document.documentElement.clientHeight + '|' + JSON.stringify(c) : '';
+  if (!forzar && c && host._h === huella && !host.hidden) return;
+  vaciar(host);
+  host._h = '';
+  if (!c || (modo === 'pagado' && !c.correo)) { host.hidden = true; return; }
+  host._h = huella;
+  host.hidden = false;
+  if (modo === 'pagado') {
+    host.append(nodo('p', 'cli-hint', 'Le enviaremos su factura a:'));
+    const v = nodo('p', 'cli-cor-v'); ponCorreo(v, c.correo); host.append(v);
+    const varios = v.children.length > 1;
+    achicar(v, varios ? 3.8 : 4.6, 3.2, 2.4, 2 * v.children.length); return;
+  }
+  const nom = c.nombre || c.personal;
+  const nombreEl = nom || (c.comercial && c.comercial !== nom) ? nodo('p', 'cli-nom') : null;
+  if (nombreEl) {
+    nombreEl.append(document.createTextNode(nom || c.comercial));
+    if (nom && c.comercial && c.comercial.toLowerCase() !== nom.toLowerCase() && c.tipo !== '01') nombreEl.append(nodo('span', 'cli-com', c.comercial));
+    host.append(nombreEl);
+  }
+  const fila = nodo('div', 'cli-fila');
+  let cedV = null, corV = null;
+  if (c.id) {
+    const col = nodo('div', 'cli-col'); col.append(nodo('p', 'cli-rot', rotId(c.tipo)));
+    cedV = nodo('p', 'cli-ced-v', formatoId(c.tipo, c.id)); col.append(cedV); fila.append(col);
+  }
+  const col2 = nodo('div', 'cli-col');
+  if (c.correo) {
+    col2.append(nodo('p', 'cli-rot', 'Confirme su correo'), nodo('p', 'cli-hint', 'Le enviaremos su factura a:'));
+    corV = nodo('p', 'cli-cor-v'); ponCorreo(corV, c.correo); col2.append(corV);
+  } else { col2.classList.add('cli-sin-col'); col2.append(nodo('p', 'cli-sin', 'Sin correo registrado')); }
+  fila.append(col2); host.append(fila);
+  fitCliente(host);
+}
+// Medidas del bloque (se repiten al cambiar el tamaño de la pantalla o al cargar la letra)
+function fitCliente(host) {
+  if (host.hidden) return;
+  const nom = host.querySelector('.cli-nom'), ced = host.querySelector('.cli-ced-v'), cor = host.querySelector('.cli-cor-v'), fila = host.querySelector('.cli-fila');
+  const tam = (v) => { const t = getComputedStyle(host).getPropertyValue(v).trim(); return parseFloat(t) || 0; };
+  if (nom) achicar(nom, tam('--sz-nom'), 2.6, 0, host.querySelector('.cli-com') ? 3.4 : 2, true);
+  fila.classList.remove('ancho');
+  if (ced) achicar(ced, tam('--sz-ced'), 3, 0);
+  if (cor) {
+    const szc = tam('--sz-cor') * (cor.children.length > 1 ? 0.8 : 1);
+    const f = achicar(cor, szc, 3.2, 0);
+    const sobra = cor.scrollWidth > cor.clientWidth + 1;
+    // si en media fila queda muy chico, el correo pasa a una fila propia con todo el ancho; y si aun así no cabe en una línea, se parte
+    if (f < szc * 0.72 || sobra) {
+      if (getComputedStyle(fila).gridTemplateColumns.split(' ').length > 1) { fila.classList.add('ancho'); if (ced) achicar(ced, tam('--sz-ced'), 3, 0); }
+      achicar(cor, szc, 3.2, 2.4, 2 * cor.children.length);
+    }
+  }
+}
+// El bloque solo existe en la vista que se está mostrando; las otras quedan vacías
+const HOSTS = { cuenta: ['cu-cli', 'completo'], pago: ['pg-cli', 'completo'], pagado: ['pd-cli', 'pagado'] };
+function vaciarOtros(vistaActual) {
+  Object.keys(HOSTS).forEach((k) => { if (k === vistaActual) return; const e = $(HOSTS[k][0]); if (e.childNodes.length || !e.hidden) { vaciar(e); e.hidden = true; e._h = ''; } });
+  $('v-pago').classList.toggle('con-cli', vistaActual === 'pago' && !$('pg-cli').hidden); $('v-pagado').classList.toggle('con-cli', vistaActual === 'pagado' && !$('pd-cli').hidden);
+}
+function repintarCliente() {
+  const h = HOSTS[vista]; if (!h) return;
+  pintarCliente($(h[0]), h[1], true); vaciarOtros(vista);
+}
+function borrarCliente() {
+  cliente = null;
+  ['cu-cli', 'pg-cli', 'pd-cli'].forEach((id) => { const e = $(id); vaciar(e); e.hidden = true; e._h = ''; });
+  $('v-pago').classList.remove('con-cli'); $('v-pagado').classList.remove('con-cli');
+}
+
 /* ---------- Vistas ---------- */
 let vista = '';
 function ir(v) {
   if (v === vista) return;
   vista = v;
+  if (v === 'espera') borrarCliente();
+  firmaPintada = '';
   document.body.dataset.vista = v;
   rotador.activar(v === 'espera' || (v === 'cuenta' && document.body.dataset.pubCuenta !== 'no'));
 }
@@ -55,6 +190,7 @@ function texto(id, t) { const e = $(id); if (e.textContent !== t) e.textContent 
 
 function pintarCuenta(s) {
   texto('cu-emp', EMPRESAS[s.empresa] || '');
+  cliente = s.cliente; pintarCliente($('cu-cli'), 'completo'); vaciarOtros('cuenta');
   const lista = $('cu-lista');
   vaciar(lista);
   const filas = s.lineas.map((l) => {
@@ -87,12 +223,18 @@ function pintarCuenta(s) {
   const cabe = () => lista.scrollHeight <= lista.clientHeight + 1;
   poner();
   for (let nivel = 0; nivel <= 3 && !cabe(); nivel++) { lista.dataset.n = String(nivel); poner(); }
-  while (!cabe() && ocultas < filas.length - 1) { ocultas = Math.min(filas.length - 1, ocultas + 1); poner(); }
+  if (!cabe()) {
+    // búsqueda binaria de cuántas líneas viejas se resumen (pocas pasadas de medición en equipos modestos)
+    let lo = 1, hi = filas.length - 1;
+    while (lo < hi) { const mid = (lo + hi) >> 1; ocultas = mid; poner(); if (cabe()) hi = mid; else lo = mid + 1; }
+    ocultas = Math.max(1, Math.min(filas.length - 1, lo)); poner();
+  }
   // el resumen reemplaza una fila: si por él aún no cabe, se oculta una más
   ajustarTotalCuenta();
 }
 
 function pintarPago(s) {
+  cliente = s.cliente; pintarCliente($('pg-cli'), 'completo'); vaciarOtros('pago');
   texto('pg-rotulo', 'Total a pagar');
   const t = texto('pg-total', colones(s.total));
   texto('pg-medio', MEDIOS[s.medio] || '');
@@ -101,6 +243,8 @@ function pintarPago(s) {
 }
 
 function pintarPagado(s) {
+  if (s.cliente) cliente = s.cliente;  // si la caja no lo manda en «pagado», se usa el de la cuenta (solo en memoria)
+  pintarCliente($('pd-cli'), 'pagado'); vaciarOtros('pagado');
   const t = texto('pd-total', colones(s.total));
   const det = $('pd-det'); vaciar(det);
   const par = (rot, val) => { const dt = document.createElement('dt'); dt.textContent = rot; const dd = document.createElement('dd'); dd.className = 'monto'; dd.textContent = val; det.append(dt, dd); };
@@ -135,9 +279,12 @@ function limpiar(m) {
     lineas, subtotal: n(m.subtotal) ?? lineas.reduce((a, l) => a + l.total, 0), descuento: n(m.descuento) || 0, iva: n(m.iva) || 0,
     total: n(m.total) ?? 0, medio: ['efectivo', 'tarjeta', 'sinpe', 'mixto'].includes(m.medio) ? m.medio : null,
     recibido: n(m.recibido), vuelto: n(m.vuelto), ts: n(m.ts) ?? Date.now(),
+    cliente: est === 'cuenta' || est === 'pago' || est === 'pagado' ? limpiarCliente(m.cliente) : null,
   };
 }
 
+let firmaPintada = '';
+const firmaDe = (s) => JSON.stringify([s.estado, s.empresa, s.lineas, s.subtotal, s.descuento, s.iva, s.total, s.medio, s.cliente]);
 function aplicar(s) {
   if (s.ts && s.ts < ultimoTs) return;           // un mensaje viejo llegado tarde no pisa a uno más nuevo
   const anteriorTs = ultimoTs; ultimoTs = Math.max(ultimoTs, s.ts || 0);
@@ -151,8 +298,11 @@ function aplicar(s) {
     return;
   }
   clearTimeout(timerPagado); pagadoActivo = false;
-  if (s.estado === 'cuenta' && s.lineas.length) { ir('cuenta'); pintarCuenta(s); return; }
-  if (s.estado === 'pago') { ir('pago'); pintarPago(s); return; }
+  // Sin repintar cuando el mensaje repite lo que ya se ve (solo se actualiza lo que cambia)
+  const firma = firmaDe(s);
+  if ((s.estado === 'cuenta' || s.estado === 'pago') && vista === s.estado && firma === firmaPintada) return;
+  if (s.estado === 'cuenta' && s.lineas.length) { ir('cuenta'); pintarCuenta(s); firmaPintada = firma; return; }
+  if (s.estado === 'pago') { ir('pago'); pintarPago(s); firmaPintada = firma; return; }
   ir('espera');
 }
 
@@ -229,6 +379,18 @@ async function pedirAnuncios() {
 }
 
 /* ---------- Vista previa sin caja: ?demo=cuenta|pago|pagado|espera|todo ---------- */
+
+const CLIENTES_DEMO = {
+  fisica: { tipo_id: '01', identificacion: '102340567', nombre: 'MARÍA JOSÉ NÚÑEZ ÁLVAREZ', nombre_comercial: null, nombre_personal: null, correo: 'maria.nunez@gmail.com' },
+  juridica: { tipo_id: '02', identificacion: '3101123456', nombre: 'INVERSIONES DEL PACÍFICO SOCIEDAD ANÓNIMA', nombre_comercial: 'Restaurante La Esquina del Sabor', nombre_personal: null, correo: 'contabilidad@esquinadelsabor.co.cr' },
+  dimex: { tipo_id: '03', identificacion: '155812345678', nombre: 'JOHN ALEXANDER SMITH', nombre_comercial: null, nombre_personal: null, correo: 'john.smith@outlook.com' },
+  nite: { tipo_id: '04', identificacion: '6000001234', nombre: 'ANA LUCÍA PEÑA', nombre_comercial: null, nombre_personal: null, correo: 'ana.pena@correo.cr' },
+  extranjero: { tipo_id: '05', identificacion: 'X1234567', nombre: 'HANS MÜLLER', nombre_comercial: null, nombre_personal: null, correo: 'hans@example.de' },
+  sincorreo: { tipo_id: '01', identificacion: '304560789', nombre: 'LUIS DIEGO ARAYA MORA', nombre_comercial: null, nombre_personal: null, correo: null },
+  varios: { tipo_id: '02', identificacion: '3101555666', nombre: 'COMERCIAL ALFA SOCIEDAD ANÓNIMA', nombre_comercial: null, nombre_personal: null, correo: 'ventas@comercial-alfa.co.cr, contabilidad@comercial-alfa.co.cr, gerencia@comercial-alfa.co.cr' },
+  confusos: { tipo_id: '01', identificacion: '101110111', nombre: 'ÓSCAR ILLESCAS LLOBERA', nombre_comercial: null, nombre_personal: null, correo: 'Il1O0.l1Il_oO0@mail.com' },
+  largo: { tipo_id: '02', identificacion: '3101987654', nombre: 'CORPORACIÓN INTERNACIONAL DE ALIMENTOS Y BEBIDAS DE CENTROAMÉRICA SOCIEDAD ANÓNIMA', nombre_comercial: 'Distribuidora Mayorista de Productos Alimenticios y Bebidas Refrigeradas del Valle Central', nombre_personal: null, correo: 'departamento.de.compras.y.proveedores.facturacion.electronica@corporacion-internacional-de-alimentos-y-bebidas.co.cr' },
+};
 function muestra(estado) {
   const n = Math.min(60, Math.max(1, parseInt(params.get('lineas') || (estado === 'cuenta' ? '5' : '3'), 10) || 5));
   const base = [['Casado con pollo', 2, 7500, 0], ['Gallo pinto con huevo', 1, 2800, 0], ['Fresco natural', 2, 2400, 0], ['Pollo frito, combo familiar con papas', 1, 9800, 10], ['Tortilla palmeada', 3, 2100, 0]];
@@ -241,7 +403,8 @@ function muestra(estado) {
   const recibido = efectivo ? Math.ceil(total / 1000) * 1000 + 5000 : null;
   return { v: 1, estado, empresa: params.get('empresa') === 'pollos' ? 'pollos' : 'soda', lineas: estado === 'espera' ? [] : lineas, subtotal, descuento, iva, total,
     medio: estado === 'cuenta' || estado === 'espera' ? null : (efectivo ? 'efectivo' : params.get('medio')), recibido: estado === 'pagado' ? recibido : null,
-    vuelto: estado === 'pagado' && efectivo && params.get('vuelto') !== '0' ? recibido - total : null, ts: Date.now() };
+    vuelto: estado === 'pagado' && efectivo && params.get('vuelto') !== '0' ? recibido - total : null, ts: Date.now(),
+    cliente: estado !== 'espera' && CLIENTES_DEMO[params.get('cliente')] ? CLIENTES_DEMO[params.get('cliente')] : null };
 }
 
 function demo(modo) {
@@ -289,10 +452,11 @@ else {
 
 // Pantalla siempre encendida, sin menú contextual ni arrastres, y recarga diaria en la publicidad para no acumular memoria
 try { navigator.wakeLock && navigator.wakeLock.request('screen').catch(() => {}); } catch { /* nada */ }
-document.addEventListener('visibilitychange', () => { if (!document.hidden) { try { navigator.wakeLock && navigator.wakeLock.request('screen').catch(() => {}); } catch { /* nada */ } } });
+document.addEventListener('visibilitychange', () => { rotador.pausar(document.hidden); if (!document.hidden) { try { navigator.wakeLock && navigator.wakeLock.request('screen').catch(() => {}); } catch { /* nada */ } } });
 addEventListener('contextmenu', (e) => e.preventDefault());
 addEventListener('dragstart', (e) => e.preventDefault());
-addEventListener('resize', () => { if (vista === 'cuenta') ajustarTotalCuenta(); });
+addEventListener('resize', () => { if (cliente) { repintarCliente(); } if (vista === 'cuenta') ajustarTotalCuenta(); });
+try { document.fonts && document.fonts.addEventListener && document.fonts.addEventListener('loadingdone', () => { if (cliente) repintarCliente(); }); document.fonts && document.fonts.load && document.fonts.load('700 1em "Atkinson Hyperlegible"').catch(() => {}); } catch { /* nada */ }
 const inicio = Date.now();
 setInterval(() => { if (!modoDemo && vista === 'espera' && Date.now() - inicio > RECARGA_MS) location.reload(); }, 60000);
 

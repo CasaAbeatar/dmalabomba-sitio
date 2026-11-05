@@ -192,6 +192,8 @@ export function crearRotador({ escena, capaA, capaB }) {
       if (si) arrancar();
       else { clearTimeout(temporizador); const v = escena.querySelectorAll('video'); v.forEach((x) => x.pause()); }
     },
+    // Con la ventana oculta o minimizada el video se pausa (no se decodifica fuera de pantalla)
+    pausar(si) { const v = escena.querySelectorAll('video'); v.forEach((x) => { try { if (si) x.pause(); else if (activo) x.play().catch(() => {}); } catch { /* nada */ } }); },
     detener() { vivo = false; clearTimeout(temporizador); },
     estado() { return { cantidad: lista.length, actual: escena.dataset.actual || null, enCache: [...enCache], pasada }; },
   };
