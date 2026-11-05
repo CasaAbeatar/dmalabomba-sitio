@@ -85,14 +85,14 @@ function Elegir-Pantallas($caja) {
 }
 function Abrir-Ventana($exe, $url, $perfil, $pantalla) {
   $b = $pantalla.Bounds
-  $args = @("--app=$url", "--user-data-dir=`"$perfil`"",
+  $argumentos = @("--app=$url", "--user-data-dir=`"$perfil`"",
     "--window-position=$($b.X),$($b.Y)", "--window-size=$($b.Width),$($b.Height)",
     "--no-first-run", "--no-default-browser-check", "--noerrdialogs", "--disable-infobars",
     "--disable-session-crashed-bubble", "--hide-crash-restore-bubble",
     "--disable-features=Translate,TranslateUI", "--autoplay-policy=no-user-gesture-required",
     "--overscroll-history-navigation=0", "--disable-pinch")
   $antes = Ventanas-Nuestras $perfil
-  Start-Process -FilePath $exe -ArgumentList $args
+  Start-Process -FilePath $exe -ArgumentList $argumentos
   $h = $null
   for ($i = 0; $i -lt 40 -and -not $h; $i++) {
     Start-Sleep -Milliseconds 500
