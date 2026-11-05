@@ -113,37 +113,30 @@ function pintarCliente(host, modo, forzar) {
     if (nom && c.comercial && c.comercial.toLowerCase() !== nom.toLowerCase() && c.tipo !== '01') nombreEl.append(nodo('span', 'cli-com', c.comercial));
     host.append(nombreEl);
   }
-  const fila = nodo('div', 'cli-fila');
-  let cedV = null, corV = null;
+  // Apilado: cédula y, debajo, correo, cada uno con su rótulo pequeño y todo el ancho
   if (c.id) {
-    const col = nodo('div', 'cli-col'); col.append(nodo('p', 'cli-rot', rotId(c.tipo)));
-    cedV = nodo('p', 'cli-ced-v', formatoId(c.tipo, c.id)); col.append(cedV); fila.append(col);
+    const f = nodo('div', 'cli-fila'), r = nodo('div', 'cli-rotl'); r.append(nodo('p', 'cli-rot', rotId(c.tipo)));
+    f.append(r, nodo('p', 'cli-ced-v', formatoId(c.tipo, c.id))); host.append(f);
   }
-  const col2 = nodo('div', 'cli-col');
+  const f2 = nodo('div', 'cli-fila');
   if (c.correo) {
-    col2.append(nodo('p', 'cli-rot', 'Confirme su correo'), nodo('p', 'cli-hint', 'Le enviaremos su factura a:'));
-    corV = nodo('p', 'cli-cor-v'); ponCorreo(corV, c.correo); col2.append(corV);
-  } else { col2.classList.add('cli-sin-col'); col2.append(nodo('p', 'cli-sin', 'Sin correo registrado')); }
-  fila.append(col2); host.append(fila);
+    const r = nodo('div', 'cli-rotl'); r.append(nodo('p', 'cli-rot', 'Confirme su correo'), nodo('p', 'cli-hint', 'Le enviaremos su factura a:'));
+    const v = nodo('p', 'cli-cor-v'); ponCorreo(v, c.correo); f2.append(r, v);
+  } else f2.append(nodo('p', 'cli-sin', 'Sin correo registrado'));
+  host.append(f2);
   fitCliente(host);
 }
 // Medidas del bloque (se repiten al cambiar el tamaño de la pantalla o al cargar la letra)
 function fitCliente(host) {
   if (host.hidden) return;
-  const nom = host.querySelector('.cli-nom'), ced = host.querySelector('.cli-ced-v'), cor = host.querySelector('.cli-cor-v'), fila = host.querySelector('.cli-fila');
+  const nom = host.querySelector('.cli-nom'), ced = host.querySelector('.cli-ced-v'), cor = host.querySelector('.cli-cor-v');
   const tam = (v) => { const t = getComputedStyle(host).getPropertyValue(v).trim(); return parseFloat(t) || 0; };
-  if (nom) achicar(nom, tam('--sz-nom'), 2.6, 0, host.querySelector('.cli-com') ? 3.4 : 2, true);
-  fila.classList.remove('ancho');
-  if (ced) achicar(ced, tam('--sz-ced'), 3, 0);
+  if (nom) achicar(nom, tam('--sz-nom'), 2.8, 0, host.querySelector('.cli-com') ? 3.4 : 2, true);
+  if (ced) achicar(ced, tam('--sz-ced'), 3.6, 0);
   if (cor) {
-    const szc = tam('--sz-cor') * (cor.children.length > 1 ? 0.8 : 1);
-    const f = achicar(cor, szc, 3.2, 0);
-    const sobra = cor.scrollWidth > cor.clientWidth + 1;
-    // si en media fila queda muy chico, el correo pasa a una fila propia con todo el ancho; y si aun así no cabe en una línea, se parte
-    if (f < szc * 0.72 || sobra) {
-      if (getComputedStyle(fila).gridTemplateColumns.split(' ').length > 1) { fila.classList.add('ancho'); if (ced) achicar(ced, tam('--sz-ced'), 3, 0); }
-      achicar(cor, szc, 3.2, 2.4, 2 * cor.children.length);
-    }
+    // un correo: a la misma altura que la cédula; si no cabe en una línea baja solo lo necesario (hasta 4,6 rem) y, si aun así no cabe, pasa a dos líneas cortando después de . @ - _
+    const szc = tam('--sz-cor') * (cor.children.length > 1 ? 0.78 : 1);
+    achicar(cor, szc, 4.6, 3.0, 2 * cor.children.length);
   }
 }
 // El bloque solo existe en la vista que se está mostrando; las otras quedan vacías
@@ -222,7 +215,8 @@ function pintarCuenta(s) {
   };
   const cabe = () => lista.scrollHeight <= lista.clientHeight + 1;
   poner();
-  for (let nivel = 0; nivel <= 3 && !cabe(); nivel++) { lista.dataset.n = String(nivel); poner(); }
+  // con muchas líneas se salta directo al tamaño más chico (menos pasadas de medición)
+  for (let nivel = filas.length > 10 ? 3 : 0; nivel <= 3 && !cabe(); nivel++) { lista.dataset.n = String(nivel); poner(); }
   if (!cabe()) {
     // búsqueda binaria de cuántas líneas viejas se resumen (pocas pasadas de medición en equipos modestos)
     let lo = 1, hi = filas.length - 1;
@@ -275,7 +269,7 @@ function limpiar(m) {
   })) : [];
   const n = (x) => (esNum(Number(x)) && x !== null && x !== '' ? Number(x) : null);
   return {
-    estado: est, empresa: m.empresa === 'soda' ? 'soda' : m.empresa === 'pollos' ? 'pollos' : '',
+    estado: est, empresa: m.empresa === 'soda' ? 'soda' : (m.empresa === 'pollos' || m.empresa === 'papea') ? 'pollos' : '',
     lineas, subtotal: n(m.subtotal) ?? lineas.reduce((a, l) => a + l.total, 0), descuento: n(m.descuento) || 0, iva: n(m.iva) || 0,
     total: n(m.total) ?? 0, medio: ['efectivo', 'tarjeta', 'sinpe', 'mixto'].includes(m.medio) ? m.medio : null,
     recibido: n(m.recibido), vuelto: n(m.vuelto), ts: n(m.ts) ?? Date.now(),
@@ -285,7 +279,9 @@ function limpiar(m) {
 
 let firmaPintada = '';
 const firmaDe = (s) => JSON.stringify([s.estado, s.empresa, s.lineas, s.subtotal, s.descuento, s.iva, s.total, s.medio, s.cliente]);
+const temaDe = (e) => (e === 'soda' ? 'soda' : e === 'pollos' ? 'pollos' : 'neutro');
 function aplicar(s) {
+  if (s.estado !== 'espera' && document.body.dataset.tema !== temaDe(s.empresa)) { document.body.dataset.tema = temaDe(s.empresa); if (cliente) repintarCliente(); }
   if (s.ts && s.ts < ultimoTs) return;           // un mensaje viejo llegado tarde no pisa a uno más nuevo
   const anteriorTs = ultimoTs; ultimoTs = Math.max(ultimoTs, s.ts || 0);
   if (pagadoActivo && s.estado === 'espera') return; // «pagado» se muestra sus 6 s completos
@@ -401,7 +397,7 @@ function muestra(estado) {
   const iva = Math.round(total * 13 / 113 * 100) / 100;
   const efectivo = params.get('medio') ? params.get('medio') === 'efectivo' : true;
   const recibido = efectivo ? Math.ceil(total / 1000) * 1000 + 5000 : null;
-  return { v: 1, estado, empresa: params.get('empresa') === 'pollos' ? 'pollos' : 'soda', lineas: estado === 'espera' ? [] : lineas, subtotal, descuento, iva, total,
+  return { v: 1, estado, empresa: params.get('empresa') === 'pollos' ? 'pollos' : params.get('empresa') === 'neutro' ? '' : 'soda', lineas: estado === 'espera' ? [] : lineas, subtotal, descuento, iva, total,
     medio: estado === 'cuenta' || estado === 'espera' ? null : (efectivo ? 'efectivo' : params.get('medio')), recibido: estado === 'pagado' ? recibido : null,
     vuelto: estado === 'pagado' && efectivo && params.get('vuelto') !== '0' ? recibido - total : null, ts: Date.now(),
     cliente: estado !== 'espera' && CLIENTES_DEMO[params.get('cliente')] ? CLIENTES_DEMO[params.get('cliente')] : null };

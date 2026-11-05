@@ -4,15 +4,31 @@
    Un solo tipo de letra (el mismo del facturador); el ₡ sale en el mismo estilo y grosor que el número que lo acompaña. */
 @font-face{font-family:"Atkinson Hyperlegible";src:url(fonts/atkinson-hyperlegible-latin-400-normal.woff2) format("woff2");font-weight:400;font-style:normal;font-display:swap}
 @font-face{font-family:"Atkinson Hyperlegible";src:url(fonts/atkinson-hyperlegible-latin-700-normal.woff2) format("woff2");font-weight:700;font-style:normal;font-display:swap}
+/* Figtree (la letra de las webs de La Bomba, licencia SIL OFL, alojada aquí). No trae el signo ₡: se completa en la misma familia con un ₡ de Inter (OFL) del mismo peso */
+@font-face{font-family:"Figtree";src:url(fonts/figtree-latin-400-normal.woff2) format("woff2");font-weight:400;font-style:normal;font-display:swap;unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+2000-206F,U+2074,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}
+@font-face{font-family:"Figtree";src:url(fonts/figtree-latin-800-normal.woff2) format("woff2");font-weight:800;font-style:normal;font-display:swap;unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+2000-206F,U+2074,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}
+@font-face{font-family:"Figtree";src:url(fonts/colon-400.woff2) format("woff2");font-weight:400;unicode-range:U+20A1;font-display:swap}
+@font-face{font-family:"Figtree";src:url(fonts/colon-800.woff2) format("woff2");font-weight:800;unicode-range:U+20A1;font-display:swap}
 :root{
   --leg:"Atkinson Hyperlegible","Verdana","Segoe UI","DejaVu Sans",Arial,sans-serif;
-  --c-ced:#0b2e8a;--c-cor:#0a5148;
-  --letra:"Helvetica Neue",Helvetica,Arial,"Liberation Sans",sans-serif;
+  --letra:"Figtree","Segoe UI","Helvetica Neue",Arial,sans-serif;
+  /* Tema neutro de respaldo (cuando el mensaje no trae empresa) */
   --fondo:#fbf8f2;--papel:#fff;--tinta:#1d1a17;--tinta2:#5d564d;--linea:#d9cfbd;--linea2:#c2b6a0;
-  --rojo:#b81622;--verde:#14573a;--verde-suave:#e6f4ec;
+  --rojo:#b81622;--verde:#14573a;--verde-suave:#e6f4ec;--vuelto-r:#14573a;--total:#1d1a17;
+  --ced-bg:#fff;--ced-fg:#0b2e8a;--ced-bd:#0b2e8a;--cor-bg:transparent;--cor-fg:#0a5148;--cor-bd:#0a5148;
   --fino:max(1px,.15rem);
   --ajuste:1;
 }
+/* Tema Soda La Bomba (sodalabomba.com): fondo rojo #B81622, ámbar #F3A62C y negro #171212, Figtree.
+   Cédula en placa ámbar con letra negra; correo en placa negra con letra ámbar y filete ámbar. */
+body[data-tema=soda]{--fondo:#b81622;--papel:#b81622;--tinta:#fff;--tinta2:#f8dcde;--linea:#d9626c;--linea2:#f3a62c;
+  --rojo:#fff;--verde:#171212;--verde-suave:#f3a62c;--vuelto-r:#f3a62c;--total:#f3a62c;
+  --ced-bg:#f3a62c;--ced-fg:#171212;--ced-bd:#f3a62c;--cor-bg:#171212;--cor-fg:#f3a62c;--cor-bd:#f3a62c}
+/* Tema Pollos La Bomba y Papea (polloslabomba.com): fondo ámbar, títulos y total en rojo, texto chico en negro.
+   Cédula en placa negra con letra ámbar; correo en negro con filete negro. */
+body[data-tema=pollos]{--fondo:#f3a62c;--papel:#f3a62c;--tinta:#171212;--tinta2:#3d2a08;--linea:#c98a1f;--linea2:#171212;
+  --rojo:#7a0d16;--verde:#f3a62c;--verde-suave:#171212;--vuelto-r:#b81622;--total:#b81622;
+  --ced-bg:#171212;--ced-fg:#f3a62c;--ced-bd:#171212;--cor-bg:transparent;--cor-fg:#171212;--cor-bd:#171212}
 *{box-sizing:border-box;cursor:none!important;-webkit-user-select:none;user-select:none;-webkit-user-drag:none}
 html{-webkit-text-size-adjust:100%;font-size:min(.5208333vw,.9259259vh);overflow:hidden;background:var(--fondo)}
 @media(orientation:portrait){html{-webkit-text-size-adjust:100%;font-size:min(.9259259vw,.5208333vh)}}
@@ -31,8 +47,8 @@ body[data-vista=cuenta] #v-cuenta,body[data-vista=pago] #v-pago,body[data-vista=
 #v-cuenta{right:33.3333%;padding:6rem 7rem 5rem}
 @media(orientation:portrait){#v-cuenta{right:0;bottom:33.3333%;padding:5rem 6rem 4rem}}
 .cu-cab{display:flex;align-items:baseline;justify-content:space-between;gap:3rem;padding-bottom:2.4rem;border-bottom:var(--fino) solid var(--linea2)}
-.cu-tit{font-size:4rem;letter-spacing:.02em}
-.cu-emp{font-size:2.8rem;letter-spacing:.3em;text-transform:uppercase;color:var(--tinta2)}
+.cu-tit{font-size:2.8rem;letter-spacing:.22em;text-transform:uppercase;color:var(--tinta2)}
+.cu-emp{font-size:3.2rem;font-weight:800;letter-spacing:.02em;color:var(--tinta)}
 .cu-lista{flex:1 1 auto;min-height:0;overflow:hidden;display:flex;flex-direction:column;justify-content:flex-start;padding-top:1.2rem;--fl:4.2rem;--hl:6.6rem}
 .cu-lista[data-n="1"]{--fl:3.5rem;--hl:5.5rem}
 .cu-lista[data-n="2"]{--fl:2.9rem;--hl:4.5rem}
@@ -41,7 +57,7 @@ body[data-vista=cuenta] #v-cuenta,body[data-vista=pago] #v-pago,body[data-vista=
 .cu-cant{color:var(--tinta2);text-align:right;font-variant-numeric:tabular-nums}
 .cu-nombre{min-width:0;overflow:hidden;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;line-height:1.15;overflow-wrap:anywhere}
 .cu-lista:not([data-n="0"]) .cu-nombre{-webkit-line-clamp:1}
-.cu-desc{display:block;font-size:.62em;color:var(--rojo);margin-top:.15em;line-height:1.1}
+.cu-desc{display:block;font-size:.62em;font-weight:800;color:var(--rojo);margin-top:.15em;line-height:1.1}
 .cu-imp{text-align:right}
 .cu-previas{color:var(--tinta2);font-style:normal}
 .cu-previas .cu-nombre{-webkit-line-clamp:1}
@@ -51,7 +67,7 @@ body[data-vista=cuenta] #v-cuenta,body[data-vista=pago] #v-pago,body[data-vista=
 .cu-sub .neg dd,.cu-sub .neg dt{color:var(--rojo)}
 .cu-total{display:flex;flex-direction:column;align-items:flex-end;min-width:0}
 .cu-total-r{font-size:3.4rem;letter-spacing:.3em;text-transform:uppercase;color:var(--tinta2);margin-bottom:-.4rem;padding-left:.3em}
-.cu-total .monto{font-size:calc(13rem*var(--ajuste));line-height:1.05;color:var(--tinta)}
+.cu-total .monto{font-size:calc(13rem*var(--ajuste));line-height:1.05;color:var(--total)}
 @media(orientation:portrait){
   .cu-pie{flex-direction:column;align-items:stretch;gap:1.6rem}
   .cu-sub{align-self:stretch;grid-template-columns:1fr auto;padding-bottom:0}
@@ -62,7 +78,7 @@ body[data-vista=cuenta] #v-cuenta,body[data-vista=pago] #v-pago,body[data-vista=
 /* ---------- Pago ---------- */
 #v-pago{align-items:center;justify-content:center;text-align:center;padding:6rem}
 .pg-rotulo{font-size:5rem;letter-spacing:.3em;text-transform:uppercase;color:var(--tinta2);padding-left:.3em}
-.pg-total{font-size:calc(30rem*var(--ajuste));line-height:1.05;margin:2.4rem 0 3rem;max-width:100%}
+.pg-total{color:var(--total);font-size:calc(30rem*var(--ajuste));line-height:1.05;margin:2.4rem 0 3rem;max-width:100%}
 .pg-medio{font-size:5.4rem;color:var(--tinta);padding-top:3rem;border-top:var(--fino) solid var(--linea2);min-width:60%}
 .pg-medio:empty{display:none}
 @media(orientation:portrait){.pg-total{font-size:calc(26rem*var(--ajuste))}.pg-rotulo{font-size:4.4rem}}
@@ -71,12 +87,12 @@ body[data-vista=cuenta] #v-cuenta,body[data-vista=pago] #v-pago,body[data-vista=
 #v-pagado{align-items:center;justify-content:center;text-align:center;padding:6rem}
 .pd-gracias{font-size:6rem;letter-spacing:.02em;margin-bottom:4rem}
 .pd-rotulo{font-size:4rem;letter-spacing:.3em;text-transform:uppercase;color:var(--tinta2);padding-left:.3em}
-.pd-total{font-size:calc(22rem*var(--ajuste));line-height:1.05;margin:1.6rem 0 2rem;max-width:100%}
+.pd-total{color:var(--total);font-size:calc(22rem*var(--ajuste));line-height:1.05;margin:1.6rem 0 2rem;max-width:100%}
 #v-pagado.sin-vuelto .pd-total{font-size:calc(30rem*var(--ajuste))}
 .pd-det{display:grid;grid-template-columns:auto auto;column-gap:5rem;row-gap:.6rem;font-size:3.6rem;color:var(--tinta2);margin-bottom:3rem}
 .pd-det:empty{display:none}
 .pd-det dd{text-align:right}
-.pd-vuelto-r{font-size:5.2rem;letter-spacing:.3em;text-transform:uppercase;color:var(--verde);padding-left:.3em;margin-top:1rem}
+.pd-vuelto-r{font-size:5.2rem;letter-spacing:.3em;text-transform:uppercase;color:var(--vuelto-r);padding-left:.3em;margin-top:1rem}
 .pd-vuelto{font-size:calc(20rem*var(--ajuste));line-height:1.05;color:var(--verde);padding:2rem 6rem;border:var(--fino) solid var(--verde);background:var(--verde-suave);margin-top:1.6rem;max-width:100%}
 @media(orientation:portrait){
   .pd-total{font-size:calc(17rem*var(--ajuste))}
@@ -110,45 +126,45 @@ body[data-pub-cuenta=no] #v-cuenta{right:0}
 @media(orientation:portrait){body[data-pub-cuenta=no] #v-cuenta{bottom:0}}
 
 
-/* ---------- Datos del cliente (cédula y correo para que el cliente los confirme) ----------
-   Nombre y rótulos en la letra de siempre; cédula y correo en Atkinson Hyperlegible (distingue l, I, 1, O, 0).
-   Cédula: azul profundo en recuadro fino. Correo: verde petróleo con filete. Ambos pasan 7:1 contra su fondo. */
-.cli{display:flex;flex-direction:column;gap:1.4rem;padding:1.8rem 0 2rem;border-bottom:var(--fino) solid var(--linea2);--sz-nom:3.6rem;--sz-ced:7rem;--sz-cor:4.6rem;min-width:0}
+/* ---------- Datos del cliente (nombre, cédula y correo para que el cliente los confirme) ----------
+   Se apilan en vertical con aire: nombre, cédula y correo. Jerarquía: total (lo más grande) > cédula = correo > nombre > rótulos.
+   Cédula y correo en Atkinson Hyperlegible (distingue l, I, 1, O, 0); el resto en Figtree. Colores por tema (variables --ced-* y --cor-*, contraste mínimo 7:1). */
+.cli{display:flex;flex-direction:column;gap:1.5rem;padding:1.8rem 0 2rem;border-bottom:var(--fino) solid var(--linea2);--sz-nom:4.2rem;--sz-ced:6.6rem;--sz-cor:6.6rem;min-width:0}
 .cli[hidden]{display:none}
-.cli-nom{font-size:var(--sz-nom);line-height:1.15;overflow-wrap:anywhere;min-width:0}
-.cli-com{display:block;font-size:.7em;color:var(--tinta2);margin-top:.15em;line-height:1.15}
-.cli-fila{display:grid;grid-template-columns:auto minmax(0,1fr);column-gap:5rem;align-items:end;min-width:0}
-.cli-fila.ancho{grid-template-columns:minmax(0,1fr);row-gap:1.6rem}
-.cli-col{min-width:0;display:flex;flex-direction:column;gap:.5rem}
-.cli-rot{font-size:2.5rem;color:var(--tinta);letter-spacing:.02em;line-height:1.15}
-.cli-hint{font-size:2.2rem;color:var(--tinta2);line-height:1.15}
-.cli-ced-v,.cli-cor-v{font-family:var(--leg);white-space:nowrap;min-width:0;max-width:100%;line-height:1.15;font-variant-ligatures:none;font-feature-settings:"liga" 0}
-.cli-ced-v{display:block;width:max-content;font-weight:700;font-size:var(--sz-ced);letter-spacing:.05em;color:var(--c-ced);background:#fff;border:var(--fino) solid var(--c-ced);padding:.5rem 1.8rem}
-.cli-cor-v{display:block;font-weight:700;font-size:var(--sz-cor);letter-spacing:.015em;color:var(--c-cor);border-bottom:var(--fino) solid var(--c-cor);padding:.3rem 0 .6rem}
+.cli-nom{font-size:var(--sz-nom);font-weight:800;line-height:1.12;overflow-wrap:anywhere;min-width:0}
+.cli-com{display:block;font-weight:400;font-size:.62em;color:var(--tinta2);margin-top:.2em;line-height:1.15}
+.cli-fila{display:flex;flex-direction:column;gap:.5rem;min-width:0}
+.cli-rotl{display:flex;flex-wrap:wrap;align-items:baseline;column-gap:2.4rem}
+.cli-rot{font-size:2.6rem;color:var(--tinta);letter-spacing:.02em;line-height:1.15}
+.cli-hint{font-size:2.3rem;color:var(--tinta2);line-height:1.15}
+.cli-ced-v,.cli-cor-v{font-family:var(--leg);white-space:nowrap;min-width:0;max-width:100%;line-height:1.15;font-variant-ligatures:none;font-feature-settings:"liga" 0;font-weight:700}
+.cli-ced-v{display:block;width:max-content;font-size:var(--sz-ced);letter-spacing:.05em;color:var(--ced-fg);background:var(--ced-bg);border:var(--fino) solid var(--ced-bd);padding:.5rem 2rem}
+.cli-cor-v{display:block;font-size:var(--sz-cor);letter-spacing:.015em;color:var(--cor-fg);background:var(--cor-bg);border:var(--fino) solid var(--cor-bd);padding:.5rem 2rem}
 .cli-ced-v.parte,.cli-cor-v.parte{white-space:normal;overflow-wrap:anywhere;width:auto}
+.cli-cor-l{display:block}
 .cli-sin{font-size:2.8rem;color:var(--tinta2);padding-bottom:.6rem}
-.cli-sin-col{justify-content:flex-end}
-@media(orientation:portrait){
-  .cli-fila{grid-template-columns:minmax(0,1fr);row-gap:1.6rem}
-}
 /* cuenta: el bloque queda arriba; la lista de productos se acomoda en lo que sobra */
-#v-cuenta .cli{margin-bottom:.4rem}
-@media(orientation:portrait){#v-cuenta .cli{--sz-nom:3.4rem;--sz-ced:6.6rem;--sz-cor:4.2rem}}
+#v-cuenta{padding:4.4rem 7rem 3.6rem}
+#v-cuenta .cu-cab{padding-bottom:1.6rem}
+#v-cuenta .cu-pie{padding-top:1.6rem}
+#v-cuenta .cu-lista{padding-top:.6rem}
+@media(orientation:portrait){#v-cuenta{padding:4rem 6rem 3rem}#v-cuenta .cli{--sz-nom:4rem;--sz-ced:6rem;--sz-cor:6rem}}
 /* pago: total y bloque del cliente a la vista a la vez */
-#v-pago .cli{width:min(150rem,92%);margin-top:2.6rem;border-bottom:0;border-top:var(--fino) solid var(--linea2);padding-top:2.4rem;text-align:left;--sz-nom:3.8rem;--sz-ced:8rem;--sz-cor:5rem}
-#v-pago.con-cli .pg-total{font-size:calc(22rem*var(--ajuste));margin:1.4rem 0 2rem}
-#v-pago.con-cli .pg-medio{font-size:4.4rem;padding-top:2rem}
-#v-pago.con-cli .pg-rotulo{font-size:4.2rem}
+#v-pago .cli{width:min(150rem,92%);margin-top:2.4rem;border-bottom:0;border-top:var(--fino) solid var(--linea2);padding-top:2.2rem;gap:1.3rem;text-align:left;--sz-nom:4.2rem;--sz-ced:7.4rem;--sz-cor:7.4rem}
+#v-pago.con-cli{padding:3rem 6rem}
+#v-pago.con-cli .pg-total{font-size:calc(21rem*var(--ajuste));margin:1rem 0 1.6rem}
+#v-pago.con-cli .pg-medio{font-size:4rem;padding-top:1.6rem}
+#v-pago.con-cli .pg-rotulo{font-size:3.8rem}
 @media(orientation:portrait){
-  #v-pago{padding:5rem 6rem}
-  #v-pago .cli{width:100%;--sz-nom:3.6rem;--sz-ced:7.4rem;--sz-cor:4.6rem}
+  #v-pago.con-cli{padding:5rem 6rem}
+  #v-pago .cli{width:100%;--sz-nom:4.2rem;--sz-ced:7.2rem;--sz-cor:7.2rem}
   #v-pago.con-cli .pg-total{font-size:calc(17rem*var(--ajuste))}
 }
 /* pagado: solo el aviso del correo */
 #v-pagado .cli-pd{align-items:center;text-align:center;border:0;padding:1.6rem 0 0;gap:.8rem;width:min(150rem,92%)}
 #v-pagado .cli-pd .cli-hint{font-size:3rem}
-#v-pagado .cli-pd .cli-cor-v{font-size:4.6rem;border-bottom:0;text-align:center}
-#v-pagado.con-cli .pd-gracias{margin-bottom:2.4rem;font-size:5rem}
+#v-pagado .cli-pd .cli-cor-v{font-size:5rem;text-align:center}
+#v-pagado.con-cli .pd-gracias{margin-bottom:2.4rem;font-size:5rem;font-weight:800}
 #v-pagado.con-cli .pd-total{font-size:calc(17rem*var(--ajuste))}
 #v-pagado.con-cli.sin-vuelto .pd-total{font-size:calc(22rem*var(--ajuste))}
 #v-pagado.con-cli .pd-vuelto{font-size:calc(13rem*var(--ajuste));padding:1.4rem 5rem}
@@ -158,5 +174,3 @@ body[data-pub-cuenta=no] #v-cuenta{right:0}
   #v-pagado.con-cli.sin-vuelto .pd-total{font-size:calc(19rem*var(--ajuste))}
   #v-pagado.con-cli .pd-vuelto{font-size:calc(11rem*var(--ajuste));padding:1.2rem 3rem}
 }
-
-.cli-cor-l{display:block}
