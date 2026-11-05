@@ -96,7 +96,8 @@ export function iniciar(app, opciones = {}) {
   function enviar(evento, payload) {
     try {
       if (!activo || !encendida || !configLista || !bc) return;
-      bc.postMessage({ evento, payload });
+      // soc y terminal viajan para que la pagina del cliente pida sus anuncios; no son datos personales
+      bc.postMessage({ evento, payload: { ...payload, soc: app?.socId ?? null, terminal: app?.terminal ?? 1 } });
     } catch { fallos++; }
   }
   function alMensaje(ev) {
