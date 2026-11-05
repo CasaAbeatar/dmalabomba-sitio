@@ -327,6 +327,12 @@ export default {
       cur = sig ? await api.venta(sig.id) : null;
       guardarActiva();
     }
+    // Al cobrar, la caja siempre queda en una cuenta nueva y vacía para el siguiente cliente, haya o no otras cuentas abiertas (4 nov 2026).
+    // Si ya hay una vacía y sin nombre (la de un cobro anterior), se usa esa en lugar de abrir otra.
+    async function abrirCuentaParaElSiguiente() {
+      const vacia = abiertas.find((a) => a.estado === 'abierta' && Number(a.lineas) === 0 && !String(a.referencia || '').trim());
+      if (vacia) { cur = await api.venta(vacia.id); guardarActiva(); } else await crearCuentaBuffet();
+    }
     function guardarActiva() { if (cur) lsSet('cuenta_' + socId, cur.venta.id); }
     function sincronizarBarra() {
       if (!cur) return;
@@ -1678,7 +1684,7 @@ export default {
         duda = false; ventasEnDuda.delete(ventaId); ventasEnCobro.delete(ventaId);
         m.cerrar();
         if (!vivo) { avisoCobroSinCaja(comp, app, aviso); return; } // la Caja ya no está en pantalla: se avisa igual
-        try { sacarDeLista(ventaId); cur = null; await pasarALaSiguiente(); if (!cur && vivo) await crearCuentaBuffet(); if (vivo) repintar(); } catch { /* la barra se refresca sola */ }
+        try { sacarDeLista(ventaId); cur = null; lugarQueQuedo = -1; await abrirCuentaParaElSiguiente(); if (vivo) repintar(); } catch { /* la barra se refresca sola */ }
         if (vivo) zonaEfectivo?.refrescar(); // el cobro en efectivo cambia el «Efectivo esperado en caja»
         if (vivo) exito(comp, vueltoLocal, aviso); else avisoCobroSinCaja(comp, app, aviso);
       }
