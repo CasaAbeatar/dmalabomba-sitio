@@ -48,15 +48,15 @@ const TITULOS = { '01': 'FACTURA ELECTRÓNICA', '02': 'NOTA DE DÉBITO ELECTRÓN
 const NOMBRE_DOC = { '01': 'Factura electrónica', '02': 'Nota de débito electrónica', '03': 'Nota de crédito electrónica', '04': 'Tiquete electrónico' };
 
 // Textos publicados en el sitio de Grupo DMA La Bomba (dmalabomba-sitio/index.html), reutilizados tal cual.
-const CONTACTO = { correo: 'contacto@dmalabomba.com', instagram: '@sodaypolloslabomba' };
+const CONTACTO = { instagram: '@sodaypolloslabomba' };
 const MARCA = {
   soda: {
-    web: 'www.sodalabomba.com', facebook: 'Soda La Bomba',
+    correo: 'contacto@sodalabomba.com', web: 'www.sodalabomba.com', facebook: 'Soda La Bomba',
     historia: 'Soda La Bomba abrió el 30 de septiembre de 2012 con un solo local pequeño. A fuerza de trabajo y visión de familia fue creciendo, y hoy atiende las 24 horas con un equipo de más de 30 personas. Seguimos creciendo.',
     lema: 'Comida de soda, abierta las 24 horas.',
   },
   pollos: {
-    web: 'www.polloslabomba.com', facebook: 'Pollos La Bomba y Papea',
+    correo: 'contacto@polloslabomba.com', web: 'www.polloslabomba.com', facebook: 'Pollos La Bomba y Papea',
     historia: null, // el sitio no tiene una historia propia de Pollos La Bomba: se usa solo su descripción
     lema: 'El mejor pollo al mejor precio, de la familia de Soda La Bomba.',
   },
@@ -555,7 +555,7 @@ function nodoCarta(m, { logo, copia }) {
     marca.historia ? null : h('p.ct-tenue', 'Grupo DMA La Bomba, empresa familiar de la Ruta 4, Horquetas de Sarapiquí.'));
   const pieDer = h('div.ct-contacto',
     h('div.ct-etq', 'Contáctenos'),
-    h('div', CONTACTO.correo),
+    h('div', marca.correo),
     h('div', marca.web),
     h('div', 'Instagram ' + CONTACTO.instagram),
     h('div', 'Facebook ' + marca.facebook));
