@@ -6,5 +6,6 @@ Get-CimInstance Win32_Process -Filter "Name='powershell.exe'" |
   ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
 Cerrar-Navegador $Perfil
 Start-Sleep -Seconds 2
+Arreglar-Cierre $Perfil
 Extender-Pantallas
 Start-Process powershell.exe -WindowStyle Hidden -ArgumentList "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$PSScriptRoot\0 abrir caja y pantalla.ps1`""
