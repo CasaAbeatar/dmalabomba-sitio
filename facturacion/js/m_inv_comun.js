@@ -309,7 +309,7 @@ export const toastOk = (t) => toast(t, 'ok', 4500);
 export const toastMal = (t) => toast(t, 'error', 8000);
 
 /* ---------- Bolsas del inventario simple ---------- */
-export const GRUPOS = { comida_preparada: 'Comida preparada', unitario: 'Unitarios', suministro: 'Suministros' };
+export const GRUPOS = { comida_preparada: 'Comida preparada', pulperia: 'Pulpería', unitario: 'Unitarios', suministro: 'Suministros' };
 /** Bolsa a la que pertenece un artículo según la categoría (null si la categoría no tiene bolsa) */
 export const grupoDe = (cat, art) => (cat?.categorias || []).find((c) => c.id === art?.categoria_id)?.grupo || null;
 /** El inventario arranca en modo simple; «completo» lo activa un administrador en Configuración */

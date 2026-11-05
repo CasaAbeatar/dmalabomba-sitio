@@ -654,7 +654,7 @@ export async function abrirFactura(ctx, clave, { previa = null, recibirSugeridas
     const cajonDeRubro = (nom) => (/confiter|snack/i.test(nom) ? '17' : /energ|malta/i.test(nom) ? '12' : /agua|yogur|l[aá]cteo/i.test(nom) ? '13' : '11');
     const grupoDeRubro = (id) => (cat.categorias || []).find((x) => x.id === id)?.grupo || '';
     let bolsa = grupoDeRubro(rubro.value);
-    const selCat = h('select.campo', { 'aria-label': 'Categoría de la línea ' + l.linea }, ...['comida_preparada', 'unitario', 'suministro'].map((g) => h('option', { value: g }, GRUPOS[g])));
+    const selCat = h('select.campo', { 'aria-label': 'Categoría de la línea ' + l.linea }, ...['comida_preparada', 'pulperia', 'unitario', 'suministro'].map((g) => h('option', { value: g }, GRUPOS[g])));
     const llenarRubros = (g) => { const v = rubro.value; rubro.replaceChildren(h('option', { value: '' }, 'Escoja el rubro…'), ...(cat.categorias || []).filter((c) => c.activo !== false && c.grupo === g).map((c) => h('option', { value: c.id }, c.nombre))); rubro.value = grupoDeRubro(v) === g ? v : ''; if (!rubro.value) { const op = [...rubro.options].filter((o) => o.value); const sg = sug.categoria_id && op.find((o) => o.value === sug.categoria_id); rubro.value = sg ? sg.value : op[0]?.value || ''; } };
     const pintarBotones = () => { bolsa = grupoDeRubro(rubro.value) || bolsa; selCat.value = bolsa || ''; el.dataset.bolsa = bolsa; if (typeof buscar !== 'undefined') buscar.value = rubro.value || ''; };
     selCat.addEventListener('change', () => { bolsa = selCat.value; errorRubro.textContent = ''; if (art && grupoDe(cat, art) !== bolsa) { art = null; pintarArticulo(true); } llenarRubros(bolsa); pintarBolsa(); pintarBotones(); pintarSem(); cambio(); });
@@ -716,11 +716,11 @@ export async function abrirFactura(ctx, clave, { previa = null, recibirSugeridas
       } catch (e) { malProd((e && e.message) || 'No se pudo agregar el producto. Intente de nuevo.'); prodInput.disabled = false; }
     }
     // Rubro: una lista visible con TODOS los rubros, agrupados por cómo se llevan (uno a uno, o bolsa por monto). Al escoger uno, la categoría se ajusta sola.
-    const GRUPO_LISTA = { unitario: 'Unitarios · uno a uno (gaseosas, bebidas, confitería)', comida_preparada: 'Comida preparada · bolsa por monto (incluye Pulpería: snacks, caramelos, helados)', suministro: 'Suministros · bolsa por monto' };
+    const GRUPO_LISTA = { unitario: 'Unitarios · uno a uno (gaseosas, bebidas)', comida_preparada: 'Comida preparada · bolsa por monto', pulperia: 'Pulpería · bolsa por monto (helados, snacks y paquetillos, galletas, caramelos)', suministro: 'Suministros · bolsa por monto' };
     const nombreRubro = () => (cat.categorias || []).find((x) => x.id === rubro.value)?.nombre || '';
     const buscar = h('select.campo.inv-buscar-rubro', { 'aria-label': 'Rubro de la línea ' + l.linea },
       h('option', { value: '' }, 'Escoja el rubro…'),
-      ...['unitario', 'comida_preparada', 'suministro'].map((g) => h('optgroup', { label: GRUPO_LISTA[g] },
+      ...['unitario', 'comida_preparada', 'pulperia', 'suministro'].map((g) => h('optgroup', { label: GRUPO_LISTA[g] },
         ...(cat.categorias || []).filter((c) => c.activo !== false && c.grupo === g).sort((x, y) => String(x.nombre).localeCompare(String(y.nombre), 'es')).map((c) => h('option', { value: c.id }, c.nombre)))));
     buscar.value = rubro.value || '';
     buscar.addEventListener('change', () => {
