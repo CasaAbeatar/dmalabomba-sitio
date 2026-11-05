@@ -191,7 +191,7 @@ function Afinar-Ventanas($pantallas, $perfil, $procesos) {
   foreach ($h in (Ventanas-Nuestras $perfil $procesos)) {
     $t = [W32]::Titulo($h)
     if ($pantallas.Cliente -and $t -like "*$TituloCliente*") { [void](Poner-En-Pantalla $h $pantallas.Cliente) }
-    elseif ($t -like "*$TituloCaja*") {
+    else {   # la ventana que no es del cliente es la caja, en el modulo que este (el titulo cambia por modulo)
       if ($CajaPantallaCompleta) { [void](Poner-En-Pantalla $h $pantallas.Caja) } else { [void](Poner-Maximizada $h $pantallas.Caja $false) }
     }
   }

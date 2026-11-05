@@ -653,19 +653,36 @@ export default {
     function pintarBarra() {
       const botones = abiertas.map((c) => {
         const act = cur && cur.venta.id === c.id;
-        return h('button.cuenta-btn' + (c.estado === 'prefacturada' ? '.prefact' : ''), {
+        const pref = c.estado === 'prefacturada';
+        const nombre = c.referencia || numCuenta(c.numero);
+        // Solo «En espera» y el nombre o número de la cuenta; el detalle (productos y total) queda en el cuadro de ayuda al apoyar el dedo o el mouse
+        return h('button.cuenta-btn' + (pref ? '.prefact' : ''), {
           type: 'button', 'aria-pressed': String(!!act), 'data-id': c.id,
+          title: c.lineas + (Number(c.lineas) === 1 ? ' producto · ' : ' productos · ') + money(c.total) + (pref && c.prefactura_vigente === false ? ' · cambió, imprima otra prefactura' : ''),
           onclick: () => { if (!act) accion(async () => { cur = await api.venta(c.id); guardarActiva(); repintar(); }); cambiarVista('cuenta'); },
-        }, h('span.c-tipo', (c.tipo_servicio === 'buffet' && c.referencia ? numCuenta(c.numero) : (TIPOS_SERVICIO[c.tipo_servicio] || c.tipo_servicio)) + (c.estado === 'prefacturada' ? (c.prefactura_vigente === false ? ' · cambió, imprima otra prefactura' : ' · prefactura') : '')),
-        h('span.c-ref', c.referencia || numCuenta(c.numero)),
-        h('span.c-tot', c.lineas + (Number(c.lineas) === 1 ? ' producto · ' : ' productos · ') + money(c.total)));
+        }, h('span.c-tipo', pref ? 'Prefactura' : 'En espera'), h('span.c-ref', nombre));
       });
-      // Las cuentas se acomodan en filas: todas a la vista, sin tira que se deslice de lado
-      const lista = h('div.cuentas-lista', { role: 'group', 'aria-label': 'Cuentas abiertas' }, botones.length ? botones : h('span.cuentas-vacio', 'No hay cuentas abiertas. Toque un producto para empezar una.'));
-      const envoltura = h('div.cuentas-envoltura', lista);
+      // Una sola fila que se desliza: los botones «‹ N» y «N ›» dicen cuántas cuentas quedan fuera de la vista y llevan hasta ellas al tocarlos
+      const lista = h('div.cuentas-lista', { role: 'group', 'aria-label': 'Cuentas en espera' }, botones.length ? botones : h('span.cuentas-vacio', 'No hay cuentas en espera. Toque un producto para empezar una.'));
+      const masIzq = h('button.cuentas-mas.izq', { type: 'button', 'aria-label': 'Ver cuentas anteriores', onclick: () => lista.scrollBy({ left: -lista.clientWidth * 0.8, behavior: 'smooth' }) });
+      const masDer = h('button.cuentas-mas.der', { type: 'button', 'aria-label': 'Ver más cuentas', onclick: () => lista.scrollBy({ left: lista.clientWidth * 0.8, behavior: 'smooth' }) });
+      const envoltura = h('div.cuentas-envoltura', masIzq, lista, masDer);
+      const pistaViva = () => {
+        const L = lista.getBoundingClientRect();
+        let izq = 0, der = 0;
+        lista.querySelectorAll('.cuenta-btn').forEach((b) => { const r = b.getBoundingClientRect(); if (r.right > L.right + 2) der++; else if (r.left < L.left - 2) izq++; });
+        masIzq.textContent = '‹ ' + izq; masDer.textContent = der + ' ›';
+        masIzq.classList.toggle('visible', izq > 0); masDer.classList.toggle('visible', der > 0);
+      };
+      lista.addEventListener('scroll', pistaViva, { passive: true });
+      if (typeof ResizeObserver !== 'undefined') new ResizeObserver(pistaViva).observe(lista);
       // Los ajustes de la impresora ya no están aquí: viven en Administración, Configuración
       barraCuentas.replaceChildren(envoltura,
         h('button.btn.btn-efectivo', { type: 'button', onclick: seguro(abrirEfectivo) }, 'Efectivo'));
+      requestAnimationFrame(() => {
+        lista.querySelector('.cuenta-btn[aria-pressed=true]')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+        pistaViva();
+      });
     }
 
     /* ---------- Cuenta nueva, poner en espera y cambiar nombre ---------- */
