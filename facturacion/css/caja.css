@@ -187,7 +187,7 @@
 .total-fila .et{font-size:.85rem;font-weight:600;color:var(--tinta2)}
 .total-monto{font-size:1.9rem;font-weight:700;letter-spacing:-.02em;font-variant-numeric:tabular-nums;line-height:1.05}
 .pie-cobro .btn-cobrar-aside{flex:1 1 150px}
-.fila-espera{flex:1 1 100%;display:grid;grid-template-columns:1fr 1fr;gap:.5rem}
+.fila-espera{flex:1 1 100%;display:grid;grid-template-columns:1fr;gap:.5rem}
 .fila-espera .btn{line-height:1.15;padding:.4rem .5rem}
 .acciones-cuenta{display:grid;grid-template-columns:1.45fr 1fr;gap:.5rem}
 .acciones-cuenta .btn.ancho{grid-column:1/-1}
