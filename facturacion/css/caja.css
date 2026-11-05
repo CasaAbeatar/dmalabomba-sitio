@@ -708,3 +708,18 @@ body.fx-caja .sin-red-in{max-width:2200px}
   .cuentas-lista .cuenta-btn{flex:1 1 calc(50% - .25rem);min-width:0;max-width:none;min-height:0;padding:.35rem .6rem}
   .cuentas-lista .cuenta-btn .c-tot{font-size:.82rem}
 }
+
+/* Cuentas en espera: tira de una sola fila, chips compactos; avisos «‹ N» y «N ›» cuando hay cuentas fuera de la vista (pedido de Emil, 5 nov 2026) */
+.cuentas-lista{flex-wrap:nowrap;overflow-x:auto;gap:.4rem;padding:2px 2px .3rem;scrollbar-width:thin;-webkit-overflow-scrolling:touch;scroll-snap-type:x proximity}
+.cuentas-lista .cuenta-btn{scroll-snap-align:start}
+.cuenta-btn{flex-direction:row;align-items:center;min-width:0;max-width:none;min-height:40px;padding:.3rem .8rem;gap:.35rem;white-space:nowrap;border-left-width:4px;font-size:.98rem}
+.cuenta-btn .c-tipo{font-size:.72rem}
+.cuenta-btn .c-ref{font-size:1rem}
+.cuentas-envoltura{flex-direction:row;align-items:center}
+.cuentas-envoltura .cuentas-lista{flex:1 1 auto;min-width:0}
+.cuentas-mas{flex:0 0 auto;display:none;align-items:center;min-height:40px;padding:0 .65rem;border:1px solid var(--borde-control,#8f8672);border-radius:var(--r);background:var(--papel);color:var(--tinta);font-weight:700;font-size:.95rem;cursor:pointer;white-space:nowrap}
+.cuentas-mas.visible{display:inline-flex}
+.cuentas-envoltura .cuentas-mas.izq{margin-right:.35rem}
+.cuentas-envoltura .cuentas-mas.der{margin-left:.35rem}
+.cuentas-pie-aviso{display:none}
+.cuentas-lista .cuenta-btn{flex:0 0 auto!important;min-width:max-content}
