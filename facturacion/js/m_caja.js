@@ -594,7 +594,7 @@ export default {
       panelOpc.replaceChildren(
         h('div.opciones-cab',
           h('div.opciones-tit', h('strong', g.nombre), h('small', 'Toque la opción que desea agregar a la cuenta')),
-          h('button.btn.cerrar-opc', { type: 'button', onclick: cerrarPanel, 'aria-label': 'Cerrar las opciones de ' + g.nombre }, 'Cerrar opciones')),
+          h('button.btn.cerrar-opc', { type: 'button', onclick: cerrarPanel, 'aria-label': 'Cerrar las opciones de ' + g.nombre }, h('span.t-cerrar', 'Cerrar opciones'), h('span.t-volver', '‹ Volver a los productos'))),
         h('div.opciones-grid', { role: 'group', 'aria-label': 'Opciones de ' + g.nombre }, ...g.opciones.map((p, i) => tarjetaArticulo(p, p.modificador_nombre, null, i + 1, 3, tarjetasMod))));
       actualizarInsignias();
       midePegajosos();
