@@ -367,7 +367,7 @@ function nodoTiquete(m, { papel, logo, copia }) {
     raiz.append(h('div.etq-chica', 'Clave numérica'), ...partir(m.clave, 25).map((p) => h('div.mono', p)));
   }
   raiz.append(fila('Fecha', fechaLinea(m.fecha)));
-  if (m.venta?.numero) raiz.append(fila(pre ? 'Cuenta' : 'Venta', m.venta.numero));
+  if (pre && m.venta?.numero) raiz.append(fila('Cuenta', m.venta.numero)); // el número de venta no sale en el tiquete ni en la factura (decisión de Emil, 4 nov 2026)
   if (m.venta?.prefactura_numero && pre) raiz.append(fila('Prefactura N.°', m.venta.prefactura_numero));
   if (pre && Number(m.venta?.prefactura_revision) > 1) raiz.append(fila('Revisión', String(Number(m.venta.prefactura_revision))));
   if (pre && m.venta?.tipo_servicio) raiz.append(fila('Servicio', TIPOS_SERVICIO[m.venta.tipo_servicio] || m.venta.tipo_servicio));
@@ -485,9 +485,7 @@ function nodoCarta(m, { logo, copia }) {
   raiz.append(h('div.ct-dos', emisor, cliente));
 
   // Datos de la venta
-  const meta = [['Condición de venta', 'Contado'], ['Moneda', 'Colón costarricense (CRC)']];
-  if (m.venta?.numero) meta.unshift(['Venta', m.venta.numero]);
-  if (m.venta?.tipo_servicio) meta.push(['Servicio', TIPOS_SERVICIO[m.venta.tipo_servicio] || m.venta.tipo_servicio]);
+  const meta = [['Condición de venta', 'Contado'], ['Moneda', 'Colón costarricense (CRC)']]; // sin «Venta» ni «Servicio» (decisión de Emil, 4 nov 2026)
   if (m.venta?.referencia) meta.push(['Referencia', m.venta.referencia]);
   raiz.append(h('div.ct-meta', meta.map(([a, b]) => h('div', h('span.ct-etq', a), h('b', b)))));
 

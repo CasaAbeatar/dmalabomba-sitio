@@ -59,3 +59,18 @@
   .rp-pie .btn.primario{order:-1}  /* en el celular «Generar» va arriba del «Volver»: es lo primero que se alcanza con el pulgar */
   .rp-pie .rp-porque,.rp-pie .rp-quehace{text-align:left}
 }
+
+/* Atajos de detalle general en cada línea (propuesta A, 4 nov 2026): botones sueltos, todos del mismo ancho y alto; solo se ven en la línea que se está editando */
+.rp-precio{grid-template-columns:max-content minmax(0,1fr)!important}
+.rp-precio small{white-space:nowrap}
+.rp-atajos{display:none}
+.rp-tr.activa .rp-atajos{display:grid;grid-template-columns:repeat(4,minmax(0,1fr))}
+.rp-atajo{font:inherit;cursor:pointer;color:var(--tinta);background:var(--papel);min-height:48px;display:flex;align-items:center;justify-content:center;text-align:center;line-height:1.2;padding:.35rem .4rem;font-size:.9rem}
+.rp-atajos-t{grid-column:1 / -1;color:var(--tinta2);font-size:.8rem}
+.rp-atajos{gap:.4rem}
+.rp-atajo{border:1px solid var(--borde-control);border-radius:var(--r)}
+.rp-atajo.on{border-color:var(--rojo);color:var(--rojo-osc);background:var(--rojo-suave);font-weight:700}
+@media (max-width:700px){
+  .rp-col{min-width:0}
+  .rp-tr.activa .rp-atajos{grid-template-columns:repeat(2,minmax(0,1fr))}
+}

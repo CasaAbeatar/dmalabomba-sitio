@@ -161,6 +161,7 @@ export function abrirReemplazo(app, comprobante, { nc = null, alTerminar, alVerN
     for (const l of lineas) {
       const k = cambioLinea(l), ce = celdaTotal.get(l.id);
       ce.textContent = money(totalLinea(l)); ce.classList.toggle('cambiado', k.cant || k.precio);
+      sincAtajos.get(l.id)?.();
       const er = errorLinea(l), ee = celdaErr.get(l.id); ee.textContent = er; ee.hidden = !er;
     }
     const tn = totalNuevo(), cambia = tn !== redondea(c.total);
@@ -172,6 +173,10 @@ export function abrirReemplazo(app, comprobante, { nc = null, alTerminar, alVerN
     avisoMonto.classList.toggle('rp-falta', cambia && pagos.length !== 1);
     pintarPie();
   }
+  const SUGERENCIAS = ['Servicio de alimentación', 'Desayunos', 'Almuerzos', 'Cenas'];
+  const sincAtajos = new Map();
+  let filaActiva = null;
+  function activar(fila) { if (filaActiva) filaActiva.classList.remove('activa'); filaActiva = fila; fila.classList.add('activa'); }
   filasLineas.append(h('div.rp-th', { role: 'row' }, h('span', 'Cant.'), h('span', 'Descripción y precio'), h('span.der', 'Total')));
   for (const l of lineas) {
     const e = edit.get(l.id);
@@ -181,8 +186,13 @@ export function abrirReemplazo(app, comprobante, { nc = null, alTerminar, alVerN
     const iPre = h('input.campo.rp-num', { type: 'number', inputmode: 'decimal', step: '0.01', min: '0', value: e.precio, 'aria-label': 'Precio unitario con IVA', oninput: (ev) => { e.precio = ev.target.value; pintarTotales(); } });
     const tot = h('span.der.rp-tot'), er = h('small.rp-err', { role: 'alert', hidden: true });
     celdaTotal.set(l.id, tot); celdaErr.set(l.id, er);
-    filasLineas.append(h('div.rp-tr.rp-edit', { role: 'row' }, iCant,
-      h('span.rp-col', iDet, h('label.rp-precio', h('small.tenue', 'Precio con IVA'), iPre), desc ? h('small.tenue', desc >= 100 ? 'Cortesía' : 'Descuento ' + String(desc).replace('.', ',') + ' %') : null, er), tot));
+    const botonesA = SUGERENCIAS.map((t) => h('button.rp-atajo', { type: 'button', 'aria-pressed': 'false', onclick: () => { e.det = t; iDet.value = t; pintarTotales(); } }, t));
+    sincAtajos.set(l.id, () => botonesA.forEach((b, i) => { const on = e.det.trim() === SUGERENCIAS[i]; b.classList.toggle('on', on); b.setAttribute('aria-pressed', String(on)); }));
+    const atajos = h('div.rp-atajos', { role: 'group', 'aria-label': 'Detalle general para esta línea' }, h('span.rp-atajos-t', 'Detalle general'), botonesA);
+    const fila = h('div.rp-tr.rp-edit', { role: 'row', onfocusin: () => activar(fila) }, iCant,
+      h('span.rp-col', iDet, atajos, h('label.rp-precio', h('small.tenue', 'Precio con IVA'), iPre), desc ? h('small.tenue', desc >= 100 ? 'Cortesía' : 'Descuento ' + String(desc).replace('.', ',') + ' %') : null, er), tot);
+    filasLineas.append(fila);
+    if (!filaActiva) activar(fila);
   }
   const notaPago = h('p.tenue.rp-nota');
   const zonaDatos = h('section.rp-bloque',
