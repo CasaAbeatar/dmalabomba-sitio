@@ -11,6 +11,8 @@ import { imprimirComprobante, reimprimirComprobante, formatoDireccion, formatoCe
 import { crearDescarga, nombrePeriodo } from './descargas.js';
 import { textoRango, rangoPeriodo } from './periodo.js';
 import { explicarRechazoConClaude } from './claude_ayuda.js';
+import { abrirReemplazo } from './m_reemplazo.js';
+import { tipoDeReemplazo } from './api_reemplazo.js';
 
 if (!document.querySelector('link[data-fx-documentos]')) document.head.append(h('link', { rel: 'stylesheet', href: new URL('../css/documentos.css', import.meta.url).href, 'data-fx-documentos': '1' }));
 
@@ -454,9 +456,9 @@ export default {
       // Cada filtro sale si tiene documentos; el que está elegido sale siempre (aunque diga 0 mientras faltan documentos por cargar)
       const chip = (k, t, n) => (n || est.filtro === k ? [k, `${t} (${num(n)})`] : null);
       zonaFiltros.replaceChildren(...[['todos', `Todos (${num(est.lista.length)})`], chip('problemas', 'Con problemas', problemas.length), chip('pendientes', 'Esperando a Hacienda', pend.length),
-        chip('aceptados', 'Aceptados', nAcept), chip('rechazados', 'Rechazados', nRech),
+        chip('aceptados', 'Aceptados', nAcept), chip('rechazados', 'Rechazados por Hacienda', nRech),
         chip('devoluciones', 'Con devolución', nDev), chip('debitos', 'Con nota de débito', nDeb)]
-        .filter(Boolean).map(([k, t]) => h('button.btn' + (k === 'problemas' ? '.alerta' : ''), { type: 'button', 'aria-pressed': String(est.filtro === k), onclick: () => { est.filtro = k; est.avisoFiltro = null; est.pagina = 1; pintar(); } }, t)),
+        .filter(Boolean).map(([k, t]) => h('button.btn' + (k === 'problemas' || k === 'rechazados' ? '.alerta' : ''), { type: 'button', 'aria-pressed': String(est.filtro === k), onclick: () => { est.filtro = k; est.avisoFiltro = null; est.pagina = 1; pintar(); } }, t)),
         ...(selTarifa ? [h('label.doc-tarifa', h('span', 'Tarifa de IVA'), selTarifa)] : []));
       if (est.avisoFiltro) zonaFiltros.append(h('p.doc-aviso-filtro', { role: 'status' }, est.avisoFiltro));
       consulta = norm(est.q.trim()); consultaId = sinSignos(est.q);
@@ -833,8 +835,11 @@ export default {
       // Una venta nueva que sustituye a un documento anulado (solo cuando la base guarda la referencia, código 07). fx_comprobante trae el número del documento que sustituye en `reemplaza`.
       if (c.reemplaza_a) {
         const r = c.reemplaza;
-        raiz.append(h('div.doc-aviso.ref', h('div', h('b', r?.consecutivo ? `Este documento sustituye al ${(NOMBRES_DOCUMENTO[r.tipo_doc] || 'documento').toLowerCase()} N.° ${numeroCorto(r.consecutivo)}, que se anuló. ` : 'Este documento sustituye a uno que se anuló. '), 'Tipo de referencia: ' + TEXTO_07 + '.'),
-          h('button.btn', { type: 'button', onclick: () => { ctx.cerrar(); abrirDetalle(c.reemplaza_a); } }, 'Ver el documento anulado')));
+        const rechazado = String(c.codigo_referencia) === '16'; // código 16: sustituye a un documento que Hacienda rechazó (no hubo nota de crédito)
+        const que = `${conArticulo(r?.tipo_doc)} N.° ${numeroCorto(r?.consecutivo)}`;
+        raiz.append(h('div.doc-aviso.ref', h('div', h('b', r?.consecutivo ? `Este documento sustituye a ${que}, ${rechazado ? 'que Hacienda rechazó' : 'que se anuló'}. ` : `Este documento sustituye a uno ${rechazado ? 'que Hacienda rechazó' : 'que se anuló'}. `),
+          'Tipo de referencia: ' + (rechazado ? 'código 16 «Sustituye el comprobante rechazado»' : TEXTO_07) + '.'),
+          h('button.btn', { type: 'button', onclick: () => { ctx.cerrar(); abrirDetalle(c.reemplaza_a); } }, rechazado ? 'Ver el documento rechazado' : 'Ver el documento anulado')));
       }
 
       // Devoluciones, correcciones de monto y notas de débito de una factura o un tiquete (la anulación total se dice arriba, aparte). Una nota que quedó en error también cuenta y se ve con su estado.
@@ -959,7 +964,7 @@ export default {
         return b;
       };
       const doc = { ...c, cliente: c.cliente_snapshot?.nombre || '' };
-      let anular = null;
+      let anular = null, motivoAnular = '';
       if (esVenta(c) && !nc) {
         const permiso = permiteAnular(ctx.saldos);
         const motivo = deOtroAmbiente(c) && c.estado !== 'rechazado' ? 'se emitió en otro ambiente de Hacienda'
@@ -967,14 +972,29 @@ export default {
           : c.estado !== 'aceptado' ? 'Hacienda todavía no lo ha aceptado'
           : ctx.falloNC ? 'no se pudo comprobar si ya está anulado'
           : permiso.sabe && !permiso.permite ? 'ya tiene devoluciones o notas, abajo se ve qué sí se puede hacer' : '';
+        motivoAnular = motivo;
         anular = boton('Anular', '.peligro', async () => { abrirAnular(doc, { alTerminar: async () => { await ctx.repintar(true); await refrescarTras(); }, alVerNC: (n) => { ctx.cerrar(); abrirDetalle(n.id); } }); }, motivo);
+      }
+      // «Corregir y generar de nuevo»: rechazado, con error o anulado con nota de crédito. Ocupa el lugar de «Anular» (que en esos casos no se puede) y abre la pantalla de reemplazo de un solo paso.
+      const hechaDeNuevo = rehechoPor(c);
+      let reemplazar = null;
+      if (tipoDeReemplazo(c, nc) === 'aceptado') {
+        // Documento aceptado y vigente: «Corregir y generar de nuevo» anula con nota de crédito y emite el nuevo en un solo paso. «Anular» se queda, para anular sin documento nuevo (por ejemplo, un cobro doble).
+        if (esVenta(c) && !hechaDeNuevo) {
+          reemplazar = boton('Corregir y generar de nuevo', '.primario', async () => { abrirReemplazo(app, c, { nc: null, alTerminar: async () => { await ctx.repintar(true); await refrescarTras(); }, alVerNuevo: (n) => { ctx.cerrar(); abrirDetalle(n.id); },
+            alSoloAnular: () => abrirAnular(doc, { alTerminar: async () => { await ctx.repintar(true); await refrescarTras(); }, alVerNC: (n) => { ctx.cerrar(); abrirDetalle(n.id); } }) }); }, motivoAnular);
+        }
+      } else if (tipoDeReemplazo(c, nc) && !hechaDeNuevo && !ctx.falloNC) {
+        reemplazar = boton('Corregir y generar de nuevo', '.primario', async () => { abrirReemplazo(app, c, { nc, alTerminar: async () => { await ctx.repintar(true); await refrescarTras(); }, alVerNuevo: (n) => { ctx.cerrar(); abrirDetalle(n.id); } }); }, '');
+        anular = null;
+        const i = motivos.findIndex((x) => x.startsWith('Anular:')); if (i >= 0) motivos.splice(i, 1);
       }
       const puedeCorreo = correoActivo(app) && !!c.cliente_snapshot && c.estado === 'aceptado';
       const reenviar = boton('Reenviar al correo', '', () => reenviarPorCorreo(c, ctx),
         puedeCorreo ? '' : !correoActivo(app) ? 'el correo todavía no está activo' : !c.cliente_snapshot ? 'no tiene cliente' : 'Hacienda todavía no lo acepta');
       const reimprimir = boton('Reimprimir', '', () => reimprimirComprobante(c.id, { admin: app.admin }), '');
       return h('div.doc-barra', { role: 'group', 'aria-label': 'Acciones rápidas del documento' },
-        h('div.doc-barra-bot', anular, reimprimir, reenviar),
+        h('div.doc-barra-bot', reemplazar, anular, reimprimir, reenviar),
         motivos.length ? h('small.doc-barra-motivo', motivos.join(' ')) : null);
     }
 
@@ -1126,9 +1146,13 @@ export default {
             accion({ texto: 'Devolver parte', hint: noNotas || sinComprobar ? 'No se puede: lea el aviso de arriba' : 'El cliente devuelve algunos productos y se le devuelve esa parte.', disabled: noNotas || sinComprobar, onclick: abrirParcial(devolverParte) }),
             accion({ texto: 'Corregir un monto', hint: noNotas || sinComprobar ? 'No se puede: lea el aviso de arriba' : 'Se cobró de más o de menos en un producto.', disabled: noNotas || sinComprobar, onclick: abrirParcial(corregirMonto) }),
             accion({ texto: esTiquete ? 'El cliente pide factura' : 'Corregir el cliente de la factura', hint: bloq || sinComprobar ? 'No se puede: lea el aviso de arriba' : esTiquete ? 'Anula el tiquete y deja la factura lista para cobrar con el cliente que usted elija.' : 'Anula la factura y deja la venta lista para cobrar con el cliente correcto.', clase: 'primario', disabled: bloq || sinComprobar, onclick: async () => { cambiarCliente(app, doc, { alTerminar: repintar }); } }),
+            accion({ texto: 'Corregir y generar de nuevo', hint: bloq || sinComprobar ? 'No se puede: lea el aviso de arriba' : 'Una sola ventana: anula este documento con nota de crédito y emite el nuevo con el detalle, el monto o el cliente corregidos.', clase: 'primario', disabled: bloq || sinComprobar || !!rehechoPor(c),
+              onclick: async () => { abrirReemplazo(app, c, { nc: null, alTerminar: repintar, alVerNuevo: (n) => { ctx.cerrar(); abrirDetalle(n.id); }, alSoloAnular: () => abrirAnular(doc, { alTerminar: repintar, alVerNC: (n) => { ctx.cerrar(); abrirDetalle(n.id); } }) }); } }),
             accion({ texto: 'Anular con nota de crédito', hint: bloq || sinComprobar ? 'No se puede: lea el aviso de arriba' : null, clase: 'peligro', disabled: bloq || sinComprobar, onclick: async () => { abrirAnular(doc, { alTerminar: repintar, alVerNC: (n) => { ctx.cerrar(); abrirDetalle(n.id); } }); } }))].filter(Boolean));
       } else if (c.estado === 'rechazado') {
-        g.append(h('p.tenue', 'Hacienda rechazó este comprobante, por eso no vale y no se le hace nota de crédito. Toque «Hacer la venta de nuevo en Facturación» para sacar uno correcto de inmediato.' + (SUSTITUYE_RECHAZADO ? ' El nuevo indicará que sustituye a este.' : '')), bloqueAtender(c, ctx));
+        const pasoUno = tipoDeReemplazo(c, nc) && !rehechoPor(c)
+          ? h('div.doc-botones', accion({ texto: 'Corregir y generar de nuevo', hint: 'Una sola ventana: ve el motivo, corrige lo que haga falta y genera el documento nuevo.', clase: 'primario', onclick: async () => { abrirReemplazo(app, c, { nc, alTerminar: async () => { await ctx.repintar(true); await refrescarTras(); }, alVerNuevo: (n) => { ctx.cerrar(); abrirDetalle(n.id); } }); } })) : null;
+        g.append(h('p.tenue', 'Hacienda rechazó este comprobante, por eso no vale y no se le hace nota de crédito. Toque «Corregir y generar de nuevo» para sacar uno correcto de inmediato, o «Hacer la venta de nuevo en Facturación» si necesita cambiar los productos.' + (SUSTITUYE_RECHAZADO ? ' El nuevo indicará que sustituye a este.' : '')), pasoUno, bloqueAtender(c, ctx));
       } else {
         // pendiente, enviado o con error: todavía no hay nada que anular. Se explica qué significa y qué hacer, sin prometer cuánto tarda Hacienda.
         const pend = c.estado === 'pendiente' || c.estado === 'enviado';
