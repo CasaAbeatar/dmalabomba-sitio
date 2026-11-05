@@ -41,10 +41,11 @@ function Abrir-Todo {
   New-Item -ItemType Directory -Force -Path $Perfil | Out-Null
   $p = Elegir-Pantallas $CajaEnPantalla
   Anotar ("Pantallas detectadas: {0}. Navegador: {1}" -f $p.Cuantas, $exe)
-  [void](Abrir-Ventana $exe $urlCajaAbrir $Perfil $p.Caja)
+  [void](Abrir-Ventana $exe $urlCajaAbrir $Perfil $p.Caja $CajaPantallaCompleta)
   if ($AbrirClienteDesdeKit -and $p.Cliente) { [void](Abrir-Ventana $exe $UrlCliente $Perfil $p.Cliente) }
   elseif ($AbrirClienteDesdeKit) { Anotar "Solo hay una pantalla: se abrio solo la caja." }
 }
+$cajaVista = $false   # la caja ya se vio abierta alguna vez (para saber si la cerraron a proposito)
 Abrir-Todo
 while ($true) {
   Start-Sleep -Seconds $SegundosVigilar
@@ -59,15 +60,22 @@ while ($true) {
       $ultimoReinicio = (Get-Date).Date; Anotar "Reinicio diario del navegador."
       Extender-Pantallas; Start-Sleep -Seconds 2; Abrir-Todo; continue
     }
-    if ($procs.Count -eq 0) { Anotar "El navegador se cerro. Se reabre."; Extender-Pantallas; Start-Sleep -Seconds 2; Abrir-Todo; continue }
+    if ($procs.Count -eq 0) {
+      if ($cajaVista -and -not $ReabrirCajaSiSeCierra) { Anotar "El navegador se cerro. El kit no lo reabre y termina (para volver: acceso Abrir caja y pantalla del cliente)."; break }
+      Anotar "El navegador se cerro. Se reabre."; Extender-Pantallas; Start-Sleep -Seconds 2; Abrir-Todo; continue
+    }
     $hs = @(Ventanas-Nuestras $Perfil $procs)
     $hayCaja = $false; $hayCliente = $false
     foreach ($h in $hs) {
       $t = [W32]::Titulo($h)
       if ($t -like "*$TituloCliente*") { $hayCliente = $true } elseif ($t -like "*$TituloCaja*") { $hayCaja = $true }
     }
+    if ($hayCaja) { $cajaVista = $true }
     $exe = Buscar-Navegador
-    if (-not $hayCaja -and $exe) { Anotar "Falta la ventana de la caja. Se abre."; [void](Abrir-Ventana $exe $urlCajaAbrir $Perfil $p.Caja) }
+    if (-not $hayCaja -and $exe) {
+      if ($cajaVista -and -not $ReabrirCajaSiSeCierra) { Anotar "Se cerro la caja con la X. El kit no la reabre y termina (para volver: acceso Abrir caja y pantalla del cliente)."; break }
+      Anotar "Falta la ventana de la caja. Se abre."; [void](Abrir-Ventana $exe $urlCajaAbrir $Perfil $p.Caja $CajaPantallaCompleta)
+    }
     if ($p.Cliente -and $exe) {
       if ($hayCliente) { $sinClienteDesde = $null }
       elseif ($AbrirClienteDesdeKit) { Anotar "Falta la ventana del cliente. Se abre."; [void](Abrir-Ventana $exe $UrlCliente $Perfil $p.Cliente) }
@@ -88,3 +96,4 @@ while ($true) {
     }
   } catch { Anotar "Error: $($_.Exception.Message)" }
 }
+Anotar "El kit termino."

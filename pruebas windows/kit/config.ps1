@@ -12,6 +12,8 @@ $CajaEnPantalla = "principal"                      # "principal" o "otra": en qu
 #   $true  = la abre el kit y la caja se abre con ?kit=1 para no abrir otra.
 $AbrirClienteDesdeKit = $false
 $EsperaRespaldoSeg    = 60
+$CajaPantallaCompleta   = $false  # $false = la caja va MAXIMIZADA (se ve la barra de titulo con la X y la barra de tareas de Windows, para poder usar la computadora); $true = pantalla completa (F11). La pantalla del cliente siempre va en pantalla completa.
+$ReabrirCajaSiSeCierra  = $false  # $false = si se cierra la caja con la X, el kit NO la vuelve a abrir y termina (para volver: acceso "Abrir caja y pantalla del cliente"); $true = la reabre sola a los pocos segundos
 $TituloCaja     = "Facturaci"                      # parte del titulo de la ventana de la caja (sin tilde para evitar problemas de codificacion)
 $TituloCliente  = "Pantalla del cliente"           # parte del titulo de la ventana del cliente
 $HoraReinicioDiario   = "04:30"                    # el navegador se cierra y abre solo a esa hora (vacio = no)

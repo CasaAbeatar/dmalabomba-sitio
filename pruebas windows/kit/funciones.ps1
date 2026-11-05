@@ -23,6 +23,8 @@ public static class W32 {
   [DllImport("user32.dll")] public static extern int GetWindowLong(IntPtr h, int i);
   [DllImport("user32.dll")] public static extern void keybd_event(byte vk, byte scan, uint flags, UIntPtr extra);
   [DllImport("user32.dll")] public static extern bool SetProcessDPIAware();
+  [DllImport("user32.dll")] public static extern bool IsZoomed(IntPtr h);
+  [DllImport("user32.dll")] public static extern bool IsIconic(IntPtr h);
   [DllImport("user32.dll")] public static extern long SetDisplayConfig(uint a, IntPtr b, uint c, IntPtr d, uint f);
   public static string Titulo(IntPtr h) { var t = new StringBuilder(512); GetWindowText(h, t, 512); return t.ToString(); }
   // Pantalla completa de Chrome: la ventana ocupa exactamente el monitor y no tiene barra de titulo (Chrome le quita WS_CAPTION).
@@ -31,6 +33,12 @@ public static class W32 {
     bool tam = Math.Abs(r.Left - x) <= 2 && Math.Abs(r.Top - y) <= 2 && Math.Abs((r.Right - r.Left) - w) <= 2 && Math.Abs((r.Bottom - r.Top) - hh) <= 2;
     bool sinTitulo = (GetWindowLong(h, -16) & 0xC00000) == 0;
     return tam && sinTitulo;
+  }
+  // El centro de la ventana cae dentro del monitor indicado.
+  public static bool EstaEn(IntPtr h, int x, int y, int w, int hh) {
+    RECT r; if (!GetWindowRect(h, out r)) return false;
+    int cx = (r.Left + r.Right) / 2, cy = (r.Top + r.Bottom) / 2;
+    return cx >= x && cx < x + w && cy >= y && cy < y + hh;
   }
   public static List<IntPtr> Ventanas(string clase, uint[] pids) {
     var r = new List<IntPtr>();
@@ -137,7 +145,28 @@ function Poner-En-Pantalla($h, $pantalla) {
   }
   return [W32]::EsCompleta($h, $b.X, $b.Y, $b.Width, $b.Height)
 }
-function Abrir-Ventana($exe, $url, $perfil, $pantalla) {
+function Poner-Maximizada($h, $pantalla, $forzar) {
+  # La caja va maximizada y NO en pantalla completa: se ve la barra de titulo con la X y la barra de tareas de Windows.
+  # $forzar = al abrir; si no, solo se corrige cuando la ventana esta fuera de su monitor.
+  if ([W32]::IsIconic($h)) { return $true }   # la cajera la minimizo para usar Windows: no se toca
+  $b = $pantalla.Bounds
+  if ([W32]::EsCompleta($h, $b.X, $b.Y, $b.Width, $b.Height)) {
+    # venia en pantalla completa (F11): se sale de ella, maximo 2 intentos
+    $k = "max" + [string]$h
+    $n = 0; if ($script:IntentosF11.ContainsKey($k)) { $n = $script:IntentosF11[$k] }
+    if ($n -lt 2) {
+      $script:IntentosF11[$k] = $n + 1
+      if (Traer-Al-Frente $h) { [System.Windows.Forms.SendKeys]::SendWait("{F11}"); Start-Sleep -Milliseconds 600 }
+    }
+  }
+  if ((-not $forzar) -and [W32]::EstaEn($h, $b.X, $b.Y, $b.Width, $b.Height)) { return $true }
+  [void][W32]::ShowWindow($h, 9)
+  [void][W32]::SetWindowPos($h, [IntPtr]::Zero, ($b.X + 40), ($b.Y + 40), [Math]::Max(400, ($b.Width - 80)), [Math]::Max(300, ($b.Height - 80)), 0x0044)
+  Start-Sleep -Milliseconds 200
+  [void][W32]::ShowWindow($h, 3)   # maximizada en el monitor donde quedo
+  return $true
+}
+function Abrir-Ventana($exe, $url, $perfil, $pantalla, $completa = $true) {
   $b = $pantalla.Bounds
   $argumentos = @("--app=$url", "--user-data-dir=`"$perfil`"",
     "--window-position=$($b.X),$($b.Y)", "--window-size=$($b.Width),$($b.Height)",
@@ -152,15 +181,19 @@ function Abrir-Ventana($exe, $url, $perfil, $pantalla) {
     Start-Sleep -Milliseconds 500
     $h = (Ventanas-Nuestras $perfil) | Where-Object { $antes -notcontains $_ } | Select-Object -First 1
   }
-  if ($h) { [void](Poner-En-Pantalla $h $pantalla) }
+  if ($h) {
+    if ($completa) { [void](Poner-En-Pantalla $h $pantalla) } else { [void](Poner-Maximizada $h $pantalla $true) }
+  }
   return $h
 }
 function Afinar-Ventanas($pantallas, $perfil, $procesos) {
-  # Cada ventana nuestra (por el titulo) va a su monitor en pantalla completa. Otras ventanas del navegador no se tocan.
+  # Cada ventana nuestra (por el titulo) va a su monitor: el cliente en pantalla completa y la caja maximizada (o completa si $CajaPantallaCompleta). Otras ventanas del navegador no se tocan.
   foreach ($h in (Ventanas-Nuestras $perfil $procesos)) {
     $t = [W32]::Titulo($h)
     if ($pantallas.Cliente -and $t -like "*$TituloCliente*") { [void](Poner-En-Pantalla $h $pantallas.Cliente) }
-    elseif ($t -like "*$TituloCaja*") { [void](Poner-En-Pantalla $h $pantallas.Caja) }
+    elseif ($t -like "*$TituloCaja*") {
+      if ($CajaPantallaCompleta) { [void](Poner-En-Pantalla $h $pantallas.Caja) } else { [void](Poner-Maximizada $h $pantallas.Caja $false) }
+    }
   }
 }
 function Afinar-Usuario {
