@@ -20,7 +20,6 @@ Warning config.ps1:8 PSUseDeclaredVarsMoreThanAssignments The variable 'HoraRein
 Warning config.ps1:9 PSUseDeclaredVarsMoreThanAssignments The variable 'HorarioDesde' is assigned but never used.
 Warning config.ps1:10 PSUseDeclaredVarsMoreThanAssignments The variable 'HorarioHasta' is assigned but never used.
 Warning config.ps1:11 PSUseDeclaredVarsMoreThanAssignments The variable 'SegundosVigilar' is assigned but never used.
-Warning funciones.ps1:88 PSAvoidAssignmentToAutomaticVariable The Variable 'args' is an automatic variable that is built into PowerShell, assigning to it might have undesired side effects. If assignment is not by design, please use a different name.
 Warning funciones.ps1:49 PSUseSingularNouns The cmdlet 'Extender-Pantallas' uses a plural noun. A singular noun should be used instead.
 Warning funciones.ps1:79 PSUseSingularNouns The cmdlet 'Elegir-Pantallas' uses a plural noun. A singular noun should be used instead.
 Warning funciones.ps1:112 PSUseSingularNouns The cmdlet 'Ventanas-Nuestras' uses a plural noun. A singular noun should be used instead.
