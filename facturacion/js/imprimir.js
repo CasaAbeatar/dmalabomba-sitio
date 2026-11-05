@@ -509,9 +509,8 @@ function nodoCarta(m, { logo, copia }) {
 
   // Líneas
   raiz.append(h('table.ct-tabla',
-    h('thead', h('tr', h('th', 'CABYS'), h('th', 'Descripción'), h('th', 'Unidad'), h('th.der', 'Cant.'), h('th.der', 'Precio unit.'), h('th.der', 'IVA'), h('th.der', 'Total'))),
+    h('thead', h('tr', h('th', 'Descripción'), h('th', 'Unidad'), h('th.der', 'Cant.'), h('th.der', 'Precio unit.'), h('th.der', 'IVA'), h('th.der', 'Total'))),
     h('tbody', m.lineas.map((l) => h('tr',
-      h('td.cod', l.cabys || ''),
       h('td', h('div', l.descripcion || ''), descuentoDe(l) ? h('div.ct-tenue', descuentoDe(l).texto + ': - ' + money(descuentoDe(l).monto)) : null, l.exoneracion ? h('div.ct-tenue', textoExoneracion(l)) : null, l.nota ? h('div.ct-tenue', l.nota) : null),
       h('td.uni', unidadDeLinea(l)),
       h('td.der', num(l.cantidad)),
@@ -536,7 +535,9 @@ function nodoCarta(m, { logo, copia }) {
     m.desglose.map((f) => h('div.ct-fila', h('span', f.etqLarga), h('span.v', money(f.iva)))),
     m.exonerado > 0 ? h('div.ct-fila', h('span', 'IVA exonerado (no se cobra)'), h('span.v', money(m.exonerado))) : null,
     h('div.ct-fila.gran', h('span', nc ? 'Total acreditado' : 'Total'), h('span.v', money(m.total))));
-  raiz.append(h('div.ct-cierre', pagos, tot));
+  // Facturas y tiquetes: no se imprimen los pagos (ni recibido ni vuelto), solo el total. Las notas de crédito y de débito conservan cómo se devuelve o se paga la diferencia.
+  const conPagos = m.tipo === '02' || m.tipo === '03';
+  raiz.append(h('div.ct-cierre' + (conPagos ? '' : '.sin-pagos'), conPagos ? pagos : null, tot));
 
   // Estado de validación (el consecutivo y la clave van arriba, junto al tipo de documento)
   const st = m.estado;

@@ -99,6 +99,7 @@ table.ct-tabla{width:100%;border-collapse:collapse;margin-top:1mm}
 .ct-fila.neto{border-top:.15mm solid #e2dacb;margin-top:.4mm;padding-top:.6mm;font-weight:600}
 .ct-nota-precio{font-size:9.5px;color:#6b645b;margin-top:.8mm}
 .ct-cierre{display:grid;grid-template-columns:1fr 82mm;gap:8mm;margin-top:2mm;break-inside:avoid}
+.ct-cierre.sin-pagos{grid-template-columns:82mm;justify-content:end}
 .ct-fila{display:flex;justify-content:space-between;gap:4mm;padding:.3mm 0}
 .ct-fila .v{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
 .ct-totales{border-top:.3mm solid #1d1a17;padding-top:.8mm}
