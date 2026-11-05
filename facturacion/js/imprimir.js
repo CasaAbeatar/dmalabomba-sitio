@@ -370,7 +370,7 @@ function nodoTiquete(m, { papel, logo, copia }) {
   if (m.venta?.numero) raiz.append(fila(pre ? 'Cuenta' : 'Venta', m.venta.numero));
   if (m.venta?.prefactura_numero && pre) raiz.append(fila('Prefactura N.°', m.venta.prefactura_numero));
   if (pre && Number(m.venta?.prefactura_revision) > 1) raiz.append(fila('Revisión', String(Number(m.venta.prefactura_revision))));
-  if (m.venta?.tipo_servicio) raiz.append(fila('Servicio', TIPOS_SERVICIO[m.venta.tipo_servicio] || m.venta.tipo_servicio));
+  if (pre && m.venta?.tipo_servicio) raiz.append(fila('Servicio', TIPOS_SERVICIO[m.venta.tipo_servicio] || m.venta.tipo_servicio));
   if (m.venta?.referencia) raiz.append(fila('Referencia', m.venta.referencia));
   if (!pre) raiz.append(fila('Condición de venta', 'Contado'), fila('Moneda', 'Colón (CRC)'));
   if (nota && m.original) {
@@ -400,7 +400,7 @@ function nodoTiquete(m, { papel, logo, copia }) {
   for (const l of m.lineas) {
     raiz.append(h('div.lin',
       h('div.d', l.descripcion || ''),
-      h('div.q', h('span', pre ? `${num(l.cantidad)} x ${money(l.precio_final)}` : `${num(l.cantidad)} ${unidadDeLinea(l)} x ${money(l.precio_final)}`), h('b', money(l.total_linea))),
+      h('div.q', h('span', `${num(l.cantidad)} x ${money(l.precio_final)}`), h('b', money(l.total_linea))),
       descuentoDe(l) ? h('div.q.desc-lin', h('span', descuentoDe(l).texto), h('b', '- ' + money(descuentoDe(l).monto))) : null,
       tarifaDeLinea(l).pct !== 13 ? h('div.iva-lin', etiquetaIva(tarifaDeLinea(l).pct, tarifaDeLinea(l).codigo)) : null,
       l.exoneracion ? h('div.iva-lin', textoExoneracion(l)) : null,
@@ -509,10 +509,9 @@ function nodoCarta(m, { logo, copia }) {
 
   // Líneas
   raiz.append(h('table.ct-tabla',
-    h('thead', h('tr', h('th', 'Descripción'), h('th', 'Unidad'), h('th.der', 'Cant.'), h('th.der', 'Precio unit.'), h('th.der', 'IVA'), h('th.der', 'Total'))),
+    h('thead', h('tr', h('th', 'Descripción'), h('th.der', 'Cant.'), h('th.der', 'Precio unit.'), h('th.der', 'IVA'), h('th.der', 'Total'))),
     h('tbody', m.lineas.map((l) => h('tr',
       h('td', h('div', l.descripcion || ''), descuentoDe(l) ? h('div.ct-tenue', descuentoDe(l).texto + ': - ' + money(descuentoDe(l).monto)) : null, l.exoneracion ? h('div.ct-tenue', textoExoneracion(l)) : null, l.nota ? h('div.ct-tenue', l.nota) : null),
-      h('td.uni', unidadDeLinea(l)),
       h('td.der', num(l.cantidad)),
       h('td.der', money(l.precio_final)),
       h('td.der', (tarifaDeLinea(l).pct ? num(tarifaDeLinea(l).pct, 2) + '%' : tarifaDeLinea(l).codigo === '10' || !tarifaDeLinea(l).codigo ? 'Exento' : '0%')),
