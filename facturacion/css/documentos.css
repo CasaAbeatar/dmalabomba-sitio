@@ -113,8 +113,8 @@
 .chip.nota{color:#4a3d00;border-color:var(--borde-ambar,#a87400);background:var(--ambar-suave)}
 .doc-fila.anulada .doc-ver{background:#faf7f1}
 /* Rechazado por Hacienda: toda la fila en rojo suave, con borde fino rojo (más marcado a la izquierda) */
-.doc-fila.rechazada .doc-ver{background:var(--rojo-suave);border-color:var(--borde-mal);box-shadow:inset 3px 0 0 var(--rojo)}
-.doc-fila.rechazada .doc-ver:hover{border-color:var(--rojo)}
+.doc-fila.rechazada .doc-ver,.doc-fila.con-error .doc-ver{background:var(--rojo-suave);border-color:var(--borde-mal);box-shadow:inset 3px 0 0 var(--rojo)}
+.doc-fila.rechazada .doc-ver:hover,.doc-fila.con-error .doc-ver:hover{border-color:var(--rojo)}
 .doc-fila.anulada .c-total{text-decoration:line-through;color:var(--tinta2)}
 .chip.anulado{color:#4a443d;border-color:var(--borde-control,#8f8672);background:#efe9dd}
 /* Pantallas anchas (computadora y tableta horizontal): una sola fila con los cinco datos y los dos botones lado a lado */

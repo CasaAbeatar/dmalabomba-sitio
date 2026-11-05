@@ -722,7 +722,7 @@ export default {
         ? h('div.doc-espera', { role: 'note' }, h('b', 'Esperando a Hacienda. '), 'Todavía no se puede anular: podrá hacerlo cuando Hacienda lo acepte. Toque la fila para ver qué significa y qué hacer.')
         : esVenta(d) && !anulado && d.estado === 'aceptado' && (nDev > 0 || nDeb > 0)
           ? h('div.doc-espera', { role: 'note' }, h('b', 'No se anula completo. '), `Ya tiene ${nDeb > 0 && nDev > 0 ? 'una devolución o corrección y una nota de débito' : nDeb > 0 ? 'una nota de débito' : 'una devolución o una corrección'}. Toque la fila: ahí puede devolver otra parte o corregir un monto.`) : null;
-      return h('div.doc-fila' + (nc ? '.nc' : '') + (nd ? '.nd' : '') + (anulado ? '.anulada' : '') + (d.estado === 'rechazado' ? '.rechazada' : ''),
+      return h('div.doc-fila' + (nc ? '.nc' : '') + (nd ? '.nd' : '') + (anulado ? '.anulada' : '') + (d.estado === 'rechazado' ? '.rechazada' : '') + (d.estado === 'error' ? '.con-error' : ''),
         h('button.doc-ver', { type: 'button', onclick: () => abrirDetalle(d.id), 'aria-label': `${tipo} número ${numeroCorto(d.consecutivo)}, ${money(d.total)}${nDev ? ', con devolución' : ''}${nDeb ? ', con nota de débito' : ''}. Toque para ver el detalle` },
           h('span.c-hora', horaCorta(d.fecha_emision)),
           h('span.c-doc', h('span.nw', h('b', tipo), ' N.° ' + numeroCorto(d.consecutivo)),
