@@ -309,18 +309,26 @@ export function modeloPrefactura(r, soc) {
 /* ------------------------------------------------------------------ logos */
 
 const logos = new Map();
-function logoDataUri(codigo) {
+function logoDataUri(codigo, horizontal = false) {
   const k = codigo === 'pollos' ? 'pollos' : 'soda';
-  if (!logos.has(k)) {
-    logos.set(k, (async () => {
+  const id = k + (horizontal ? '-h' : '');
+  if (!logos.has(id)) {
+    logos.set(id, (async () => {
       try {
+        if (horizontal) {
+          const r = await fetch(new URL(`../img/logo-${k}-horizontal.png`, import.meta.url));
+          if (!r.ok) throw new Error('sin logo');
+          const b = new Uint8Array(await r.arrayBuffer()); let bin = '';
+          for (let i = 0; i < b.length; i += 8192) bin += String.fromCharCode(...b.subarray(i, i + 8192));
+          return 'data:image/png;base64,' + btoa(bin);
+        }
         const r = await fetch(new URL(`../img/logo-${k}.svg`, import.meta.url));
         if (!r.ok) throw new Error('sin logo');
         return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(await r.text());
       } catch { return null; }
     })());
   }
-  return logos.get(k);
+  return logos.get(id);
 }
 
 /* ------------------------------------------------------------------ dibujo: tiquete térmico */
@@ -694,7 +702,7 @@ export async function imprimirComprobante(comprobanteId, { formato, copias } = {
   // Una venta hecha de nuevo después de anular dice cuál documento sustituye: se busca su número (si no se puede leer, se imprime sin él)
   if (c.reemplaza_a && !c.reemplaza?.consecutivo) { try { const o = await api.comprobante(c.reemplaza_a); if (o) c = { ...c, reemplazado: { tipo_doc: o.tipo_doc, consecutivo: o.consecutivo } }; } catch { /* se imprime sin el número */ } }
   const m = modeloComprobante(c);
-  const logo = await logoDataUri(m.soc.codigo);
+  const logo = await logoDataUri(m.soc.codigo, formato === 'carta');
   const nodos = [];
   for (let i = 1; i <= copias; i++) nodos.push(formato === 'carta' ? nodoCarta(m, { logo, copia: copiaTxt(i, copias) }) : nodoTiquete(m, { papel: aj.papel, logo, copia: copiaTxt(i, copias) }));
   const nombre = `${NOMBRE_DOC[m.tipo] || 'Comprobante'} ${m.consecutivo}`;
