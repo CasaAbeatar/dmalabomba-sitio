@@ -29,6 +29,9 @@ const TODOS = ['efectivo', 'tarjeta', 'sinpe', 'transferencia'];
 const cents = (n) => Math.round((Number(n) || 0) * 100);
 const numCuenta = (n) => '#' + String(n || '').split('-').pop();
 // fx_turno_cerrar rechaza el cierre con cuentas abiertas (error P0001, hint «cuentas_abiertas»). api.js guarda el hint en el error; el texto queda solo de respaldo por si el servidor no lo manda.
+// Después de cada cobro la caja abre sola una cuenta nueva para el siguiente cliente (4 nov 2026). Si nadie le agregó nada, esa cuenta vacía y sin nombre no estorba: no se cuenta como abierta y se anula sola al cerrar la caja.
+const cuentaVacia = (a) => a.estado === 'abierta' && Number(a.lineas) === 0 && !String(a.referencia || '').trim();
+const conProductos = (l) => (l || []).filter((a) => !cuentaVacia(a));
 const rechazoPorCuentas = (e) => !!e && !esTransitorio(e) && (e.hint === 'cuentas_abiertas' || /cuentas? abiertas?/i.test(e.message || ''));
 
 // Fecha y hora que se pueden partir en dos renglones sin cortar los números (celular)
@@ -306,7 +309,7 @@ export default {
         if (!vivo || mi !== nCarga) return;
         turnoVisto = null; e = null; ab = [];
       }
-      est = e; abiertas = ab || []; historial = hist || []; informes = Array.isArray(inf) ? inf : [];
+      est = e; abiertas = conProductos(ab); historial = hist || []; informes = Array.isArray(inf) ? inf : [];
       pintar();
     }
 
@@ -506,7 +509,12 @@ export default {
 
     async function prepararCierre(dMostrado, contado, notasTxt) {
       // Se leen las cifras otra vez por si hubo ventas, salidas o un cierre desde otro aparato mientras se contaba
-      const [fresco, lista] = await Promise.all([api.turnoEstado(turnoVisto), api.ventasAbiertas(socId)]);
+      let [fresco, lista] = await Promise.all([api.turnoEstado(turnoVisto), api.ventasAbiertas(socId)]);
+      const vacias = (lista || []).filter(cuentaVacia);
+      if (vacias.length) {
+        for (const c of vacias) { try { await api.ventaAnular(c.id, 'Cuenta vacía al cerrar la caja'); } catch { /* si no se pudo, el aviso de cuentas abiertas lo dirá */ } }
+        lista = await api.ventasAbiertas(socId);
+      }
       if (fresco?.turno?.cerrado_en) { await terminarCierre(fresco, avisoYaCerrada(fresco, contado)); return; }
       const d2 = datosResumen(fresco);
       d2.leidoEn = Date.now();

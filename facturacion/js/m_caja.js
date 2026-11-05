@@ -1144,8 +1144,8 @@ export default {
           h('small', (TIPOS_SERVICIO[c.tipo_servicio] || '') + (c.estado === 'prefacturada' ? ' · prefactura' : '')),
           h('span', c.lineas + (Number(c.lineas) === 1 ? ' producto · ' : ' productos · ') + money(c.total))));
         asideCuenta.replaceChildren(h('div.vacio-cuenta',
-          h('h2', abiertas.length ? 'Cuentas abiertas' : 'Cuenta nueva'),
-          abiertas.length ? h('div.esquema', tarjetas) : h('p', 'Ya puede tocar los productos: la cuenta se crea sola con el primero. «Nueva cuenta» solo hace falta si quiere ponerle nombre.'),
+          h('h2', abiertas.length ? 'Cuentas abiertas' : 'No hay cuentas abiertas'),
+          abiertas.length ? h('div.esquema', tarjetas) : h('p', 'Toque «Nueva cuenta», escriba el nombre y cree la cuenta. Después toque los productos.'),
           h('button.btn.primario.grande', { type: 'button', onclick: seguro(nuevaCuenta) }, 'Nueva cuenta')));
         return;
       }
@@ -1678,7 +1678,7 @@ export default {
         duda = false; ventasEnDuda.delete(ventaId); ventasEnCobro.delete(ventaId);
         m.cerrar();
         if (!vivo) { avisoCobroSinCaja(comp, app, aviso); return; } // la Caja ya no está en pantalla: se avisa igual
-        try { sacarDeLista(ventaId); cur = null; await pasarALaSiguiente(); if (vivo) repintar(); } catch { /* la barra se refresca sola */ }
+        try { sacarDeLista(ventaId); cur = null; await pasarALaSiguiente(); if (!cur && vivo) await crearCuentaBuffet(); if (vivo) repintar(); } catch { /* la barra se refresca sola */ }
         if (vivo) zonaEfectivo?.refrescar(); // el cobro en efectivo cambia el «Efectivo esperado en caja»
         if (vivo) exito(comp, vueltoLocal, aviso); else avisoCobroSinCaja(comp, app, aviso);
       }
