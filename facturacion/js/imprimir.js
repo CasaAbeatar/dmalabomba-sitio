@@ -419,7 +419,7 @@ function nodoTiquete(m, { papel, logo, copia }) {
   for (const f of m.desglose) raiz.append(fila(pre ? f.etq : f.etqTarifa, money(f.iva)));
   if (m.exonerado > 0) raiz.append(fila('IVA exonerado (no se cobra)', money(m.exonerado)));
   raiz.append(h('div.fila-tq.total', h('span', nc ? 'TOTAL ACREDITADO' : 'TOTAL'), h('span.v', money(m.total))));
-  if (m.pagos.length) {
+  if (m.pagos.length && (m.tipo === '02' || m.tipo === '03')) { // tiquetes y facturas: sin pagos, recibido ni vuelto; las notas conservan cómo se devuelve o se paga
     raiz.append(linea());
     raiz.append(h('div.etq-chica', etiquetaPagos(m)));
     for (const p of m.pagos) {
