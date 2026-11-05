@@ -15,20 +15,21 @@
   /* Tema neutro de respaldo (cuando el mensaje no trae empresa) */
   --fondo:#fbf8f2;--papel:#fff;--tinta:#1d1a17;--tinta2:#5d564d;--linea:#d9cfbd;--linea2:#c2b6a0;
   --rojo:#b81622;--verde:#14573a;--verde-suave:#e6f4ec;--vuelto-r:#14573a;--total:#1d1a17;
-  --ced-bg:#fff;--ced-fg:#0b2e8a;--ced-bd:#0b2e8a;--cor-bg:transparent;--cor-fg:#0a5148;--cor-bd:#0a5148;
+  --ced-bg:#fff;--ced-fg:#0b2e8a;--ced-bd:#0b2e8a;--cor-bg:transparent;--cor-fg:#0a5148;--cor-bd:#0a5148;--emp:#1d1a17;
   --fino:max(1px,.15rem);
   --ajuste:1;
 }
-/* Tema Soda La Bomba (sodalabomba.com): fondo rojo #B81622, ámbar #F3A62C y negro #171212, Figtree.
-   Cédula en placa ámbar con letra negra; correo en placa negra con letra ámbar y filete ámbar. */
-body[data-tema=soda]{--fondo:#b81622;--papel:#b81622;--tinta:#fff;--tinta2:#f8dcde;--linea:#d9626c;--linea2:#f3a62c;
-  --rojo:#fff;--verde:#171212;--verde-suave:#f3a62c;--vuelto-r:#f3a62c;--total:#f3a62c;
-  --ced-bg:#f3a62c;--ced-fg:#171212;--ced-bd:#f3a62c;--cor-bg:#171212;--cor-fg:#f3a62c;--cor-bd:#f3a62c}
-/* Tema Pollos La Bomba y Papea (polloslabomba.com): fondo ámbar, títulos y total en rojo, texto chico en negro.
-   Cédula en placa negra con letra ámbar; correo en negro con filete negro. */
-body[data-tema=pollos]{--fondo:#f3a62c;--papel:#f3a62c;--tinta:#171212;--tinta2:#3d2a08;--linea:#c98a1f;--linea2:#171212;
-  --rojo:#7a0d16;--verde:#f3a62c;--verde-suave:#171212;--vuelto-r:#b81622;--total:#b81622;
-  --ced-bg:#171212;--ced-fg:#f3a62c;--ced-bd:#171212;--cor-bg:transparent;--cor-fg:#171212;--cor-bd:#171212}
+/* Los dos negocios comparten una base clara y cálida (la del boceto) y se distinguen por sus acentos de marca, en filetes finos, rótulos, total y placas.
+   Tema Soda La Bomba (sodalabomba.com: rojo #B81622, ámbar #F3A62C, negro #171212): base crema, filetes rojos, título de empresa y total en rojo.
+   Cédula en placa blanca con filete rojo y letra roja oscura; correo en negro con filete rojo. */
+body[data-tema=soda]{--fondo:#fbf7ef;--papel:#fbf7ef;--tinta:#171212;--tinta2:#5a4a44;--linea:#e6d8c8;--linea2:#b81622;--emp:#b81622;
+  --rojo:#b81622;--verde:#8c0e19;--verde-suave:#fff;--vuelto-r:#b81622;--total:#b81622;
+  --ced-bg:#fff;--ced-fg:#8c0e19;--ced-bd:#b81622;--cor-bg:transparent;--cor-fg:#171212;--cor-bd:#b81622}
+/* Tema Pollos La Bomba y Papea (polloslabomba.com: ámbar #F3A62C, negro #171212, rojo #B81622): base crema con un toque de ámbar, filetes ámbar, título y total en negro.
+   Cédula en placa negra con letra ámbar; correo en negro con filete ámbar. El rojo queda para los descuentos. */
+body[data-tema=pollos]{--fondo:#fff5de;--papel:#fff5de;--tinta:#171212;--tinta2:#5a4528;--linea:#f1deb2;--linea2:#f3a62c;--emp:#171212;
+  --rojo:#b81622;--verde:#171212;--verde-suave:#ffe7b3;--vuelto-r:#171212;--total:#171212;
+  --ced-bg:#171212;--ced-fg:#f3a62c;--ced-bd:#171212;--cor-bg:transparent;--cor-fg:#171212;--cor-bd:#f3a62c}
 *{box-sizing:border-box;cursor:none!important;-webkit-user-select:none;user-select:none;-webkit-user-drag:none}
 html{-webkit-text-size-adjust:100%;font-size:min(.5208333vw,.9259259vh);overflow:hidden;background:var(--fondo)}
 @media(orientation:portrait){html{-webkit-text-size-adjust:100%;font-size:min(.9259259vw,.5208333vh)}}
@@ -48,11 +49,11 @@ body[data-vista=cuenta] #v-cuenta,body[data-vista=pago] #v-pago,body[data-vista=
 @media(orientation:portrait){#v-cuenta{right:0;bottom:33.3333%;padding:5rem 6rem 4rem}}
 .cu-cab{display:flex;align-items:baseline;justify-content:space-between;gap:3rem;padding-bottom:2.4rem;border-bottom:var(--fino) solid var(--linea2)}
 .cu-tit{font-size:2.8rem;letter-spacing:.22em;text-transform:uppercase;color:var(--tinta2)}
-.cu-emp{font-size:3.2rem;font-weight:800;letter-spacing:.02em;color:var(--tinta)}
-.cu-lista{flex:1 1 auto;min-height:0;overflow:hidden;display:flex;flex-direction:column;justify-content:flex-start;padding-top:1.2rem;--fl:4.2rem;--hl:6.6rem}
-.cu-lista[data-n="1"]{--fl:3.5rem;--hl:5.5rem}
-.cu-lista[data-n="2"]{--fl:2.9rem;--hl:4.5rem}
-.cu-lista[data-n="3"]{--fl:2.5rem;--hl:3.8rem}
+.cu-emp{font-size:3.2rem;font-weight:800;letter-spacing:.02em;color:var(--emp)}
+.cu-lista{flex:1 1 auto;min-height:0;overflow:hidden;display:flex;flex-direction:column;justify-content:flex-start;padding-top:1.2rem;--fl:5rem;--hl:7.8rem}
+.cu-lista[data-n="1"]{--fl:4.2rem;--hl:6.5rem}
+.cu-lista[data-n="2"]{--fl:3.5rem;--hl:5.4rem}
+.cu-lista[data-n="3"]{--fl:3rem;--hl:4.6rem}
 .cu-fila{display:grid;grid-template-columns:minmax(7rem,auto) minmax(0,1fr) auto;align-items:center;column-gap:2.4rem;min-height:var(--hl);font-size:var(--fl);border-bottom:var(--fino) solid var(--linea);flex:0 0 auto}
 .cu-cant{color:var(--tinta2);text-align:right;font-variant-numeric:tabular-nums}
 .cu-nombre{min-width:0;overflow:hidden;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;line-height:1.15;overflow-wrap:anywhere}
@@ -67,7 +68,7 @@ body[data-vista=cuenta] #v-cuenta,body[data-vista=pago] #v-pago,body[data-vista=
 .cu-sub .neg dd,.cu-sub .neg dt{color:var(--rojo)}
 .cu-total{display:flex;flex-direction:column;align-items:flex-end;min-width:0}
 .cu-total-r{font-size:3.4rem;letter-spacing:.3em;text-transform:uppercase;color:var(--tinta2);margin-bottom:-.4rem;padding-left:.3em}
-.cu-total .monto{font-size:calc(13rem*var(--ajuste));line-height:1.05;color:var(--total)}
+.cu-total .monto{font-size:calc(14rem*var(--ajuste));line-height:1.05;color:var(--total)}
 @media(orientation:portrait){
   .cu-pie{flex-direction:column;align-items:stretch;gap:1.6rem}
   .cu-sub{align-self:stretch;grid-template-columns:1fr auto;padding-bottom:0}
@@ -139,7 +140,7 @@ body[data-pub-cuenta=no] #v-cuenta{right:0}
 .cli-hint{font-size:2.3rem;color:var(--tinta2);line-height:1.15}
 .cli-ced-v,.cli-cor-v{font-family:var(--leg);white-space:nowrap;min-width:0;max-width:100%;line-height:1.15;font-variant-ligatures:none;font-feature-settings:"liga" 0;font-weight:700}
 .cli-ced-v{display:block;width:max-content;font-size:var(--sz-ced);letter-spacing:.05em;color:var(--ced-fg);background:var(--ced-bg);border:var(--fino) solid var(--ced-bd);padding:.5rem 2rem}
-.cli-cor-v{display:block;font-size:var(--sz-cor);letter-spacing:.015em;color:var(--cor-fg);background:var(--cor-bg);border:var(--fino) solid var(--cor-bd);padding:.5rem 2rem}
+.cli-cor-v{display:block;font-size:var(--sz-cor);letter-spacing:.015em;color:var(--cor-fg);background:var(--cor-bg);border:0;border-bottom:.3rem solid var(--cor-bd);padding:.3rem 0 .6rem}
 .cli-ced-v.parte,.cli-cor-v.parte{white-space:normal;overflow-wrap:anywhere;width:auto}
 .cli-cor-l{display:block}
 .cli-sin{font-size:2.8rem;color:var(--tinta2);padding-bottom:.6rem}
