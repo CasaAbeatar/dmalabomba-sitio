@@ -218,7 +218,7 @@ export function abrirReemplazo(app, comprobante, { nc = null, alTerminar, alVerN
   const porque = h('small.rp-porque');
   const volver = h('button.btn', { type: 'button', onclick: () => m.cerrar() }, 'Volver sin cambiar nada');
   const generar = h('button.btn.primario.grande', { type: 'button', onclick: () => ejecutar() }, 'Generar');
-  const queHace = h('small.rp-quehace', motivoTipo === 'aceptado' ? 'Se anula este documento con una nota de crédito por el total y se emite uno nuevo con número nuevo y la referencia a este.' : 'Se emite un documento nuevo con número nuevo, con la referencia a este, y este queda reemplazado.');
+  const queHace = h('small.rp-quehace', motivoTipo === 'aceptado' ? 'Se anula este documento con una nota de crédito por el total y se emite uno nuevo con número nuevo y la referencia a este.' : motivoTipo === 'error' ? 'Se emite un documento nuevo con número nuevo y sin referencia, porque Hacienda nunca recibió este. El número de este queda registrado como no enviado.' : 'Se emite un documento nuevo con número nuevo, con la referencia a este, y este queda reemplazado.');
   function pintarPie() {
     const f = faltas();
     let motivo = '';
