@@ -890,9 +890,11 @@ export async function abrirFactura(ctx, clave, { previa = null, recibirSugeridas
     }
     function pintarAccion() {
       const principal = sem.nivel === 'verde' ? btnCambiar : (sem.nivel === 'rojo' && sug.no_inventario) ? ignorarBtn : btnUna;
-      celdaAcc.replaceChildren(principal);
+      // Si el sistema sugiere «No es de inventario», la persona igual puede decidir lo contrario: queda a la vista «Sí es de inventario», que abre la fila para escoger el rubro y recibirla
+      const sugiereNo = sem.nivel === 'rojo' && !!sug.no_inventario;
+      celdaAcc.replaceChildren(...(sugiereNo ? [principal, btnCambiar] : [principal]));
       panelAcc.replaceChildren(...[btnUna, ignorarBtn].filter((b) => b !== principal));
-      btnCambiar.textContent = abierta ? 'Cerrar' : 'Cambiar';
+      btnCambiar.textContent = abierta ? 'Cerrar' : (sugiereNo ? 'Sí es de inventario' : 'Cambiar');
       btnUna.classList.toggle('primario', principal === btnUna);
       ignorarBtn.classList.toggle('primario', principal === ignorarBtn);
       if (!btnUna.dataset.ocupado) btnUna.disabled = !!sem.bloquea;
