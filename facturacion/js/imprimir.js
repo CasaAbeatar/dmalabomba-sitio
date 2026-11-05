@@ -507,12 +507,11 @@ function nodoCarta(m, { logo, copia }) {
 
   // Líneas
   raiz.append(h('table.ct-tabla',
-    h('thead', h('tr', h('th', 'Descripción'), h('th.der', 'Cant.'), h('th.der', 'Precio unit.'), h('th.der', 'IVA'), h('th.der', 'Total'))),
+    h('thead', h('tr', h('th', 'Descripción'), h('th.der', 'Cant.'), h('th.der', 'Precio unit.'), h('th.der', 'Total'))),
     h('tbody', m.lineas.map((l) => h('tr',
       h('td', h('div', l.descripcion || ''), descuentoDe(l) ? h('div.ct-tenue', descuentoDe(l).texto + ': - ' + money(descuentoDe(l).monto)) : null, l.exoneracion ? h('div.ct-tenue', textoExoneracion(l)) : null, l.nota ? h('div.ct-tenue', l.nota) : null),
       h('td.der', num(l.cantidad)),
       h('td.der', money(l.precio_final)),
-      h('td.der', (tarifaDeLinea(l).pct ? num(tarifaDeLinea(l).pct, 2) + '%' : tarifaDeLinea(l).codigo === '10' || !tarifaDeLinea(l).codigo ? 'Exento' : '0%')),
       h('td.der', money(l.total_linea)))))));
   raiz.append(h('div.ct-nota-precio', 'Los precios unitarios y los totales de cada línea incluyen el IVA.'));
 
