@@ -1295,7 +1295,7 @@ export default {
       // Elegir o crear cliente: la ventana completa de Clientes (ui_cliente.js). Al crear uno nuevo trae los 4 correos, la dirección y la verificación en Hacienda.
       // El cliente también queda guardado en la cuenta (así se ve igual en cualquier aparato y en la prefactura)
       const elegirCliente = (c) => {
-        cliente = c; actividadFactura = null; correosOff = new Set(); pintarCliente(); actualizar();
+        cliente = c; actividadFactura = null; correosOff = new Set(); pantalla?.correos([]); pintarCliente(); actualizar();
         asignarCliente(c).then((ok) => { if (ok && !terminado && cur?.cliente?.id === c.id) { cliente = cur.cliente; pintarCliente(); } });
       };
       const btnElegir = h('button.btn', { type: 'button', onclick: () => selectorCliente(app, { alElegir: elegirCliente }) }, 'Elegir cliente (factura)');
@@ -1574,7 +1574,7 @@ export default {
             : 'Este cliente no tiene correo guardado. La factura se emite igual. Hoy el sistema no envía correos: entregue el comprobante impreso. Puede agregar el correo en Clientes para cuando se active el envío.') : null,
           correosDe().length > 1 ? h('div.correos-elegir',
             h('div.et', 'Enviar la factura a:'),
-            ...correosDe().map((c) => h('label.correo-op', h('input', { type: 'checkbox', checked: !correosOff.has(c.toLowerCase()), onchange: (ev) => { if (ev.target.checked) correosOff.delete(c.toLowerCase()); else correosOff.add(c.toLowerCase()); pintarActividad(); } }), ' ' + c)),
+            ...correosDe().map((c) => h('label.correo-op', h('input', { type: 'checkbox', checked: !correosOff.has(c.toLowerCase()), onchange: (ev) => { if (ev.target.checked) correosOff.delete(c.toLowerCase()); else correosOff.add(c.toLowerCase()); pantalla?.correos([...correosOff]); pintarActividad(); } }), ' ' + c)),
             correosDe().every((c) => correosOff.has(c.toLowerCase())) ? h('small.tenue', 'Sin ninguno marcado, la factura se emite pero no se envía por correo.') : null) : null,
           sinDireccion(cliente) ? h('div.act-aviso', 'Este cliente no tiene dirección guardada. La factura se emite igual y sale sin dirección; puede agregarla en Clientes si el cliente la quiere.') : null,
         ].filter(Boolean));
