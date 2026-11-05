@@ -1,0 +1,49 @@
+name: Prueba en Windows
+on:
+  workflow_dispatch:
+  push:
+    branches: [prueba-windows, 'pantalla-*', 'perfeccion-*']
+permissions:
+  contents: write
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Revisar el kit de Windows
+        shell: pwsh
+        working-directory: pruebas windows
+        run: ./"revisar kit.ps1"
+        continue-on-error: true
+      - name: Preparar Playwright
+        shell: pwsh
+        working-directory: pruebas windows
+        run: |
+          npm init -y | Out-Null
+          npm i playwright@1.49.1 | Out-Null
+      - name: Probar caja y pantalla del cliente en Chrome
+        shell: pwsh
+        working-directory: pruebas windows
+        run: |
+          Copy-Item ../facturacion ./facturacion -Recurse
+          node prueba.mjs
+        continue-on-error: true
+      - name: Guardar resultados en la rama resultados-windows
+        shell: pwsh
+        run: |
+          $rama = "${{ github.ref_name }}"
+          $carpeta = "${{ runner.temp }}/res"
+          New-Item -ItemType Directory -Force $carpeta | Out-Null
+          Copy-Item "pruebas windows/resultados/*" $carpeta -Recurse -ErrorAction SilentlyContinue
+          Set-Content "$carpeta/commit.txt" "${{ github.sha }} rama $rama"
+          git config user.name "prueba-windows"
+          git config user.email "prueba-windows@users.noreply.github.com"
+          git fetch origin resultados-windows 2>$null
+          if ($LASTEXITCODE -eq 0) { git checkout -f resultados-windows } else { git checkout --orphan resultados-windows; git rm -rf . | Out-Null }
+          $dest = "ultima"
+          if (Test-Path $dest) { Remove-Item $dest -Recurse -Force }
+          Copy-Item $carpeta $dest -Recurse
+          git add ultima
+          git commit -m "Resultados Windows de ${{ github.sha }}" 2>$null
+          git push origin resultados-windows
