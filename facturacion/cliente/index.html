@@ -6,7 +6,7 @@
 <meta name="referrer" content="no-referrer">
 <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
 <meta name="robots" content="noindex,nofollow">
-<meta name="theme-color" content="#fbf8f2">
+<meta name="theme-color" content="#f6f3ec">
 <title>Pantalla del cliente · La Bomba</title>
 <link rel="icon" href="../img/logo-soda.svg" type="image/svg+xml">
 <link rel="stylesheet" href="cliente.css">
@@ -18,7 +18,7 @@
   <section id="v-cuenta" class="vista" aria-label="Su cuenta">
     <header class="cu-cab">
       <p class="cu-tit">Su cuenta</p>
-      <p class="cu-emp" id="cu-emp"></p>
+      <p class="cu-emp pil" id="cu-emp"></p>
     </header>
     <div class="cli" id="cu-cli" hidden></div>
     <div class="cu-lista" id="cu-lista"></div>
@@ -33,13 +33,16 @@
 
   <!-- Pago y pagado: total a pantalla completa -->
   <section id="v-pago" class="vista" aria-label="Pago">
-    <p class="pg-rotulo" id="pg-rotulo">Total a pagar</p>
-    <p class="pg-total monto" id="pg-total"></p>
-    <p class="pg-medio" id="pg-medio"></p>
-    <div class="cli" id="pg-cli" hidden></div>
+    <div class="tarjeta pg-tarj" id="pg-tarj">
+      <p class="pg-rotulo" id="pg-rotulo">Total a pagar</p>
+      <p class="pg-total monto" id="pg-total"></p>
+      <p class="pg-medio" id="pg-medio"></p>
+      <div class="cli" id="pg-cli" hidden></div>
+    </div>
   </section>
 
   <section id="v-pagado" class="vista" aria-label="Pago recibido">
+    <div class="tarjeta pd-tarj" id="pd-tarj">
     <p class="pd-gracias" id="pd-gracias">Muchas gracias</p>
     <p class="pd-rotulo">Total pagado</p>
     <p class="pd-total monto" id="pd-total"></p>
@@ -47,6 +50,7 @@
     <p class="pd-vuelto-r" id="pd-vuelto-r" hidden>Su vuelto</p>
     <p class="pd-vuelto monto" id="pd-vuelto" hidden></p>
     <div class="cli cli-pd" id="pd-cli" hidden></div>
+    </div>
   </section>
 
   <!-- Publicidad: una sola capa que cambia de lugar según la vista -->

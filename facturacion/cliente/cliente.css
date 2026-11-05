@@ -1,177 +1,180 @@
-/* Pantalla del cliente. Sin cursor, sin barras, sin selección, sin botones.
-   Medidas en rem: 1rem = 10 px a 1920x1080 y escala con la pantalla (1366x768, 1280x720) sin perder proporción.
-   En vertical (1080x1920) la base cambia para que 1rem = 10 px a 1080x1920.
-   Un solo tipo de letra (el mismo del facturador); el ₡ sale en el mismo estilo y grosor que el número que lo acompaña. */
+/* Pantalla del cliente, diseño v4 (propuesta): misma familia visual que Dixiapp (el panel/app), con el acento de cada negocio.
+   Fondo crema con halos suaves y difusos, tarjetas blancas muy redondeadas con filete fino cálido, cifras ₡ grandes y limpias, etiquetas en píldora.
+   Sin sombras, sin desenfoques ni filtros (equipo modesto): solo opacity animada. Los halos son degradados estáticos.
+   Medidas en rem: 1rem = 10 px a 1920x1080 y escala con la pantalla (1366x768, 1280x720). En vertical (1080x1920) la base cambia para que 1rem = 10 px a 1080x1920.
+   Un solo tipo de letra (Figtree, la de Dixiapp y las webs) en dos pesos, 400 y 600; el ₡ sale en el mismo estilo y grosor que el número que lo acompaña.
+   Cédula y correo en Atkinson Hyperlegible (distingue l, I, 1, O, 0). */
 @font-face{font-family:"Atkinson Hyperlegible";src:url(fonts/atkinson-hyperlegible-latin-400-normal.woff2) format("woff2");font-weight:400;font-style:normal;font-display:swap}
 @font-face{font-family:"Atkinson Hyperlegible";src:url(fonts/atkinson-hyperlegible-latin-700-normal.woff2) format("woff2");font-weight:700;font-style:normal;font-display:swap}
-/* Figtree (la letra de las webs de La Bomba, licencia SIL OFL, alojada aquí). No trae el signo ₡: se completa en la misma familia con un ₡ de Inter (OFL) del mismo peso */
+/* Figtree (licencia SIL OFL, alojada aquí). No trae el signo ₡: se completa en la misma familia con el ₡ de Inter (OFL) del mismo peso, como hace Dixiapp con su «Colon» */
 @font-face{font-family:"Figtree";src:url(fonts/figtree-latin-400-normal.woff2) format("woff2");font-weight:400;font-style:normal;font-display:swap;unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+2000-206F,U+2074,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}
-@font-face{font-family:"Figtree";src:url(fonts/figtree-latin-800-normal.woff2) format("woff2");font-weight:800;font-style:normal;font-display:swap;unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+2000-206F,U+2074,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}
+@font-face{font-family:"Figtree";src:url(fonts/figtree-latin-600-normal.woff2) format("woff2");font-weight:600;font-style:normal;font-display:swap;unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+2000-206F,U+2074,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}
 @font-face{font-family:"Figtree";src:url(fonts/colon-400.woff2) format("woff2");font-weight:400;unicode-range:U+20A1;font-display:swap}
-@font-face{font-family:"Figtree";src:url(fonts/colon-800.woff2) format("woff2");font-weight:800;unicode-range:U+20A1;font-display:swap}
+@font-face{font-family:"Figtree";src:url(fonts/colon-600.woff2) format("woff2");font-weight:600;unicode-range:U+20A1;font-display:swap}
 :root{
   --leg:"Atkinson Hyperlegible","Verdana","Segoe UI","DejaVu Sans",Arial,sans-serif;
   --letra:"Figtree","Segoe UI","Helvetica Neue",Arial,sans-serif;
-  /* Tema neutro de respaldo (cuando el mensaje no trae empresa) */
-  --fondo:#fbf8f2;--papel:#fff;--tinta:#1d1a17;--tinta2:#5d564d;--linea:#d9cfbd;--linea2:#c2b6a0;
-  --rojo:#b81622;--verde:#14573a;--verde-suave:#e6f4ec;--vuelto-r:#14573a;--total:#1d1a17;
-  --ced-bg:#fff;--ced-fg:#0b2e8a;--ced-bd:#0b2e8a;--cor-bg:transparent;--cor-fg:#0a5148;--cor-bd:#0a5148;--emp:#1d1a17;
-  --fino:max(1px,.15rem);
-  --ajuste:1;
+  /* Base de Dixiapp: crema #f6f3ec, tarjeta blanca, filete cálido #e9e2d4, gris cálido para etiquetas */
+  --fondo:#f6f3ec;--papel:#fff;--tinta:#14110d;--tinta2:#5f564b;--linea:#e9e2d4;--linea2:#d6cbb6;
+  --rojo:#b81622;--rojo-fondo:#fde8e9;--ok:#0b5c3b;--ok-fondo:#e3f5ec;--ok-linea:#9bd3b6;
+  /* Acento del negocio: --ac (relleno y filetes), --ac-tx (texto sobre --ac-bg), --ac-bg (píldoras) */
+  --ac:#c2480a;--ac-tx:#8f3407;--ac-bg:#ffe9d6;
+  --halo1:rgba(240,120,42,.22);--halo2:rgba(31,169,113,.18);--halo3:rgba(242,178,26,.24);
+  --ced-bg:#eef2ff;--ced-fg:#0b2e8a;--ced-bd:#0b2e8a;--cor-fg:#0a5148;--cor-bd:#0a5148;
+  --radio:2.4rem;--fino:max(1px,.15rem);--ajuste:1;
 }
-/* Los dos negocios comparten una base clara y cálida (la del boceto) y se distinguen por sus acentos de marca, en filetes finos, rótulos, total y placas.
-   Tema Soda La Bomba (sodalabomba.com: rojo #B81622, ámbar #F3A62C, negro #171212): base crema, filetes rojos, título de empresa y total en rojo.
-   Cédula en placa blanca con filete rojo y letra roja oscura; correo en negro con filete rojo. */
-body[data-tema=soda]{--fondo:#fbf7ef;--papel:#fbf7ef;--tinta:#171212;--tinta2:#5a4a44;--linea:#e6d8c8;--linea2:#b81622;--emp:#b81622;
-  --rojo:#b81622;--verde:#8c0e19;--verde-suave:#fff;--vuelto-r:#b81622;--total:#b81622;
-  --ced-bg:#fff;--ced-fg:#8c0e19;--ced-bd:#b81622;--cor-bg:transparent;--cor-fg:#171212;--cor-bd:#b81622}
-/* Tema Pollos La Bomba y Papea (polloslabomba.com: ámbar #F3A62C, negro #171212, rojo #B81622): base crema con un toque de ámbar, filetes ámbar, título y total en negro.
-   Cédula en placa negra con letra ámbar; correo en negro con filete ámbar. El rojo queda para los descuentos. */
-body[data-tema=pollos]{--fondo:#fff5de;--papel:#fff5de;--tinta:#171212;--tinta2:#5a4528;--linea:#f1deb2;--linea2:#f3a62c;--emp:#171212;
-  --rojo:#b81622;--verde:#171212;--verde-suave:#ffe7b3;--vuelto-r:#171212;--total:#171212;
-  --ced-bg:#171212;--ced-fg:#f3a62c;--ced-bd:#171212;--cor-bg:transparent;--cor-fg:#171212;--cor-bd:#f3a62c}
+/* Soda La Bomba (rojo #B81622, ámbar #F3A62C, negro #171212): el rojo solo como acento fino (filetes, píldoras, placa de la cédula), nunca como fondo sólido */
+body[data-tema=soda]{--tinta:#171212;--tinta2:#5a4a44;--linea:#eadfd0;--linea2:#d9c6b0;--ac:#b81622;--ac-tx:#8c0e19;--ac-bg:#fdecec;
+  --halo1:rgba(184,22,34,.11);--halo2:rgba(243,166,44,.24);--halo3:rgba(243,166,44,.16);
+  --ced-bg:#fff1f1;--ced-fg:#8c0e19;--ced-bd:#b81622;--cor-fg:#171212;--cor-bd:#b81622}
+/* Pollos La Bomba y Papea (ámbar #F3A62C, negro #171212): la cédula en placa negra con letra ámbar; el rojo queda para los descuentos */
+body[data-tema=pollos]{--tinta:#171212;--tinta2:#5a4528;--linea:#f0e0b8;--linea2:#e6c97f;--ac:#f3a62c;--ac-tx:#171212;--ac-bg:#ffefc9;
+  --halo1:rgba(243,166,44,.32);--halo2:rgba(240,120,42,.14);--halo3:rgba(243,166,44,.20);
+  --ced-bg:#171212;--ced-fg:#f3a62c;--ced-bd:#171212;--cor-fg:#171212;--cor-bd:#f3a62c}
 *{box-sizing:border-box;cursor:none!important;-webkit-user-select:none;user-select:none;-webkit-user-drag:none}
 html{-webkit-text-size-adjust:100%;font-size:min(.5208333vw,.9259259vh);overflow:hidden;background:var(--fondo)}
 @media(orientation:portrait){html{-webkit-text-size-adjust:100%;font-size:min(.9259259vw,.5208333vh)}}
 html,body{margin:0;height:100%;width:100%;overflow:hidden}
-body{font-family:var(--letra);font-size:3rem;line-height:1.2;color:var(--tinta);background:var(--fondo);-webkit-font-smoothing:antialiased;touch-action:none}
+body{font-family:var(--letra);font-size:3rem;line-height:1.2;color:var(--tinta);-webkit-font-smoothing:antialiased;touch-action:none;
+  background:radial-gradient(70rem 52rem at 6% 10%,var(--halo1),transparent 70%),radial-gradient(72rem 54rem at 97% 30%,var(--halo2),transparent 70%),radial-gradient(78rem 56rem at 50% 100%,var(--halo3),transparent 70%),var(--fondo)}
 ::-webkit-scrollbar{display:none}
 p,dl,dd,dt,h1,h2{margin:0}
 #raiz{position:fixed;top:0;right:0;bottom:0;left:0;overflow:hidden}
 .monto{font-variant-numeric:tabular-nums;font-feature-settings:"tnum";white-space:nowrap}
+.tarjeta{background:var(--papel);border:var(--fino) solid var(--linea);border-radius:var(--radio)}
+/* píldora de etiqueta (como las insignias de Dixiapp) */
+.pil{display:inline-block;background:var(--ac-bg);color:var(--ac-tx);border:var(--fino) solid var(--ac);border-radius:99rem;padding:.35rem 2rem .45rem;font-weight:600;letter-spacing:.02em;white-space:nowrap}
 
 /* Vistas */
 .vista{position:absolute;top:0;right:0;bottom:0;left:0;opacity:0;visibility:hidden;transition:opacity .6s ease,visibility 0s linear .6s;display:flex;flex-direction:column}
 body[data-vista=cuenta] #v-cuenta,body[data-vista=pago] #v-pago,body[data-vista=pagado] #v-pagado{opacity:1;visibility:visible;transition:opacity .6s ease,visibility 0s}
 
-/* ---------- Cuenta ---------- */
-#v-cuenta{right:33.3333%;padding:6rem 7rem 5rem}
-@media(orientation:portrait){#v-cuenta{right:0;bottom:33.3333%;padding:5rem 6rem 4rem}}
-.cu-cab{display:flex;align-items:baseline;justify-content:space-between;gap:3rem;padding-bottom:2.4rem;border-bottom:var(--fino) solid var(--linea2)}
+/* ---------- Cuenta: columna de tarjetas (datos, cuenta, total) y, a la derecha, la publicidad como tarjeta ---------- */
+#v-cuenta{right:33.3333%;padding:3.4rem 1.8rem 3.4rem 3.6rem;gap:1.6rem}
+@media(orientation:portrait){#v-cuenta{right:0;bottom:33.3333%;padding:3rem 3.6rem 1.6rem;gap:1.4rem}}
+.cu-cab{display:flex;align-items:center;justify-content:space-between;gap:3rem;padding:0 .6rem}
 .cu-tit{font-size:2.8rem;letter-spacing:.22em;text-transform:uppercase;color:var(--tinta2)}
-.cu-emp{font-size:3.2rem;font-weight:800;letter-spacing:.02em;color:var(--emp)}
-.cu-lista{flex:1 1 auto;min-height:0;overflow:hidden;display:flex;flex-direction:column;justify-content:flex-start;padding-top:1.2rem;--fl:5rem;--hl:7.8rem}
+.cu-emp{font-size:3rem;padding:.3rem 2.4rem .5rem}
+.cu-emp:empty{display:none}
+.cu-lista{flex:1 1 auto;min-height:0;overflow:hidden;display:flex;flex-direction:column;justify-content:flex-start;padding:.8rem 3.2rem;background:var(--papel);border:var(--fino) solid var(--linea);border-radius:var(--radio);--fl:5rem;--hl:7.8rem}
 .cu-lista[data-n="1"]{--fl:4.2rem;--hl:6.5rem}
 .cu-lista[data-n="2"]{--fl:3.5rem;--hl:5.4rem}
 .cu-lista[data-n="3"]{--fl:3rem;--hl:4.6rem}
 .cu-fila{display:grid;grid-template-columns:minmax(7rem,auto) minmax(0,1fr) auto;align-items:center;column-gap:2.4rem;min-height:var(--hl);font-size:var(--fl);border-bottom:var(--fino) solid var(--linea);flex:0 0 auto}
+.cu-fila:last-child{border-bottom:0}
 .cu-cant{color:var(--tinta2);text-align:right;font-variant-numeric:tabular-nums}
 .cu-nombre{min-width:0;overflow:hidden;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;line-height:1.15;overflow-wrap:anywhere}
 .cu-lista:not([data-n="0"]) .cu-nombre{-webkit-line-clamp:1}
-.cu-desc{display:block;font-size:.62em;font-weight:800;color:var(--rojo);margin-top:.15em;line-height:1.1}
-.cu-imp{text-align:right}
+.cu-desc{display:block;width:max-content;max-width:100%;font-size:.58em;font-weight:600;color:var(--rojo);background:var(--rojo-fondo);border-radius:99rem;padding:.02em .7em .06em;margin-top:.15em;line-height:1.15}
+.cu-imp{text-align:right;font-weight:600}
 .cu-previas{color:var(--tinta2);font-style:normal}
 .cu-previas .cu-nombre{-webkit-line-clamp:1}
-.cu-pie{padding-top:2.4rem;border-top:var(--fino) solid var(--linea2);display:flex;align-items:flex-end;justify-content:space-between;gap:4rem}
-.cu-sub{display:grid;grid-template-columns:auto auto;column-gap:3rem;row-gap:.8rem;font-size:3rem;color:var(--tinta2);align-self:flex-end;padding-bottom:1.4rem}
+.cu-previas .cu-imp{font-weight:400}
+.cu-pie{padding:2rem 3.2rem 2rem 3.2rem;background:var(--papel);border:var(--fino) solid var(--linea);border-radius:var(--radio);display:flex;align-items:center;justify-content:space-between;gap:4rem;flex:0 0 auto}
+.cu-sub{display:grid;grid-template-columns:auto auto;column-gap:3rem;row-gap:.6rem;font-size:3rem;color:var(--tinta2);align-self:center}
 .cu-sub dd{text-align:right}
 .cu-sub .neg dd,.cu-sub .neg dt{color:var(--rojo)}
-.cu-total{display:flex;flex-direction:column;align-items:flex-end;min-width:0}
-.cu-total-r{font-size:3.4rem;letter-spacing:.3em;text-transform:uppercase;color:var(--tinta2);margin-bottom:-.4rem;padding-left:.3em}
-.cu-total .monto{font-size:calc(14rem*var(--ajuste));line-height:1.05;color:var(--total)}
+.cu-total{display:flex;flex-direction:column;align-items:flex-end;min-width:0;gap:.2rem}
+.cu-total-r{font-size:3rem;letter-spacing:.06em;font-weight:600;color:var(--ac-tx);background:var(--ac-bg);border:var(--fino) solid var(--ac);border-radius:99rem;padding:.2rem 2.2rem .35rem;margin-bottom:.4rem}
+.cu-total .monto{font-size:calc(14rem*var(--ajuste));line-height:1.05;font-weight:600;letter-spacing:-.01em;color:var(--tinta)}
 @media(orientation:portrait){
-  .cu-pie{flex-direction:column;align-items:stretch;gap:1.6rem}
-  .cu-sub{align-self:stretch;grid-template-columns:1fr auto;padding-bottom:0}
+  .cu-pie{flex-direction:column;align-items:stretch;gap:1.2rem;padding:1.8rem 3rem}
+  .cu-sub{align-self:stretch;grid-template-columns:1fr auto}
   .cu-total{align-items:flex-end}
   .cu-total .monto{font-size:calc(12.5rem*var(--ajuste))}
 }
 
-/* ---------- Pago ---------- */
-#v-pago{align-items:center;justify-content:center;text-align:center;padding:6rem}
-.pg-rotulo{font-size:5rem;letter-spacing:.3em;text-transform:uppercase;color:var(--tinta2);padding-left:.3em}
-.pg-total{color:var(--total);font-size:calc(30rem*var(--ajuste));line-height:1.05;margin:2.4rem 0 3rem;max-width:100%}
-.pg-medio{font-size:5.4rem;color:var(--tinta);padding-top:3rem;border-top:var(--fino) solid var(--linea2);min-width:60%}
+/* ---------- Pago: el total a pantalla completa, en una tarjeta ---------- */
+#v-pago{padding:3.4rem}
+.pg-tarj{flex:1 1 auto;min-height:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:3rem 6rem}
+.pg-rotulo{font-size:4rem;letter-spacing:.04em;font-weight:600;color:var(--ac-tx);background:var(--ac-bg);border:var(--fino) solid var(--ac);border-radius:99rem;padding:.4rem 3.4rem .6rem}
+.pg-total{color:var(--tinta);font-weight:600;letter-spacing:-.015em;font-size:calc(30rem*var(--ajuste));line-height:1.05;margin:2.4rem 0 2.4rem;max-width:100%}
+.pg-medio{font-size:5.4rem;color:var(--tinta);padding-top:2.6rem;border-top:var(--fino) solid var(--linea);min-width:60%}
 .pg-medio:empty{display:none}
-@media(orientation:portrait){.pg-total{font-size:calc(26rem*var(--ajuste))}.pg-rotulo{font-size:4.4rem}}
+@media(orientation:portrait){.pg-total{font-size:calc(26rem*var(--ajuste))}.pg-rotulo{font-size:3.8rem}}
 
-/* ---------- Pagado ---------- */
-#v-pagado{align-items:center;justify-content:center;text-align:center;padding:6rem}
-.pd-gracias{font-size:6rem;letter-spacing:.02em;margin-bottom:4rem}
-.pd-rotulo{font-size:4rem;letter-spacing:.3em;text-transform:uppercase;color:var(--tinta2);padding-left:.3em}
-.pd-total{color:var(--total);font-size:calc(22rem*var(--ajuste));line-height:1.05;margin:1.6rem 0 2rem;max-width:100%}
+/* ---------- Pagado: gracias sobrio ---------- */
+#v-pagado{padding:3.4rem}
+.pd-tarj{flex:1 1 auto;min-height:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:3rem 6rem}
+.pd-gracias{font-size:6rem;font-weight:600;letter-spacing:.01em;margin-bottom:3.4rem}
+.pd-rotulo{font-size:3.4rem;letter-spacing:.2em;text-transform:uppercase;color:var(--tinta2);padding-left:.2em}
+.pd-total{color:var(--tinta);font-weight:600;letter-spacing:-.015em;font-size:calc(22rem*var(--ajuste));line-height:1.05;margin:1.4rem 0 2rem;max-width:100%}
 #v-pagado.sin-vuelto .pd-total{font-size:calc(30rem*var(--ajuste))}
 .pd-det{display:grid;grid-template-columns:auto auto;column-gap:5rem;row-gap:.6rem;font-size:3.6rem;color:var(--tinta2);margin-bottom:3rem}
 .pd-det:empty{display:none}
 .pd-det dd{text-align:right}
-.pd-vuelto-r{font-size:5.2rem;letter-spacing:.3em;text-transform:uppercase;color:var(--vuelto-r);padding-left:.3em;margin-top:1rem}
-.pd-vuelto{font-size:calc(20rem*var(--ajuste));line-height:1.05;color:var(--verde);padding:2rem 6rem;border:var(--fino) solid var(--verde);background:var(--verde-suave);margin-top:1.6rem;max-width:100%}
+.pd-vuelto-r{font-size:3.8rem;letter-spacing:.04em;font-weight:600;color:var(--ok);background:var(--ok-fondo);border:var(--fino) solid var(--ok-linea);border-radius:99rem;padding:.4rem 3.4rem .6rem;margin-top:1rem}
+.pd-vuelto{font-size:calc(20rem*var(--ajuste));font-weight:600;line-height:1.05;color:var(--ok);background:var(--ok-fondo);border:var(--fino) solid var(--ok-linea);border-radius:var(--radio);padding:1rem 4rem 1.4rem;margin-top:1.4rem;max-width:100%}
 @media(orientation:portrait){
   .pd-total{font-size:calc(17rem*var(--ajuste))}
   #v-pagado.sin-vuelto .pd-total{font-size:calc(24rem*var(--ajuste))}
-  .pd-vuelto{font-size:calc(15rem*var(--ajuste));padding:2rem 3rem}
+  .pd-vuelto{font-size:calc(15rem*var(--ajuste));padding:1rem 2rem}
 }
 
-/* Equipo modesto (Celeron J4025): solo opacity en las transiciones, sin blur, sombras ni filtros; el diseño no anima medidas */
-/* ---------- Publicidad ---------- */
-.anuncios{position:absolute;background:var(--papel);overflow:hidden;opacity:0;visibility:hidden;
+/* ---------- Publicidad: en espera ocupa todo; con la cuenta, es una tarjeta redondeada a la derecha (o abajo en vertical) ---------- */
+.anuncios{position:absolute;background:transparent;overflow:hidden;opacity:0;visibility:hidden;
   top:0;bottom:0;left:0;right:0;
   transition:opacity .6s ease,visibility 0s linear .6s}
 body[data-vista=cuenta] .anuncios,body[data-vista=pago] .anuncios,body[data-vista=pagado] .anuncios{opacity:0}
 body[data-vista=espera] .anuncios{opacity:1;visibility:visible;transition:opacity .6s ease,visibility 0s}
-body[data-vista=cuenta] .anuncios{opacity:1;visibility:visible;left:66.6667%;border-left:var(--fino) solid var(--linea2);transition:opacity .6s ease,visibility 0s}
+body[data-vista=cuenta] .anuncios{opacity:1;visibility:visible;left:66.6667%;top:3.4rem;bottom:3.4rem;right:3.6rem;background:var(--papel);border:var(--fino) solid var(--linea);border-radius:var(--radio);transition:opacity .6s ease,visibility 0s}
 @media(orientation:portrait){
-  body[data-vista=cuenta] .anuncios{left:0;top:66.6667%;border-left:0;border-top:var(--fino) solid var(--linea2)}
+  body[data-vista=cuenta] .anuncios{left:3.6rem;right:3.6rem;top:66.6667%;bottom:3.4rem}
 }
 .an-capa{will-change:opacity;position:absolute;top:0;right:0;bottom:0;left:0;opacity:0;transition:opacity 1s ease;display:flex;align-items:center;justify-content:center}
 .an-capa.on{opacity:1}
-.an-capa img,.an-capa video{width:100%;height:100%;object-fit:contain;display:block;background:var(--papel);pointer-events:none}
-.an-vacio{position:absolute;top:0;right:0;bottom:0;left:0;display:none;align-items:center;justify-content:center;font-size:9rem;letter-spacing:.5em;text-transform:uppercase;color:var(--tinta2);padding-left:.5em}
-.an-vacio span{padding:4rem 6rem;border-top:var(--fino) solid var(--linea2);border-bottom:var(--fino) solid var(--linea2)}
+.an-capa img,.an-capa video{width:100%;height:100%;object-fit:contain;display:block;background:transparent;pointer-events:none}
+.an-vacio{position:absolute;top:0;right:0;bottom:0;left:0;display:none;align-items:center;justify-content:center;font-size:9rem;font-weight:600;letter-spacing:.4em;text-transform:uppercase;color:var(--tinta2);padding-left:.4em}
+.an-vacio span{padding:3rem 7rem 3.6rem;border:var(--fino) solid var(--ac);background:var(--ac-bg);color:var(--ac-tx);border-radius:99rem}
 .anuncios.sin-anuncios .an-vacio{display:flex}
 body[data-vista=cuenta] .an-vacio{font-size:4.6rem}
 @media(prefers-reduced-motion:reduce){*{transition-duration:.01s!important}}
 
 /* Ajuste por caja: publicidad_en_cuenta = false deja la cuenta a pantalla completa */
 body[data-pub-cuenta=no][data-vista=cuenta] .anuncios{opacity:0;visibility:hidden}
-body[data-pub-cuenta=no] #v-cuenta{right:0}
-@media(orientation:portrait){body[data-pub-cuenta=no] #v-cuenta{bottom:0}}
+body[data-pub-cuenta=no] #v-cuenta{right:0;padding-right:3.6rem}
+@media(orientation:portrait){body[data-pub-cuenta=no] #v-cuenta{bottom:0;padding-bottom:3.4rem}}
 
-
-/* ---------- Datos del cliente (nombre, cédula y correo para que el cliente los confirme) ----------
-   Se apilan en vertical con aire: nombre, cédula y correo. Jerarquía: total (lo más grande) > cédula = correo > nombre > rótulos.
-   Cédula y correo en Atkinson Hyperlegible (distingue l, I, 1, O, 0); el resto en Figtree. Colores por tema (variables --ced-* y --cor-*, contraste mínimo 7:1). */
-.cli{display:flex;flex-direction:column;gap:1.5rem;padding:1.8rem 0 2rem;border-bottom:var(--fino) solid var(--linea2);--sz-nom:4.2rem;--sz-ced:6.6rem;--sz-cor:6.6rem;min-width:0}
+/* ---------- Datos del cliente: tarjeta aparte «Sus datos para la factura» ----------
+   Jerarquía: total (lo más grande) > cédula = correo > nombre > rótulos. Cédula y correo en Atkinson Hyperlegible; contraste mínimo 7:1. */
+.cli{display:flex;flex-direction:column;gap:1.2rem;padding:1.8rem 3.2rem 2rem;background:var(--papel);border:var(--fino) solid var(--linea);border-radius:var(--radio);--sz-nom:4.2rem;--sz-ced:6.6rem;--sz-cor:6.6rem;min-width:0;flex:0 0 auto}
 .cli[hidden]{display:none}
-.cli-nom{font-size:var(--sz-nom);font-weight:800;line-height:1.12;overflow-wrap:anywhere;min-width:0}
+.cli-tit{font-size:2.3rem;letter-spacing:.16em;text-transform:uppercase;color:var(--tinta2);line-height:1.1}
+.cli-nom{font-size:var(--sz-nom);font-weight:600;line-height:1.12;overflow-wrap:anywhere;min-width:0}
 .cli-com{display:block;font-weight:400;font-size:.62em;color:var(--tinta2);margin-top:.2em;line-height:1.15}
 .cli-fila{display:flex;flex-direction:column;gap:.5rem;min-width:0}
 .cli-rotl{display:flex;flex-wrap:wrap;align-items:baseline;column-gap:2.4rem}
-.cli-rot{font-size:2.6rem;color:var(--tinta);letter-spacing:.02em;line-height:1.15}
+.cli-rot{font-size:2.6rem;font-weight:600;color:var(--tinta);letter-spacing:.01em;line-height:1.15}
 .cli-hint{font-size:2.3rem;color:var(--tinta2);line-height:1.15}
 .cli-ced-v,.cli-cor-v{font-family:var(--leg);white-space:nowrap;min-width:0;max-width:100%;line-height:1.15;font-variant-ligatures:none;font-feature-settings:"liga" 0;font-weight:700}
-.cli-ced-v{display:block;width:max-content;font-size:var(--sz-ced);letter-spacing:.05em;color:var(--ced-fg);background:var(--ced-bg);border:var(--fino) solid var(--ced-bd);padding:.5rem 2rem}
-.cli-cor-v{display:block;font-size:var(--sz-cor);letter-spacing:.015em;color:var(--cor-fg);background:var(--cor-bg);border:0;border-bottom:.3rem solid var(--cor-bd);padding:.3rem 0 .6rem}
+.cli-ced-v{display:block;width:max-content;font-size:var(--sz-ced);letter-spacing:.05em;color:var(--ced-fg);background:var(--ced-bg);border:.3rem solid var(--ced-bd);border-radius:1.6rem;padding:.5rem 2.2rem}
+.cli-cor-v{display:block;font-size:var(--sz-cor);letter-spacing:.015em;color:var(--cor-fg);background:transparent;border:0;border-bottom:.3rem solid var(--cor-bd);padding:.3rem 0 .6rem}
 .cli-ced-v.parte,.cli-cor-v.parte{white-space:normal;overflow-wrap:anywhere;width:auto}
 .cli-cor-l{display:block}
 .cli-sin{font-size:2.8rem;color:var(--tinta2);padding-bottom:.6rem}
-/* cuenta: el bloque queda arriba; la lista de productos se acomoda en lo que sobra */
-#v-cuenta{padding:4.4rem 7rem 3.6rem}
-#v-cuenta .cu-cab{padding-bottom:1.6rem}
-#v-cuenta .cu-pie{padding-top:1.6rem}
-#v-cuenta .cu-lista{padding-top:.6rem}
-@media(orientation:portrait){#v-cuenta{padding:4rem 6rem 3rem}#v-cuenta .cli{--sz-nom:4rem;--sz-ced:6rem;--sz-cor:6rem}}
-/* pago: total y bloque del cliente a la vista a la vez */
-#v-pago .cli{width:min(150rem,92%);margin-top:2.4rem;border-bottom:0;border-top:var(--fino) solid var(--linea2);padding-top:2.2rem;gap:1.3rem;text-align:left;--sz-nom:4.2rem;--sz-ced:7.4rem;--sz-cor:7.4rem}
-#v-pago.con-cli{padding:3rem 6rem}
-#v-pago.con-cli .pg-total{font-size:calc(21rem*var(--ajuste));margin:1rem 0 1.6rem}
-#v-pago.con-cli .pg-medio{font-size:4rem;padding-top:1.6rem}
-#v-pago.con-cli .pg-rotulo{font-size:3.8rem}
+@media(orientation:portrait){#v-cuenta .cli{--sz-nom:4rem;--sz-ced:6rem;--sz-cor:6rem;padding:1.6rem 3rem 1.8rem}}
+/* pago: total y datos a la vez, dentro de la misma tarjeta (los datos en un panel crema con filete) */
+#v-pago .cli{width:min(150rem,100%);margin-top:2.2rem;background:var(--fondo);text-align:left;padding:2rem 3.4rem 2.2rem;gap:1.2rem;--sz-nom:4.2rem;--sz-ced:7.4rem;--sz-cor:7.4rem}
+#v-pago.con-cli .pg-tarj{padding:2.4rem 5rem}
+#v-pago.con-cli .pg-total{font-size:calc(21rem*var(--ajuste));margin:1rem 0 1.4rem}
+#v-pago.con-cli .pg-medio{font-size:4rem;padding-top:1.4rem}
+#v-pago.con-cli .pg-rotulo{font-size:3.6rem}
 @media(orientation:portrait){
-  #v-pago.con-cli{padding:5rem 6rem}
+  #v-pago.con-cli .pg-tarj{padding:3rem 4rem}
   #v-pago .cli{width:100%;--sz-nom:4.2rem;--sz-ced:7.2rem;--sz-cor:7.2rem}
   #v-pago.con-cli .pg-total{font-size:calc(17rem*var(--ajuste))}
 }
 /* pagado: solo el aviso del correo */
-#v-pagado .cli-pd{align-items:center;text-align:center;border:0;padding:1.6rem 0 0;gap:.8rem;width:min(150rem,92%)}
+#v-pagado .cli-pd{align-items:center;text-align:center;background:transparent;border:0;border-radius:0;padding:1.6rem 0 0;gap:.8rem;width:min(150rem,100%)}
 #v-pagado .cli-pd .cli-hint{font-size:3rem}
 #v-pagado .cli-pd .cli-cor-v{font-size:5rem;text-align:center}
-#v-pagado.con-cli .pd-gracias{margin-bottom:2.4rem;font-size:5rem;font-weight:800}
+#v-pagado.con-cli .pd-gracias{margin-bottom:2.4rem;font-size:5rem}
 #v-pagado.con-cli .pd-total{font-size:calc(17rem*var(--ajuste))}
 #v-pagado.con-cli.sin-vuelto .pd-total{font-size:calc(22rem*var(--ajuste))}
-#v-pagado.con-cli .pd-vuelto{font-size:calc(13rem*var(--ajuste));padding:1.4rem 5rem}
+#v-pagado.con-cli .pd-vuelto{font-size:calc(13rem*var(--ajuste));padding:.8rem 4rem}
 #v-pagado.con-cli .pd-det{margin-bottom:1.6rem;font-size:3.2rem}
 @media(orientation:portrait){
   #v-pagado.con-cli .pd-total{font-size:calc(14rem*var(--ajuste))}
   #v-pagado.con-cli.sin-vuelto .pd-total{font-size:calc(19rem*var(--ajuste))}
-  #v-pagado.con-cli .pd-vuelto{font-size:calc(11rem*var(--ajuste));padding:1.2rem 3rem}
+  #v-pagado.con-cli .pd-vuelto{font-size:calc(11rem*var(--ajuste));padding:.8rem 2rem}
 }

@@ -106,6 +106,7 @@ function pintarCliente(host, modo, forzar) {
     const varios = v.children.length > 1;
     achicar(v, varios ? 3.8 : 4.6, 3.2, 2.4, 2 * v.children.length); return;
   }
+  host.append(nodo('p', 'cli-tit', 'Sus datos para la factura'));
   const nom = c.nombre || c.personal;
   const nombreEl = nom || (c.comercial && c.comercial !== nom) ? nodo('p', 'cli-nom') : null;
   if (nombreEl) {
@@ -171,11 +172,12 @@ function ajustar(el, ancho) {
   const w = el.scrollWidth;
   if (w > ancho && w > 0) el.style.setProperty('--ajuste', String(Math.max(0.3, ancho / w - 0.01)));
 }
+const anchoUtil = (el) => { const cs = getComputedStyle(el); return el.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight); };
 function ajustarTotalCuenta() {
   const t = $('cu-total'), pie = t.closest('.cu-pie'), sub = $('cu-sub');
   const horizontal = getComputedStyle(pie).flexDirection === 'row';
   const rem = parseFloat(getComputedStyle(document.documentElement).fontSize);
-  ajustar(t, pie.clientWidth - (horizontal ? sub.offsetWidth + 4 * rem : 0));
+  ajustar(t, anchoUtil(pie) - (horizontal ? sub.offsetWidth + 4 * rem : 0));
 }
 
 const vaciar = (el) => { while (el.firstChild) el.removeChild(el.firstChild); };
@@ -233,7 +235,7 @@ function pintarPago(s) {
   const t = texto('pg-total', colones(s.total));
   texto('pg-medio', MEDIOS[s.medio] || '');
   // ajustar después de mostrar la vista (medición necesita que sea visible)
-  requestAnimationFrame(() => ajustar(t, $('v-pago').clientWidth * 0.88));
+  requestAnimationFrame(() => ajustar(t, anchoUtil($('pg-tarj')) * 0.98));
 }
 
 function pintarPagado(s) {
@@ -249,7 +251,7 @@ function pintarPagado(s) {
   $('pd-vuelto-r').hidden = !hayVuelto; $('pd-vuelto').hidden = !hayVuelto;
   const v = $('pd-vuelto');
   if (hayVuelto) v.textContent = colones(s.vuelto);
-  requestAnimationFrame(() => { const w = $('v-pagado').clientWidth; ajustar(t, w * 0.88); if (hayVuelto) ajustar(v, w * 0.88 - 0); });
+  requestAnimationFrame(() => { const w = anchoUtil($('pd-tarj')); ajustar(t, w * 0.98); if (hayVuelto) ajustar(v, w * 0.98); });
 }
 
 /* ---------- Estado recibido ---------- */
