@@ -1205,8 +1205,8 @@ export default {
             h('div.total-fila', h('span.et', 'Total a pagar (IVA incluido)'), h('div.total-monto', { 'aria-live': 'polite' }, money(v.total))),
             h('button.btn.primario.grande.btn-cobrar-aside', { type: 'button', disabled: !puede, onclick: seguro(abrirCobro) }, 'Cobrar'),
             v.tipo_servicio === 'buffet' ? h('div.fila-espera',
-              h('button.btn.ambar.grande.btn-espera', { type: 'button', disabled: !cur.lineas.length, onclick: seguro(() => ponerEnEspera(false)) }, 'Poner en espera'),
-              h('button.btn.ambar.grande.btn-espera-pref', { type: 'button', disabled: !cur.lineas.length, onclick: seguro(() => ponerEnEspera(true)) }, 'En espera e imprimir prefactura')) : null),
+              // Un solo botón (decisión de Emil, 5 nov 2026): poner en espera siempre imprime la prefactura; el botón «Poner en espera» solo era repetido
+              h('button.btn.ambar.grande.btn-espera-pref', { type: 'button', disabled: !cur.lineas.length, onclick: seguro(() => ponerEnEspera(true)) }, 'Poner en espera e imprimir prefactura')) : null),
           h('div.acciones-cuenta', prefBtn, h('button.btn.peligro' + (prefBtn ? '' : '.ancho'), { type: 'button', onclick: anularCuenta }, 'Anular esta cuenta'))));
       const nuevo = asideCuenta.querySelector('.cuenta-lineas');
       nuevo.scrollTop = irAlFinal ? nuevo.scrollHeight : scroll;
