@@ -470,8 +470,7 @@ function nodoCarta(m, { logo, copia }) {
     h('div.ct-etq', 'Emisor'),
     h('div.ct-fuerte', m.soc.comercial),
     m.soc.razon && m.soc.razon.toUpperCase() !== m.soc.comercial.toUpperCase() ? h('div', m.soc.razon) : null,
-    h('div', 'Cédula jurídica ' + m.soc.cedula),
-    m.soc.tel ? h('div', 'Teléfono ' + m.soc.tel) : null,
+    h('div', 'Cédula jurídica ' + m.soc.cedula + (m.soc.tel ? '  ·  Teléfono ' + m.soc.tel : '')),
     m.soc.correo ? h('div', m.soc.correo) : null,
     m.soc.dir ? h('div', m.soc.dir) : null);
   const c = m.cliente;
@@ -480,8 +479,7 @@ function nodoCarta(m, { logo, copia }) {
     c ? h('div.ct-fuerte', c.nombre) : h('div.ct-fuerte', 'Consumidor final'),
     c?.comercial ? h('div', c.comercial) : null,
     c?.ident ? h('div', (c.tipoId || 'Identificación') + ' ' + c.ident) : null,
-    c?.correo ? h('div', c.correo) : null,
-    c?.tel ? h('div', 'Teléfono ' + c.tel) : null,
+    c?.correo || c?.tel ? h('div', [c.correo, c.tel ? 'Teléfono ' + c.tel : ''].filter(Boolean).join('  ·  ')) : null,
     c?.dir ? h('div', c.dir) : null,
     !c ? h('div.ct-tenue', 'Sin datos del cliente') : null);
   raiz.append(h('div.ct-dos', emisor, cliente));
@@ -617,7 +615,7 @@ async function esperarRecursos(doc, raiz) {
 // Tamaño de página: tiquete = ancho del rollo x alto exacto del contenido; carta = hoja completa con márgenes
 function cssPagina({ tipo, papel, hoja, altoMm }) {
   if (tipo === 'tiquete') return `@page{size:${papel}mm ${altoMm}mm;margin:0}`;
-  return `@page{size:${hoja === 'a4' ? 'A4' : 'letter'};margin:10mm 14mm 11mm}`;
+  return `@page{size:${hoja === 'a4' ? 'A4' : 'letter'};margin:8mm 12mm 9mm}`;
 }
 
 /**
