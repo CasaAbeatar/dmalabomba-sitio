@@ -290,6 +290,57 @@ function limpiar(m) {
 }
 
 let firmaPintada = '';
+/* ---------- Datos del cliente nuevo (la caja está agregando un cliente: se muestra lo que va escribiendo, solo lo que ya tiene valor) ---------- */
+let nuevoActivo = false, nuevoTs = 0, ultimoEstado = null, nuevoFirma = '';
+const NUEVO_CADUCA_MS = 15000;
+const TIPOS_NOMBRE = { '01': 'Cédula física', '02': 'Cédula jurídica', '03': 'DIMEX', '04': 'NITE', '05': 'Extranjero no domiciliado', '06': 'No contribuyente' };
+function limpiarNuevo(m) {
+  if (!m || typeof m !== 'object') return null;
+  const t = (x, max) => limpioTxt(x, max);
+  const tipo = /^0[1-6]$/.test(String(m.tipo_id)) ? String(m.tipo_id) : '';
+  const id = t(m.identificacion, 25).replace(/\s+/g, '');
+  return {
+    empresa: m.empresa === 'soda' ? 'soda' : m.empresa === 'pollos' ? 'pollos' : '',
+    tipo, id, nombre: t(m.nombre, 140), comercial: t(m.nombre_comercial, 140), actividad: t(m.actividad, 160),
+    correo: t(m.correo, 160).replace(/\s+/g, ''), extras: (Array.isArray(m.correos_extra) ? m.correos_extra : []).map((x) => t(x, 160).replace(/\s+/g, '')).filter(Boolean).slice(0, 7),
+    telefono: t(m.telefono, 30), direccion: t(m.direccion, 300),
+  };
+}
+function pintarNuevo(d) {
+  const filas = [];
+  if (d.id) filas.push([TIPOS_NOMBRE[d.tipo] || 'Identificación', formatoId(d.tipo, d.id), 'id']);
+  if (d.nombre) filas.push([d.tipo === '02' ? 'Razón social' : 'Nombre', d.nombre]);
+  if (d.comercial) filas.push(['Nombre comercial', d.comercial]);
+  if (d.actividad) filas.push(['Actividad económica', d.actividad]);
+  if (d.correo) filas.push(['Correo principal', d.correo]);
+  d.extras.forEach((c, i) => filas.push([d.extras.length > 1 ? 'Correo adicional ' + (i + 1) : 'Correo adicional', c]));
+  if (d.telefono) filas.push(['Teléfono', d.telefono]);
+  if (d.direccion) filas.push(['Dirección', d.direccion]);
+  const lista = $('nv-lista');
+  vaciar(lista);
+  lista.dataset.n = String(Math.min(filas.length, 8));
+  filas.forEach(([rot, val, clase]) => {
+    const fila = nodo('div', 'nv-fila'), dt = nodo('dt', 'nv-rot', rot), dd = nodo('dd', 'nv-val' + (clase ? ' ' + clase : ''), val);
+    if (val.length > 60) dd.classList.add('largo2'); else if (val.length > 34) dd.classList.add('largo1');
+    fila.append(dt, dd); lista.append(fila);
+  });
+  texto('nv-emp', MARCAS[d.empresa] || '');
+}
+function aplicarNuevo(d) {
+  nuevoActivo = true; nuevoTs = Date.now(); ultimaRecepcion = Date.now();
+  clearTimeout(timerPagado); pagadoActivo = false;
+  if (document.body.dataset.tema !== temaDe(d.empresa)) { document.body.dataset.tema = temaDe(d.empresa); if (cliente) repintarCliente(); }
+  const firma = JSON.stringify(d);
+  if (vista === 'nuevo' && firma === nuevoFirma) return;
+  nuevoFirma = firma; pintarNuevo(d); ir('nuevo');
+}
+function terminarNuevo() {
+  if (!nuevoActivo) return;
+  nuevoActivo = false; nuevoFirma = '';
+  // Vuelve a lo que mostraba la caja (si lo publicó hace poco); si no, a la publicidad
+  if (ultimoEstado && Date.now() - ultimoEstado.visto < CADUCA_MS) { vista = ''; aplicar(ultimoEstado.s); } else ir('espera');
+}
+
 const firmaDe = (s) => JSON.stringify([s.estado, s.empresa, s.lineas, s.subtotal, s.descuento, s.iva, s.total, s.medio, s.cliente]);
 const temaDe = (e) => (e === 'soda' ? 'soda' : e === 'pollos' ? 'pollos' : 'neutro');
 // Cuando no hay publicidad cargada, la pantalla de espera muestra el nombre de la empresa que factura en esa caja
@@ -331,6 +382,8 @@ function recibir(d) {
     soc = carga.soc; try { localStorage.setItem(LLAVE_SOC, soc); } catch { /* nada */ }
     pedirConfig();
   }
+  if (ev === 'cliente_nuevo') { const d = limpiarNuevo(carga); if (d) aplicarNuevo(d); return; }
+  if (ev === 'cliente_nuevo_fin') { terminarNuevo(); return; }
   const esEstado = ev === 'estado' || (!ev && carga.estado);
   const esLatido = ev === 'latido' || (!ev && !carga.estado && 'ts' in carga);
   if (esLatido) { ultimaRecepcion = Date.now(); enviar({ evento: 'ack', payload: { ts: esNum(Number(carga.ts)) ? Number(carga.ts) : Date.now() } }); return; }
@@ -338,6 +391,8 @@ function recibir(d) {
   const s = limpiar(carga);
   if (!s) return;
   ultimaRecepcion = Date.now();
+  ultimoEstado = { s, visto: Date.now() };
+  if (nuevoActivo) return; // se está agregando un cliente: esta pantalla no se pisa hasta que termine
   aplicar(s);
 }
 
@@ -460,7 +515,8 @@ else {
   addEventListener('online', pedirAnuncios);
   // Caducidad: si la caja deja de dar señales, el cliente vuelve a ver publicidad
   setInterval(() => {
-    if (vista !== 'espera' && Date.now() - ultimaRecepcion > CADUCA_MS) { clearTimeout(timerPagado); pagadoActivo = false; ir('espera'); }
+    if (nuevoActivo && Date.now() - nuevoTs > NUEVO_CADUCA_MS) terminarNuevo(); // la caja dejó de avisar: no se queda con datos personales en pantalla
+    if (!nuevoActivo && vista !== 'espera' && Date.now() - ultimaRecepcion > CADUCA_MS) { clearTimeout(timerPagado); pagadoActivo = false; ir('espera'); }
   }, 1000);
 }
 

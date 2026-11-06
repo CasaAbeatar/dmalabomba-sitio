@@ -42,7 +42,7 @@ p,dl,dd,dt,h1,h2{margin:0}
 
 /* Vistas */
 .vista{position:absolute;top:0;right:0;bottom:0;left:0;opacity:0;visibility:hidden;transition:opacity .6s ease,visibility 0s linear .6s;display:flex;flex-direction:column}
-body[data-vista=cuenta] #v-cuenta,body[data-vista=pago] #v-pago,body[data-vista=pagado] #v-pagado{opacity:1;visibility:visible;transition:opacity .6s ease,visibility 0s}
+body[data-vista=cuenta] #v-cuenta,body[data-vista=pago] #v-pago,body[data-vista=pagado] #v-pagado,body[data-vista=nuevo] #v-nuevo{opacity:1;visibility:visible;transition:opacity .6s ease,visibility 0s}
 
 /* ---------- Cuenta ---------- */
 #v-cuenta{right:50%;padding:6rem 7rem 5rem}
@@ -176,3 +176,26 @@ body[data-pub-cuenta=no] #v-cuenta{right:0}
   #v-pagado.con-cli.sin-vuelto .pd-total{font-size:calc(19rem*var(--ajuste))}
   #v-pagado.con-cli .pd-vuelto{font-size:calc(11rem*var(--ajuste));padding:1.2rem 3rem}
 }
+
+/* ---------- Datos del cliente nuevo (pantalla completa; solo aparecen las filas que ya tienen valor) ---------- */
+#v-nuevo{padding:6rem 9rem 5rem}
+@media(orientation:portrait){#v-nuevo{padding:5rem 6rem 4rem}}
+.nv-cab{display:flex;align-items:baseline;justify-content:space-between;gap:3rem;padding-bottom:2.4rem;border-bottom:var(--fino) solid var(--linea2)}
+.nv-tit{font-size:3.6rem;letter-spacing:.18em;text-transform:uppercase;color:var(--tinta2)}
+.nv-emp{font-size:3.2rem;font-weight:800;letter-spacing:.02em;color:var(--emp)}
+.nv-lista{flex:1 1 auto;min-height:0;overflow:hidden;display:flex;flex-direction:column;justify-content:flex-start;gap:0;padding-top:2.4rem;--vf:6.4rem}
+.nv-lista[data-n="5"],.nv-lista[data-n="6"]{--vf:5.2rem}
+.nv-lista[data-n="7"]{--vf:4.2rem}
+.nv-lista[data-n="8"]{--vf:3.8rem}
+.nv-fila{min-width:0;border-bottom:var(--fino) solid var(--linea2);border-left:.8rem solid transparent;padding:1.2rem 2.4rem 1.3rem;animation:nvEntra .35s ease both}
+/* Franjas alternadas: una fila con fondo tintado y la siguiente en blanco, con una barra de color a la izquierda en las tintadas, para revisar cada dato por separado */
+.nv-fila:nth-child(odd){background:color-mix(in srgb,var(--tinta) 7%,var(--fondo));border-left-color:var(--linea2)}
+.nv-fila:nth-child(even){background:#fff;border-left-color:transparent}
+.nv-rot{font-size:2.4rem;letter-spacing:.14em;text-transform:uppercase;color:var(--tinta2);margin-bottom:.4rem}
+.nv-val{margin:0;font-size:var(--vf);font-weight:800;line-height:1.1;color:var(--tinta);overflow-wrap:anywhere;word-break:break-word}
+.nv-val.id{font-variant-numeric:tabular-nums;letter-spacing:.04em;color:var(--ced-fg)}
+.nv-val.largo1{font-size:calc(var(--vf) * .82)}
+.nv-val.largo2{font-size:calc(var(--vf) * .64)}
+.nv-pie{font-size:2.6rem;color:var(--tinta2);padding-top:2rem}
+@keyframes nvEntra{from{opacity:0;transform:translateY(.8rem)}to{opacity:1;transform:none}}
+body[data-tema=pollos] .nv-val.id{color:var(--tinta)}

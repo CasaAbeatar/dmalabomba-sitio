@@ -1,6 +1,6 @@
 // Service worker de la pantalla del cliente: guarda la página para abrir sin internet y entrega la publicidad guardada.
 // La publicidad vive en Cache Storage («cliente-anuncios-v1», la llena anuncios.js) y se sirve en «anuncio/<clave>» con soporte de Range para el video.
-const V = 'cliente-v3';
+const V = 'cliente-v4';
 const ANUNCIOS = 'cliente-anuncios-v1';
 const BASE = new URL('./', self.location.href);
 const CASCARA = ['./', 'index.html', 'cliente.js', 'cliente.css', 'anuncios.js', 'fonts/atkinson-hyperlegible-latin-400-normal.woff2', 'fonts/atkinson-hyperlegible-latin-700-normal.woff2', 'fonts/figtree-latin-400-normal.woff2', 'fonts/figtree-latin-800-normal.woff2', 'fonts/colon-400.woff2', 'fonts/colon-800.woff2', '../img/logo-soda.svg', '../img/logo-pollos.svg'];
