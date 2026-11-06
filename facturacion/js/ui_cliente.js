@@ -397,7 +397,6 @@ export function abrirFormCliente(app, cliente, { alGuardar, alCambiarEstado, tit
   const pieFicha = !esNuevo && c.creado_en ? h('small.tenue', 'Cliente agregado el ' + new Intl.DateTimeFormat('es-CR', { timeZone: 'America/Costa_Rica', dateStyle: 'long' }).format(new Date(c.creado_en)) + '.') : null;
   if (rapido) {
     masBloque = h('div.mt-form', { hidden: true, id: 'mt-mas-datos' },
-      bloqueComercial,
       h('fieldset', h('legend', 'Otros correos (opcionales)'), bloqueOtrosCorreos),
       bloqueTelefono, bloqueDireccion, bloqueTarifa, bloqueExo, bloqueNotas);
     masBtn = h('button.btn.mt-mas', { type: 'button', 'aria-expanded': 'false', 'aria-controls': 'mt-mas-datos', onclick: () => abrirMas(masBloque.hidden) });
@@ -405,7 +404,8 @@ export function abrirFormCliente(app, cliente, { alGuardar, alCambiarEstado, tit
   }
   const cuerpo = rapido
     ? h('div.mt-form', err,
-      h('fieldset', h('legend', 'Datos del cliente'), ced.el, avisoTipo05, actividadBloque),
+      // Orden de Emil (6 nov 2026): cédula, nombre (Hacienda), nombre comercial, actividad, correo; después (en «más datos») otros correos, teléfono, dirección y lo demás
+      h('fieldset', h('legend', 'Datos del cliente'), ced.el, avisoTipo05, bloqueComercial, actividadBloque),
       bloqueCorreo(),
       bloqueClaude, masBtn, masBloque)
     : h('div.mt-form',
