@@ -30,6 +30,8 @@ import { api, funcion } from './api.js';
 import { clientesTodos, clienteActivar } from './api_clientes.js';
 import { UBICACIONES } from './data_ubicaciones.js';
 import { cargarCss, campo, aviso, conBotonM, mensajeSeguro } from './ui_mant.js';
+import { crearEspejoClienteNuevo } from './pantalla_cliente_nuevo.js';
+import { infoActividad } from './actividades.js';
 import { crearCampoIdentificacion, leerCorreos, llevaLetras, limpiarNumeroId } from './ui_cedula.js';
 import { TARIFAS_CLIENTE, tarifaHabitual, clienteTraeTarifa } from './iva.js';
 import { revisarClienteConClaude } from './claude_ayuda.js';
@@ -444,8 +446,44 @@ export function abrirFormCliente(app, cliente, { alGuardar, alCambiarEstado, tit
     preguntarSalir();
     return sinAvisoFlotante('Tiene cambios sin guardar.');
   };
+  // Doble pantalla: mientras se llena un cliente NUEVO, la pantalla del cliente muestra a pantalla completa lo que se va escribiendo (solo si ya está abierta).
+  // Cada dato aparece cuando la persona llega a ese campo y lo llena, no antes (lo que Hacienda llena solo en otros campos, como la actividad, no sale hasta tocarlo).
+  // La cédula y el nombre salen de una vez: es lo primero que el cliente debe confirmar.
+  const tocados = new Set();
+  const llaveDe = (el) => {
+    if (!el || !el.closest) return '';
+    if (el === comercial || botonesComercial.some((b) => b === el || b.contains(el))) return 'comercial';
+    if (el === ced.actividad) return 'act';
+    const ic = correos.indexOf(el); if (ic >= 0) return 'c' + ic;
+    if (el === telefono) return 'tel';
+    if ([prov, cant, dist, barrio, senas].includes(el)) return 'dir';
+    return '';
+  };
+  const tocar = (e) => { const k = llaveDe(e.target); if (k) tocados.add(k); };
+  cuerpo.addEventListener('focusin', tocar);
+  cuerpo.addEventListener('pointerdown', tocar, true);
+  const espejo = esNuevo ? crearEspejoClienteNuevo({
+    empresa: /soda/i.test(String(app?.empresa?.codigo || app?.soc?.codigo_acceso || app?.soc?.codigo || '')) ? 'soda' : 'pollos',
+    leer: () => {
+      const v = ced.valores();
+      const nom = (sel) => (sel.value ? String(sel.selectedOptions[0]?.textContent || '').trim() : '');
+      const idOk = String(v.identificacion || '').length >= 9 || !!String(v.nombre || '').trim();
+      const cv = (i) => (tocados.has('c' + i) ? correos[i].value.trim() : '');
+      const lugar = [barrio.value.trim(), nom(dist), nom(cant), nom(prov)].filter(Boolean).join(', ');
+      const sn = senas.value.trim();
+      const cod = tocados.has('act') ? String(v.actividad_codigo || '').trim() : '';
+      const info = cod ? infoActividad(cod) : null;
+      return {
+        tipo_id: idOk ? v.tipo_id || '' : '', identificacion: idOk ? v.identificacion || '' : '', nombre: String(v.nombre || '').trim(),
+        nombre_comercial: tocados.has('comercial') ? valorComercial() : '',
+        actividad: cod ? (info && info.nombre !== 'Actividad sin nombre en la lista' ? info.texto : cod) : '',
+        correo: cv(0), correos_extra: correos.map((_, i) => (i ? cv(i) : '')).filter(Boolean), telefono: tocados.has('tel') ? telefono.value.trim() : '',
+        direccion: tocados.has('dir') ? [lugar, sn].filter(Boolean).join('. ') : '',
+      };
+    },
+  }) : null;
   const m = modal({
-    titulo: titulo || (esNuevo ? 'Agregar cliente' : 'Cliente: ' + nombrePropio(c.nombre)), contenido: cuerpo, ancho: 760, alCerrar: () => ced.destruir(), bloqueo,
+    titulo: titulo || (esNuevo ? 'Agregar cliente' : 'Cliente: ' + nombrePropio(c.nombre)), contenido: cuerpo, ancho: 760, alCerrar: () => { ced.destruir(); espejo?.cerrar(); }, bloqueo,
     botones: [{ texto: 'Cancelar', clase: 'suave', onclick: (x) => { const b = bloqueo(); if (!b) x(); else if (typeof b === 'string') toast(b, 'error', 5000); } }, { texto: esNuevo ? 'Guardar cliente' : 'Guardar cambios', clase: 'primario', onclick: (x) => guardar(x) }],
   });
   if (esNuevo) ced.enfocar();
