@@ -69,8 +69,10 @@ const DISTRITOS_SARAPIQUI = { 1: 'Puerto Viejo', 2: 'La Virgen', 3: 'Horquetas',
 const AJUSTES_CLAVE = 'fx_impresion';
 const DEFECTO = { papel: 80, copias: 1, auto: false, formato: 'tiquete', hoja: 'carta', modo: 'auto' };
 // El tiquete se entrega en el mismo acto de la venta (Res. MH-DGT-RES-0027-2024, art. 5). Por eso, mientras el aparato no haya guardado
-// su propia opción, la impresión automática viene encendida en computadora y tableta (pantalla de más de 700 px) y apagada en celular.
-const esCelular = () => { try { return window.matchMedia('(max-width:700px)').matches; } catch { return false; } };
+// su propia opción, la impresión automática viene encendida en computadora y apagada en celular y tableta.
+// Celular o tableta (Android, iPhone, iPad): ahí el tiquete NO sale solo al cobrar; se imprime tocando el botón.
+// La caja de Windows (aunque su pantalla sea táctil) sigue imprimiendo sola.
+const esDispositivo = () => { try { const u = navigator.userAgent || ''; return /Android|iPhone|iPad|iPod|Mobile/i.test(u) || (/Macintosh/i.test(u) && navigator.maxTouchPoints > 1) || window.matchMedia('(max-width:700px)').matches; } catch { return false; } };
 const CSS_URL = new URL('../css/imprimir.css', import.meta.url).href;
 const FUENTES_URL = 'https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&display=swap';
 
@@ -84,7 +86,7 @@ if (!document.querySelector('link[data-fx-imprimir]')) document.head.append(h('l
 export function leerAjustes() {
   let g = {};
   try { g = JSON.parse(localStorage.getItem(AJUSTES_CLAVE) || '{}') || {}; } catch { g = {}; }
-  const a = { ...DEFECTO, auto: !esCelular(), ...g };
+  const a = { ...DEFECTO, auto: !esDispositivo(), ...g };
   a.papel = Number(a.papel) === 58 ? 58 : 80;
   a.copias = Math.min(5, Math.max(1, parseInt(a.copias, 10) || 1));
   a.auto = !!a.auto;
@@ -801,7 +803,7 @@ export function armarAjustesImpresion() {
       seg([[80, 'Papel de 80 mm'], [58, 'Papel de 58 mm']], aj.papel, (v) => cambiar('papel', Number(v)), 'Ancho del papel')),
     grupo('Copias de cada tiquete', 'Cuántas copias salen cada vez que se imprime.',
       seg([[1, '1 copia'], [2, '2 copias'], [3, '3 copias']], aj.copias, (v) => cambiar('copias', Number(v)), 'Copias')),
-    grupo('Imprimir automáticamente al cobrar', 'En computadora y tableta viene encendido: el tiquete sale solo al terminar el cobro y se entrega al cliente. En celular viene apagado: el tiquete se imprime tocando el botón y se entrega igual. Cada aparato guarda su propia opción.',
+    grupo('Imprimir automáticamente al cobrar', 'En computadora viene encendido: el tiquete sale solo al terminar el cobro y se entrega al cliente. En celular y tableta viene apagado: el tiquete se imprime tocando el botón y se entrega igual. Cada aparato guarda su propia opción.',
       seg([['si', 'Sí, imprimir solo'], ['no', 'No, yo lo pido']], aj.auto ? 'si' : 'no', (v) => cambiar('auto', v === 'si'), 'Imprimir automáticamente'), estadoAuto),
     h('div.fx-grupo', h('div.fx-tit', 'Probar la impresora'),
       h('div.fx-ayuda', 'Saca un tiquete con una regla, letras de varios tamaños y tildes, para ver que nada se corta.'), probar, guardado),
