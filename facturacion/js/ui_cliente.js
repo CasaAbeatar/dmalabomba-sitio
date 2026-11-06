@@ -71,7 +71,7 @@ export function abrirFormCliente(app, cliente, { alGuardar, alCambiarEstado, tit
   const esNuevo = !c.id;
   let activo = c.activo !== false; // un cliente desactivado no aparece al buscar cliente para facturar
   const err = h('div.error-caja', { hidden: true, role: 'alert' });
-  const rapido = esNuevo && !completo; // cliente nuevo desde Facturación o Anular: formulario rápido, lo opcional queda detrás de «Agregar más datos del cliente»
+  const rapido = false; // Decisión de Emil (6 nov 2026): ya no hay «Agregar más datos del cliente» detrás de un botón; al agregar un cliente nuevo (también desde Facturación o Anular) todos los datos salen a la vista, en el orden de siempre (el parámetro «completo» queda sin efecto)
   let masBloque = null, masBtn = null; // se arman más abajo (solo en el formulario rápido)
   const abrirMas = (abrir) => { if (!masBloque) return; masBloque.hidden = !abrir; masBtn.replaceChildren(h('b', abrir ? 'Ocultar los datos opcionales' : 'Agregar más datos del cliente (opcional)'), h('small', abrir ? 'Lo que escribió aquí se guarda igual.' : 'Nombre comercial, otros correos, teléfono, dirección, tarifa de IVA, exoneración y notas. Hacienda no los pide para facturar.')); masBtn.setAttribute('aria-expanded', String(abrir)); };
   const mostrarError = (m, campoEl) => {
