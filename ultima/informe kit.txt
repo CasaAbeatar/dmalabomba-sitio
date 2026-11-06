@@ -13,6 +13,7 @@ OK sintaxis: 9 tacto del AON.ps1
 OK sintaxis: config.ps1
 OK sintaxis: funciones.ps1
 OK sintaxis: instalar todo.ps1
+OK sintaxis: servidor publicidad.ps1
 --- PSScriptAnalyzer (errores y advertencias) ---
 --- Equipo de prueba ---
 Microsoft Windows Server 2025 Datacenter 10.0.26100
