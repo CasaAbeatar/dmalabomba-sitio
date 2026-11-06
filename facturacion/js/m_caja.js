@@ -678,7 +678,9 @@ export default {
       if (typeof ResizeObserver !== 'undefined') new ResizeObserver(pistaViva).observe(lista);
       // Los ajustes de la impresora ya no están aquí: viven en Administración, Configuración
       barraCuentas.replaceChildren(envoltura,
-        h('button.btn.btn-efectivo', { type: 'button', onclick: seguro(abrirEfectivo) }, 'Efectivo'));
+        h('button.btn.btn-efectivo', { type: 'button', onclick: seguro(abrirEfectivo) }, 'Efectivo'),
+        // Decisión de Emil (6 nov 2026): «Cuenta nueva» vuelve a la barra, a la derecha de Efectivo y en ámbar; es el botón que abre cuentas nuevas
+        h('button.btn.ambar.btn-cuenta-nueva', { type: 'button', onclick: seguro(nuevaCuenta) }, 'Cuenta nueva'));
       requestAnimationFrame(() => {
         lista.querySelector('.cuenta-btn[aria-pressed=true]')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
         pistaViva();
@@ -708,8 +710,8 @@ export default {
       });
     }
 
-    // Ya no hay botón «Nueva cuenta» en la barra: la caja siempre abre sola la cuenta siguiente. Esta función queda para «Siguiente cliente» (tras un cobro)
-    // y para «Intentar de nuevo» cuando la red falló al abrirla. Reutiliza la vacía que exista: nunca hay más de una cuenta nueva vacía.
+    // El botón «Cuenta nueva» (ámbar, a la derecha de Efectivo) vuelve a la barra por decisión de Emil (6 nov 2026); la caja además abre sola la cuenta siguiente.
+    // Esta función también sirve para «Siguiente cliente» (tras un cobro) y para «Intentar de nuevo» cuando la red falló al abrirla. Reutiliza la vacía que exista: nunca hay más de una cuenta nueva vacía.
     async function nuevaCuenta() {
       await accion(async () => {
         await abrirCuentaParaElSiguiente();
@@ -1298,7 +1300,8 @@ export default {
         cliente = c; actividadFactura = null; correosOff = new Set(); pantalla?.correos([]); pintarCliente(); actualizar();
         asignarCliente(c).then((ok) => { if (ok && !terminado && cur?.cliente?.id === c.id) { cliente = cur.cliente; pintarCliente(); } });
       };
-      const btnElegir = h('button.btn', { type: 'button', onclick: () => selectorCliente(app, { alElegir: elegirCliente }) }, 'Elegir cliente (factura)');
+      // Decisión de Emil (6 nov 2026): al abrir la ventana de cobrar, «Elegir cliente» va en ámbar
+      const btnElegir = h('button.btn.ambar', { type: 'button', onclick: () => selectorCliente(app, { alElegir: elegirCliente }) }, 'Elegir cliente (factura)');
       const btnQuitarCli = h('button.btn.suave', { type: 'button', onclick: async () => { if (cur && (cur.lineas || []).some((l) => l.exoneracion)) { await quitarExo(true); } cliente = null; actividadFactura = null; pintarCliente(); asignarCliente(null); } }, 'Quitar cliente');
       const actEl = h('div.cobro-act', { hidden: true });
       const tarEl = h('div.cobro-tarifa', { hidden: true });
@@ -1595,15 +1598,15 @@ export default {
         listaPagos.replaceChildren(...pagos.map((p, i) => h('div.pago-item',
           h('div', h('div.p-med', MEDIOS[p.medio] + ' · ' + money(p.recibido)), p.ref ? h('div.p-det', 'Referencia: ' + p.ref) : null),
           h('button.btn.chico.peligro', { type: 'button', 'aria-label': 'Quitar el pago de ' + MEDIOS[p.medio], onclick: () => { pagos.splice(i, 1); auto = true; sugerir(); actualizar(); } }, 'Quitar'))));
-        resumen.className = 'cobro-resumen';
+        resumen.className = 'cobro-resumen'; resumen.hidden = false;
         if (r.error) { resumen.replaceChildren(h('span', 'Revise los montos')); resumen.classList.add('falta'); }
-        else if (r.falta > 0) { resumen.classList.add('falta'); resumen.replaceChildren(h('span', 'Falta por pagar'), h('span.grande', money(r.falta / 100))); }
+        else if (r.falta > 0) { resumen.hidden = true; } // Decisión de Emil (6 nov 2026): se quita la tarjeta «Falta por pagar»
         else if (r.vuelto > 0) { resumen.classList.add('vuelto'); resumen.replaceChildren(h('span', 'Pago completo. Entregue de vuelto'), h('span.grande', money(r.vuelto / 100))); }
         else if (cortesia && r.ok) { resumen.classList.add('ok'); resumen.replaceChildren(h('span', 'Cortesía: no hay nada que cobrar'), h('span.grande', '✓')); }
         else if (r.ok) { resumen.classList.add('ok'); resumen.replaceChildren(h('span', 'Pago completo, sin vuelto'), h('span.grande', '✓')); }
-        else { resumen.classList.add('falta'); resumen.replaceChildren(h('span', 'Falta por pagar'), h('span.grande', money(totalC / 100))); }
+        else { resumen.hidden = true; }
         // Con el cobro bloqueado no se habla de vuelto (no se va a cobrar): se dice qué hacer con el dinero
-        if (bloqueo) { resumen.className = 'cobro-resumen falta'; resumen.replaceChildren(h('span', 'No se cobra esta cuenta: no entregue vuelto. Si ya recibió dinero por ella, devuélvalo.')); }
+        if (bloqueo) { resumen.hidden = false; resumen.className = 'cobro-resumen falta'; resumen.replaceChildren(h('span', 'No se cobra esta cuenta: no entregue vuelto. Si ya recibió dinero por ella, devuélvalo.')); }
         btnCobrar.textContent = cobrando ? (cortesia ? 'Registrando…' : 'Cobrando…') : cortesia ? 'Registrar cortesía' : 'Cobrar ' + money(venta.total);
         // Con el cobro bloqueado el botón se ve apagado pero sigue recibiendo el toque (aunque falte el monto): el toque lleva la vista al aviso (no cobra) y al lado se dice por qué
         // Sin medio de pago elegido no se cobra (salvo cortesía, que no lleva pago)
