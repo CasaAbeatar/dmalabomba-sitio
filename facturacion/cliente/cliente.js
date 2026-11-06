@@ -12,7 +12,8 @@ const LLAVE_SOC = 'pc-soc';
 const NOMBRE_CANAL = 'lb-pantalla-cliente';
 const CADUCA_MS = 20000;      // sin «estado» ni «latido» en 20 s: vuelve a la publicidad
 let PAGADO_MS = 6000;         // «pagado» dura 6 s (configurable: segundos_pagado)
-const ANUNCIOS_CADA_MS = 10 * 60 * 1000;
+const ANUNCIOS_CADA_MS = 60 * 1000;   // la carpeta se vuelve a leer cada minuto: lo que se agregue o quite aparece solo
+let ultimaConfig = 0;                 // el ajuste del administrador (Supabase) se pide como máximo cada 10 minutos
 const RECARGA_MS = 24 * 3600 * 1000;
 
 const $ = (id) => document.getElementById(id);
@@ -293,7 +294,8 @@ const firmaDe = (s) => JSON.stringify([s.estado, s.empresa, s.lineas, s.subtotal
 const temaDe = (e) => (e === 'soda' ? 'soda' : e === 'pollos' ? 'pollos' : 'neutro');
 // Cuando no hay publicidad cargada, la pantalla de espera muestra el nombre de la empresa que factura en esa caja
 const MARCAS = { soda: 'Soda La Bomba', pollos: 'Pollos La Bomba' };
-function marcaEmpresa(e) { const sp = document.querySelector('#an-vacio span'); const t = MARCAS[e] || 'La Bomba'; if (sp && sp.textContent !== t) sp.textContent = t; }
+let empresaActual = '';
+function marcaEmpresa(e) { if (e && e !== empresaActual) { empresaActual = e; setTimeout(() => pedirAnuncios(), 0); } const sp = document.querySelector('#an-vacio span'); const t = MARCAS[e] || 'La Bomba'; if (sp && sp.textContent !== t) sp.textContent = t; }
 function aplicar(s) {
   marcaEmpresa(s.empresa);
   if (s.estado !== 'espera' && document.body.dataset.tema !== temaDe(s.empresa)) { document.body.dataset.tema = temaDe(s.empresa); if (cliente) repintarCliente(); }
@@ -327,7 +329,7 @@ function recibir(d) {
   if (carga && Number.isInteger(carga.terminal) && carga.terminal > 0) terminal = carga.terminal;
   if (carga && typeof carga.soc === 'string' && /^[0-9a-f-]{36}$/i.test(carga.soc) && carga.soc !== soc) {
     soc = carga.soc; try { localStorage.setItem(LLAVE_SOC, soc); } catch { /* nada */ }
-    pedirAnuncios();
+    pedirConfig();
   }
   const esEstado = ev === 'estado' || (!ev && carga.estado);
   const esLatido = ev === 'latido' || (!ev && !carga.estado && 'ts' in carga);
@@ -367,25 +369,26 @@ async function pedirConfig() {
   } catch { /* se queda con lo de siempre */ }
 }
 
+// La publicidad sale de una carpeta de la computadora (decisión de Emil, 5 nov 2026): C:\PantallaCliente\publicidad\soda, \pollos y \todas.
+// Un servidor local del kit (solo en esta computadora, 127.0.0.1) entrega la lista y los archivos; sin internet ni base de datos.
+const LOCAL = 'http://127.0.0.1:8766';
+const SEG_FOTO = 10;
 let pidiendo = false;
 async function pedirAnuncios() {
-  if (pidiendo || params.get('demo')) return;
-  if (!soc) { aviso('sin sociedad conocida todavía; se usa la publicidad guardada'); return; }
-  const t = tokenDeSesion();
-  if (!t) { aviso('sin sesión vigente; se usa la publicidad guardada'); return; }
+  if (modoDemo) return;
+  if (Date.now() - ultimaConfig > 10 * 60 * 1000) { ultimaConfig = Date.now(); pedirConfig(); }
+  if (pidiendo) return;
   pidiendo = true;
   try {
-    const r = await fetch(SUPA_URL + '/rest/v1/rpc/fx_pantalla_anuncios', {
-      method: 'POST', cache: 'no-store', credentials: 'omit',
-      headers: { apikey: SUPA_KEY, Authorization: 'Bearer ' + t, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ p_soc: soc }),
-    });
+    const r = await fetch(LOCAL + '/lista?e=' + encodeURIComponent(empresaActual || 'ninguna'), { cache: 'no-store', credentials: 'omit' });
     if (!r.ok) throw new Error('http ' + r.status);
-    let lista = await r.json();
-    if (lista && !Array.isArray(lista) && Array.isArray(lista.anuncios)) lista = lista.anuncios;
-    await rotador.sincronizar(lista);
-    pedirConfig();
-  } catch (e) { aviso('no se pudo actualizar la publicidad, sigue la guardada:', e && e.message); }
+    const datos = await r.json();
+    const lista = (datos && Array.isArray(datos.anuncios) ? datos.anuncios : []).map((a, n) => ({
+      id: a.carpeta + '/' + a.nombre, tipo: a.tipo === 'video' ? 'video' : 'imagen', segundos: SEG_FOTO, orden: n,
+      url: LOCAL + '/a/' + encodeURIComponent(a.carpeta) + '/' + encodeURIComponent(a.nombre) + '?v=' + encodeURIComponent(String(a.mod || '')),
+    }));
+    await rotador.sincronizar(lista, { soloMostrar: true });
+  } catch (e) { aviso('no se pudo leer la carpeta de publicidad (¿está corriendo el servidor del kit?):', e && e.message); }
   finally { pidiendo = false; }
 }
 
@@ -438,7 +441,7 @@ ir('espera');
 const modoDemo = params.get('demo');
 if (modoDemo) demo(modoDemo);
 else {
-  rotador.cargarGuardados().then(() => pedirAnuncios());
+  pedirAnuncios();
   // BroadcastChannel (Chrome, Edge, Safari 15.4 o más). Alternativa si falta: la caja escribe el mensaje JSON en localStorage['lb-pantalla-cliente-msg'] y aquí se oye el evento «storage».
   const entrada = (e) => { try { recibir(e.data); } catch (err) { aviso('mensaje ignorado:', err && err.message); } };
   if (typeof BroadcastChannel === 'function') {

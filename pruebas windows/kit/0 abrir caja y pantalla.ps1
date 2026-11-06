@@ -13,6 +13,13 @@ function Anotar($t) { Add-Content -Path $log -Value ("{0:yyyy-MM-dd HH:mm:ss}  {
 if ((Test-Path $log) -and ((Get-Item $log).Length -gt 500KB)) { Remove-Item $log -Force }
 Afinar-Usuario
 
+# Servidor local de la publicidad (carpeta de la computadora). Si se cae, se levanta solo en la vigilancia.
+function Levantar-Servidor {
+  try { return Start-Process -FilePath "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -ArgumentList @("-NoProfile", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden", "-File", "`"$Carpeta\servidor publicidad.ps1`"") -WindowStyle Hidden -PassThru }
+  catch { Anotar "No se pudo iniciar el servidor de publicidad: $($_.Exception.Message)"; return $null }
+}
+$servidorPub = Levantar-Servidor
+
 # Esperar red hasta 3 minutos (si no hay, abre igual: la pantalla guarda lo ultimo que vio)
 for ($i = 0; $i -lt 36; $i++) {
   if ([System.Net.NetworkInformation.NetworkInterface]::GetIsNetworkAvailable()) { break }
@@ -50,6 +57,7 @@ Abrir-Todo
 while ($true) {
   Start-Sleep -Seconds $SegundosVigilar
   try {
+    if ($servidorPub -and $servidorPub.HasExited) { $servidorPub = Levantar-Servidor }
     $procs = @(Procesos-Navegador $Perfil)   # una sola consulta por vuelta: es lo mas caro de la vigilancia
     $p = Elegir-Pantallas $CajaEnPantalla
     if ($p.Cuantas -ne $ultimasPantallas) {
