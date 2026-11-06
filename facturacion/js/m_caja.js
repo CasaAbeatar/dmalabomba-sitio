@@ -1843,7 +1843,7 @@ export default {
           // La página solo sabe que abrió la impresión: no puede saber si la persona la canceló o si salió el papel
           impEstado.textContent = fmt === 'carta'
             ? 'Se abrió la impresión de la factura carta (' + aj.copias + (aj.copias === 1 ? ' copia' : ' copias') + '). Si no salió, toque el botón otra vez.'
-            : 'Se abrió la impresión del tiquete de ' + aj.papel + ' mm (' + aj.copias + (aj.copias === 1 ? ' copia' : ' copias') + '). Si no salió, toque «Imprimir otra vez».';
+            : ''; // Decisión de Emil (6 nov 2026): se quita el aviso «Se abrió la impresión del tiquete de 80 mm…»; los errores sí se muestran
         } catch (e) {
           impEstado.className = 'tenue-linea msg-mal';
           impEstado.textContent = 'No se pudo imprimir: ' + textoDeError(e) + ' Toque el botón de imprimir otra vez; si sigue igual, avise a un administrador (Administración, Configuración).';
