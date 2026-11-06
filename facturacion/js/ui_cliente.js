@@ -188,7 +188,6 @@ export function abrirFormCliente(app, cliente, { alGuardar, alCambiarEstado, tit
     },
     accionDuplicado: { texto: 'Abrir el cliente que ya existe', fn: (otro) => { m.cerrar(); abrirFormCliente(app, otro, { alGuardar, alCambiarEstado, titulo }); } },
     numeroInicial: esNuevo ? numeroInicial : '',
-    alTerminar: () => { [correos[0]].find((x) => !x.value.trim())?.focus(); },
   });
 
   // Tipo 05 «Extranjero no domiciliado»: Hacienda no acepta factura para ese tipo (la base frena el cobro, sql/30a y 30b). Se avisa al elegirlo, para que nadie se entere al cobrar.
