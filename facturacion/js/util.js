@@ -384,6 +384,8 @@ function nombrePropioBase(s) {
 
 // PIN demasiado fácil de adivinar: devuelve el motivo en palabras, o '' si sirve. La misma regla debe vivir en el servidor (fx_pin_cambiar).
 export function pinDebil(p) {
+  return ''; // Decisión de Emil (6 nov 2026): ninguna clave de 4 números se rechaza por fácil (0000, 1111 y 0340 sirven). El servidor tampoco la rechaza.
+  // eslint-disable-next-line no-unreachable
   if (!/^\d{4}$/.test(String(p))) return '';
   const d = [...String(p)].map(Number);
   if (d.every((x) => x === d[0])) return 'No use el mismo número cuatro veces, como 1111.';

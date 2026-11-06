@@ -6,7 +6,6 @@
 //     cliente,                      // fila de fact.clientes al editar; omitir al crear
 //     revisarDuplicado(ident),      // opcional: promesa con el cliente ya guardado con ese número, o null
 //     accionDuplicado: { texto, fn(clienteExistente) },
-//     alTerminar(),                 // opcional: la consulta llenó todo; que el formulario lleve el foco a su siguiente campo vacío
 //     numeroInicial,                // opcional (cliente nuevo): número que la persona ya había escrito en el buscador; se consulta de una vez
 //   });
 //   ced.el            -> bloque con: número de identificación, nombre o razón social y código de actividad (en ese orden)
@@ -234,14 +233,7 @@ export function crearCampoIdentificacion(opts = {}) {
       if (fase === 'no_encontrada' && !nuevo && c.identificacion === ident.value && c.verificacion_motivo) sinConfirmar = true;
     }
     pintar();
-    if (resp.ok) siguienteCampo();
-  }
-  // Después de llenar solo, el foco pasa al primer campo vacío (sin quitárselo a quien ya está escribiendo en otro lado)
-  function siguienteCampo() {
-    const a = document.activeElement;
-    if (a && a !== document.body && a !== ident) return;
-    if (!nombre.value.trim()) { nombre.focus(); return; }
-    opts.alTerminar?.();
+    // Decisión de Emil (6 nov 2026): al confirmar la cédula el foco NO salta solo. Quien agrega el cliente primero ve quién es (nombre arriba) y sigue a mano.
   }
 
   /* ---------- Número ---------- */
@@ -388,7 +380,9 @@ export function crearCampoIdentificacion(opts = {}) {
     else if (fase === 'encontrada' && r) {
       const via = r.estado === 'padron';
       nodo = caja('verde', '✓', via ? 'Existe en el padrón de personas' : 'Existe en Hacienda',
-        nombrePropio(r.nombre) + (TIPOS_ID[r.tipo] ? ' · ' + TIPOS_ID[r.tipo] : ''),
+        null,
+        h('span.ced-quien', nombrePropio(r.nombre)),
+        h('span', 'Cédula ' + d + (TIPOS_ID[r.tipo] ? ' · ' + TIPOS_ID[r.tipo] : '') + '. Revise que sea la persona correcta antes de seguir.'),
         via ? h('span', 'Hacienda no muestra actividad económica para este número.') : null,
         r.desactualizado ? h('span', 'Hacienda no respondió ahora. Estos datos son de la consulta del ' + fechaCorta(r.consultado_en) + '.') : null);
     } else if (fase === 'no_encontrada') {
