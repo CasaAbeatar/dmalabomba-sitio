@@ -26,7 +26,6 @@
 
 /* Lista de clientes y usuarios */
 .mt-lista{display:flex;flex-direction:column;gap:.55rem}
-.mt-lista>.mt-item{flex:0 0 auto} /* las tarjetas nunca se encogen: si no caben, la lista se desplaza (antes se encimaban unas sobre otras) */
 .mt-item{display:flex;gap:.8rem;align-items:center;justify-content:space-between;padding:.8rem 1rem;background:var(--papel);border:1px solid var(--linea);border-radius:14px}
 .mt-item:hover{border-color:var(--linea2)}
 .mt-item .mt-datos{min-width:0;flex:1 1 auto;display:flex;flex-direction:column;gap:.15rem}

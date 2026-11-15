@@ -1,16 +1,16 @@
-// Usuarios del facturador (solo administradores): crear, cambiar nombre, reiniciar clave, activar o desactivar. Nunca se elimina.
+// Usuarios del facturador (solo administradores): crear, cambiar nombre, ver y cambiar claves (solo el administrador general), activar o desactivar. Nunca se elimina.
 // Cada empresa tiene sus usuarios: el servidor (fx_usuarios) entrega solo los de la empresa de la sesión y un usuario nuevo queda en esa empresa.
 // fx_usuarios trae por usuario `empresas: [{ id, codigo, nombre_comercial }]`; de la fila del propio administrador salen las OTRAS empresas a las que él tiene acceso (casilla «También puede entrar a …»).
-import { estiloUsuario, h, modal, confirmar, pedir, conBoton, toast, fechaHora, fechaCorta, pinDebil, conPunto, nombrePropio, nombreLocal, bloqueError, textoDeError } from './util.js';
+import { estiloUsuario, h, modal, confirmar, pedir, conBoton, toast, fechaHora, fechaCorta, conPunto, nombrePropio, nombreLocal, bloqueError, textoDeError } from './util.js';
 import { api } from './api.js';
 import { seguridad, normalizarSeguridad, normalizarAparatos } from './api_seguridad.js';
 import { haceCuanto } from './api_respaldos.js';
 import { cargarCss, aviso, campo, soloDigitos, diaCR } from './ui_mant.js';
 
-// Clave al azar de 4 números para ofrecer al crear un usuario (cualquier combinación sirve)
+// Clave al azar de 4 números (6 nov 2026: ya no hay regla de claves débiles, la base acepta cualquiera de 4 números)
 function pinAzar() {
   let p;
-  do { const a = new Uint32Array(1); crypto.getRandomValues(a); p = String(a[0] % 10000).padStart(4, '0'); } while (false);
+  do { const a = new Uint32Array(1); crypto.getRandomValues(a); p = String(a[0] % 10000).padStart(4, '0'); } while (/^(\d)\1{3}$/.test(p));
   return p;
 }
 const usuarioLimpio = (s) => s.toLowerCase().replace(/\s+/g, '');
@@ -68,7 +68,7 @@ export default {
       const yo = esYo(u);
       const ultimo = u.ultimo_ingreso ? 'Último ingreso: ' + fechaHora(u.ultimo_ingreso) : 'Todavía no ha ingresado';
       const btnNombre = h('button.btn', { type: 'button', onclick: () => cambiarNombre(u) }, 'Cambiar nombre');
-      const btnPin = u.ver_claves ? h('button.btn', { type: 'button', onclick: () => cambiarClave(u) }, 'Ver o cambiar clave') : null;
+      const btnPin = u.ver_claves ? h('button.btn', { type: 'button', onclick: (e) => cambiarClave(u, e.currentTarget) }, 'Cambiar clave') : null; // solo el administrador general (la base lo exige)
       const btnAdmin = yo ? null : h('button.btn', { type: 'button', onclick: (e) => cambiarAdmin(u, e.currentTarget) }, u.admin ? 'Pasar a Caja' : 'Hacer administrador');
       const btnActivo = yo ? null : h('button.btn' + (u.activo ? '.peligro' : ''), { type: 'button', onclick: (e) => cambiarActivo(u, e.currentTarget) }, u.activo ? 'Desactivar' : 'Activar de nuevo');
       return h('div.mt-item' + (u.activo ? '' : '.apagado'),
@@ -76,12 +76,13 @@ export default {
           h('span.mt-nombre', nombrePropio(u.nombre || u.usuario)),
           h('span.mt-sub', 'Usuario: ', h('span.mt-codigo', u.usuario)),
           h('span.mt-sub', ultimo),
+          u.ver_claves ? h('span.mt-sub', 'Clave: ', u.clave ? h('strong.mt-codigo', u.clave) : h('span.tenue', 'no se puede ver todavía; se verá cuando la vuelva a poner')) : null,
           h('div.fila', { style: 'gap:.4rem;margin-top:.2rem' },
             yo ? h('span.chip.ok', 'Es usted') : null,
             h('span.chip' + (u.admin ? '.ok' : '.gris'), u.admin ? 'Administrador' : 'Caja'),
             u.activo ? null : h('span.chip.mal', 'Desactivado: no puede entrar'),
             otrasEmpresas(u).map((e) => h('span.chip.gris', 'También entra a ' + nombreLocal(e))),
-            u.ver_claves ? h('span.chip.' + (u.clave ? 'ok' : 'gris'), u.clave ? 'Clave: ' + u.clave : 'Clave sin guardar: póngala con «Ver o cambiar clave»') : null)),
+            u.debe_cambiar_pin ? h('span.chip.espera', 'Debe cambiar su clave al entrar') : null)),
         h('div.mt-btns', btnNombre, btnPin, btnAdmin, btnActivo));
     }
 
@@ -147,7 +148,7 @@ export default {
       const origen = origenDe(a);
       const quien = a.usuario ? usuarios.find((u) => u.usuario === a.usuario) : null;
       const btnAtender = h('button.btn.primario', { type: 'button', onclick: (e) => atenderAviso(a, e.currentTarget) }, 'Marcar como atendida');
-      const btnPin = quien && !esYo(quien) && quien.activo ? h('button.btn', { type: 'button', onclick: (e) => reiniciarPin(quien, e.currentTarget) }, 'Reiniciar clave de ' + nombrePropio(quien.nombre || quien.usuario)) : null;
+      const btnPin = quien && quien.ver_claves && quien.activo ? h('button.btn', { type: 'button', onclick: (e) => cambiarClave(quien, e.currentTarget) }, 'Cambiar la clave de ' + nombrePropio(quien.nombre || quien.usuario)) : null;
       return h('li.mt-seg-aviso',
         h('p.mt-seg-que', a.mensaje || 'Aviso de ingreso.'),
         origen ? h('p.mt-seg-origen', origen) : null,
@@ -230,26 +231,24 @@ export default {
       await guardar(null, { id: u.id, nombre: v.trim() }, 'Nombre guardado.');
     }
 
-    // Solo el administrador general (la base lo exige): ve la clave de 4 números y escribe la que quiera. Guarda y queda de una vez, sin cambio obligatorio.
-    function cambiarClave(u) {
+    // Solo el administrador general: escribe la clave que quiera (4 números), sin cambio obligatorio después
+    function cambiarClave(u, btn) {
       const err = h('div.error-caja', { hidden: true, role: 'alert' });
-      const pin = h('input.campo.mt-pin-campo', { type: 'text', inputmode: 'numeric', maxlength: 4, autocomplete: 'off', value: u.clave || '', 'aria-label': 'Clave de 4 números' });
-      soloDigitos(pin, 4);
+      const mostrar = (m, el) => { err.textContent = m; err.hidden = !m; el?.focus(); };
+      const pin = soloDigitos(h('input.campo', { type: 'text', inputmode: 'numeric', autocomplete: 'off', maxlength: 4, value: u.clave || '', 'aria-label': 'clave de 4 números' }), 4);
       const m = modal({
-        titulo: 'Clave de ' + (u.nombre || u.usuario), ancho: 420,
-        contenido: h('div',
-          h('p', u.clave ? 'Clave actual: ' : 'Esta clave todavía no se guardó para verla.', u.clave ? h('strong', u.clave) : null),
-          h('label.etq', 'Clave (4 números)', pin), err,
-          h('small.tenue', 'Cualquier combinación de 4 números sirve. Al guardar, la persona entra de una vez con esta clave, sin tener que cambiarla.')),
-        botones: [{ texto: 'Cancelar', clase: 'suave', onclick: (c) => c() }, { texto: 'Guardar clave', clase: 'primario', onclick: async (c) => {
-          err.hidden = true;
-          if (!/^\d{4}$/.test(pin.value)) { err.textContent = 'La clave debe tener exactamente 4 números.'; err.hidden = false; pin.focus(); return; }
-          const btn = m.el.querySelector('.modal-pie .primario');
-          const hecho = await guardar(btn, { id: u.id, pin: pin.value }, 'Clave guardada. Ya puede entrar con ella.');
-          if (hecho) c();
+        titulo: 'Clave de ' + (u.nombre || u.usuario), ancho: 440,
+        contenido: h('div.mt-form', err,
+          campo('Clave (4 números)', pin, 'La persona entra con esta clave y no tiene que cambiarla. Usted la verá siempre en Usuarios.'),
+          h('div.fila', h('button.btn', { type: 'button', onclick: () => { pin.value = pinAzar(); pin.focus(); } }, 'Poner una al azar'))),
+        botones: [{ texto: 'Cancelar', clase: 'suave', onclick: (c) => c() }, { texto: 'Guardar', clase: 'primario', onclick: async (c) => {
+          mostrar('');
+          if (!/^\d{4}$/.test(pin.value)) return mostrar('La clave debe tener exactamente 4 números.', pin);
+          const b = m.el.querySelector('.modal-pie .primario');
+          await conBoton(b, async () => { await api.usuarioGuardar({ id: u.id, pin: pin.value }); toast('Clave guardada. Si esa persona tenía la sesión abierta, tendrá que entrar de nuevo.'); c(); await cargar(); });
         } }],
       });
-      setTimeout(() => pin.focus(), 50);
+      pin.focus(); pin.select();
     }
 
     async function cambiarAdmin(u, btn) {
@@ -287,7 +286,7 @@ export default {
             h('small.tenue', extras.length ? 'La persona queda en ' + miEmpresa + '. Marque la otra empresa solo si también trabaja allá.' : 'La persona queda en ' + miEmpresa + ' y solo entra a esta empresa.')),
           campo('Usuario para entrar', usr, 'Letras minúsculas sin tilde ni espacios; puede llevar números, punto o guion. Entre 2 y 30 caracteres. Ejemplo: maria'),
           campo('Nombre de la persona', nom, 'Ejemplo: María Rodríguez'),
-          h('div.col', { style: 'gap:.3rem' }, campo('Clave (4 números)', pin, 'Es la clave definitiva: la persona entra con ella y no tiene que cambiarla.'),
+          h('div.col', { style: 'gap:.3rem' }, campo('Clave (4 números)', pin, 'Es la clave definitiva: la persona no tiene que cambiarla. Usted podrá verla después en esta pantalla.'),
             h('div.fila', h('button.btn', { type: 'button', onclick: () => { pin.value = pinAzar(); } }, 'Generar una clave al azar'))),
           h('div.col', { style: 'gap:.3rem' }, h('span.etq', '¿Es administrador?'),
             h('div.mt-radios', h('label', rNo, 'No, es de caja'), h('label', rSi, 'Sí, administrador')),
@@ -303,7 +302,7 @@ export default {
           await conBoton(btn, async () => {
             const ids = extras.filter((x) => x.cb.checked).map((x) => x.id);
             await api.usuarioGuardar({ usuario: u, nombre: nom.value.trim(), admin, pin: pin.value, sociedad_id: app.socId, ...(ids.length ? { empresas: ids } : {}) });
-            toast('Usuario creado. Entra con la clave que usted le puso.');
+            toast('Usuario creado.');
             c(); await cargar();
           });
         } }],
@@ -322,8 +321,8 @@ export default {
         h('ul', { style: 'margin:.4rem 0 0;padding-left:1.2rem;display:grid;gap:.3rem' },
           h('li', 'La clave tiene 4 números que solo conoce cada persona. Se usa junto con el código de la empresa y el usuario para entrar.'),
           h('li', 'Si alguien se equivoca de clave, puede intentar de nuevo pasados 3 segundos. El ingreso nunca se bloquea ni se queda esperando más tiempo.'),
-          h('li', 'Si alguien olvida su clave, el administrador general la ve o la cambia con «Ver o cambiar clave».'),
-          h('li', 'Nadie puede ver la clave de otra persona, ni siquiera un administrador.'),
+          h('li', 'Si alguien olvida su clave, el administrador general la ve aquí o le pone otra con «Cambiar clave». No hay cambio obligatorio.'),
+          h('li', 'Solo el administrador general ve las claves de todos y puede cambiarlas. Los demás administradores no.'),
           h('li', 'Cada persona entra solo a la empresa que se le dio. Aquí se ven y se crean los usuarios de ' + miEmpresa + '.'),
           h('li', 'Hay dos tipos de usuario. Caja: factura, crea y edita clientes (sin desactivarlos), anula y reimprime facturas, y abre y cierra la caja. Administrador: lo mismo y además todo el resto del sistema, incluida esta pantalla de Usuarios. Todos los administradores tienen el mismo acceso.'))));
     pintarSeguridad(); // «Revisando…» mientras llega

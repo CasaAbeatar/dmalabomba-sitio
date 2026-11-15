@@ -1010,8 +1010,8 @@ export default {
       const puedeReenviar = c.estado === 'error' || recuperable || ((c.estado === 'pendiente' || c.estado === 'enviado') && hechoHace > 3);
 
       const impr = h('div.doc-grupo', h('h3', 'Imprimir'), h('div.doc-botones',
-        accion({ texto: 'Imprimir tiquete', clase: 'primario', onclick: () => imprimirComprobante(c.id, { formato: 'tiquete', copias: 1 }) }),
-        accion({ texto: 'Imprimir factura carta', onclick: () => imprimirComprobante(c.id, { formato: 'carta', copias: 1 }) })));
+        accion({ texto: 'Imprimir en rollo', clase: 'primario', onclick: () => imprimirComprobante(c.id, { formato: 'tiquete', copias: 1 }) }),
+        accion({ texto: 'Imprimir hoja carta o PDF', onclick: () => imprimirComprobante(c.id, { formato: 'carta', copias: 1 }) })));
 
       const arch = h('div.doc-grupo', h('h3', 'Archivos para contabilidad'), h('div.doc-botones',
         accion({ texto: 'Descargar XML firmado', onclick: () => hechoXml('firmado', 'firmado', 'Este documento todavía no tiene el XML firmado.') }),

@@ -1,0 +1,39 @@
+/* Contabilidad, Calendario: líneas finas, tinta oscura; el rojo solo para lo vencido, el verde para lo hecho. Sin tiras que se deslizan de lado. */
+.iva-cifras{grid-template-columns:repeat(3,minmax(0,1fr))}
+.iva-cifras .con-cifra.iva-pagar{border-color:var(--rojo)}
+.iva-cifras .con-cifra.iva-pagar .v{color:var(--rojo)}
+.iva-cifras .con-cifra.iva-favor{border-color:var(--borde-ok)}
+.iva-cifras .con-cifra.iva-favor .v{color:var(--verde)}
+.iva-pie{display:flex;gap:.7rem;flex-wrap:wrap;align-items:center;justify-content:space-between;margin-top:.6rem;padding-top:.6rem;border-top:1px solid var(--linea)}
+.cal-fila{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr) 190px;gap:.4rem .9rem;align-items:center;padding:.7rem 0;border-bottom:1px solid var(--linea)}
+.cal-fila:last-child{border-bottom:0}
+.cal-fila.cal-vencida{border-left:2px solid var(--rojo);padding-left:.7rem}
+.cal-fila.cal-cerrada{opacity:.75}
+.cal-chk{display:flex;gap:.7rem;align-items:center;min-height:48px;cursor:pointer}
+.cal-quien strong{font-weight:600}
+.cal-estado{display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;justify-content:flex-end}
+.cal-confirmar{font-size:.75rem;color:var(--tinta2);border:1px dashed var(--linea2);border-radius:999px;padding:.1rem .5rem}
+.cal-detalle,.cal-fuente{grid-column:1/-1}
+.cal-fuente summary{font-size:.82rem;color:var(--tinta2);cursor:pointer;min-height:32px}
+.cal-rejilla{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:1px;background:var(--linea);border:1px solid var(--linea);border-radius:var(--r);overflow:hidden;margin-top:.6rem}
+.cal-cab{background:var(--fondo);padding:.4rem .3rem;text-align:center;font-size:.78rem;color:var(--tinta2);font-weight:600}
+.cal-dia{background:var(--papel);min-height:84px;padding:.3rem;display:flex;flex-direction:column;gap:.2rem}
+.cal-dia.cal-vacia{background:var(--fondo)}
+.cal-dia.cal-hoy{box-shadow:inset 0 0 0 2px var(--rojo)}
+.cal-num{font-size:.8rem;color:var(--tinta2);font-variant-numeric:tabular-nums}
+.cal-hoy .cal-num{color:var(--rojo);font-weight:700}
+.cal-marca{display:inline-block;font-size:.72rem;line-height:1.25;border-radius:6px;padding:.1rem .35rem;font-weight:600;border:1px solid var(--linea2);background:var(--papel);color:var(--tinta);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%}
+.cal-marca.hecha{background:var(--verde-suave);border-color:var(--borde-ok);color:var(--verde)}
+.cal-marca.vencida{background:var(--rojo-suave);border-color:var(--borde-mal);color:var(--rojo-osc)}
+.cal-marca.pend{background:var(--ambar-suave);border-color:var(--borde-ambar);color:#2a1d00}
+.cal-marca.noaplica{color:var(--tinta2);border-style:dashed}
+.cal-leyenda{display:flex;gap:.5rem;flex-wrap:wrap;margin-top:.6rem}
+@media(max-width:700px){
+  .iva-cifras{grid-template-columns:1fr}
+  .cal-fila{grid-template-columns:1fr;gap:.3rem}
+  .cal-estado{justify-content:flex-start}
+  /* en el celular las marcas son puntos de color con la inicial; el detalle va en la lista de arriba */
+  .cal-dia{min-height:54px;padding:.2rem}
+  .cal-marca{font-size:0;padding:0;width:12px;height:12px;border-radius:50%}
+  .cal-leyenda .cal-marca{font-size:.75rem;width:auto;height:auto;border-radius:6px;padding:.1rem .4rem}
+}

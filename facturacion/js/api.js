@@ -448,6 +448,23 @@ export async function entrar(empresa, usuario, pin, { alReintentar } = {}) {
     return j;
   }, alReintentar);
 }
+// Cambio de empresa sin volver a escribir el PIN (solo administradores con sesión viva): el servidor abre una sesión nueva atada a la otra empresa y cierra la anterior.
+export async function cambiarEmpresa(codigo) {
+  const { data } = await sb.auth.getSession();
+  const tk = data?.session?.access_token;
+  if (!tk) throw new ErrorApi('La sesión ya no está abierta. Entre de nuevo.', { estado: 401 });
+  const ctrl = new AbortController(); const reloj = setTimeout(() => ctrl.abort(), 20000);
+  let r, j = null;
+  try {
+    r = await fetch(`${SUPA_URL}/functions/v1/facturador-cambiar-empresa`, { method: 'POST', headers: { 'Content-Type': 'application/json', apikey: SUPA_KEY, Authorization: 'Bearer ' + tk }, body: JSON.stringify({ empresa: codigo }), signal: ctrl.signal });
+    try { j = JSON.parse(await r.text()); } catch { j = null; }
+  } catch { throw new ErrorApi(MSG_RED, { tipo: 'red' }); } finally { clearTimeout(reloj); }
+  if (!j || !j.ok) throw new ErrorApi((j && j.error) || 'No se pudo cambiar de empresa. Intente de nuevo.', { estado: r?.status });
+  const { error } = await sb.auth.setSession({ access_token: j.access_token, refresh_token: j.refresh_token });
+  if (error) throw new ErrorApi('No se pudo abrir la otra empresa. Entre con su clave.', { tipo: 'ocupado' });
+  invalidarCatalogo();
+  return j.empresa;
+}
 // Cierre de sesión limpio: UNA sola llamada al servidor, que cierra solo la sesión de ESTE aparato (scope 'local'; el celular y la tableta
 // del mismo usuario siguen abiertos). El servidor además invalida ese token (fx_chk exige una sesión viva), así que el token viejo ya no sirve.
 // Si no hay conexión la llamada falla: entonces se borra la sesión guardada en este aparato a mano (la pantalla nunca queda "medio abierta") y el cierre

@@ -80,7 +80,7 @@ function ajustesImp() {
   try { g = JSON.parse(localStorage.getItem('fx_impresion') || '{}') || {}; } catch { g = {}; }
   return { papel: Number(g.papel) === 58 ? 58 : 80, copias: Math.min(5, Math.max(1, parseInt(g.copias, 10) || 1)), auto: !!g.auto, formato: g.formato === 'carta' ? 'carta' : 'tiquete', hoja: g.hoja === 'a4' ? 'a4' : 'carta' };
 }
-const textoImpresion = (a) => (a.formato === 'carta' ? 'factura carta' : 'tiquete de ' + a.papel + ' mm') + ', ' + a.copias + (a.copias === 1 ? ' copia' : ' copias');
+const textoImpresion = (a) => (a.formato === 'carta' ? 'hoja carta o PDF' : 'rollo de ' + a.papel + ' mm') + ', ' + a.copias + (a.copias === 1 ? ' copia' : ' copias');
 // Estado del comprobante para la pantalla de éxito. Es el de describirEstado (util.js) más un caso: Hacienda lo aceptó PERO dejó un aviso
 // (por ejemplo, la ubicación del emisor). En ese caso se dice «Aceptado con aviso» y el aviso en palabras simples, para que no parezca un rechazo.
 function describirCobro(estado, mensaje) {
@@ -149,7 +149,7 @@ function avisoCobroSinCaja(comp, app, aviso) {
       h('p.tenue-linea', 'El cobro terminó mientras estaba en otra pantalla. ' + d.texto),
       impEstado,
       h('div.botones',
-        h('button.btn.primario.grande', { type: 'button', onclick: () => imprimir(aj.formato === 'carta' ? 'carta' : 'tiquete') }, aj.formato === 'carta' ? 'Imprimir factura carta' : 'Imprimir tiquete'),
+        h('button.btn.primario.grande', { type: 'button', onclick: () => imprimir(aj.formato === 'carta' ? 'carta' : 'tiquete') }, aj.formato === 'carta' ? 'Imprimir hoja carta o PDF' : 'Imprimir en rollo de ' + aj.papel + ' mm'),
         h('button.btn', { type: 'button', onclick: () => app.ir('anular', comp.id ? { comprobante: String(comp.id) } : null) }, 'Ver en «Anular y reimprimir»'))),
     botones: [{ texto: 'Cerrar', clase: 'primario', onclick: (c) => c() }] });
   if (aj.auto) imprimir(aj.formato === 'carta' ? 'carta' : 'tiquete');
@@ -653,38 +653,21 @@ export default {
     function pintarBarra() {
       const botones = abiertas.map((c) => {
         const act = cur && cur.venta.id === c.id;
-        const pref = c.estado === 'prefacturada';
-        const nombre = c.referencia || numCuenta(c.numero);
-        // Solo «En espera» y el nombre o número de la cuenta; el detalle (productos y total) queda en el cuadro de ayuda al apoyar el dedo o el mouse
-        return h('button.cuenta-btn' + (pref ? '.prefact' : ''), {
+        return h('button.cuenta-btn' + (c.estado === 'prefacturada' ? '.prefact' : ''), {
           type: 'button', 'aria-pressed': String(!!act), 'data-id': c.id,
-          title: c.lineas + (Number(c.lineas) === 1 ? ' producto · ' : ' productos · ') + money(c.total) + (pref && c.prefactura_vigente === false ? ' · cambió, imprima otra prefactura' : ''),
           onclick: () => { if (!act) accion(async () => { cur = await api.venta(c.id); guardarActiva(); repintar(); }); cambiarVista('cuenta'); },
-        }, h('span.c-tipo', pref ? 'Prefactura' : 'En espera'), h('span.c-ref', nombre));
+        }, h('span.c-tipo', (c.tipo_servicio === 'buffet' && c.referencia ? numCuenta(c.numero) : (TIPOS_SERVICIO[c.tipo_servicio] || c.tipo_servicio)) + (c.estado === 'prefacturada' ? (c.prefactura_vigente === false ? ' · cambió, imprima otra prefactura' : ' · prefactura') : '')),
+        h('span.c-ref', c.referencia || numCuenta(c.numero)),
+        h('span.c-tot', c.lineas + (Number(c.lineas) === 1 ? ' producto · ' : ' productos · ') + money(c.total)));
       });
-      // Una sola fila que se desliza: los botones «‹ N» y «N ›» dicen cuántas cuentas quedan fuera de la vista y llevan hasta ellas al tocarlos
-      const lista = h('div.cuentas-lista', { role: 'group', 'aria-label': 'Cuentas en espera' }, botones.length ? botones : h('span.cuentas-vacio', 'No hay cuentas en espera. Toque un producto para empezar una.'));
-      const masIzq = h('button.cuentas-mas.izq', { type: 'button', 'aria-label': 'Ver cuentas anteriores', onclick: () => lista.scrollBy({ left: -lista.clientWidth * 0.8, behavior: 'smooth' }) });
-      const masDer = h('button.cuentas-mas.der', { type: 'button', 'aria-label': 'Ver más cuentas', onclick: () => lista.scrollBy({ left: lista.clientWidth * 0.8, behavior: 'smooth' }) });
-      const envoltura = h('div.cuentas-envoltura', masIzq, lista, masDer);
-      const pistaViva = () => {
-        const L = lista.getBoundingClientRect();
-        let izq = 0, der = 0;
-        lista.querySelectorAll('.cuenta-btn').forEach((b) => { const r = b.getBoundingClientRect(); if (r.right > L.right + 2) der++; else if (r.left < L.left - 2) izq++; });
-        masIzq.textContent = '‹ ' + izq; masDer.textContent = der + ' ›';
-        masIzq.classList.toggle('visible', izq > 0); masDer.classList.toggle('visible', der > 0);
-      };
-      lista.addEventListener('scroll', pistaViva, { passive: true });
-      if (typeof ResizeObserver !== 'undefined') new ResizeObserver(pistaViva).observe(lista);
+      // Las cuentas se acomodan en filas: todas a la vista, sin tira que se deslice de lado
+      const lista = h('div.cuentas-lista', { role: 'group', 'aria-label': 'Cuentas abiertas' }, botones.length ? botones : h('span.cuentas-vacio', 'No hay cuentas abiertas. Toque un producto para empezar una.'));
+      const envoltura = h('div.cuentas-envoltura', lista);
       // Los ajustes de la impresora ya no están aquí: viven en Administración, Configuración
       barraCuentas.replaceChildren(envoltura,
         h('button.btn.btn-efectivo', { type: 'button', onclick: seguro(abrirEfectivo) }, 'Efectivo'),
-        // Decisión de Emil (6 nov 2026): «Cuenta nueva» vuelve a la barra, a la derecha de Efectivo y en ámbar; es el botón que abre cuentas nuevas
+        // Orden de Emil (6 nov 2026): a la derecha de Efectivo, un botón ámbar «Cuenta nueva» para abrir cuentas nuevas
         h('button.btn.ambar.btn-cuenta-nueva', { type: 'button', onclick: seguro(nuevaCuenta) }, 'Cuenta nueva'));
-      requestAnimationFrame(() => {
-        lista.querySelector('.cuenta-btn[aria-pressed=true]')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
-        pistaViva();
-      });
     }
 
     /* ---------- Cuenta nueva, poner en espera y cambiar nombre ---------- */
@@ -710,8 +693,8 @@ export default {
       });
     }
 
-    // El botón «Cuenta nueva» (ámbar, a la derecha de Efectivo) vuelve a la barra por decisión de Emil (6 nov 2026); la caja además abre sola la cuenta siguiente.
-    // Esta función también sirve para «Siguiente cliente» (tras un cobro) y para «Intentar de nuevo» cuando la red falló al abrirla. Reutiliza la vacía que exista: nunca hay más de una cuenta nueva vacía.
+    // Ya no hay botón «Nueva cuenta» en la barra: la caja siempre abre sola la cuenta siguiente. Esta función queda para «Siguiente cliente» (tras un cobro)
+    // y para «Intentar de nuevo» cuando la red falló al abrirla. Reutiliza la vacía que exista: nunca hay más de una cuenta nueva vacía.
     async function nuevaCuenta() {
       await accion(async () => {
         await abrirCuentaParaElSiguiente();
@@ -1207,8 +1190,8 @@ export default {
             h('div.total-fila', h('span.et', 'Total a pagar (IVA incluido)'), h('div.total-monto', { 'aria-live': 'polite' }, money(v.total))),
             h('button.btn.primario.grande.btn-cobrar-aside', { type: 'button', disabled: !puede, onclick: seguro(abrirCobro) }, 'Cobrar'),
             v.tipo_servicio === 'buffet' ? h('div.fila-espera',
-              // Un solo botón (decisión de Emil, 5 nov 2026): poner en espera siempre imprime la prefactura; el botón «Poner en espera» solo era repetido
-              h('button.btn.ambar.grande.btn-espera-pref', { type: 'button', disabled: !cur.lineas.length, onclick: seguro(() => ponerEnEspera(true)) }, 'Poner en espera e imprimir prefactura')) : null),
+              h('button.btn.ambar.grande.btn-espera', { type: 'button', disabled: !cur.lineas.length, onclick: seguro(() => ponerEnEspera(false)) }, 'Poner en espera'),
+              h('button.btn.ambar.grande.btn-espera-pref', { type: 'button', disabled: !cur.lineas.length, onclick: seguro(() => ponerEnEspera(true)) }, 'En espera e imprimir prefactura')) : null),
           h('div.acciones-cuenta', prefBtn, h('button.btn.peligro' + (prefBtn ? '' : '.ancho'), { type: 'button', onclick: anularCuenta }, 'Anular esta cuenta'))));
       const nuevo = asideCuenta.querySelector('.cuenta-lineas');
       nuevo.scrollTop = irAlFinal ? nuevo.scrollHeight : scroll;
@@ -1297,15 +1280,17 @@ export default {
       // Elegir o crear cliente: la ventana completa de Clientes (ui_cliente.js). Al crear uno nuevo trae los 4 correos, la dirección y la verificación en Hacienda.
       // El cliente también queda guardado en la cuenta (así se ve igual en cualquier aparato y en la prefactura)
       const elegirCliente = (c) => {
+        editEl.hidden = true; editEl.replaceChildren();
         cliente = c; actividadFactura = null; correosOff = new Set(); pantalla?.correos([]); pintarCliente(); actualizar();
         asignarCliente(c).then((ok) => { if (ok && !terminado && cur?.cliente?.id === c.id) { cliente = cur.cliente; pintarCliente(); } });
       };
-      // Decisión de Emil (6 nov 2026): al abrir la ventana de cobrar, «Elegir cliente» va en ámbar
       const btnElegir = h('button.btn.ambar', { type: 'button', onclick: () => selectorCliente(app, { alElegir: elegirCliente }) }, 'Elegir cliente (factura)');
       const btnQuitarCli = h('button.btn.suave', { type: 'button', onclick: async () => { if (cur && (cur.lineas || []).some((l) => l.exoneracion)) { await quitarExo(true); } cliente = null; actividadFactura = null; pintarCliente(); asignarCliente(null); } }, 'Quitar cliente');
       const actEl = h('div.cobro-act', { hidden: true });
       const tarEl = h('div.cobro-tarifa', { hidden: true });
       const exoEl = h('div.cobro-tarifa.cobro-exo', { hidden: true });
+      const editEl = h('div.cobro-editar', { hidden: true }); // corrección rápida de los datos del cliente, sin salir del cobro
+      const btnEditar = h('button.btn.suave', { type: 'button', hidden: true, onclick: () => abrirEditor() }, 'Corregir datos');
       const tipoIdEl = h('div.cobro-tipo-id', { hidden: true }); // el cliente elegido no puede llevar factura (o trae una advertencia de la base)
       const montoTotal = h('div.monto', money(venta.total));
       // Solo estos tres medios en la caja y en este orden. «Transferencia» no se ofrece aquí: se registra como SINPE Móvil (el medio sigue existiendo en la base y en las otras pantallas)
@@ -1384,7 +1369,7 @@ export default {
         claveImp = clave;
         resImp.replaceChildren(
           h('div.cobro-imp-txt', h('strong', 'Impresión al cobrar'),
-            h('div.tenue-linea', a.auto ? 'Se imprime sola: ' + textoImpresion(a) + '.' : 'No se imprime sola. Al terminar el cobro aparece el botón «Imprimir tiquete».')));
+            h('div.tenue-linea', a.auto ? 'Se imprime sola: ' + textoImpresion(a) + '.' : 'No se imprime sola. Al terminar el cobro aparece el botón «Imprimir en rollo».')));
       }
       const vigilaAjustes = new MutationObserver(() => pintarImp());
       vigilaAjustes.observe(document.body, { childList: true });
@@ -1410,8 +1395,9 @@ export default {
         avisoRep,
         cajaBloqueo,
         listaPagos,
-        h('div.cobro-doc', h('div', h('div', docTxt), h('div', cliTxt)), h('div.fila', btnElegir, btnQuitarCli)),
+        h('div.cobro-doc', h('div', h('div', docTxt), h('div', cliTxt)), h('div.fila', btnElegir, btnEditar, btnQuitarCli)),
         tipoIdEl,
+        editEl,
         tarEl,
         exoEl,
         actEl,
@@ -1470,12 +1456,49 @@ export default {
           ...caja('Correo del cliente', 'correo@ejemplo.com', (v) => api.clienteCorreoCorregir(socId, cliente.id, v), 'Guardar correo', 'Correo guardado.', 'email'));
         return h('div.cc-aviso-tipo.mal.cc-cedula-pendiente', { role: 'alert' }, ...partes);
       }
+      // Corrige nombre, cédula y correos del cliente del cobro y lo guarda en la base (el mismo guardado de Clientes); la pantalla del cliente lo ve al instante
+      async function abrirEditor() {
+        if (!cliente || !editEl.hidden) { editEl.hidden = true; editEl.replaceChildren(); return; }
+        let base = null;
+        const idAbierto = cliente.id;
+        try { const r = await api.clientes(socId, String(cliente.nombre || cliente.identificacion || '')); base = (r || []).find((x) => x.id === idAbierto) || null; } catch { base = null; }
+        if (!base) { toast('No se pudieron cargar los datos completos del cliente. Intente de nuevo.'); return; } // sin la fila completa no se guarda: se borrarían dirección, teléfono y demás
+        if (!cliente || cliente.id !== idAbierto) return;
+        const iNom = h('input', { type: 'text', value: base.nombre || '', maxlength: 100, autocomplete: 'off', 'aria-label': 'Nombre del cliente' });
+        const iCed = h('input', { type: 'text', value: base.identificacion || '', maxlength: 20, autocomplete: 'off', inputmode: 'text', 'aria-label': 'Cédula del cliente' });
+        const iCor = h('input', { type: 'text', value: base.correo || '', maxlength: 400, autocomplete: 'off', inputmode: 'email', 'aria-label': 'Correos del cliente', placeholder: 'correo@ejemplo.com, otro@ejemplo.com' });
+        const err = h('div.error-caja', { hidden: true });
+        const btn = h('button.btn.primario', { type: 'button' }, 'Guardar');
+        const cerrar = h('button.btn.suave', { type: 'button', onclick: () => { editEl.hidden = true; editEl.replaceChildren(); } }, 'Cancelar');
+        let guardando = false;
+        const guardar = async () => {
+          if (guardando) return;
+          if (!cliente || cliente.id !== base.id) { editEl.hidden = true; editEl.replaceChildren(); return; }
+          guardando = true; err.hidden = true; btn.disabled = true;
+          try {
+            const nuevo = await api.clienteGuardar({ ...base, sociedad_id: socId, id: base.id, tipo_id: base.tipo_id, nombre: iNom.value, identificacion: iCed.value, correo: iCor.value });
+            cliente = { ...cliente, ...nuevo };
+            if (cur?.cliente?.id === cliente.id) { cur = { ...cur, cliente: { ...cur.cliente, ...nuevo } }; pantalla?.cuenta(cur); }
+            correosOff = new Set(); pantalla?.correos([]);
+            editEl.hidden = true; editEl.replaceChildren();
+            toast('Cliente actualizado.');
+            pintarCliente(); actualizar();
+          } catch (e) { err.textContent = textoDeError(e); err.hidden = false; btn.disabled = false; } finally { guardando = false; }
+        };
+        btn.addEventListener('click', guardar);
+        [iNom, iCed, iCor].forEach((i) => i.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); guardar(); } }));
+        editEl.replaceChildren(
+          h('label', 'Nombre', iNom), h('label', 'Cédula', iCed), h('label', 'Correos (separados por coma)', iCor),
+          h('div.fila', btn, cerrar), err);
+        editEl.hidden = false; iNom.focus();
+      }
       function pintarCliente() {
         docTxt.textContent = 'Documento: ' + (cliente ? TIPOS_DOC['01'] : TIPOS_DOC['04'] + ' (sin cliente)');
         cliTxt.textContent = cliente ? 'Cliente: ' + nombrePropio(cliente.nombre) + ' · ' + cliente.identificacion : '¿El cliente necesita factura a su nombre? Elíjalo aquí antes de cobrar.';
         docLinea.textContent = cliente ? 'Se emite: ' + TIPOS_DOC['01'] + ' a nombre de ' + nombrePropio(cliente.nombre) : 'Se emite: ' + TIPOS_DOC['04'] + ', sin cliente';
         btnElegir.textContent = cliente ? 'Cambiar cliente' : 'Elegir cliente (factura)';
         btnQuitarCli.hidden = !cliente;
+        btnEditar.hidden = !cliente; if (!cliente) { editEl.hidden = true; editEl.replaceChildren(); }
         const avTipo = avisoTipoCliente(cliente);
         const pend = bloqueCedulaPendiente();
         tipoIdEl.hidden = !avTipo && !pend; tipoIdEl.replaceChildren(...[avTipo, pend].filter(Boolean));
@@ -1598,13 +1621,14 @@ export default {
         listaPagos.replaceChildren(...pagos.map((p, i) => h('div.pago-item',
           h('div', h('div.p-med', MEDIOS[p.medio] + ' · ' + money(p.recibido)), p.ref ? h('div.p-det', 'Referencia: ' + p.ref) : null),
           h('button.btn.chico.peligro', { type: 'button', 'aria-label': 'Quitar el pago de ' + MEDIOS[p.medio], onclick: () => { pagos.splice(i, 1); auto = true; sugerir(); actualizar(); } }, 'Quitar'))));
-        resumen.className = 'cobro-resumen'; resumen.hidden = false;
+        resumen.className = 'cobro-resumen';
+        resumen.hidden = false;
         if (r.error) { resumen.replaceChildren(h('span', 'Revise los montos')); resumen.classList.add('falta'); }
-        else if (r.falta > 0) { resumen.hidden = true; } // Decisión de Emil (6 nov 2026): se quita la tarjeta «Falta por pagar»
+        else if (r.falta > 0) { resumen.hidden = true; resumen.replaceChildren(); } // orden de Emil (6 nov 2026): sin la tarjeta «Falta por pagar»
         else if (r.vuelto > 0) { resumen.classList.add('vuelto'); resumen.replaceChildren(h('span', 'Pago completo. Entregue de vuelto'), h('span.grande', money(r.vuelto / 100))); }
         else if (cortesia && r.ok) { resumen.classList.add('ok'); resumen.replaceChildren(h('span', 'Cortesía: no hay nada que cobrar'), h('span.grande', '✓')); }
         else if (r.ok) { resumen.classList.add('ok'); resumen.replaceChildren(h('span', 'Pago completo, sin vuelto'), h('span.grande', '✓')); }
-        else { resumen.hidden = true; }
+        else { resumen.hidden = true; resumen.replaceChildren(); }
         // Con el cobro bloqueado no se habla de vuelto (no se va a cobrar): se dice qué hacer con el dinero
         if (bloqueo) { resumen.hidden = false; resumen.className = 'cobro-resumen falta'; resumen.replaceChildren(h('span', 'No se cobra esta cuenta: no entregue vuelto. Si ya recibió dinero por ella, devuélvalo.')); }
         btnCobrar.textContent = cobrando ? (cortesia ? 'Registrando…' : 'Cobrando…') : cortesia ? 'Registrar cortesía' : 'Cobrar ' + money(venta.total);
@@ -1804,7 +1828,7 @@ export default {
       }));
 
       // Con el cobro en camino la ventana no se puede cerrar (ni con Escape, ni tocando fuera, ni con «Volver», ni con el botón Atrás)
-      m = modal({ titulo: 'Cobrar', contenido: raiz, ancho: 720,
+      m = modal({ titulo: 'Cobrar', contenido: raiz, ancho: 960,
         bloqueo: () => (cobrando ? 'El cobro va en camino. Espere a que termine; la ventana se cierra sola.' : ''),
         alCerrar: () => { cobroAbierto = false; if (!terminado) pantalla?.cerrarPago(cur); vigilaAjustes.disconnect(); if (vivo && !terminado && buscador && fino()) buscador.inp.focus(); } });
       avisarCreada();
@@ -1842,8 +1866,8 @@ export default {
           await (await imp()).imprimirComprobante(compId, { formato: fmt, copias: aj.copias });
           // La página solo sabe que abrió la impresión: no puede saber si la persona la canceló o si salió el papel
           impEstado.textContent = fmt === 'carta'
-            ? 'Se abrió la impresión de la factura carta (' + aj.copias + (aj.copias === 1 ? ' copia' : ' copias') + '). Si no salió, toque el botón otra vez.'
-            : ''; // Decisión de Emil (6 nov 2026): se quita el aviso «Se abrió la impresión del tiquete de 80 mm…»; los errores sí se muestran
+            ? 'Se abrió la impresión en hoja carta o PDF (' + aj.copias + (aj.copias === 1 ? ' copia' : ' copias') + '). Si no salió, toque el botón otra vez.'
+            : 'Se abrió la impresión del tiquete (' + aj.copias + (aj.copias === 1 ? ' copia' : ' copias') + '). Si no salió, toque «Imprimir otra vez».';
         } catch (e) {
           impEstado.className = 'tenue-linea msg-mal';
           impEstado.textContent = 'No se pudo imprimir: ' + textoDeError(e) + ' Toque el botón de imprimir otra vez; si sigue igual, avise a un administrador (Administración, Configuración).';
@@ -1858,10 +1882,10 @@ export default {
         recibido > 0 ? h('div.ex-fila.recibido', h('span', 'Efectivo que entregó el cliente'), h('b', money(recibido))) : null) : null;
       let cerrarM;
       const fmtPrincipal = aj.formato === 'carta' ? 'carta' : 'tiquete';
-      const nombrePrincipal = fmtPrincipal === 'carta' ? 'factura carta' : 'tiquete';
+      const nombrePrincipal = fmtPrincipal === 'carta' ? 'hoja carta o PDF' : 'en rollo de ' + aj.papel + ' mm';
       const btnNueva = h('button.btn' + (aj.auto ? '.primario.grande' : '.grande'), { type: 'button', onclick: () => { cerrarM(); nuevaCuenta(); } }, 'Siguiente cliente');
       const btnImprimir = h('button.btn' + (aj.auto ? '' : '.primario.grande'), { type: 'button', onclick: () => imprimir(fmtPrincipal) }, aj.auto ? 'Imprimir otra vez' : 'Imprimir ' + nombrePrincipal);
-      const btnOtroFormato = h('button.btn', { type: 'button', onclick: () => imprimir(fmtPrincipal === 'carta' ? 'tiquete' : 'carta') }, fmtPrincipal === 'carta' ? 'Imprimir tiquete' : 'Imprimir factura carta');
+      const btnOtroFormato = h('button.btn', { type: 'button', onclick: () => imprimir(fmtPrincipal === 'carta' ? 'tiquete' : 'carta') }, fmtPrincipal === 'carta' ? 'Imprimir en rollo de ' + aj.papel + ' mm' : 'Imprimir hoja carta o PDF');
       const contenido = h('div.exito',
         h('div.gran', '✓ Cobro registrado'),
         aviso ? h('div.error-caja', aviso) : null,

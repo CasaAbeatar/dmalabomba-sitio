@@ -1,0 +1,422 @@
+/* Cascarón del administrador (9 nov 2026): crema + verde bosque, sin negro, Helvetica Neue con peso máximo 600, cristal esmerilado tenue y simetría.
+   Todo cuelga de body.fx-admin / .fx-shell: la persona de caja y la pantalla de Caja (facturar) no cambian. */
+body.fx-admin{
+  --tinta:#3b2a20;--tinta2:#5e5448;--linea:#ddd1ba;--linea2:#c9bb9f;--borde-control:#8a7f6a;
+  --verde:#b81622;--verde-suave:#fdecea;--ok:#d9992a;
+  --nv-ancho:232px;--rail-ancho:316px;--gap:16px;
+  --cristal:rgba(255,252,246,.30);--cristal-borde:rgba(255,255,255,.85);--cristal-card:linear-gradient(160deg,rgba(255,253,248,.55),rgba(255,251,243,.22));
+  --blur:blur(26px) saturate(1.1);
+  font-family:"Helvetica Neue",Helvetica,Arial,"Liberation Sans",sans-serif;color:var(--tinta);
+  background:#f7f1e6;
+  background-image:radial-gradient(600px 460px at 20% 15%,rgba(255,252,244,.95),transparent 70%),radial-gradient(620px 480px at 80% 20%,rgba(222,208,180,.65),transparent 70%),radial-gradient(560px 480px at 55% 95%,rgba(255,250,240,.9),transparent 70%),linear-gradient(135deg,#f7f1e6,#efe6d5);
+  background-attachment:fixed;
+}
+body.fx-admin :is(strong,b,h1,h2,h3,h4,th,summary,button,.btn,.chip){font-weight:600}
+body.fx-admin .toast{background:var(--verde);color:#fbf8f2}
+body.fx-admin .toast.error{background:var(--rojo)}
+
+/* ---------- Rejilla del cascarón ---------- */
+.fx-shell{display:grid;grid-template-columns:var(--nv-ancho) minmax(0,1fr);align-items:start;min-height:100vh;min-height:100dvh}
+.fx-centro{min-width:0}
+.fx-shell[data-vista=facturar]{grid-template-columns:minmax(0,1fr)}
+.fx-shell[data-vista=facturar] :is(.fx-nav,.fx-barra){display:none}
+@media(min-width:1600px){.fx-shell:not([data-vista=facturar]){grid-template-columns:var(--nv-ancho) minmax(0,1fr) var(--rail-ancho)}}
+@media(min-width:1200px) and (max-width:1599px){.fx-shell[data-vista=inicio],.fx-shell[data-vista=admin]{grid-template-columns:var(--nv-ancho) minmax(0,1fr) var(--rail-ancho)}}
+
+/* ---------- Barra lateral ---------- */
+.fx-nav{position:sticky;top:0;height:100vh;height:100dvh;overflow:auto;display:flex;flex-direction:column;gap:2px;padding:16px 12px;background:var(--cristal);-webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);border-right:1px solid var(--cristal-borde);color:var(--tinta)}
+.nv-marca{display:flex;align-items:center;gap:8px;padding:0 4px 14px}
+.nv-logo{flex:0 0 auto;width:40px;height:40px;border-radius:10px;background:var(--verde);color:#fbf8f2;display:flex;align-items:center;justify-content:center;font-weight:600;font-size:13px;letter-spacing:.02em}
+.nv-marca-txt{display:flex;flex-direction:column;min-width:0}
+.nv-marca-txt b{font-size:13px;line-height:1.2;white-space:nowrap}.nv-marca-txt small{font-size:12px;color:var(--tinta2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.nv-grupo{display:flex;flex-direction:column;gap:2px;margin-top:10px}
+.nv-grupo-tit{padding:4px 10px;font-size:11px;letter-spacing:.08em;text-transform:uppercase;font-weight:600;color:var(--tinta2)}
+.nv-item{display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;min-height:38px;padding:6px 10px;border:1px solid transparent;border-radius:10px;background:none;color:var(--tinta);font:inherit;font-size:14px;font-weight:600;text-align:left;cursor:pointer}
+.nv-item:hover{background:rgba(255,255,255,.55);border-color:rgba(255,255,255,.9)}
+.nv-item.on{background:var(--verde);border-color:var(--verde);color:#fff}
+.nv-item:focus-visible{outline:3px solid var(--rojo);outline-offset:1px}
+.nv-ins{flex:0 0 auto;min-width:28px;text-align:center;font-size:11px;font-weight:600;padding:2px 8px;border-radius:999px;background:var(--ambar-suave);color:#5c3d00;border:1px solid #d9b25f;white-space:nowrap}
+.nv-ins.urgente{background:var(--rojo-suave);color:var(--rojo-osc);border-color:var(--rojo)}
+.nv-pie{margin-top:auto;padding-top:14px;display:flex;flex-direction:column;gap:2px;border-top:1px solid rgba(94,84,72,.18)}
+.nv-sesion{padding:6px 10px;font-size:12.5px;color:var(--tinta2)}
+.nv-hoy{margin-bottom:2px}
+
+/* ---------- Encabezado ---------- */
+.fx-shell .cabecera{background:var(--cristal);-webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);border-bottom:1px solid var(--cristal-borde)}
+.fx-shell .cab-franja-in{max-width:none;padding-inline:var(--gap)}
+.fx-shell .cab-franja .amb-prueba{background:#fdf2dc;color:#5c3d00;border:1px solid #d9b25f}
+.fx-shell .cab-fila{max-width:none;display:flex;flex-wrap:nowrap;align-items:center;gap:10px;padding:10px var(--gap)}
+.fx-shell .cab-fila>*{grid-area:auto}
+.fx-shell .marca,.fx-shell .cab-inicio,.fx-shell .cab-usuario{display:none!important}
+@media(min-width:980px){.fx-shell .cab-volver{display:none!important}}
+.fx-shell .cab-titulo{display:block;flex:1 1 auto;min-width:0;font-size:1.45rem;font-weight:600}
+.fx-shell .cab-estado{flex:0 1 auto}
+.fx-shell .cab-acciones{display:flex;gap:10px;flex:0 0 auto}
+.fx-shell .cab-acciones .btn{min-height:44px;font-size:14px;border-radius:999px;background:rgba(255,253,248,.45);border-color:#c9bb9f}
+.cab-buscar{min-width:250px;justify-content:space-between}
+.cab-buscar kbd{font:inherit;font-size:11px;padding:1px 6px;border:1px solid #c9bb9f;border-radius:6px;color:var(--tinta2)}
+.cab-atencion{min-width:120px}
+.cab-atencion.con-aviso{background:var(--ambar)!important;border-color:var(--verde)!important}
+.cab-atn{display:inline-flex;align-items:center;justify-content:center;min-width:22px;height:22px;padding:0 6px;border-radius:999px;background:var(--rojo);color:#fff;font-size:12px;font-weight:600}
+.cab-atn[hidden]{display:none}
+.fx-shell[data-vista=facturar] .cab-buscar{display:none}
+.fx-shell .btn.cab-anular{background:#fff;font-weight:600}
+
+/* ---------- Columna «Requiere atención» ---------- */
+.fx-rail{display:flex;flex-direction:column;gap:12px;padding:16px;background:var(--cristal);-webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);border-left:1px solid var(--cristal-borde)}
+.rail-cab{display:flex;align-items:center;gap:8px}
+.rail-cab h2{flex:1 1 auto;font-size:1.05rem}
+.rail-n{min-width:24px;height:24px;padding:0 7px;display:inline-flex;align-items:center;justify-content:center;border-radius:999px;background:var(--rojo);color:#fff;font-size:12px;font-weight:600}
+.rail-n[hidden],.rail-vacio[hidden]{display:none}
+.rail-x{display:none}
+.rail-lista{display:flex;flex-direction:column;gap:12px}
+.rail-vacio{margin:0;padding:14px;border:1px solid var(--cristal-borde);border-radius:12px;background:var(--cristal-card);color:var(--tinta2);font-size:.92rem}
+.rail-nota{margin:0;font-size:12px;color:var(--tinta2)}
+.rail-lista :is(.alerta-cab,.alerta-resp){background:var(--cristal-card);color:var(--tinta);border:1px solid var(--cristal-borde);border-left:4px solid var(--ambar);border-radius:12px;box-shadow:0 1px 0 rgba(255,255,255,.95) inset,0 6px 18px rgba(94,84,72,.08);-webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur)}
+.rail-lista .alerta-cab{border-left-color:var(--rojo)}
+.rail-lista .alerta-resp.urgente{border-left-color:var(--rojo);background:var(--cristal-card);color:var(--tinta)}
+.rail-lista .alerta-in{max-width:none;margin:0;padding:12px;flex-direction:column;align-items:stretch;gap:10px}
+.rail-lista .alerta-texto strong{white-space:normal;overflow:visible;font-size:.95rem}
+.rail-lista .alerta-detalle{display:-webkit-box!important;-webkit-line-clamp:3;font-size:.86rem;color:var(--tinta2)}
+.rail-lista .btn.alerta-ver{width:100%;min-height:44px;background:#fff;color:var(--tinta);border-color:var(--verde)}
+.rail-lista .btn.alerta-ver:hover{background:var(--verde-suave)}
+.rail-lista :focus-visible{outline-color:var(--rojo)}
+.fx-vela{position:fixed;inset:0;z-index:58;background:rgba(59,42,32,.28)}
+.fx-vela[hidden]{display:none}
+/* Cajón (cuando la columna no cabe fija) */
+.fx-shell:not([data-vista=inicio]):not([data-vista=admin]) .fx-rail,.fx-shell .fx-rail{--x:0}
+@media(max-width:1599px){
+  .fx-rail{position:fixed;z-index:60;top:0;right:0;bottom:0;width:min(360px,92vw);overflow:auto;transform:translateX(105%);transition:transform .2s;background:rgba(251,248,242,.96);box-shadow:-12px 0 40px rgba(59,42,32,.18)}
+  .fx-rail.abierto{transform:none}
+  .rail-x{display:inline-flex}
+}
+@media(min-width:1200px) and (max-width:1599px){
+  .fx-shell[data-vista=inicio] .fx-rail,.fx-shell[data-vista=admin] .fx-rail{position:sticky;top:0;height:100vh;height:100dvh;z-index:auto;width:auto;transform:none;box-shadow:none;background:var(--cristal);overflow:auto}
+  .fx-shell[data-vista=inicio] .rail-x,.fx-shell[data-vista=admin] .rail-x,.fx-shell[data-vista=inicio] .cab-atencion,.fx-shell[data-vista=admin] .cab-atencion{display:none}
+}
+@media(min-width:1600px){.fx-rail{position:sticky;top:0;height:100vh;height:100dvh;overflow:auto}.cab-atencion{display:none}}
+
+/* ---------- Hoy ---------- */
+.hoy{gap:var(--gap)}
+.hoy-cab h1{font-size:1.7rem}.hoy-cab p{margin:2px 0 0}
+.hoy-caja,.hoy-cifra,.hoy-acceso,.hoy-pend-item{background:var(--cristal-card);-webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);border:1px solid rgba(255,255,255,.95);border-radius:14px;box-shadow:0 1px 0 #fff inset,0 10px 30px rgba(94,84,72,.10);color:var(--tinta)}
+.hoy-caja{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 16px;border-left:4px solid var(--ok)}
+.hoy-caja.cerrada{border-left-color:var(--ambar)}
+.hoy-caja>div{display:flex;flex-direction:column}
+.hoy-caja .btn{min-width:160px}
+.hoy-cifras,.hoy-accesos,.hoy-pend{display:grid;gap:var(--gap)}
+.hoy-cifras{grid-template-columns:repeat(3,minmax(0,1fr))}
+.hoy-accesos{grid-template-columns:repeat(4,minmax(0,1fr));grid-auto-rows:1fr}
+.hoy-pend{grid-template-columns:repeat(auto-fill,minmax(220px,1fr));grid-auto-rows:1fr}
+.hoy-cifra{display:flex;flex-direction:column;gap:4px;padding:16px;min-height:112px}
+.hoy-valor{font-size:1.9rem;font-weight:600;font-variant-numeric:tabular-nums;line-height:1.1}
+.hoy-et{font-size:.74rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--tinta2)}
+.hoy-acceso,.hoy-pend-item{display:flex;flex-direction:column;align-items:flex-start;justify-content:flex-start;gap:6px;padding:16px;min-height:112px;text-align:left;cursor:pointer;font:inherit}
+.hoy-acceso b,.hoy-pend-item b{font-size:1rem}
+.hoy-acceso span,.hoy-pend-item span{font-size:.86rem;color:var(--tinta2);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.hoy-acceso.destacado{border-color:var(--verde);box-shadow:0 0 0 1px var(--verde),0 10px 30px rgba(94,84,72,.10)}
+.hoy-pend-item{border-left:4px solid var(--ambar)}
+.hoy-pend-item.urgente{border-left-color:var(--rojo)}
+.hoy-acceso:hover,.hoy-pend-item:hover{border-color:var(--verde)}
+.hoy-sec{display:flex;flex-direction:column;gap:10px}
+.hoy-sec h2{font-size:1rem;color:var(--tinta2);font-weight:600}
+.hoy-ver-atn{align-self:flex-start}
+@media(min-width:1200px){.hoy-ver-atn{display:none}}
+@media(max-width:1100px){.hoy-accesos{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:700px){.hoy-cifras{grid-template-columns:1fr}.hoy-cifra,.hoy-acceso,.hoy-pend-item{min-height:0}.hoy-caja{flex-direction:column;align-items:stretch}}
+
+/* Tarjetas, tablas y pestañas de los módulos dentro del cascarón: cristal tenue y filas parejas */
+.fx-shell :is(.hoy-franja,.con-raiz .con-aviso){background:var(--cristal-card);border-color:rgba(255,255,255,.95)}
+.fx-shell th,.fx-shell td{border-color:rgba(94,84,72,.18)}
+.fx-shell main#vista{max-width:1400px}
+
+/* ---------- Pestañas de Contabilidad por familias (simetría: todas las pestañas de una familia miden igual) ---------- */
+.con-fams{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.con-fam{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:52px;padding:8px 14px;border:1px solid rgba(255,255,255,.95);border-radius:12px;background:var(--cristal-card);color:var(--tinta);font-weight:600;cursor:pointer;text-align:left}
+.con-fam[aria-selected=true]{background:var(--verde);border-color:var(--verde);color:#fff}
+.con-fam .chip{margin:0}
+.con-tabs.sub{display:grid;grid-template-columns:repeat(var(--n,3),minmax(0,1fr));gap:8px;border-bottom:0;padding:0}
+.con-tabs.sub .con-tab{min-height:44px;border:1px solid var(--linea2);border-radius:10px;background:rgba(255,253,248,.45);display:flex;align-items:center;justify-content:center;padding:6px 10px}
+.con-tabs.sub .con-tab[aria-selected=true]{border-color:var(--verde);background:var(--verde-suave);color:var(--tinta)}
+@media(max-width:700px){.con-fams{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+/* ---------- Búsqueda ---------- */
+.bus{display:flex;flex-direction:column;gap:10px}
+.bus-res{display:grid;gap:6px;max-height:50vh;overflow:auto}
+.bus-item{display:flex;flex-direction:column;align-items:flex-start;gap:2px;min-height:52px;padding:8px 12px;border:1px solid var(--linea);border-radius:10px;background:#fff;text-align:left;cursor:pointer}
+.bus-item span{font-size:.84rem;color:var(--tinta2);font-weight:400}
+.bus-item:hover,.bus-item:focus-visible{border-color:var(--verde);background:var(--verde-suave)}
+
+/* ---------- Celular: barra inferior de 5 destinos y hojas ---------- */
+.fx-barra,.fx-hoja{display:none}
+@media(max-width:979px){
+  .fx-shell{grid-template-columns:minmax(0,1fr)!important}
+  .fx-nav{display:none}
+  .fx-centro{padding-bottom:76px}
+  .fx-barra{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:4px;position:fixed;z-index:50;left:0;right:0;bottom:0;padding:6px 8px calc(6px + env(safe-area-inset-bottom));background:rgba(251,248,242,.88);-webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);border-top:1px solid var(--cristal-borde)}
+  .bb-item{position:relative;min-height:56px;border:1px solid transparent;border-radius:12px;background:none;color:var(--tinta);font-size:13px;font-weight:600;display:flex;align-items:center;justify-content:center}
+  .bb-item.on{background:var(--verde);color:#fff}
+  .bb-n{position:absolute;top:4px;right:10px;min-width:18px;height:18px;padding:0 5px;border-radius:999px;background:var(--rojo);color:#fff;font-size:11px;display:inline-flex;align-items:center;justify-content:center}
+  .bb-n[hidden]{display:none}
+  .fx-shell[data-vista=facturar] .fx-barra{display:none}
+  .fx-shell[data-vista=facturar] .fx-centro{padding-bottom:0}
+  .fx-hoja:not([hidden]){display:block;position:fixed;z-index:59;left:0;right:0;bottom:0;max-height:70vh;overflow:auto;padding:14px 14px calc(78px + env(safe-area-inset-bottom));background:rgba(251,248,242,.97);border-radius:18px 18px 0 0;box-shadow:0 -12px 40px rgba(59,42,32,.2)}
+  .hoja-tit{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px;font-weight:600;font-size:1.05rem}
+  .hoja-rejilla{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));grid-auto-rows:1fr;gap:10px}
+  .hoja-item{display:flex;flex-direction:column;align-items:flex-start;justify-content:center;gap:4px;min-height:64px;padding:10px 12px;border:1px solid var(--linea2);border-radius:12px;background:#fff;color:var(--tinta);text-align:left;font-size:.95rem}
+  .hoja-item:focus-visible{outline:3px solid var(--rojo)}
+  .hoja-vela{z-index:55}
+  .fx-shell .cab-titulo{font-size:1.2rem}
+  .fx-shell .cab-buscar{min-width:0}.fx-shell .cab-buscar kbd,.fx-shell .cab-estado{display:none}
+  .fx-shell .cab-usuario{display:flex!important}
+  .fx-shell .cab-volver{display:inline-flex}
+  .fx-shell .cab-fila{flex-wrap:wrap}
+  .fx-shell .cab-acciones{margin-left:auto}
+  .cab-atencion{display:inline-flex}
+}
+@media(max-width:979px){.fx-shell[data-vista=inicio] .cab-volver,.fx-shell[data-vista=admin] .cab-volver{display:none!important}}
+
+/* ---------- Sin desenfoque: equipos lentos, preferencia del sistema o navegador sin soporte (mismo aspecto, fondo más sólido) ---------- */
+@media(prefers-reduced-transparency:reduce){body.fx-admin{--cristal:rgba(251,248,242,.96);--cristal-card:#fffdf8;--blur:none}}
+body.fx-admin.sin-cristal{--cristal:rgba(251,248,242,.96);--cristal-card:#fffdf8;--blur:none}
+@supports not ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))){body.fx-admin{--cristal:rgba(251,248,242,.96);--cristal-card:#fffdf8}}
+@media print{.fx-nav,.fx-rail,.fx-barra,.fx-hoja,.fx-vela,.cab-acciones{display:none!important}.fx-shell{display:block}}
+/* Botones de los avisos: todos iguales (mismo alto, ancho y borde) */
+.rail-lista .alerta-in button{display:inline-flex;align-items:center;justify-content:center;width:100%;min-height:44px;padding:6px 12px;border:1px solid var(--verde);border-radius:10px;background:#fff;color:var(--tinta);font:inherit;font-weight:600;cursor:pointer;min-width:0}
+.rail-lista .alerta-in button:hover{background:var(--verde-suave)}
+.rail-lista :is(.alerta-cab,.alerta-resp){overflow:hidden}
+@media(max-width:979px){.fx-barra{z-index:61}.fx-hoja:not([hidden]){padding-bottom:calc(84px + env(safe-area-inset-bottom))}}
+
+/* La pantalla de Caja no cambia: dentro de ella se devuelven los colores de siempre */
+body.fx-admin:has(.fx-shell[data-vista=facturar]){--tinta:#1d1a17;--tinta2:#6b645b;--linea:#e2dacb;--linea2:#cfc5b2;--borde-control:#8f8672;--cristal:rgba(251,248,242,.97);--cristal-card:#fff;--blur:none;background:#fbf8f2;background-image:none;color:#1d1a17}
+body.fx-admin:has(.fx-shell[data-vista=facturar]) :is(strong,b,h1,h2,h3,h4,th,summary,button,.btn,.chip){font-weight:revert}
+body.fx-admin:has(.fx-shell[data-vista=facturar]) .toast{background:#1d1a17}
+
+/* Sin negro: los selectores activos y chips oscuros de los módulos pasan a verde bosque */
+body.fx-admin .fx-shell:not([data-vista=facturar]) :is(.ah-pestanas .btn[aria-pressed=true],.an-motivos .btn[aria-pressed=true],.bd-tabs .btn[aria-pressed=true],.ct-medios button[aria-pressed=true],.doc-filtros .btn[aria-pressed=true],.doc-correo-op[aria-pressed=true],.efz-chip[aria-pressed=true],.btn.inv-seg[aria-pressed=true],.inv-bolsa-btn[aria-pressed=true],.seg[aria-pressed=true],.np-opcion[aria-pressed=true],.np-motivos .btn[aria-pressed=true],.rec-vista[aria-pressed=true],.sm-pestanas .btn[aria-pressed=true],.mt-barra-sel,.desc-ctl .desc-ok,.medio-btn[aria-pressed=true]){background:var(--verde)!important;border-color:var(--verde)!important;color:#fff!important}
+body.fx-admin .fx-shell:not([data-vista=facturar]) .inv-barra-pista i{background:var(--verde)}
+body.fx-admin .fx-shell:not([data-vista=facturar]) :is(.pc-marco,.pc-mini){background:#b81622}
+body.fx-admin .cab-franja .amb-prueba{background:#fdf2dc;color:#5c3d00;border:1px solid #d9b25f}
+/* Tarjetas de alerta: sin recorte del borde inferior */
+.rail-lista :is(.alerta-cab,.alerta-resp){overflow:visible}
+.rail-lista .alerta-in{box-sizing:border-box}
+
+/* Celular, administrador: encabezado simétrico = título arriba y 4 botones iguales abajo (Buscar, Atención, Anular, Menú) */
+@media(max-width:979px){
+  .fx-shell .cab-fila{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;align-items:stretch}
+  .fx-shell .cab-titulo{grid-column:1/-1;grid-row:1;align-self:center;margin:0}
+  .fx-shell:not([data-vista=inicio]):not([data-vista=admin]) .cab-titulo{grid-column:2/-1}
+  .fx-shell:not([data-vista=inicio]):not([data-vista=admin]) .cab-volver{grid-column:1;grid-row:1}
+  .fx-shell .cab-acciones{display:contents}
+  .fx-shell .cab-fila :is(.cab-buscar,.cab-atencion,.cab-anular,.cab-usuario){grid-row:2;min-width:0;width:100%;min-height:44px;font-size:13px;padding-inline:6px;justify-content:center;white-space:nowrap}
+  .fx-shell .cab-usuario .cab-menu{width:100%;min-height:44px}
+  .fx-shell .cab-buscar{order:0}
+}
+
+/* Tarjetas «urgentes» de la columna: mismo borde y mismo botón que las demás (sin borde inferior rojo oscuro ni botón con borde blanco) */
+.fx-rail .rail-lista .alerta-resp.urgente,.fx-rail .rail-lista .alerta-resp{border:1px solid var(--cristal-borde);border-left:4px solid var(--ambar);border-bottom:1px solid var(--cristal-borde)}
+.fx-rail .rail-lista :is(.alerta-cab,.alerta-resp.urgente){border-left-color:var(--rojo)}
+.fx-rail .rail-lista .alerta-resp.urgente .btn.alerta-ver,.fx-rail .rail-lista .alerta-cab .btn.alerta-ver,.fx-rail .rail-lista .alerta-resp .btn.alerta-ver{background:#fff;color:var(--tinta);border:1px solid var(--verde)}
+.fx-rail .rail-lista .alerta-resp.urgente .btn.alerta-ver:hover,.fx-rail .rail-lista .alerta-cab .btn.alerta-ver:hover,.fx-rail .rail-lista .alerta-resp .btn.alerta-ver:hover{background:var(--verde-suave)}
+.fx-rail .rail-lista .alerta-resp.urgente :focus-visible{outline-color:var(--rojo)}
+/* Celular: 2×2 botones iguales con el mismo radio */
+@media(max-width:979px){
+  .fx-shell .cab-fila{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .fx-shell:not([data-vista=inicio]):not([data-vista=admin]) .cab-titulo{grid-column:2/-1}
+  .fx-shell .cab-fila :is(.cab-buscar,.cab-atencion,.cab-anular,.cab-usuario){border-radius:12px;font-size:14px}
+  .fx-shell .cab-buscar{grid-row:2;grid-column:1}.fx-shell .cab-atencion{grid-row:2;grid-column:2}
+  .fx-shell .cab-anular{grid-row:3;grid-column:1}.fx-shell .cab-usuario{grid-row:3;grid-column:2}
+  .fx-shell .cab-usuario .cab-menu,.fx-shell .cab-fila .btn{border-radius:12px}
+}
+
+@media(max-width:979px){
+  .fx-shell .cab-fila .cab-buscar{grid-row:2;grid-column:1}.fx-shell .cab-fila .cab-atencion{grid-row:2;grid-column:2}
+  .fx-shell .cab-fila .cab-anular{grid-row:3;grid-column:1}.fx-shell .cab-fila .cab-usuario{grid-row:3;grid-column:2}
+}
+@media(max-width:979px){.fx-shell .cab-fila .cab-usuario{padding:0;margin:0;display:block!important;position:relative}.fx-shell .cab-fila .cab-usuario .cab-menu{width:100%;height:100%;margin:0}}
+/* Pago sin factura en celular: el aviso rojo no ensancha la tarjeta */
+.psf-pago,.psf-pago>*{min-width:0;max-width:100%}.psf-pago .mt-aviso{overflow-wrap:anywhere;box-sizing:border-box}
+@media(max-width:979px){
+  body.fx-admin .fx-shell .cabecera .cab-fila{grid-template-columns:repeat(2,minmax(0,1fr))!important;grid-template-areas:none!important}
+}
+
+/* ===== Ajustes del 9 nov (revisión de Emil): niveles claros, volver, tarjetas tocables y pistas de desplazamiento ===== */
+/* Niveles del menú: el grupo es más grande y firme; sus opciones van sangradas bajo una línea, más pequeñas */
+.nv-grupo{margin-top:16px;gap:1px}
+.nv-grupo-tit{display:flex;align-items:center;gap:8px;padding:6px 10px;font-size:16px;letter-spacing:0;text-transform:none;font-weight:600;color:var(--verde);border-bottom:1px solid var(--linea2);margin-bottom:4px}
+.nv-grupo-tit::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--ambar);flex:0 0 auto}
+.nv-grupo .nv-item{margin-left:14px;width:calc(100% - 14px);min-height:36px;font-size:13.5px;font-weight:400;border-radius:8px;position:relative}
+.nv-grupo .nv-item::before{content:"";position:absolute;left:-8px;top:50%;width:8px;border-top:1px solid var(--linea2)}
+.nv-grupo .nv-item.on{font-weight:600}
+.nv-hoy{font-size:16px!important;font-weight:600;min-height:44px}
+.nv-pie .nv-item{font-size:13.5px;font-weight:400}
+/* Volver a Hoy: botón grande y claro en toda pantalla que no sea Hoy */
+.fx-volver{display:none;padding:12px var(--gap) 0}
+.fx-shell:not([data-vista=inicio]):not([data-vista=admin]):not([data-vista=facturar]) .fx-volver{display:block}
+.fx-volver-btn{min-height:48px;padding:6px 18px;border-radius:12px;background:#fff;border:1px solid var(--verde);color:var(--verde);font-size:15px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:8px}
+.fx-volver-btn:hover{background:var(--verde-suave)}
+.fx-shell .cab-volver{display:none!important}
+@media(max-width:979px){.fx-shell:not([data-vista=inicio]):not([data-vista=admin]) .cab-titulo{grid-column:1/-1}.fx-volver-btn{width:100%;justify-content:center}}
+/* Columna derecha: se ve que se toca */
+.rail-ayuda{margin:0;font-size:12.5px;color:var(--tinta2)}
+.rail-lista :is(.alerta-cab,.alerta-resp){cursor:pointer;transition:box-shadow .15s,transform .15s}
+.rail-lista :is(.alerta-cab,.alerta-resp):hover{box-shadow:0 0 0 1px var(--verde),0 10px 24px rgba(94,84,72,.16);transform:translateY(-1px)}
+.fx-rail .rail-lista .alerta-in button,.fx-rail .rail-lista .btn.alerta-ver{background:var(--verde)!important;color:#fff!important;border-color:var(--verde)!important}
+.fx-rail .rail-lista .alerta-in button::after{content:"›";margin-left:10px;font-size:1.3em;line-height:1}
+.fx-rail .rail-lista .alerta-in button:hover{background:#9a1019!important}
+/* Pistas de desplazamiento */
+.fx-nav,.fx-rail{scrollbar-width:thin;scrollbar-color:var(--verde) transparent}
+.fx-nav::-webkit-scrollbar,.fx-rail::-webkit-scrollbar{width:8px}
+.fx-nav::-webkit-scrollbar-thumb,.fx-rail::-webkit-scrollbar-thumb{background:var(--verde);border-radius:8px}
+.pista{display:none;position:sticky;height:0;overflow:visible;z-index:5;pointer-events:none;flex:0 0 auto}
+.pista span{position:absolute;left:50%;transform:translateX(-50%);padding:4px 12px;border-radius:999px;background:var(--ambar);color:#3d2900;border:1px solid #d9b25f;font-size:12px;font-weight:600;white-space:nowrap;box-shadow:0 4px 12px rgba(94,84,72,.2)}
+.pista-arriba{top:0}.pista-arriba span{top:6px}
+.pista-abajo{bottom:0}.pista-abajo span{bottom:8px}
+.mas-arriba>.pista-arriba,.mas-abajo>.pista-abajo{display:block}
+
+/* Perfil de Dixia: Hoy = 4 tarjetas grandes y parejas (2×2), quietas; la columna derecha se queda */
+.hoy-dixia .hoy-grandes{grid-template-columns:repeat(2,minmax(0,1fr));grid-auto-rows:1fr}
+.hoy-dixia .hoy-acceso{min-height:200px;padding:28px;justify-content:center;gap:10px}
+.hoy-dixia .hoy-acceso b{font-size:1.6rem}
+.hoy-dixia .hoy-acceso span{font-size:1.02rem;-webkit-line-clamp:3}
+@media(max-width:700px){.hoy-dixia .hoy-grandes{grid-template-columns:1fr}.hoy-dixia .hoy-acceso{min-height:132px;padding:20px}.hoy-dixia .hoy-acceso b{font-size:1.3rem}}
+/* Columna derecha: botones en ámbar (acorde con Atención y el resto), no en verde sólido */
+.fx-rail .rail-lista .alerta-in button,.fx-rail .rail-lista .btn.alerta-ver{background:var(--ambar)!important;color:#3d2900!important;border-color:#d9992a!important}
+.fx-rail .rail-lista .alerta-in button:hover{background:#f7b54a!important}
+/* Columna derecha sin verde: bordes y reflejos en ámbar y rojo de marca */
+.rail-lista :is(.alerta-cab,.alerta-resp):hover{box-shadow:0 0 0 1px #d9992a,0 10px 24px rgba(94,84,72,.16)}
+.fx-rail .rail-lista .alerta-in button{border:1px solid #d9992a!important}
+.fx-rail{scrollbar-color:#d9992a transparent}.fx-rail::-webkit-scrollbar-thumb{background:#d9992a}
+
+/* Dixia: sin columna de alertas, sin botón Atención y sin contador */
+.fx-shell.sin-rail .fx-rail,.fx-shell.sin-rail .cab-atencion,.fx-shell.sin-rail .bb-n,.fx-shell.sin-rail .hoy-ver-atn{display:none!important}
+@media(min-width:980px){.fx-shell.sin-rail:not([data-vista=facturar]){grid-template-columns:var(--nv-ancho) minmax(0,1fr)!important}}
+
+/* Dentro de facturar, el administrador también tiene su botón grande para volver a Hoy (igual que «‹ Inicio» de la caja) */
+.fx-shell[data-vista=facturar] .cab-volver{display:inline-flex!important;min-height:48px;padding:6px 16px;border:1px solid var(--verde);border-radius:12px;background:#fff;color:var(--verde);font-weight:600;font-size:15px}
+
+/* ===== Empresa activa: muy clara (logo + nombre grandes) ===== */
+.nv-empresa{display:flex;align-items:center;gap:12px;margin:2px 0 6px;padding:12px;border-radius:14px;border:1px solid var(--linea2);border-left-width:8px;background:var(--cristal-card)}
+.nv-empresa[data-emp=pollos]{border-left-color:var(--ambar);background:linear-gradient(160deg,#fff4dc,#fdf8ec)}
+.nv-empresa[data-emp=soda]{border-left-color:var(--rojo);background:linear-gradient(160deg,#fdeaea,#fdf8f4)}
+.nv-emp-logo{flex:0 0 auto;width:52px;height:52px;border-radius:50%;background:#fff;border:1px solid var(--linea2);display:flex;align-items:center;justify-content:center;overflow:hidden}
+.nv-emp-logo img{width:40px;height:40px;object-fit:contain}
+.nv-emp-txt{display:flex;flex-direction:column;min-width:0}
+.nv-emp-txt small{font-size:11.5px;color:var(--tinta2)}
+.nv-emp-txt strong{font-size:18px;line-height:1.15;font-weight:600;color:var(--tinta);overflow-wrap:anywhere}
+/* Franja de arriba más grande, con el logo en un círculo blanco (se ve también en el celular) */
+.fx-shell .cab-franja-in{min-height:44px}
+.fx-shell .cab-emp{font-size:1.1rem!important;letter-spacing:.03em}
+.fx-shell .cab-emp::before{content:"";flex:0 0 auto;width:32px;height:32px;margin-right:10px;border-radius:50%;background:#fff center/24px 24px no-repeat url(../img/logo-pollos.svg);border:1px solid rgba(0,0,0,.08)}
+.fx-shell .cabecera[data-emp=soda] .cab-emp::before{background-image:url(../img/logo-soda.svg)}
+/* En facturar, el administrador no ve el contador de Atención: la pantalla de caja se queda tranquila */
+.fx-shell[data-vista=facturar] .cab-atencion{display:none!important}
+
+/* ===== Sin verde (9 nov, orden de Emil): paleta = crema, rojo de marca, ámbar y marrón cálido. «Bien / abierto» se dice con ámbar y con palabras, no con verde ===== */
+body.fx-admin{--verde:#b81622;--verde-suave:#fdecea;--borde-ok:#d9992a;--ok:#d9992a;--tinta:#3b2a20;--azul:#3b2a20}
+body.fx-admin .chip.ok,body.fx-admin .estado-turno.abierto{background:#fdf2dc;color:#5c3d00;border-color:#d9992a}
+body.fx-admin .nv-logo{background:#b81622}
+.fx-shell .nv-item.on{background:var(--ambar);border-color:#d9992a;color:#3b2a20}
+.fx-shell .con-fam[aria-selected=true]{background:var(--ambar);border-color:#d9992a;color:#3b2a20}
+.fx-shell .bb-item.on{background:var(--ambar);color:#3b2a20}
+.hoy-caja{border-left-color:var(--ambar)}
+.nv-grupo-tit{color:var(--tinta)}
+body.fx-admin .fx-shell:not([data-vista=facturar]) :is(.ah-pestanas .btn[aria-pressed=true],.an-motivos .btn[aria-pressed=true],.bd-tabs .btn[aria-pressed=true],.ct-medios button[aria-pressed=true],.doc-filtros .btn[aria-pressed=true],.doc-correo-op[aria-pressed=true],.efz-chip[aria-pressed=true],.btn.inv-seg[aria-pressed=true],.inv-bolsa-btn[aria-pressed=true],.seg[aria-pressed=true],.np-opcion[aria-pressed=true],.np-motivos .btn[aria-pressed=true],.rec-vista[aria-pressed=true],.sm-pestanas .btn[aria-pressed=true],.mt-barra-sel,.desc-ctl .desc-ok,.medio-btn[aria-pressed=true]){background:var(--ambar)!important;border-color:#d9992a!important;color:#3b2a20!important}
+body.fx-admin .fx-shell:not([data-vista=facturar]) :is(.pc-marco,.pc-mini){background:#b81622}
+
+/* Marca y empresa activa: fijas arriba del menú, no se mueven al desplazar */
+.nv-fija{position:sticky;top:0;z-index:6;margin:-16px -12px 0;padding:16px 12px 8px;background:rgba(247,241,230,.97);border-bottom:1px solid var(--linea)}
+
+/* Cambiar de empresa (menú de abajo, sobre «Sesión de…») */
+.nv-cambio{display:flex;align-items:center;gap:10px;width:100%;min-height:56px;padding:8px 10px;margin-bottom:6px;border:1px solid var(--linea2);border-radius:12px;background:#fff;color:var(--tinta);font:inherit;text-align:left;cursor:pointer}
+.nv-cambio:hover{border-color:var(--ambar);background:#fff8e8}
+.nv-cambio:disabled{opacity:.7;cursor:wait}
+.nv-cambio-txt{display:flex;flex-direction:column;min-width:0}.nv-cambio-txt small{font-size:11.5px;color:var(--tinta2)}.nv-cambio-txt b{font-size:14.5px;font-weight:600}
+.nv-emp-logo.chico{width:36px;height:36px}.nv-emp-logo.chico img{width:28px;height:28px}
+.fx-nav{padding-top:0}
+.nv-fija{margin:0 -12px;padding:16px 12px 8px}
+.nv-fija{background:#f7f1e6!important;z-index:8}
+/* franja roja: logo y nombre de la empresa al centro; el aviso de pruebas queda a la derecha */
+.fx-shell .cab-franja-in{position:relative;justify-content:flex-end}
+.fx-shell .cab-emp{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);display:inline-flex;align-items:center}
+@media (max-width:640px){.fx-shell .cab-emp{font-size:.9rem!important}.fx-shell .cab-emp::before{width:26px;height:26px;margin-right:7px}}
+/* colores de marca por empresa en el cascarón del administrador: Pollos = fondo ámbar con letras rojas; Soda = fondo rojo con letras ámbar */
+.fx-shell .cabecera[data-emp=pollos],.fx-shell .cabecera:not([data-emp]){--acento:#f3a62c;--acento-texto:#b81622}
+.fx-shell .cabecera[data-emp=soda]{--acento:#b81622;--acento-texto:#f3a62c}
+.fx-shell .cab-franja .amb-prueba{background:#fff;color:#5c3d00;border:1px solid #d9b25f}
+/* centrado real: tres columnas */
+.fx-shell .cab-franja-in{display:grid;grid-template-columns:1fr auto 1fr;justify-content:normal}
+.fx-shell .cab-emp{position:static;transform:none;grid-column:2}
+.fx-shell .cab-franja .amb{grid-column:3;justify-self:end}
+.fx-shell .cab-emp{white-space:nowrap;overflow:visible!important;max-width:none!important;width:max-content;text-overflow:clip!important}
+.rail-panel{display:flex;justify-content:center;align-items:center;min-height:44px;margin:0 0 10px;background:#fff;border:1.5px solid #b81622;color:#b81622;font-weight:600;text-decoration:none;border-radius:10px}
+.rail-panel:hover{background:#fdecea}
+/* Libro de marca por empresa. Pollos: base ámbar, detalles rojos. Soda: base roja, detalles ámbar. */
+.fx-shell:has(.cabecera[data-emp=pollos]) .nv-item.on{background:#f3a62c;border-color:#b81622;color:#b81622}
+.fx-shell:has(.cabecera[data-emp=pollos]) .nv-grupo-tit::before{background:#b81622}
+.fx-shell:has(.cabecera[data-emp=pollos]) .fx-rail .rail-lista .alerta-in button,.fx-shell:has(.cabecera[data-emp=pollos]) .fx-rail .rail-lista .btn.alerta-ver{background:#f3a62c!important;color:#b81622!important;border-color:#b81622!important}
+.fx-shell:has(.cabecera[data-emp=soda]) .nv-item.on{background:#b81622;border-color:#f3a62c;color:#f3a62c}
+.fx-shell:has(.cabecera[data-emp=soda]) .nv-grupo-tit::before{background:#f3a62c}
+.fx-shell:has(.cabecera[data-emp=soda]) .fx-rail .rail-lista .alerta-in button,.fx-shell:has(.cabecera[data-emp=soda]) .fx-rail .rail-lista .btn.alerta-ver{background:#b81622!important;color:#f3a62c!important;border-color:#f3a62c!important}
+.fx-shell:has(.cabecera[data-emp=soda]) .fx-rail .rail-lista .alerta-in button:hover{background:#9a1019!important}
+.fx-shell:has(.cabecera[data-emp=pollos]) .fx-rail .rail-lista .alerta-in button:hover{background:#f7b54a!important}
+.fx-shell .cab-emp{font-size:1.2rem!important;font-weight:700}
+@media (max-width:640px){.fx-shell .cab-emp{font-size:1.17rem!important}}
+/* celular, facturar: «Volver al inicio» ocupa su propia fila, el título va debajo y los botones siguen (sin encimarse) */
+@media(max-width:979px){
+  body.fx-admin .fx-shell[data-vista=facturar] .cab-volver{grid-column:1/-1!important;grid-row:1!important;width:100%;justify-content:center}
+  body.fx-admin .fx-shell[data-vista=facturar] .cab-titulo{grid-column:1/-1!important;grid-row:2!important;text-align:center}
+  body.fx-admin .fx-shell[data-vista=facturar] .cab-fila :is(.cab-buscar,.cab-atencion,.cab-anular,.cab-usuario){grid-row:auto!important}
+}
+/* logos dentro del círculo: el cuadrado del logo debe caber en el círculo (lado ≈ 70 % del diámetro) para que no se recorte abajo */
+.fx-shell .cab-emp::before{width:38px;height:38px;background-size:26px 26px!important;background-position:center!important;background-repeat:no-repeat!important}
+.nv-emp-logo img{width:36px;height:36px;object-fit:contain}
+.nv-emp-logo.chico img{width:25px;height:25px}
+@media (max-width:640px){.fx-shell .cab-emp::before{width:32px;height:32px;background-size:22px 22px!important}}
+.fx-shell .cab-franja-in{min-height:54px;padding-block:6px}
+@media (max-width:640px){.fx-shell .cab-franja-in{min-height:50px;padding-inline:8px;gap:6px}.fx-shell .cab-emp{font-size:1rem!important}.fx-shell .cab-franja .amb{font-size:.6rem;padding:.05rem .3rem}}
+
+/* Ventanas de pantalla completa (Por recibir y similares): dejan a la vista el menú izquierdo y la columna derecha */
+@media(min-width:980px){body.fx-admin .modal-fondo.inv-fondo{left:var(--nv-ancho)}}
+@media(min-width:1600px){body.fx-admin .modal-fondo.inv-fondo{right:var(--rail-ancho)}}
+@media(min-width:1200px) and (max-width:1599px){body.fx-admin:has(.fx-shell[data-vista=inicio]) .modal-fondo.inv-fondo,body.fx-admin:has(.fx-shell[data-vista=admin]) .modal-fondo.inv-fondo{right:var(--rail-ancho)}}
+
+/* Excepción al «sin verde»: el semáforo de recibir es una señal de seguridad. Verde = segura, ámbar = revisar, rojo = falta algo. El verde no se toca. */
+body.fx-admin .rc-pill.verde i,body.fx-admin .rc-punto.verde,body.fx-admin .rc-lin-punto.verde{background:#1e7a4f!important}
+body.fx-admin .rc-lin[data-semaforo="verde"]{border-left-color:#1e7a4f!important}
+body.fx-admin .inv-mov-tipo.entra,body.fx-admin .inv-mov-cant.entra,body.fx-admin .inv-anotado{color:#1e7a4f!important}
+body.fx-admin .inv-aviso.ok,body.fx-admin .inv-opcion.sugerida,body.fx-admin .inv-costo-aviso.nota{--verde-suave:#e6f4ec}
+
+/* Documentos en el cascarón del administrador: el ancho útil es el de la zona central (menú y columna derecha le quitan espacio), no el de la ventana */
+#vista{container-type:inline-size;container-name:vista}
+@container vista (max-width:1299px){
+  body.fx-admin .doc-cabeza{display:none}
+  body.fx-admin .doc-lista{--doc-acc:19rem}
+  body.fx-admin .doc-fbot{flex-direction:row}
+  body.fx-admin .doc-fbot .btn{flex:1 1 0;min-height:48px;font-size:.9rem;padding-inline:.3rem;line-height:1.15}
+  body.fx-admin .doc-ver{grid-template-columns:3.4rem minmax(0,1fr) auto;grid-template-areas:"hora doc total" "cli cli est";gap:.35rem .6rem}
+  body.fx-admin .doc-ver .c-hora{grid-area:hora;font-size:.9rem;color:var(--tinta2)}.doc-ver .c-doc{grid-area:doc}.doc-ver .c-total{grid-area:total}
+  body.fx-admin .doc-ver .c-doc .nw{white-space:normal;overflow-wrap:anywhere}  /* un número largo no se pega al total */
+  body.fx-admin .doc-ver .c-total{padding-left:.4rem}
+  body.fx-admin .doc-ver .c-cli{grid-area:cli}.doc-ver .c-est{grid-area:est;justify-content:flex-end}  /* Con dos o más marcas («Aceptado por Hacienda» y «Anulado», «Con devolución»...) las marcas van en su propia línea: si no, ensanchan la última columna y dejan al nombre del documento casi sin espacio */
+  body.fx-admin .doc-ver:has(.c-est .chip+.chip){grid-template-areas:"hora doc total" "cli cli cli" "est est est"}
+  body.fx-admin .doc-ver:has(.c-est .chip+.chip) .c-est{justify-content:flex-start}
+}
+
+/* Pistas de desplazamiento: una franja suave sin cubrir las opciones del menú */
+.pista span{left:0;right:0;transform:none;width:100%;box-sizing:border-box;text-align:center;padding:6px 0 4px;border:0;border-radius:0;box-shadow:none;background:linear-gradient(to top,#f7f1e6 55%,rgba(247,241,230,0));color:var(--tinta2);font-size:11px;font-weight:600}
+.pista-arriba span{top:0;background:linear-gradient(to bottom,#f7f1e6 55%,rgba(247,241,230,0))}
+.pista-abajo span{bottom:0}
+
+/* La cabecera fija es opaca: lo que se desplaza no se transparenta bajo el título */
+.fx-shell .cabecera{background:#f7f1e6!important;-webkit-backdrop-filter:none!important;backdrop-filter:none!important}
+
+/* Simetría: tres botones de una misma fila van en tres columnas iguales, no dos arriba y uno solo abajo */
+@media(min-width:700px){
+  html body .mt-lista .mt-item:has(.mt-btns>.btn:nth-child(3):last-child){grid-template-columns:minmax(0,1fr) min(30rem,60%)}
+  html body .mt-lista .mt-item .mt-btns:has(>.btn:nth-child(3):last-child){grid-template-columns:repeat(3,minmax(0,1fr))}
+  html body .mt-lista .mt-item .mt-btns:has(>.btn:nth-child(3):last-child)>.btn{white-space:normal;min-height:48px;padding-inline:.4rem;line-height:1.15}
+}
+
+/* La barra inferior del celular es opaca: nada se transparenta bajo los botones */
+.fx-barra{background:#f7f1e6!important;-webkit-backdrop-filter:none!important;backdrop-filter:none!important}

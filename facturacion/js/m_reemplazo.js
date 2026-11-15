@@ -173,7 +173,7 @@ export function abrirReemplazo(app, comprobante, { nc = null, alTerminar, alVerN
     avisoMonto.classList.toggle('rp-falta', cambia && pagos.length !== 1);
     pintarPie();
   }
-  const SUGERENCIAS = ['Servicio de alimentación', 'Desayunos', 'Almuerzos', 'Cenas'];
+  const SUGERENCIAS = ['Servicio de alimentación', 'Desayuno', 'Almuerzo', 'Cena'];
   const sincAtajos = new Map();
   let filaActiva = null;
   function activar(fila) { if (filaActiva) filaActiva.classList.remove('activa'); filaActiva = fila; fila.classList.add('activa'); }

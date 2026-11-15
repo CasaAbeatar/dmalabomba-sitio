@@ -73,6 +73,7 @@ export const inv = {
   alertasResumen: () => leer('fx_inv_alertas_resumen'),
   valorizacion: () => leer('fx_inv_valorizacion'),
   mermas: (desde, hasta) => leer('fx_inv_mermas', { p_desde: desde, p_hasta: hasta }),
+  modeloPanel: () => leer('fx_inv_modelo_panel', {}),
   conteos: (ubicacion = null, estado = null, limite = 50) => leer('fx_inv_conteos', { p_ubicacion: ubicacion, p_estado: estado, p_limite: limite }),
   conteo: (id) => leer('fx_inv_conteo', { p_conteo: id }),
   equivalencias: (q = '', limite = 200) => leer('fx_inv_equivalencias', { p_q: q, p_limite: limite }),
@@ -87,6 +88,12 @@ export const inv = {
   ignorar: (clave, lineas = null, motivo = null, recordar = true, idem) => escribir('fx_inv_ignorar', { p_clave: clave, p_lineas: lineas, p_motivo: motivo, p_recordar: !!recordar, p_idem: idem }),
   deshacerIgnorar: (clave, lineas = null, idem) => escribir('fx_inv_deshacer_ignorar', { p_clave: clave, p_lineas: lineas, p_idem: idem }),
   trasladar: (origen, destino, items, motivo = null, idem) => escribir('fx_inv_trasladar', { p_origen: origen, p_destino: destino, p_items: items, p_motivo: motivo, p_idem: idem }),
+  // Traslados de los últimos días, una fila por operación, con su estado de reversa (7 nov 2026, pantallas de inventario)
+  trasladosRecientes: (dias = 30, limite = 60) => leer('fx_inv_traslados_recientes', { p_dias: dias, p_limite: limite }),
+  // Solo administración (la base lo vuelve a revisar). El motivo es obligatorio; si el traslado ya no se puede deshacer, la base dice por qué en palabras.
+  trasladoDeshacer: (operacion, motivo, idem) => escribir('fx_inv_traslado_revertir', { p_operacion: operacion, p_motivo: motivo, p_idem: idem }),
+  // Lo pendiente de recibir desde el 1 de octubre, agrupado por proveedor (la lista de «Por recibir» solo trae desde el corte de recepción)
+  pendientePorProveedor: (sociedad = null) => leer('fx_inv_pendiente_por_proveedor', { p_sociedad: sociedad }),
   salida: (tipo, ubicacion, items, motivo, idem) => escribir('fx_inv_salida', { p_tipo: tipo, p_ubicacion: ubicacion, p_items: items, p_motivo: motivo, p_idem: idem }),
   porcionar: (ubicacion, origen, resultados, motivo = null, idem) => escribir('fx_inv_porcionar', { p_ubicacion: ubicacion, p_origen: origen, p_resultados: resultados, p_motivo: motivo, p_idem: idem }),
   conteoIniciar: (ubicacion, nota = null, idem) => escribir('fx_inv_conteo_iniciar', { p_ubicacion: ubicacion, p_nota: nota, p_idem: idem }),

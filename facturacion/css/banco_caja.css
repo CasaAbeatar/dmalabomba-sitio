@@ -1,0 +1,21 @@
+/* Contabilidad: conciliación del BCR y posición de caja a 30 días */
+.gr path.linea{fill:none;stroke-width:2.4;stroke-linejoin:round;stroke-linecap:round}
+.gr path.linea.rojo{stroke:var(--rojo)}.gr path.linea.ambar{stroke:#a87400}.gr path.linea.verde{stroke:var(--verde)}.gr path.linea.tinta{stroke:var(--tinta)}
+.gr path.linea.punteada{stroke-dasharray:6 5}
+.gr .cursor{stroke:var(--tinta2);stroke-width:1;stroke-dasharray:3 3}
+.bc-leyenda{display:flex;flex-wrap:wrap;gap:.4rem 1.1rem;margin:.4rem 0 0;font-size:.9rem}
+.bc-leyenda span{display:inline-flex;align-items:center;gap:.4rem}
+.bc-leyenda i{display:inline-block;width:22px;height:0;border-top:3px solid var(--rojo)}
+.bc-leyenda i.ambar{border-color:#a87400}.bc-leyenda i.verde{border-color:var(--verde)}.bc-leyenda i.tinta{border-color:var(--tinta)}.bc-leyenda i.punteada{border-top-style:dashed}
+.bc-aviso{margin:.4rem 0 .8rem;padding:.6rem .85rem;border:1px solid #efd08f;background:var(--ambar-suave);border-radius:var(--r);color:#6b4600;font-size:.92rem}
+.bc-aviso strong{color:#4a3000}
+.bc-sup{margin:.6rem 0 0;padding-left:1.1rem;font-size:.9rem;color:var(--tinta2)}
+.bc-sup li{margin:.25rem 0}
+.bc-dif.pos{color:var(--rojo);font-weight:600}.bc-dif.cero{color:var(--verde);font-weight:600}
+.bc-form{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:.7rem;margin-top:.6rem;align-items:end}
+.bc-form label{display:flex;flex-direction:column;gap:.25rem;font-size:.85rem;color:var(--tinta2)}
+.bc-form input{font:inherit;color:var(--tinta);padding:.6rem .7rem;border:1.5px solid var(--borde-control);border-radius:var(--r);background:#fff;min-height:44px}
+.bc-form .btn{min-height:44px}
+.bc-neg{color:var(--rojo)}
+.con-cifra .v{overflow-wrap:anywhere;font-size:clamp(1.05rem,4.6vw,1.45rem)}
+@media(min-width:900px){.con-cifra .v{font-size:1.45rem}}

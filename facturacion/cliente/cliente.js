@@ -12,7 +12,12 @@ const LLAVE_SOC = 'pc-soc';
 const NOMBRE_CANAL = 'lb-pantalla-cliente';
 const CADUCA_MS = 20000;      // sin «estado» ni «latido» en 20 s: vuelve a la publicidad
 let PAGADO_MS = 6000;         // «pagado» dura 6 s (configurable: segundos_pagado)
-const ANUNCIOS_CADA_MS = 60 * 1000;   // la carpeta se vuelve a leer cada minuto: lo que se agregue o quite aparece solo
+const ANUNCIOS_CADA_MS = 60 * 1000;   // la carpeta de publicidad se vuelve a leer cada minuto: lo que se agregue o quite aparece solo
+const LOCAL = 'http://127.0.0.1:8766';   // servidor local del kit (solo esta computadora): entrega la lista y los archivos de la carpeta Publicidad del Escritorio
+const SEG_FOTO = 10;
+const LLAVE_EMP = 'pc-emp';
+let empresaActual = '';
+try { empresaActual = localStorage.getItem(LLAVE_EMP) || ''; } catch { /* nada */ }
 let ultimaConfig = 0;                 // el ajuste del administrador (Supabase) se pide como máximo cada 10 minutos
 const RECARGA_MS = 24 * 3600 * 1000;
 
@@ -38,7 +43,7 @@ function limpiarCliente(c) {
   const tipo = /^0[1-6]$/.test(String(c.tipo_id)) ? String(c.tipo_id) : '';
   const id = limpioTxt(c.identificacion, 25).replace(/\s+/g, '');
   const nombre = limpioTxt(c.nombre, 140), comercial = limpioTxt(c.nombre_comercial, 140), personal = limpioTxt(c.nombre_personal, 140);
-  const correo = limpioTxt(c.correo, 160).replace(/\s*[,;\s]\s*/g, ',').replace(/^,|,$/g, ''); // varios correos: coma entre ellos (la caja también los separa por espacio)
+  const correo = limpioTxt(c.correo, 300); // los correos pueden venir separados por coma, punto y coma o espacio: no se pegan (6 nov 2026)
   if (!id && !nombre && !comercial && !personal && !correo) return null;
   const off = Array.isArray(c.correo_off) ? c.correo_off.map((x) => limpioTxt(x, 160).replace(/\s+/g, '').toLowerCase()).filter(Boolean).slice(0, 8) : [];
   return { tipo, id, nombre, comercial, personal, correo, off };
@@ -86,7 +91,7 @@ function achicar(el, max, minUna, minParte, lineas, siempreParte) {
   return f;
 }
 // El correo se escribe completo; solo si hay que partirlo, se parte después de . @ - _ (no cambia el texto)
-// `off` = correos que la cajera desactivó: no se muestran; el cliente ve solo los correos a los que sí se enviará la factura
+// `off` = correos que la cajera desactivó: no se muestran (no se tachan); el cliente ve solo los correos a los que sí se enviará la factura
 function ponCorreo(el, t, off = []) {
   vaciar(el);
   listaCorreos(t).filter((x) => !off.includes(x.toLowerCase())).forEach((x) => { const l = document.createElement('span'); l.className = 'cli-cor-l'; l.textContent = x; el.append(l); });
@@ -97,7 +102,7 @@ function rotCorreo(c) {
   const todos = listaCorreos(c.correo), act = todos.filter((x) => !(c.off || []).includes(x.toLowerCase()));
   return act.length === 0 ? 'No se le enviará la factura por correo' : act.length < todos.length ? 'Le enviaremos su factura solo a:' : 'Le enviaremos su factura a:';
 }
-// Puede haber varios correos en un solo texto, separados por coma, punto y coma o espacio (igual que en la caja): cada uno va en su línea
+// Puede haber varios correos en un solo texto, separados por coma o punto y coma: cada uno va en su línea
 function listaCorreos(t) { return String(t).split(/[,;\s]+/).map((x) => x.trim()).filter(Boolean).slice(0, 8); }
 function partirCorreo(el) { el.querySelectorAll('.cli-cor-l').forEach((l) => { const t = l.textContent; vaciar(l); (t.match(/[^.@_-]*[.@_-]?/g) || []).filter(Boolean).forEach((trozo) => { l.append(document.createTextNode(trozo)); l.append(document.createElement('wbr')); }); }); }
 const nodo = (tag, cls, txt) => { const e = document.createElement(tag); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; };
@@ -116,7 +121,7 @@ function pintarCliente(host, modo, forzar) {
     host.append(nodo('p', 'cli-hint', rotCorreo(c)));
     const v = nodo('p', 'cli-cor-v'); ponCorreo(v, c.correo, c.off); host.append(v);
     const varios = v.children.length > 1;
-    if (v.children.length) achicar(v, varios ? 3.8 : 4.6, 3.2, 2.4, 2 * v.children.length); return;
+    achicar(v, varios ? 3.8 : 4.6, 3.2, 2.4, 2 * v.children.length); return;
   }
   const nom = c.nombre || c.personal;
   const nombreEl = nom || (c.comercial && c.comercial !== nom) ? nodo('p', 'cli-nom') : null;
@@ -145,10 +150,10 @@ function fitCliente(host) {
   const tam = (v) => { const t = getComputedStyle(host).getPropertyValue(v).trim(); return parseFloat(t) || 0; };
   if (nom) achicar(nom, tam('--sz-nom'), 2.8, 0, host.querySelector('.cli-com') ? 3.4 : 2, true);
   if (ced) achicar(ced, tam('--sz-ced'), 3.6, 0);
-  if (cor && !cor.hidden) {
+  if (cor) {
     // un correo: a la misma altura que la cédula; si no cabe en una línea baja solo lo necesario (hasta 4,6 rem) y, si aun así no cabe, pasa a dos líneas cortando después de . @ - _
     const szc = tam('--sz-cor') * (cor.children.length > 1 ? 0.78 : 1);
-    achicar(cor, szc, 4.6, 3.0, 2 * cor.children.length);
+    achicar(cor, szc, 3.0, 2.6, 2 * cor.children.length);
   }
 }
 // El bloque solo existe en la vista que se está mostrando; las otras quedan vacías
@@ -290,65 +295,10 @@ function limpiar(m) {
 }
 
 let firmaPintada = '';
-/* ---------- Datos del cliente nuevo (la caja está agregando un cliente: se muestra lo que va escribiendo, solo lo que ya tiene valor) ---------- */
-let nuevoActivo = false, nuevoTs = 0, ultimoEstado = null, nuevoFirma = '';
-const NUEVO_CADUCA_MS = 15000;
-const TIPOS_NOMBRE = { '01': 'Cédula física', '02': 'Cédula jurídica', '03': 'DIMEX', '04': 'NITE', '05': 'Extranjero no domiciliado', '06': 'No contribuyente' };
-function limpiarNuevo(m) {
-  if (!m || typeof m !== 'object') return null;
-  const t = (x, max) => limpioTxt(x, max);
-  const tipo = /^0[1-6]$/.test(String(m.tipo_id)) ? String(m.tipo_id) : '';
-  const id = t(m.identificacion, 25).replace(/\s+/g, '');
-  return {
-    empresa: m.empresa === 'soda' ? 'soda' : m.empresa === 'pollos' ? 'pollos' : '',
-    tipo, id, nombre: t(m.nombre, 140), comercial: t(m.nombre_comercial, 140), actividad: t(m.actividad, 160),
-    correo: t(m.correo, 160).replace(/\s+/g, ''), extras: (Array.isArray(m.correos_extra) ? m.correos_extra : []).map((x) => t(x, 160).replace(/\s+/g, '')).filter(Boolean).slice(0, 7),
-    telefono: t(m.telefono, 30), direccion: t(m.direccion, 300),
-  };
-}
-function pintarNuevo(d) {
-  const filas = [];
-  if (d.id) filas.push([TIPOS_NOMBRE[d.tipo] || 'Identificación', formatoId(d.tipo, d.id), 'id']);
-  if (d.nombre) filas.push([d.tipo === '02' ? 'Razón social' : 'Nombre', d.nombre]);
-  if (d.comercial) filas.push(['Nombre comercial', d.comercial]);
-  if (d.actividad) filas.push(['Actividad económica', d.actividad]);
-  if (d.correo) filas.push(['Correo principal', d.correo]);
-  d.extras.forEach((c, i) => filas.push([d.extras.length > 1 ? 'Correo adicional ' + (i + 1) : 'Correo adicional', c]));
-  if (d.telefono) filas.push(['Teléfono', d.telefono]);
-  if (d.direccion) filas.push(['Dirección', d.direccion]);
-  const lista = $('nv-lista');
-  vaciar(lista);
-  lista.dataset.n = String(Math.min(filas.length, 8));
-  filas.forEach(([rot, val, clase]) => {
-    const fila = nodo('div', 'nv-fila'), dt = nodo('dt', 'nv-rot', rot), dd = nodo('dd', 'nv-val' + (clase ? ' ' + clase : ''), val);
-    if (val.length > 60) dd.classList.add('largo2'); else if (val.length > 34) dd.classList.add('largo1');
-    fila.append(dt, dd); lista.append(fila);
-  });
-  texto('nv-emp', MARCAS[d.empresa] || '');
-}
-function aplicarNuevo(d) {
-  nuevoActivo = true; nuevoTs = Date.now(); ultimaRecepcion = Date.now();
-  clearTimeout(timerPagado); pagadoActivo = false;
-  if (document.body.dataset.tema !== temaDe(d.empresa)) { document.body.dataset.tema = temaDe(d.empresa); if (cliente) repintarCliente(); }
-  const firma = JSON.stringify(d);
-  if (vista === 'nuevo' && firma === nuevoFirma) return;
-  nuevoFirma = firma; pintarNuevo(d); ir('nuevo');
-}
-function terminarNuevo() {
-  if (!nuevoActivo) return;
-  nuevoActivo = false; nuevoFirma = '';
-  // Vuelve a lo que mostraba la caja (si lo publicó hace poco); si no, a la publicidad
-  if (ultimoEstado && Date.now() - ultimoEstado.visto < CADUCA_MS) { vista = ''; aplicar(ultimoEstado.s); } else ir('espera');
-}
-
 const firmaDe = (s) => JSON.stringify([s.estado, s.empresa, s.lineas, s.subtotal, s.descuento, s.iva, s.total, s.medio, s.cliente]);
 const temaDe = (e) => (e === 'soda' ? 'soda' : e === 'pollos' ? 'pollos' : 'neutro');
-// Cuando no hay publicidad cargada, la pantalla de espera muestra el nombre de la empresa que factura en esa caja
-const MARCAS = { soda: 'Soda La Bomba', pollos: 'Pollos La Bomba' };
-let empresaActual = '';
-function marcaEmpresa(e) { if (e && e !== empresaActual) { empresaActual = e; setTimeout(() => pedirAnuncios(), 0); } const sp = document.querySelector('#an-vacio span'); const t = MARCAS[e] || 'La Bomba'; if (sp && sp.textContent !== t) sp.textContent = t; }
 function aplicar(s) {
-  marcaEmpresa(s.empresa);
+  if (s.empresa && s.empresa !== empresaActual) { empresaActual = s.empresa; try { localStorage.setItem(LLAVE_EMP, empresaActual); } catch { /* nada */ } setTimeout(pedirAnuncios, 0); }
   if (s.estado !== 'espera' && document.body.dataset.tema !== temaDe(s.empresa)) { document.body.dataset.tema = temaDe(s.empresa); if (cliente) repintarCliente(); }
   if (s.ts && s.ts < ultimoTs) return;           // un mensaje viejo llegado tarde no pisa a uno más nuevo
   const anteriorTs = ultimoTs; ultimoTs = Math.max(ultimoTs, s.ts || 0);
@@ -380,10 +330,8 @@ function recibir(d) {
   if (carga && Number.isInteger(carga.terminal) && carga.terminal > 0) terminal = carga.terminal;
   if (carga && typeof carga.soc === 'string' && /^[0-9a-f-]{36}$/i.test(carga.soc) && carga.soc !== soc) {
     soc = carga.soc; try { localStorage.setItem(LLAVE_SOC, soc); } catch { /* nada */ }
-    pedirConfig();
+    pedirAnuncios();
   }
-  if (ev === 'cliente_nuevo') { const d = limpiarNuevo(carga); if (d) aplicarNuevo(d); return; }
-  if (ev === 'cliente_nuevo_fin') { terminarNuevo(); return; }
   const esEstado = ev === 'estado' || (!ev && carga.estado);
   const esLatido = ev === 'latido' || (!ev && !carga.estado && 'ts' in carga);
   if (esLatido) { ultimaRecepcion = Date.now(); enviar({ evento: 'ack', payload: { ts: esNum(Number(carga.ts)) ? Number(carga.ts) : Date.now() } }); return; }
@@ -391,8 +339,6 @@ function recibir(d) {
   const s = limpiar(carga);
   if (!s) return;
   ultimaRecepcion = Date.now();
-  ultimoEstado = { s, visto: Date.now() };
-  if (nuevoActivo) return; // se está agregando un cliente: esta pantalla no se pisa hasta que termine
   aplicar(s);
 }
 
@@ -424,13 +370,10 @@ async function pedirConfig() {
   } catch { /* se queda con lo de siempre */ }
 }
 
-// La publicidad sale de una carpeta de la computadora (decisión de Emil, 5 nov 2026): C:\PantallaCliente\publicidad\soda, \pollos y \todas.
-// Un servidor local del kit (solo en esta computadora, 127.0.0.1) entrega la lista y los archivos; sin internet ni base de datos.
-const LOCAL = 'http://127.0.0.1:8766';
-const SEG_FOTO = 10;
 let pidiendo = false;
+// La publicidad sale de la carpeta Publicidad del Escritorio de la computadora (decisión de Emil, 5 y 14 nov 2026): sin internet ni base de datos.
 async function pedirAnuncios() {
-  if (modoDemo) return;
+  if (params.get('demo')) return;
   if (Date.now() - ultimaConfig > 10 * 60 * 1000) { ultimaConfig = Date.now(); pedirConfig(); }
   if (pidiendo) return;
   pidiendo = true;
@@ -496,7 +439,7 @@ ir('espera');
 const modoDemo = params.get('demo');
 if (modoDemo) demo(modoDemo);
 else {
-  pedirAnuncios();
+  rotador.cargarGuardados().then(() => pedirAnuncios());
   // BroadcastChannel (Chrome, Edge, Safari 15.4 o más). Alternativa si falta: la caja escribe el mensaje JSON en localStorage['lb-pantalla-cliente-msg'] y aquí se oye el evento «storage».
   const entrada = (e) => { try { recibir(e.data); } catch (err) { aviso('mensaje ignorado:', err && err.message); } };
   if (typeof BroadcastChannel === 'function') {
@@ -515,8 +458,7 @@ else {
   addEventListener('online', pedirAnuncios);
   // Caducidad: si la caja deja de dar señales, el cliente vuelve a ver publicidad
   setInterval(() => {
-    if (nuevoActivo && Date.now() - nuevoTs > NUEVO_CADUCA_MS) terminarNuevo(); // la caja dejó de avisar: no se queda con datos personales en pantalla
-    if (!nuevoActivo && vista !== 'espera' && Date.now() - ultimaRecepcion > CADUCA_MS) { clearTimeout(timerPagado); pagadoActivo = false; ir('espera'); }
+    if (vista !== 'espera' && Date.now() - ultimaRecepcion > CADUCA_MS) { clearTimeout(timerPagado); pagadoActivo = false; ir('espera'); }
   }, 1000);
 }
 

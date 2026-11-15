@@ -31,7 +31,7 @@
 .con-cifras{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:.7rem}
 .con-cifra{border:1px solid var(--linea);border-radius:var(--r);padding:.7rem .8rem;background:var(--papel)}
 .con-cifra .t{font-size:.8rem;color:var(--tinta2)}
-.con-cifra .v{font-size:1.25rem;font-weight:600;font-variant-numeric:tabular-nums}
+.con-cifra .v{overflow-wrap:anywhere;font-size:clamp(1.05rem,4.6vw,1.25rem);font-weight:600;font-variant-numeric:tabular-nums}
 .con-cifra .n{font-size:.78rem;color:var(--tinta2)}
 .con-nota{font-size:.82rem;color:var(--tinta2)}
 @media(max-width:560px){.con-tab{flex:1 1 auto;padding:.5rem .6rem}.con-tabla{font-size:.88rem}}

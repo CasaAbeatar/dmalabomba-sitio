@@ -30,8 +30,6 @@ import { api, funcion } from './api.js';
 import { clientesTodos, clienteActivar } from './api_clientes.js';
 import { UBICACIONES } from './data_ubicaciones.js';
 import { cargarCss, campo, aviso, conBotonM, mensajeSeguro } from './ui_mant.js';
-import { crearEspejoClienteNuevo } from './pantalla_cliente_nuevo.js';
-import { infoActividad } from './actividades.js';
 import { crearCampoIdentificacion, leerCorreos, llevaLetras, limpiarNumeroId } from './ui_cedula.js';
 import { TARIFAS_CLIENTE, tarifaHabitual, clienteTraeTarifa } from './iva.js';
 import { revisarClienteConClaude } from './claude_ayuda.js';
@@ -71,7 +69,7 @@ export function abrirFormCliente(app, cliente, { alGuardar, alCambiarEstado, tit
   const esNuevo = !c.id;
   let activo = c.activo !== false; // un cliente desactivado no aparece al buscar cliente para facturar
   const err = h('div.error-caja', { hidden: true, role: 'alert' });
-  const rapido = false; // Decisión de Emil (6 nov 2026): ya no hay «Agregar más datos del cliente» detrás de un botón; al agregar un cliente nuevo (también desde Facturación o Anular) todos los datos salen a la vista, en el orden de siempre (el parámetro «completo» queda sin efecto)
+  const rapido = esNuevo && !completo; // cliente nuevo desde Facturación o Anular: formulario rápido, lo opcional queda detrás de «Agregar más datos del cliente»
   let masBloque = null, masBtn = null; // se arman más abajo (solo en el formulario rápido)
   const abrirMas = (abrir) => { if (!masBloque) return; masBloque.hidden = !abrir; masBtn.replaceChildren(h('b', abrir ? 'Ocultar los datos opcionales' : 'Agregar más datos del cliente (opcional)'), h('small', abrir ? 'Lo que escribió aquí se guarda igual.' : 'Nombre comercial, otros correos, teléfono, dirección, tarifa de IVA, exoneración y notas. Hacienda no los pide para facturar.')); masBtn.setAttribute('aria-expanded', String(abrir)); };
   const mostrarError = (m, campoEl) => {
@@ -190,6 +188,7 @@ export function abrirFormCliente(app, cliente, { alGuardar, alCambiarEstado, tit
     },
     accionDuplicado: { texto: 'Abrir el cliente que ya existe', fn: (otro) => { m.cerrar(); abrirFormCliente(app, otro, { alGuardar, alCambiarEstado, titulo }); } },
     numeroInicial: esNuevo ? numeroInicial : '',
+    alTerminar: () => { [correos[0]].find((x) => !x.value.trim())?.focus(); },
   });
 
   // Tipo 05 «Extranjero no domiciliado»: Hacienda no acepta factura para ese tipo (la base frena el cobro, sql/30a y 30b). Se avisa al elegirlo, para que nadie se entere al cobrar.
@@ -397,6 +396,7 @@ export function abrirFormCliente(app, cliente, { alGuardar, alCambiarEstado, tit
   const pieFicha = !esNuevo && c.creado_en ? h('small.tenue', 'Cliente agregado el ' + new Intl.DateTimeFormat('es-CR', { timeZone: 'America/Costa_Rica', dateStyle: 'long' }).format(new Date(c.creado_en)) + '.') : null;
   if (rapido) {
     masBloque = h('div.mt-form', { hidden: true, id: 'mt-mas-datos' },
+      bloqueComercial,
       h('fieldset', h('legend', 'Otros correos (opcionales)'), bloqueOtrosCorreos),
       bloqueTelefono, bloqueDireccion, bloqueTarifa, bloqueExo, bloqueNotas);
     masBtn = h('button.btn.mt-mas', { type: 'button', 'aria-expanded': 'false', 'aria-controls': 'mt-mas-datos', onclick: () => abrirMas(masBloque.hidden) });
@@ -404,8 +404,7 @@ export function abrirFormCliente(app, cliente, { alGuardar, alCambiarEstado, tit
   }
   const cuerpo = rapido
     ? h('div.mt-form', err,
-      // Orden de Emil (6 nov 2026): cédula, nombre (Hacienda), nombre comercial, actividad, correo; después (en «más datos») otros correos, teléfono, dirección y lo demás
-      h('fieldset', h('legend', 'Datos del cliente'), ced.el, avisoTipo05, bloqueComercial, actividadBloque),
+      h('fieldset', h('legend', 'Datos del cliente'), ced.el, avisoTipo05, actividadBloque),
       bloqueCorreo(),
       bloqueClaude, masBtn, masBloque)
     : h('div.mt-form',
@@ -446,44 +445,8 @@ export function abrirFormCliente(app, cliente, { alGuardar, alCambiarEstado, tit
     preguntarSalir();
     return sinAvisoFlotante('Tiene cambios sin guardar.');
   };
-  // Doble pantalla: mientras se llena un cliente NUEVO, la pantalla del cliente muestra a pantalla completa lo que se va escribiendo (solo si ya está abierta).
-  // Cada dato aparece cuando la persona llega a ese campo y lo llena, no antes (lo que Hacienda llena solo en otros campos, como la actividad, no sale hasta tocarlo).
-  // La cédula y el nombre salen de una vez: es lo primero que el cliente debe confirmar.
-  const tocados = new Set();
-  const llaveDe = (el) => {
-    if (!el || !el.closest) return '';
-    if (el === comercial || botonesComercial.some((b) => b === el || b.contains(el))) return 'comercial';
-    if (el === ced.actividad) return 'act';
-    const ic = correos.indexOf(el); if (ic >= 0) return 'c' + ic;
-    if (el === telefono) return 'tel';
-    if ([prov, cant, dist, barrio, senas].includes(el)) return 'dir';
-    return '';
-  };
-  const tocar = (e) => { const k = llaveDe(e.target); if (k) tocados.add(k); };
-  cuerpo.addEventListener('focusin', tocar);
-  cuerpo.addEventListener('pointerdown', tocar, true);
-  const espejo = esNuevo ? crearEspejoClienteNuevo({
-    empresa: /soda/i.test(String(app?.empresa?.codigo || app?.soc?.codigo_acceso || app?.soc?.codigo || '')) ? 'soda' : 'pollos',
-    leer: () => {
-      const v = ced.valores();
-      const nom = (sel) => (sel.value ? String(sel.selectedOptions[0]?.textContent || '').trim() : '');
-      const idOk = String(v.identificacion || '').length >= 9 || !!String(v.nombre || '').trim();
-      const cv = (i) => (tocados.has('c' + i) ? correos[i].value.trim() : '');
-      const lugar = [barrio.value.trim(), nom(dist), nom(cant), nom(prov)].filter(Boolean).join(', ');
-      const sn = senas.value.trim();
-      const cod = tocados.has('act') ? String(v.actividad_codigo || '').trim() : '';
-      const info = cod ? infoActividad(cod) : null;
-      return {
-        tipo_id: idOk ? v.tipo_id || '' : '', identificacion: idOk ? v.identificacion || '' : '', nombre: String(v.nombre || '').trim(),
-        nombre_comercial: tocados.has('comercial') ? valorComercial() : '',
-        actividad: cod ? (info && info.nombre !== 'Actividad sin nombre en la lista' ? info.texto : cod) : '',
-        correo: cv(0), correos_extra: correos.map((_, i) => (i ? cv(i) : '')).filter(Boolean), telefono: tocados.has('tel') ? telefono.value.trim() : '',
-        direccion: tocados.has('dir') ? [lugar, sn].filter(Boolean).join('. ') : '',
-      };
-    },
-  }) : null;
   const m = modal({
-    titulo: titulo || (esNuevo ? 'Agregar cliente' : 'Cliente: ' + nombrePropio(c.nombre)), contenido: cuerpo, ancho: 760, alCerrar: () => { ced.destruir(); espejo?.cerrar(); }, bloqueo,
+    titulo: titulo || (esNuevo ? 'Agregar cliente' : 'Cliente: ' + nombrePropio(c.nombre)), contenido: cuerpo, ancho: 760, alCerrar: () => ced.destruir(), bloqueo,
     botones: [{ texto: 'Cancelar', clase: 'suave', onclick: (x) => { const b = bloqueo(); if (!b) x(); else if (typeof b === 'string') toast(b, 'error', 5000); } }, { texto: esNuevo ? 'Guardar cliente' : 'Guardar cambios', clase: 'primario', onclick: (x) => guardar(x) }],
   });
   if (esNuevo) ced.enfocar();

@@ -1,9 +1,10 @@
 // Mover entre bodegas (fx_inv_trasladar), Salidas y mermas (fx_inv_salida: consumo, merma, devolución; fx_inv_porcionar) y, para administradores,
 // Corregir existencias (fx_inv_ajustar) y Entrada manual (fx_inv_entrada_manual). Toda salida consume por FEFO: primero lo que vence primero.
 // Cada formulario es UNA intención: su clave de repetición se crea al primer toque y se reutiliza en «Reintentar» (m_inv_comun.js, accionSegura).
-import { h, money, num, horaCorta, sumaDias } from './util.js';
+import { h, money, num, horaCorta, sumaDias, toast } from './util.js';
 import { graficoColumnas, autoAjustar } from './graficos.js';
 import { inv, cant, dinero } from './api_inventarios.js';
+import { cargarCssPantallas } from './inv_pantallas_css.js';
 import {
   ventana, dialogo, cargando, falla, vacio, aviso, cantTxt, costoTxt, unidadTxt, dma, plural, empresaChip, chipEmpresaId, selectUbicacion, nombreUbicacion,
   elegirArticulo, opcionDeArticulo, campoCantidad, leerMonto, accionSegura, rotular, repetidaTxt, enfocar, poner } from './m_inv_comun.js';
@@ -28,10 +29,62 @@ function listaHoy(ctx, filas, vacioTxt) {
     h('span.inv-mov-val.cifra', money(Math.abs(Number(m.valor) || 0))))));
 }
 
+/* ---------- Deshacer un traslado (solo administración): la lista de traslados recientes, cada uno con su botón; la confirmación se abre en la misma fila ---------- */
+const MOTIVOS_DESHACER = ['Se movió por error', 'Cantidad equivocada', 'Destino equivocado'];
+function trasladosParaDeshacer(ctx) {
+  const caja = h('div', cargando('Buscando los traslados de los últimos 30 días…'));
+  let abierta = null; // operación con la confirmación abierta: se conserva si la lista se vuelve a pintar
+  const resumenArts = (t) => {
+    const arts = t.articulos || [];
+    return [...arts.slice(0, 3).map((a) => h('li', h('span', a.articulo), h('strong.cifra', cantTxt(a.cantidad, a.unidad)))),
+      arts.length > 3 ? h('li.tenue', 'y ' + plural(arts.length - 3, 'artículo más', 'artículos más')) : null];
+  };
+  function fila(t) {
+    const panel = h('div.inv-tr-panel', { hidden: abierta !== t.operacion_id });
+    const zona = h('div');
+    const motivo = h('input.campo', { type: 'text', maxlength: 160, 'aria-label': 'Motivo para deshacer el traslado (obligatorio)', placeholder: 'Por qué se deshace (obligatorio)' });
+    const ok = h('button.btn.primario', { type: 'button' }, 'Sí, deshacer el traslado');
+    const no = h('button.btn', { type: 'button', onclick: () => { abierta = null; panel.hidden = true; abrir.focus(); } }, 'No, dejarlo así');
+    const abrir = h('button.btn.inv-tr-btn', { type: 'button', 'aria-expanded': String(abierta === t.operacion_id), onclick: () => { abierta = t.operacion_id; panel.hidden = false; abrir.setAttribute('aria-expanded', 'true'); motivo.focus({ preventScroll: false }); } }, 'Deshacer este traslado');
+    panel.append(
+      h('p.inv-tr-que', h('strong', 'Se devolverá a ' + t.origen + ' lo que hoy está en ' + t.destino + ':'), ' ' + (t.articulos || []).map((a) => a.articulo + ' (' + cantTxt(a.cantidad, a.unidad) + ')').join(', ') + '. Valor al costo, sin IVA: ' + money(t.valor_total) + '.'),
+      h('label.etq', 'Motivo (obligatorio)', motivo),
+      h('div.inv-rapidos', MOTIVOS_DESHACER.map((m) => h('button.btn.chico.inv-rapido', { type: 'button', onclick: () => { motivo.value = m; motivo.focus(); } }, m))),
+      zona,
+      h('div.inv-tr-acc', no, ok));
+    const acc = accionSegura({ boton: ok, zona, ocupado: 'Deshaciendo…',
+      hacer: (idem) => inv.trasladoDeshacer(t.operacion_id, leerMotivo(motivo, true), idem),
+      alFallar: () => { zona.append(h('p.tenue.inv-chico', 'Si de todos modos hay que devolverlo, haga un traslado en sentido contrario con «Hacer un traslado»: queda registrado como dos traslados.')); },
+      alTerminar: (r, { repetida }) => { abierta = null; toast('Listo: se deshizo el traslado de ' + t.origen + ' a ' + t.destino + ' (' + money(r.valor_total) + ').' + repetidaTxt(repetida), 'ok', 6000); } });
+    ok.addEventListener('click', () => acc.ejecutar());
+    const deshecho = !!t.deshecho;
+    return h('article.inv-tr' + (deshecho ? '.deshecho' : ''), { 'data-op': t.operacion_id },
+      h('div.inv-tr-fila',
+        h('div.inv-tr-dato', h('strong', t.origen + ' → ' + t.destino), h('small', [dma(t.fecha) + ' ' + horaCorta(t.creado_en), t.usuario === 'sistema' ? 'el sistema' : t.usuario, t.motivo && !/^traslado deshecho/i.test(t.motivo) ? '«' + t.motivo + '»' : ''].filter(Boolean).join(' · '))),
+        h('ul.inv-tr-arts', resumenArts(t)),
+        h('span.inv-tr-val.cifra', money(t.valor_total)),
+        deshecho ? h('span.chip.inv-tr-chip', 'Deshecho') : abrir),
+      deshecho ? h('p.tenue.inv-chico.inv-tr-nota', 'Deshecho el ' + dma(String(t.deshecho_en).slice(0, 10)) + (t.deshecho_por ? ' por ' + t.deshecho_por : '') + (t.deshecho_motivo ? ' · ' + t.deshecho_motivo.replace(/^Traslado deshecho:?\s*/i, '') : '') + '.') : panel);
+  }
+  async function cargar() {
+    try {
+      const d = await inv.trasladosRecientes(30, 60);
+      const lista = d.traslados || [];
+      poner(caja, lista.length ? h('div.inv-trs', lista.map(fila)) : vacio('En los últimos 30 días no se ha hecho ningún traslado.'));
+    } catch (e) { poner(caja, falla(e, cargar, 'No se pudieron cargar los traslados recientes')); }
+  }
+  const el = h('section.inv-grupo', h('h3', 'Deshacer un traslado', h('span.chip.inv-solo-admin', 'Solo administradores')),
+    h('p.tenue', 'Los traslados de los últimos 30 días. Solo se puede deshacer uno cuya mercadería sigue completa en el destino; si ya se vendió o se movió otra vez, el sistema lo dice con las palabras de lo que pasó.'), caja);
+  return { el, cargar };
+}
+
 async function seccionMover(ctx, pedido) {
+  await cargarCssPantallas();
   const hoyLista = h('div', cargando('Cargando los traslados de hoy…'));
+  const deshacer = ctx.esAdmin ? trasladosParaDeshacer(ctx) : null;
   let vivo = true;
   const cargar = async () => {
+    deshacer?.cargar();
     try {
       const d = await inv.movimientos(ctx.hoy, ctx.hoy, { tipo: 'traslado_salida', limite: 500 });
       if (vivo) poner(hoyLista, listaHoy(ctx, d.filas || [], 'Hoy no se ha trasladado nada.'));
@@ -41,8 +94,11 @@ async function seccionMover(ctx, pedido) {
   document.addEventListener('inv:cambio', alCambio);
   const v = ventana({ titulo: 'Mover entre bodegas', contenido: [
     h('div.inv-ventana-cab', h('p', 'Pasar mercadería de la bodega central a un local, o de un lugar a otro. Lo que se mueve conserva su vencimiento, su costo y su empresa de origen.')),
-    h('div.inv-acciones-grandes', h('button.btn.primario.grande', { type: 'button', onclick: () => formTraslado(ctx, {}) }, 'Hacer un traslado')),
-    h('section.inv-grupo', h('h3', 'Traslados de hoy'), hoyLista)],
+    h('div.inv-acciones-grandes',
+      h('button.btn.primario.grande', { type: 'button', onclick: async () => (await import('./m_inv_mover_cat.js')).formTrasladoCategoria(ctx, {}) }, 'Mover productos por categoría'),
+      h('button.btn.grande', { type: 'button', onclick: () => formTraslado(ctx, {}) }, 'Hacer un traslado de un artículo')),
+    h('section.inv-grupo', h('h3', 'Traslados de hoy'), hoyLista),
+    deshacer ? deshacer.el : null],
   alCerrar: () => { vivo = false; document.removeEventListener('inv:cambio', alCambio); } });
   await cargar();
   enfocar(v.cuerpo);
@@ -87,11 +143,12 @@ async function seccionSalidas(ctx, pedido) {
   const alCambio = () => { if (vivo) cargar(); };
   document.addEventListener('inv:cambio', alCambio);
   const v = ventana({ titulo: 'Salidas y mermas', contenido: [
-    h('div.inv-ventana-cab', h('p', 'Registre lo que se usó (consumo), lo que se dañó o se botó (merma) y el porcionado. Siempre sale primero lo que vence primero.')),
+    h('div.inv-ventana-cab', h('p', 'Registre lo que se usó (consumo), lo que se dañó o se botó (merma) y el porcionado. Siempre sale primero lo que vence primero. Lo que descuenta solo el modelo de salida automática se ve en el cuarto botón.')),
     h('div.inv-acciones-grandes',
       h('button.btn.primario.grande', { type: 'button', onclick: () => formSalida(ctx, { tipo: 'merma' }) }, 'Registrar una merma'),
       h('button.btn.grande', { type: 'button', onclick: () => formSalida(ctx, { tipo: 'consumo' }) }, 'Registrar un consumo'),
-      h('button.btn.grande', { type: 'button', onclick: () => formPorcionar(ctx, {}) }, 'Porcionar')),
+      h('button.btn.grande', { type: 'button', onclick: () => formPorcionar(ctx, {}) }, 'Porcionar'),
+      ctx.esAdmin ? h('button.btn.grande', { type: 'button', onclick: async () => (await import('./m_inv_modelo.js')).abrir(ctx) }, 'Ver las salidas automáticas del modelo') : null),
     h('section.inv-grupo', h('h3', 'Salidas de hoy'), hoyLista),
     h('section.inv-grupo', h('h3', 'Mermas y vencimientos de este mes'), mes)],
   alCerrar: () => { vivo = false; quitarGrafico?.(); document.removeEventListener('inv:cambio', alCambio); } });
@@ -206,7 +263,7 @@ function leerMotivo(campo, obligatorio) {
   return m || null;
 }
 // Formulario de una sola intención: el botón principal hace la llamada; al terminar se muestra el resultado y se ofrece «Hacer otro»
-function formulario({ titulo, ancho = 760, partes, boton, ocupado, hacer, resultado, otro, alFallar }) {
+export function formulario({ titulo, ancho = 760, partes, boton, ocupado, hacer, resultado, otro, alFallar }) {
   const zona = h('div');
   const caja = h('div.inv-form', partes, zona);
   const fin = h('div.inv-form-fin', { hidden: true });

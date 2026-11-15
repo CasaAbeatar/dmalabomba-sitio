@@ -1,0 +1,94 @@
+/* Pantallas de inventario agregadas el 7 nov 2026: deshacer traslados, destino sugerido al recibir y pendiente por proveedor.
+   Mismos colores, misma letra y mismas líneas finas del resto de Inventarios; todo en filas (nada que se deslice de lado). */
+
+/* ---- Deshacer un traslado (Mover entre bodegas) ---- */
+.inv-solo-admin{margin-left:.5rem;font-size:.78rem;font-weight:600;color:var(--tinta2)}
+.inv-trs{display:grid;border:1px solid var(--linea);border-radius:14px;background:#fff;overflow:hidden}
+.inv-tr{padding:.8rem 1rem;border-bottom:1px solid var(--linea)}
+.inv-tr:last-child{border-bottom:0}
+.inv-tr.deshecho{background:var(--fondo)}
+.inv-tr.deshecho .inv-tr-dato strong,.inv-tr.deshecho .inv-tr-arts{color:var(--tinta2)}
+.inv-tr-fila{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1.4fr) auto auto;gap:.4rem 1.1rem;align-items:center}
+.inv-tr-dato{display:flex;flex-direction:column;gap:.12rem;min-width:0}
+.inv-tr-dato small{color:var(--tinta2);font-size:.86rem;overflow-wrap:anywhere}
+.inv-tr-arts{list-style:none;margin:0;padding:0;display:grid;gap:.15rem;font-size:.92rem;min-width:0}
+.inv-tr-arts li{display:flex;justify-content:space-between;gap:.8rem}
+.inv-tr-arts li span{overflow-wrap:anywhere}
+.inv-tr-val{white-space:nowrap;text-align:right}
+.inv-tr-chip{justify-self:end}
+.inv-tr-nota{margin:.35rem 0 0}
+.inv-tr-panel{margin-top:.75rem;padding:.8rem .95rem;border:1px solid var(--borde-ambar);border-left-width:4px;border-radius:var(--r);background:var(--ambar-suave);color:#5c3b00;display:flex;flex-direction:column;gap:.6rem}
+.inv-tr-panel[hidden]{display:none}
+.inv-tr-que{margin:0}
+.inv-tr-acc{display:flex;flex-wrap:wrap;gap:.6rem;justify-content:flex-end}
+@media (max-width:760px){
+  .inv-tr-fila{grid-template-columns:minmax(0,1fr) auto}
+  .inv-tr-dato,.inv-tr-arts{grid-column:1/-1}
+  .inv-tr-val{text-align:left}
+  .inv-tr-acc .btn{flex:1 1 100%}
+}
+
+/* ---- Destino sugerido por la categoría (Por recibir, dentro de cada línea) ---- */
+.rc-c-dest small.rc-dest-aviso,.rc-dest-aviso{display:block;margin-top:.3rem;font-size:.85rem;line-height:1.35;white-space:normal;overflow:visible;text-overflow:clip;overflow-wrap:anywhere}
+.rc-dest-aviso[hidden]{display:none}
+.rc-c-dest small.rc-dest-aviso.ok,.rc-dest-aviso.ok{color:var(--verde)}
+.rc-c-dest small.rc-dest-aviso.distinto,.rc-dest-aviso.distinto{color:#5c3b00;padding:.4rem .55rem;border:1px solid var(--borde-ambar);border-left-width:4px;border-radius:8px;background:var(--ambar-suave);color:#5c3b00}
+.rc-dest-aviso .rc-dest-volver{margin-top:.35rem;min-height:40px}
+
+/* ---- Pendiente desde el 1 de octubre, por proveedor (Por recibir) ---- */
+.rc-pp{border:1px solid var(--linea);border-radius:14px;background:#fff;margin:.2rem 0 .8rem}
+.rc-pp>summary{cursor:pointer;padding:.8rem 1rem;display:flex;flex-wrap:wrap;gap:.2rem .8rem;align-items:baseline;min-height:48px}
+.rc-pp-res{color:var(--tinta2);font-size:.9rem}
+.rc-pp-filtros{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.6rem 1rem;padding:0 1rem .6rem}
+.rc-pp-cuerpo{display:grid;border-top:1px solid var(--linea)}
+.rc-pp-prov{border-bottom:1px solid var(--linea)}
+.rc-pp-prov:last-child{border-bottom:0}
+.rc-pp-prov>summary{cursor:pointer;padding:.65rem 1rem;display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1.4fr) minmax(0,1fr);gap:.2rem 1rem;align-items:baseline;min-height:48px}
+.rc-pp-datos,.rc-pp-ant{color:var(--tinta2);font-size:.9rem}
+.rc-pp-facs{list-style:none;margin:0;padding:.2rem 1rem .8rem;display:grid;gap:.4rem}
+.rc-pp-facs li{display:grid;grid-template-columns:minmax(0,1.6fr) auto auto auto auto;gap:.3rem .9rem;align-items:center;padding:.4rem 0;border-top:1px solid var(--linea)}
+.rc-pp-facs li:first-child{border-top:0}
+@media (max-width:760px){
+  .rc-pp-filtros{grid-template-columns:1fr}
+  .rc-pp-prov>summary{grid-template-columns:1fr}
+  .rc-pp-facs li{grid-template-columns:1fr auto}
+  .rc-pp-fac{grid-column:1/-1}
+}
+
+/* Mover por categoría (7 nov 2026) — prefijo inv-mc- */
+.inv-mc-cats { display: flex; flex-wrap: wrap; gap: .4rem; margin: .4rem 0 .8rem; }
+.inv-mc-lista { display: flex; flex-direction: column; gap: .5rem; max-height: 46vh; overflow-y: auto; padding: .2rem; margin: .6rem 0; }
+.inv-mc-fila { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .6rem; padding: .6rem .7rem; border: 1px solid var(--borde, #d8d2c4); border-radius: .6rem; }
+.inv-mc-fila.marcada { border-color: var(--primario, #b3261e); }
+.inv-mc-nombre { display: flex; align-items: center; gap: .6rem; min-width: 0; flex: 1 1 14rem; }
+.inv-mc-nombre input { width: 1.4rem; height: 1.4rem; flex: none; }
+.inv-mc-nombre span { display: flex; flex-direction: column; min-width: 0; }
+.inv-mc-cant { display: flex; align-items: flex-end; gap: .5rem; flex: 0 1 15rem; }
+.inv-mc-resumen { font-weight: 600; margin: .4rem 0 .8rem; }
+
+/* Modelo de salidas (7 nov 2026) — prefijo inv-ms- */
+.inv-ms { display: flex; flex-direction: column; gap: 1.2rem; }
+.inv-ms section { display: flex; flex-direction: column; gap: .5rem; }
+.inv-ms-lista { display: flex; flex-direction: column; gap: .5rem; }
+.inv-ms-fila { padding: .7rem .8rem; border: 1px solid var(--borde, #d8d2c4); border-radius: .6rem; display: flex; flex-direction: column; gap: .3rem; }
+.inv-ms-fila p { margin: 0; }
+.inv-ms-tit { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; justify-content: space-between; }
+.inv-ms-graf { max-width: 100%; color: inherit; }
+.inv-ms-glos dt { font-weight: 700; margin-top: .6rem; }
+.inv-ms-glos dd { margin: .1rem 0 0; }
+.inv-ms-nota { border-top: 1px solid var(--borde, #d8d2c4); padding-top: .8rem; }
+
+.inv-ms h3 { margin: 0; font-size: 1.05rem; }
+.inv-ms h4 { margin: .4rem 0 0; font-size: .95rem; }
+.inv-ms p { margin: 0; }
+.inv-ms-hoy { gap: .35rem; }
+.inv-ms-datos { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.inv-ms-datos li { display: flex; justify-content: space-between; gap: 1rem; padding: .4rem 0; border-bottom: 1px solid var(--borde, #d8d2c4); }
+.inv-ms-datos li > span { min-width: 0; }
+.inv-ms-tit .chip { margin-left: .3rem; }
+.inv-ms-glos { margin: 0; }
+
+.inv-ms-graf { overflow-x: auto; max-width: 760px; }
+.inv-ms-graf svg { min-width: 520px; }
+.inv-ms-datos li > strong { flex-shrink: 0; white-space: nowrap; }
+.inv-ms-graf svg { min-width: 440px; }

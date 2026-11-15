@@ -2,8 +2,9 @@
 // La propuesta viene armada (por lo aprendido de ese proveedor, por el CABYS o por lo que ya entró a Inventarios): se confirma en la misma fila, sin otra ventana.
 import { h, money, hoyCR, esqueleto, bloqueError, textoDeError, toast, conBoton } from './util.js';
 import { selectorPeriodo, fechaDMA, textoRango } from './periodo.js';
-import { compras, compra, compraConfirmar, comprasAceptarSugerencias, reglas, reglaQuitar, catalogo } from './api_contable.js';
+import { compras, compra, compraAsiento, compraConfirmar, comprasAceptarSugerencias, reglas, reglaQuitar, catalogo } from './api_contable.js';
 import { llenar } from './c_comun.js';
+import { pintarAsiento } from './c_asiento.js';
 
 const FILTROS = [['por_clasificar', 'Por clasificar'], ['listas', 'Listas para contabilizar'], ['contabilizadas', 'Contabilizadas'], ['todas', 'Todas']];
 const FUENTE = { regla: 'Aprendido de este proveedor', inventario: 'Entró a Inventarios', categoria: 'Por el tipo de producto (CABYS)' };
@@ -36,12 +37,12 @@ export default {
           h('strong', money(f.total)), ' ', h('span.chip' + (cls ? '.' + cls : ''), txt), f.provisional ? h('span.chip.espera', { title: 'Contabilizada con cuentas sin confirmar' }, 'Provisional') : null, f.asiento ? h('span.con-nota', ' asiento ' + f.asiento) : null), cuerpo);
       det.addEventListener('toggle', async () => {
         if (!det.open || cargada) return; cargada = true; llenar(cuerpo, esqueleto(1, 'Cargando las líneas…'));
-        try { pintarDetalle(cuerpo, await compra(soc.id, f.clave), f, alCambiar); } catch (e) { cargada = false; llenar(cuerpo, bloqueError({ titulo: 'No se pudo cargar la factura', mensaje: textoDeError(e), alReintentar: () => { cargada = false; det.open = false; det.open = true; } })); }
+        try { const [d, as] = await Promise.all([compra(soc.id, f.clave), compraAsiento(soc.id, f.clave).catch(() => null)]); await pintarDetalle(cuerpo, d, f, alCambiar, as); } catch (e) { cargada = false; llenar(cuerpo, bloqueError({ titulo: 'No se pudo cargar la factura', mensaje: textoDeError(e), alReintentar: () => { cargada = false; det.open = false; det.open = true; } })); }
       });
       return det;
     }
 
-    function pintarDetalle(cuerpo, d, f, alCambiar) {
+    async function pintarDetalle(cuerpo, d, f, alCambiar, as) {
       const sel = new Map(), apr = new Map();
       const filas = d.lineas.map((l) => {
         const s = h('select.campo', { 'aria-label': 'Cuenta para ' + l.detalle }, h('option', { value: '' }, 'Escoja la cuenta'), opciones(l.efectiva));
@@ -53,14 +54,10 @@ export default {
           h('div.con-fila', l.confirmada ? h('span.chip.ok', 'Confirmada') : l.sugerida ? h('span.chip', 'Propuesta: ' + (FUENTE[l.fuente] || '')) : h('span.chip.mal', 'Sin propuesta: escoja la cuenta'),
             h('label.etq', { style: 'flex-direction:row;align-items:center;gap:.4rem' }, cb, 'Recordar para próximas facturas de este proveedor')));
       });
-      const previa = d.previa, lineasP = (previa?.lineas || []);
-      const nombre = (id) => { const c = cuentas.find((x) => x.id === id); return c ? c.codigo + ' ' + c.nombre : id; };
-      const resumen = h('details', h('summary', 'Ver cómo quedaría el asiento'), h('div.tabla-caja', h('table.con-tabla', h('thead', h('tr', h('th', 'Cuenta'), h('th.der', 'Debe'), h('th.der', 'Haber'))),
-        h('tbody', lineasP.map((l) => h('tr', h('td', nombre(l.cuenta_id)), h('td.der', l.debe ? money(l.debe) : ''), h('td.der', l.haber ? money(l.haber) : ''))))),
-        h('p.con-nota', 'Es la propuesta con las cuentas de arriba tal como están guardadas; al confirmar se recalcula con lo que usted escoja.')));
+      const resumen = as ? await pintarAsiento(as) : null;
       llenar(cuerpo, 
         d.asiento ? h('p.con-nota', 'Contabilizada en el asiento ' + d.asiento + (d.provisional ? ' (provisional: ' + (d.provisional_motivo || 'cuentas sin confirmar') + ')' : '') + '. Si cambia una cuenta y confirma, el asiento se reversa y se hace uno nuevo.') : null,
-        filas, lineasP.length ? resumen : null,
+        filas, resumen,
         h('div.con-acciones', h('button.btn.primario', { type: 'button', onclick: (e) => conBoton(e.currentTarget, async () => {
           const falta = [...sel.entries()].filter(([, s]) => !s.value);
           if (falta.length) { toast('Falta escoger la cuenta de ' + falta.length + (falta.length === 1 ? ' línea' : ' líneas'), 'error'); falta[0][1].focus(); return; }

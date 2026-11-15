@@ -71,10 +71,12 @@ export const MODULOS = [
   { id: 'listados', titulo: 'Informes', descripcion: 'Ventas por hora y por día, por tarifa de IVA y por medio de pago', grupo: 'admin', ruta: 'admin/informes', icono: 'barras', orden: 20, soloAdmin: true, cargar: () => import('./m_listados.js') },
   { id: 'semanal', alias: ['informe-semanal'], titulo: 'Informe semanal', descripcion: 'El informe de la semana con sus gráficos de planilla y costos, y el historial de semanas', grupo: 'admin', ruta: 'admin/informe-semanal', icono: 'barras', orden: 21, soloAdmin: true, cargar: () => import('./m_semanal.js') },
   { id: 'pago_sin_factura', alias: ['pago-sin-factura'], titulo: 'Pago sin factura', descripcion: 'Registrar lo pagado a quien no factura y emitir la factura electrónica de compra', grupo: 'admin', ruta: 'admin/pago-sin-factura', icono: 'libro', orden: 26, soloAdmin: true, cargar: () => import('./m_pago_sin_factura.js') },
+  { id: 'cotizaciones', titulo: 'Cotizaciones', descripcion: 'Precios para un cliente: se mandan, se aceptan y pasan a Caja sin volver a escribirlas', grupo: 'admin', ruta: 'admin/cotizaciones', icono: 'libro', orden: 27, soloAdmin: true, cargar: () => import('./m_cotizaciones.js') },
+  { id: 'recurrentes', alias: ['pedidos-fijos'], titulo: 'Pedidos fijos', descripcion: 'Clientes que piden lo mismo cada semana o cada mes: el sistema lo prepara y usted lo confirma', grupo: 'admin', ruta: 'admin/pedidos-fijos', icono: 'emitidas', orden: 27.5, soloAdmin: true, insignia: (app) => { const n = Number(app.recurrentes?.pendientes) || 0; return n > 0 ? { texto: n === 1 ? '1 por confirmar' : n + ' por confirmar', urgente: false } : null; }, cargar: () => import('./m_recurrentes.js') },
   { id: 'emitidas', alias: ['facturas-emitidas'], titulo: 'Facturas emitidas', descripcion: 'Buscar facturas y tiquetes de cualquier fecha y ver si Hacienda los aceptó', grupo: 'admin', ruta: 'admin/facturas-emitidas', icono: 'emitidas', orden: 25, soloAdmin: true, cargar: () => import('./m_facturas_emitidas.js') },
   { id: 'contabilidad', alias: ['recepcion', 'contable', 'admin/contable'], titulo: 'Contabilidad', descripcion: 'Facturas de proveedores y respuesta a Hacienda, cuentas, asientos, IVA, formularios y estados', grupo: 'admin', ruta: 'admin/contabilidad', icono: 'libro', orden: 30, soloAdmin: true, insignia: insigniaContable, cargar: () => import('./m_contabilidad.js') },
   { id: 'inventarios', titulo: 'Inventarios', descripcion: 'Bodega central y locales: lo que entra, lo que sale y lo que vence', grupo: 'admin', ruta: 'admin/inventarios', icono: 'bodega', orden: 35, soloAdmin: true, insignia: insigniaInventarios, cargar: () => import('./m_inventarios.js') },
-  { id: 'bodega', titulo: 'Bodega', descripcion: 'Qué hay en cada local, mínimos propuestos, alertas de bajo mínimo y conteo físico', grupo: 'admin', ruta: 'admin/bodega', icono: 'bodega', orden: 36, soloAdmin: true, cargar: () => import('./m_bodega.js') },
+  { id: 'bodega', titulo: 'Bodega', descripcion: 'Qué hay en cada local, mínimos propuestos, alertas de bajo mínimo y conteo físico', grupo: 'admin', ruta: 'admin/bodega', icono: 'bodega', orden: 36, soloAdmin: true, dentroDe: 'inventarios', cargar: () => import('./m_bodega.js') },
   { id: 'usuarios', titulo: 'Usuarios', descripcion: 'Las personas que usan el sistema, su clave y quién ingresó', grupo: 'admin', ruta: 'admin/usuarios', icono: 'usuario', orden: 40, soloAdmin: true, insignia: insigniaUsuarios, cargar: () => import('./m_usuarios.js') },
   { id: 'numeracion', titulo: 'Numeración', descripcion: 'En qué modo está el sistema, qué número sigue y qué falta para facturar de verdad', grupo: 'admin', ruta: 'admin/numeracion', icono: 'numeracion', orden: 45, soloAdmin: true, cargar: () => import('./m_numeracion.js') },
   { id: 'pantalla_cliente', alias: ['pantalla-cliente'], titulo: 'Pantalla del cliente', descripcion: 'Emparejar la pantalla que mira el cliente y manejar la publicidad que se muestra', grupo: 'admin', ruta: 'admin/pantalla-cliente', icono: 'aviso', orden: 45.5, soloAdmin: true, cargar: () => import('./m_pantalla_cliente.js') },
@@ -88,7 +90,7 @@ export const MODULOS = [
 /* ---------- Consultas sobre el registro (las usa main.js) ---------- */
 const PADRE = { principal: 'inicio', admin: 'admin' };
 const ordenados = (l) => l.slice().sort((a, b) => (a.orden || 0) - (b.orden || 0));
-export const modulosDe = (grupo, app) => ordenados(MODULOS.filter((m) => m.grupo === grupo && (!m.soloAdmin || !app || app.admin)));
+export const modulosDe = (grupo, app) => ordenados(MODULOS.filter((m) => m.grupo === grupo && !m.dentroDe && (!m.soloAdmin || !app || app.admin)));
 export const hayModulo = (idORuta) => buscar(idORuta);
 export function buscar(clave) {
   const k = String(clave ?? '').replace(/^#\/?/, '').toLowerCase();
@@ -120,3 +122,20 @@ export function descripcionDe(m, app) {
   if (m.emite && app?.soc?.puede_emitir === false) return 'No disponible en esta empresa';
   return m.descripcion || '';
 }
+
+// Navegación lateral del administrador (aprobada 9 nov 2026): 6 grupos, dos niveles. Un módulo aparece en UN solo grupo; los ids no cambian.
+// `nav.hoy` es la pantalla de inicio (Hoy). El orden dentro de cada grupo es el de esta lista. En el celular: Hoy, Vender, Inventario, Conta y «Más» (Informes y Sistema).
+export const GRUPOS_NAV = [
+  { id: 'hoy', titulo: 'Hoy', ruta: 'inicio', icono: 'caja', items: [] },
+  { id: 'vender', titulo: 'Vender', corto: 'Vender', icono: 'facturar', items: ['caja', 'turno', 'anular', 'clientes', 'cotizaciones', 'contingencia'] },
+  { id: 'inventario', titulo: 'Inventario', corto: 'Inventario', icono: 'bodega', items: ['inventarios', 'productos'] },
+  { id: 'conta', titulo: 'Contabilidad', corto: 'Conta', icono: 'libro', items: ['contabilidad', 'alertas_hacienda', 'pago_sin_factura'] },
+  { id: 'informes', titulo: 'Informes', corto: 'Informes', icono: 'barras', items: ['listados', 'semanal', 'emitidas'] },
+  { id: 'sistema', titulo: 'Sistema', corto: 'Sistema', icono: 'ajustes', items: ['usuarios', 'numeracion', 'pantalla_cliente', 'avisos', 'configuracion', 'respaldos'] },
+];
+export const grupoNavDe = (id) => GRUPOS_NAV.find((g) => g.items.includes(id)) || null;
+
+// Perfil de Dixia (la dueña, 9 nov 2026): su Hoy son solo estas 4 tarjetas grandes y, por eso, no se repiten en la columna izquierda. Solo cambia lo que se ve: los permisos siguen en el servidor.
+export const RAPIDOS_DIXIA = ['caja', 'anular', 'clientes', 'turno'];
+export const esDixia = (app) => String(app?.usuario || app?.ctx?.usuario || '').toLowerCase() === 'dixia';
+export const itemsDeGrupo = (g, app) => esDixia(app) ? g.items.filter((id) => !RAPIDOS_DIXIA.includes(id)) : g.items;

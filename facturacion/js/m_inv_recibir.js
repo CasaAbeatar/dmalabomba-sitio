@@ -8,6 +8,7 @@
 // Una factura que Contable o Hacienda rechazaron no se puede recibir (puede_recibir = false): solo se puede marcar «No es de inventario».
 import { h, money, money0, num, fechaHora, horaCorta, debounce, campoBusqueda, sumaDias } from './util.js';
 import { inv, cant, dinero } from './api_inventarios.js';
+import { cargarCssPantallas } from './inv_pantallas_css.js';
 import { debeGuardarAlias } from './invclave.js';
 import { revisarConversion, unidadReal } from './inv_sentido.js';
 const uFac = (l) => unidadReal(l.cantidad, l.unidad).unidad; // «Unid» con decimales es peso: se muestra y se usa como kg
@@ -59,6 +60,27 @@ const unidadSugerida = (u) => UNIDAD_DE_FACTURA[norm(u).replace(/\./g, '')] || '
 const limpiaNombre = (n) => String(n || '').replace(/\s*\(en colones\)\s*/i, '').trim();
 // Cantidad con su unidad; si la unidad es el colón es dinero y se escribe con ₡
 const cantR = (n, unidad) => (unidad === 'colon' ? money(n) : cantTxt(n, unidad));
+
+// Detalle de una línea para el modo resumido: a qué artículo, rubro y bodega entra, y por qué el sistema lo propone
+function detalleSeguro(cat, sociedadId, l) {
+  const sg = l.sugerencia || {};
+  const rub = (cat.categorias || []).find((x) => x.id === sg.categoria_id);
+  const ubs = (cat.ubicaciones || []).filter((u) => u.activo !== false);
+  let ub = sg.ubicacion_id ? ubs.find((u) => u.id === sg.ubicacion_id) : null;
+  if (!ub && sg.categoria_id) {
+    if (rub?.entrada_ubicacion_id) ub = ubs.find((u) => u.id === rub.entrada_ubicacion_id);
+    else if (rub?.entrada === 'local') ub = ubs.find((u) => u.tipo === 'local' && u.sociedad_id === sociedadId && u.predeterminada);
+    else ub = ubs.find((u) => u.tipo === 'bodega' && u.predeterminada);
+  }
+  const nombreRub = rub?.nombre || sg.categoria || '';
+  const por = sg.fuente ? String(FUENTES[sg.fuente] || '') : '';
+  const art = sg.articulo ? limpiaNombre(sg.articulo) : '';
+  const cant = sg.unidad && sg.unidad !== 'colon' ? cantTxt(Number(l.cantidad) || 0, sg.unidad) : '';
+  return h('span.rc-seg-art',
+    h('span.rc-seg-art-n', art || (nombreRub ? 'Artículo nuevo' : 'Sin artículo')),
+    h('small.rc-seg-art-d', [nombreRub ? 'Rubro: ' + nombreRub : '', ub ? 'Bodega: ' + ub.nombre : 'Bodega: por definir', cant ? 'Entra: ' + cant : ''].filter(Boolean).join(' · ')),
+    por ? h('small.rc-seg-art-p', 'Por qué: ' + por.replace(/^./, (c) => c.toLowerCase())) : (art ? null : h('small.rc-seg-art-p', 'Por qué: solo se conoce el rubro por el CABYS; se crea un artículo nuevo al recibir.')));
+}
 
 // Decidir un enlace de verdad guarda su alias (solo administración): el texto del proveedor queda como otra forma de nombrar ese artículo, para ese proveedor.
 // No se guarda alias si el texto solo difiere del nombre del artículo en mayúsculas, tildes, puntuación o espacios (eso es el mismo nombre, la base lo compara normalizado),
@@ -121,6 +143,7 @@ const ORDENES = [['proveedor', 'Por proveedor'], ['recientes', 'Más recientes p
 const dm = (x) => { const d = ymdCR(x); return d ? d.split('-').reverse().slice(0, 2).join('/') : ''; };
 
 async function abrirLista(ctx) {
+  await cargarCssPantallas();
   const cat = ctx.cat;
   // Empresa única: la bodega y los proveedores son del grupo. La primera vez la lista muestra las facturas de las dos empresas; si la persona filtra por una, se recuerda.
   const propia = (cat.empresas || []).some((e) => e.id === ctx.app.socId) ? ctx.app.socId : null; // solo ordena los botones: la de la sesión va primero
@@ -130,8 +153,9 @@ async function abrirLista(ctx) {
     sociedad: empresaGuardada, q: String(g.q || ''), proveedor: String(g.proveedor || ''),
     estado: ESTADOS.some(([v]) => v === g.estado) ? g.estado : 'todas', orden: g.orden === 'recientes' || g.orden === 'lineas' ? g.orden : 'proveedor', sel: new Map(), mostrarL: 120,
     mostrar: Number(g.mostrar) >= PAGINA ? Number(g.mostrar) : PAGINA, datos: null, otra: null, otraVieja: true,
+    pp: { abierto: !!(g.pp && g.pp.abierto), q: String((g.pp && g.pp.q) || ''), orden: g.pp && g.pp.orden === 'antigua' ? 'antigua' : 'proveedor' }, // «Pendiente desde octubre, por proveedor»
   };
-  const persistir = () => guardarLista({ sociedad: est.sociedad || 'todas', q: est.q, proveedor: est.proveedor, estado: est.estado, orden: est.orden, mostrar: est.mostrar });
+  const persistir = () => guardarLista({ sociedad: est.sociedad || 'todas', q: est.q, proveedor: est.proveedor, estado: est.estado, orden: est.orden, mostrar: est.mostrar, pp: est.pp });
   let vivo = true, seq = 0;
   const buscar = h('input.campo', { type: 'search', placeholder: 'Proveedor, cédula, número o artículo', 'aria-label': 'Buscar factura por recibir', autocomplete: 'off', value: est.q });
   const filtroEmp = h('div.inv-segmento.rc-seg', { role: 'group', 'aria-label': 'De qué empresa' });
@@ -145,11 +169,54 @@ async function abrirLista(ctx) {
   const lista = h('div.inv-fac-lista.rc-lista', cargando('Buscando facturas por recibir…'));
   const resumen = h('p.rc-resumen', { 'aria-live': 'polite' });
   const otraNota = h('div.inv-otra-nota');
+  /* ---- Pendiente desde el 1 de octubre, por proveedor y antigüedad (fx_inv_pendiente_por_proveedor). Solo para ver y abrir facturas: no recibe nada.
+     La lista de abajo trae desde el corte de recepción; esta sección muestra TODO lo que sigue sin decidir desde octubre. Su filtro, su orden y si está abierta se conservan al volver. ---- */
+  const pp = (() => {
+    const cuerpo = h('div.rc-pp-cuerpo');
+    const q = h('input.campo', { type: 'search', placeholder: 'Buscar proveedor', 'aria-label': 'Buscar proveedor entre lo pendiente desde octubre', autocomplete: 'off', value: est.pp.q });
+    const ord = h('select.campo', { 'aria-label': 'Cómo ordenar los proveedores', onchange: () => { est.pp.orden = ord.value; persistir(); pintarPP(); } },
+      h('option', { value: 'proveedor' }, 'Proveedor, de la A a la Z'), h('option', { value: 'antigua' }, 'Primero el de la factura más antigua'));
+    ord.value = est.pp.orden;
+    const resumenPP = h('span.rc-pp-res', 'cargando…');
+    const det = h('details.rc-pp', { open: est.pp.abierto },
+      h('summary', h('strong', 'Pendiente desde el 1 de octubre, por proveedor'), resumenPP),
+      h('div.rc-pp-filtros', h('label.etq.rc-filtro', h('span', 'Buscar'), q), h('label.etq.rc-filtro', h('span', 'Orden'), ord)),
+      cuerpo);
+    let datos = null, cargando1 = false;
+    async function cargarPP() {
+      if (cargando1) return; cargando1 = true;
+      try { datos = await inv.pendientePorProveedor(est.sociedad); pintarPP(); }
+      catch (e) { poner(cuerpo, falla(e, () => { cargando1 = false; cargarPP(); }, 'No se pudo traer lo pendiente por proveedor')); }
+      finally { cargando1 = false; }
+    }
+    function pintarPP() {
+      if (!datos) return;
+      const r = datos.resumen || {};
+      poner(resumenPP, ' ' + plural(r.lineas || 0, 'línea', 'líneas') + ' en ' + plural(r.facturas || 0, 'factura', 'facturas') + ' de ' + plural(r.proveedores || 0, 'proveedor', 'proveedores') + ' · ' + money0(r.importe_sin_iva_crc || 0) + ' sin IVA' + (r.mas_antigua ? ' · la más antigua: ' + dma(r.mas_antigua) : ''));
+      const buscado = norm(q.value);
+      let provs = (datos.proveedores || []).filter((x) => !buscado || norm(x.nombre).includes(buscado));
+      provs = [...provs].sort((a, b) => est.pp.orden === 'antigua' ? String(a.mas_antigua).localeCompare(String(b.mas_antigua)) || String(a.nombre).localeCompare(String(b.nombre), 'es') : String(a.nombre).localeCompare(String(b.nombre), 'es'));
+      poner(cuerpo, provs.length ? provs.map((x) => h('details.rc-pp-prov',
+        h('summary', h('strong.rc-pp-nom', proveedorTxt(x.nombre)), h('span.rc-pp-datos', plural(x.facturas, 'factura', 'facturas') + ' · ' + plural(x.lineas, 'línea', 'líneas') + ' · ' + money0(x.importe_sin_iva_crc) + ' sin IVA'),
+          h('span.rc-pp-ant', 'La más antigua: ' + dma(x.mas_antigua) + ' (hace ' + plural(x.dias, 'día', 'días') + ')')),
+        h('ul.rc-pp-facs', (x.detalle || []).map((f) => h('li',
+          h('span.rc-pp-fac', 'N.° ' + numFactura(f.consecutivo) + ' · ' + dma(f.fecha) + ' · hace ' + plural(f.dias, 'día', 'días') + (est.sociedad ? '' : ' · ' + f.sociedad)),
+          h('span.tenue', plural(f.lineas, 'línea', 'líneas')), h('span.cifra', money0(f.importe_sin_iva_crc)),
+          f.rechazada ? h('span.chip.mal', 'Rechazada') : f.anterior_al_corte ? h('span.chip', 'Antes del corte de recepción') : null,
+          h('button.btn.chico', { type: 'button', onclick: () => abrirFactura(ctx, f.clave) }, 'Abrir')))))) : vacio('Ningún proveedor coincide con lo que escribió.'));
+    }
+    q.addEventListener('input', debounce(() => { est.pp.q = q.value.trim(); persistir(); pintarPP(); }, 250));
+    det.addEventListener('toggle', () => { est.pp.abierto = det.open; persistir(); if (det.open && !datos) { poner(cuerpo, cargando('Buscando lo pendiente por proveedor…')); cargarPP(); } });
+    const alCambioPP = () => { if (!vivo) { document.removeEventListener('inv:cambio', alCambioPP); return; } datos = null; if (det.open) cargarPP(); };
+    document.addEventListener('inv:cambio', alCambioPP);
+    if (est.pp.abierto) { poner(cuerpo, cargando('Buscando lo pendiente por proveedor…')); cargarPP(); } else { poner(cuerpo, cargando('Se carga al abrir esta sección…')); resumenPP.textContent = ' toque para ver las facturas pendientes de octubre y noviembre'; }
+    return { el: det };
+  })();
   const campo = (txt, ctl) => h('label.etq.rc-filtro', h('span', txt), ctl);
   const contenido = [
     h('div.rc-filtros', filtroEmp,
       h('div.rc-filtros-fila', h('label.etq.inv-buscar.rc-filtro.rc-f-buscar', h('span', 'Buscar'), campoBusqueda(buscar, () => { est.q = ''; est.mostrar = PAGINA; persistir(); cargar(); })), campo('Proveedor', selProv), campo('Semáforo', selEstado), campo('Orden', selOrden))),
-    resumen, otraNota, deshechos, lista];
+    resumen, otraNota, deshechos, pp.el, lista];
   const alCambio = () => { if (vivo) { est.otraVieja = true; cargar(); } };
   ventana({ titulo: 'Por recibir', contenido, alCerrar: () => { vivo = false; document.removeEventListener('inv:cambio', alCambio); } }).el.classList.add('rc-vent');
   document.addEventListener('inv:cambio', alCambio);
@@ -179,8 +246,9 @@ async function abrirLista(ctx) {
     if (!est.datos) poner(lista, cargando('Buscando facturas por recibir…'));
     try {
       const pedirOtra = est.sociedad && est.otraVieja;
-      const [d, otra] = await Promise.all([inv.pendientes(est.sociedad, est.q, 100), pedirOtra ? inv.pendientes(null, '', 1).catch(() => null) : Promise.resolve(undefined)]);
+      const [d, otra, nt] = await Promise.all([inv.pendientes(est.sociedad, est.q, 100), pedirOtra ? inv.pendientes(null, '', 1).catch(() => null) : Promise.resolve(undefined), inv.notasProveedor('por_revisar', 300).catch(() => null)]);
       if (!vivo || mia !== seq) return;
+      est.notasDe = mapaNotas(nt); // si no se pudieron traer, simplemente no se avisa en la lista (el detalle de cada factura las muestra igual)
       if (pedirOtra) { est.otra = otra; est.otraVieja = !otra; }
       est.datos = d; pintar(); pintarOtra();
     } catch (e) {
@@ -205,11 +273,21 @@ async function abrirLista(ctx) {
   }
   // Seguras: las verdes y la comida preparada o suministro con rubro sugerido (entran por su valor: no hay conversión que revisar)
   const esSegura = (l) => { const n = nivelRapido(l); const sg = l.sugerencia || {}; return n === 'verde' || (n === 'ambar' && !!sg.categoria_id && grupoDeRubro(sg.categoria_id) !== 'unitario' && sg.fuente !== 'servicio'); };
+  // Facturas que tienen una nota del proveedor por revisar (la nota trae su factura, o sus facturas candidatas si todavía no está ligada)
+  function mapaNotas(r) {
+    const m = new Map();
+    ((r && r.notas) || []).forEach((n) => {
+      const claves = n.factura_clave ? [n.factura_clave] : (n.candidatas || []).filter((c) => Number(c.coincidencias) > 0).map((c) => c.clave);
+      claves.forEach((k) => { if (!m.has(k)) m.set(k, []); m.get(k).push(n); });
+    });
+    return m;
+  }
+  const notasDeFactura = (clave) => (est.notasDe && est.notasDe.get(clave)) || [];
   const infoFactura = (f) => {
     const ls = (f.lineas || []).filter(pendiente), puede = f.puede_recibir !== false;
     const niv = { verde: 0, ambar: 0, rojo: 0 };
     ls.forEach((l) => { niv[nivelRapido(l)]++; });
-    return { ls, puede, n: ls.length, niv, seguras: puede ? ls.filter(esSegura).length : 0, todasNoInv: ls.length > 0 && ls.every((l) => (l.sugerencia || {}).no_inventario) };
+    return { f, ls, puede, n: ls.length, niv, seguras: puede ? ls.filter(esSegura).length : 0, todasNoInv: ls.length > 0 && ls.every((l) => (l.sugerencia || {}).no_inventario) };
   };
   // Etapas por factura: primero se ven las verdes; al aceptarlas aparecen las ámbar; al resolverlas, las rojas
   const nivelEtapa = (l) => { const v = nivelRapido(l); return v === 'verde' ? 'verde' : v === 'ambar' ? 'ambar' : 'rojo'; };
@@ -248,7 +326,9 @@ async function abrirLista(ctx) {
       d.truncado ? ' · se muestran las ' + todas.length + ' más recientes' + (totalFacs > todas.length ? ' de ' + totalFacs : '') + (est.sociedad ? '; use el buscador para ver las demás' : '; use el buscador o escoja una empresa para ver las demás') : '',
       h('span.tenue.inv-chico.rc-leyenda', ' Verde: segura. Ámbar: revisar. Rojo: falta algo o no es de inventario.'));
     if (!facs.length) {
-      poner(lista, vacio(est.q || est.proveedor || est.estado !== 'todas' ? 'Ninguna factura por recibir coincide con lo que escogió. Cambie el filtro o el buscador.' : 'No hay facturas por recibir. Todo lo que llegó ya se recibió o se marcó «No es de inventario».'));
+      const filtrada = !!(est.q || est.proveedor || est.estado !== 'todas' || est.sociedad);
+      poner(lista, vacio(filtrada ? 'Ninguna factura por recibir coincide con lo que escogió. Hay filtros puestos que pueden estar escondiendo facturas.' : 'No hay facturas por recibir. Todo lo que llegó ya se recibió o se marcó «No es de inventario».',
+        filtrada ? h('button.btn.primario', { type: 'button', onclick: () => { est.q = ''; buscar.value = ''; est.proveedor = ''; est.estado = 'todas'; selEstado.value = 'todas'; est.sociedad = null; est.mostrar = PAGINA; est.datos = null; persistir(); pintarEmpresas(); cargar(); } }, 'Quitar los filtros y ver todas las facturas') : null));
     } else {
       const conEmpresa = !est.sociedad;
       const filaDe = (f, conProveedor) => fila(f, infos.get(f.clave), conProveedor, conEmpresa);
@@ -312,7 +392,7 @@ async function abrirLista(ctx) {
       return h('div.rc-lin' + (marcada(f, l) ? '.marcada' : ''),
         caja, h('i.rc-lin-punto.' + (v === 'segura' ? 'ambar' : v), { 'aria-hidden': 'true', title: v === 'verde' ? 'Verde' : v === 'segura' ? 'Ámbar segura' : v === 'ambar' ? 'Ámbar: revisar' : 'Roja' }),
         h('span.rc-lin-doc', h('strong', proveedorTxt(f.proveedor_nombre)), h('small', 'N.° ' + numFactura(f.consecutivo) + ' · línea ' + l.linea + (conEmpresa ? ' · ' + (f.sociedad_nombre || '') : ''))),
-        h('span.rc-lin-art', h('span.rc-seg-desc', l.descripcion || ''), h('span.rc-seg-flecha', { 'aria-hidden': 'true' }, '→'), h('span.rc-seg-art', destino)),
+        h('span.rc-lin-art', h('span.rc-seg-desc', l.descripcion || ''), h('span.rc-seg-flecha', { 'aria-hidden': 'true' }, '→'), detalleSeguro(cat, f.sociedad_id, l)),
         h('span.rc-seg-cant.cifra', num(Number(l.cantidad) || 0, 3)),
         h('span.rc-lin-imp.cifra', money0(l.subtotal_crc)),
         puedeMarcar ? h('span.rc-lin-acc') : h('button.btn.chico', { type: 'button', onclick: () => abrirFactura(ctx, f.clave, { previa: f }) }, 'Revisar'));
@@ -386,7 +466,7 @@ async function abrirLista(ctx) {
         conProveedor ? h('strong.rc-fac-prov', proveedorTxt(f.proveedor_nombre)) : null,
         h('span.rc-fac-doc', 'N.° ' + numFactura(f.consecutivo) + ' · ' + cuando)),
       conEmpresa ? h('span.rc-fac-emp', empresaChip(f.sociedad_nombre, f.sociedad_codigo)) : null,
-      h('span.rc-fac-estado', h('span.rc-fac-lineas', plural(inf.n, 'línea', 'líneas')),
+      h('span.rc-fac-estado', h('span.rc-fac-lineas', plural(inf.n, 'línea', 'líneas')), notasDeFactura(f.clave).length ? h('span.chip.espera', { title: 'Revise la nota antes de recibir: si anula la factura, no la reciba' }, 'Tiene una nota del proveedor por revisar') : null,
         inf.puede ? h('span.rc-pills', pill('verde', inf.niv.verde, 'verde', 'verdes'), pill('ambar', inf.niv.ambar, 'ámbar', 'ámbar'), pill('rojo', inf.niv.rojo, 'roja', 'rojas')) : h('span.chip.mal.rc-fac-rech', ec.texto || 'Rechazada, no entra')),
       h('span.rc-fac-total.cifra', { title: 'Total con IVA' }, money0(f.total)),
       h('div.rc-fac-acc', botones)),
@@ -402,7 +482,7 @@ async function abrirLista(ctx) {
       h('ul.rc-seguras', ...et.ls.map((l) => {
         const sg = l.sugerencia || {};
         const destino = sg.articulo ? limpiaNombre(sg.articulo) : (sg.categoria ? 'rubro «' + sg.categoria + '»' : 'sin artículo');
-        return h('li', h('span.rc-seg-desc', l.descripcion || ('Línea ' + l.linea)), h('span.rc-seg-flecha', { 'aria-hidden': 'true' }, '→'), h('span.rc-seg-art', destino), h('span.rc-seg-cant.cifra', num(Number(l.cantidad) || 0, 3)));
+        return h('li', h('span.rc-seg-desc', l.descripcion || ('Línea ' + l.linea)), h('span.rc-seg-flecha', { 'aria-hidden': 'true' }, '→'), detalleSeguro(cat, inf.f?.sociedad_id, l), h('span.rc-seg-cant.cifra', num(Number(l.cantidad) || 0, 3)));
       })));
   }
   // La factura entera quedó «No es de inventario»: sale de la lista y deja un aviso con «Deshacer»
@@ -458,6 +538,7 @@ export function pedirIgnorar(ctx, f, lineas, alTerminar) {
    Ventana de una factura: recibir sus líneas
    ===================================================================================================================== */
 export async function abrirFactura(ctx, clave, { previa = null, recibirSugeridas = false, soloLineas = null, alRecibir = null, alFin = null } = {}) {
+  await cargarCssPantallas();
   let autoRecibir = recibirSugeridas;
   let silencioso = recibirSugeridas; // «Recibir las N líneas seguras» desde la lista: no se abre la ventana salvo que algo necesite revisarse
   const cat = ctx.cat;
@@ -496,7 +577,7 @@ export async function abrirFactura(ctx, clave, { previa = null, recibirSugeridas
     poner(resultado, aviso('ok',
       h('p', h('strong', rec.length === 1 ? 'Se recibió 1 línea.' : 'Se recibieron ' + rec.length + ' líneas.'), repetidaTxt(repetida)),
       rec.length ? h('details.rc-res-det', h('summary', 'Ver qué entró'),
-        h('ul.inv-res-lista', rec.map((x) => h('li', `Línea ${x.linea}: ${limpiaNombre(x.articulo)}, ${cantR(x.cantidad, x.unidad)} a ${x.ubicacion}` + (x.vence_en ? ', vence el ' + dma(x.vence_en) : ', no vence') + (x.unidad === 'colon' ? '' : `, ${costoTxt(x.costo_unitario)} por ${unidadTxt(x.unidad, 1)}`) + ` (${money(x.valor)} sin IVA). Empresa de origen: ${x.sociedad_origen_nombre || 'sin dato'}.`)))) : null,
+        h('ul.inv-res-lista', rec.map((x) => h('li', `Línea ${x.linea}: ${limpiaNombre(x.articulo)}, ${cantR(x.cantidad, x.unidad)} a ${x.ubicacion}` + '' + (x.unidad === 'colon' ? '' : `, ${costoTxt(x.costo_unitario)} por ${unidadTxt(x.unidad, 1)}`) + ` (${money(x.valor)} sin IVA). Empresa de origen: ${x.sociedad_origen_nombre || 'sin dato'}.`)))) : null,
       ...(r.avisos || []).map((t) => h('p.inv-res-aviso', t))));
     resultado.scrollIntoView({ block: 'nearest' });
   }
@@ -559,6 +640,9 @@ export async function abrirFactura(ctx, clave, { previa = null, recibirSugeridas
           // Lo mismo que le dice Contable antes de rechazar (m_recepcion.js): rechazar no mueve la bodega
           lineas.some((l) => l.estado === 'recibida') ? h('p', 'Lo que ya se recibió sigue en la bodega: rechazar la factura en Contable no lo saca. Para corregirlo, use «Deshacer la recepción» en cada línea (solo una persona administradora, y solo si ese lote todavía no se ha tocado) o registre una salida como «Devolución a proveedor», en «Salidas y mermas».') : null)
         : (f.aviso || ec.aviso) ? aviso('espera', h('p', f.aviso || ec.aviso)) : null,
+      pend.length && (d.notas_proveedor || []).some((n) => n.estado === 'por_revisar')
+        ? aviso('espera', h('p', h('strong', 'Esta factura tiene una nota del proveedor por revisar: '), d.notas_proveedor.filter((n) => n.estado === 'por_revisar').map((n) => tipoDocTxt(n.tipo) + ' N.° ' + numFactura(n.consecutivo) + ' del ' + dma(n.fecha)).join('; ') + '. Revísela antes de recibir: si anula la factura, no la reciba. Si la anula y ya no hace falta, márquela «No es de inventario».'),
+            h('button.btn.chico', { type: 'button', onclick: () => ctx.abrir('notas') }, 'Abrir Notas de proveedor')) : null,
       pend.length ? h('section.inv-grupo.rc-lineas', h('h3', 'Líneas por recibir', h('span.inv-cuenta', String(pend.length))),
         h('div.rc-barra',
           puede ? btnRecibir : null,
@@ -734,7 +818,7 @@ export async function abrirFactura(ctx, clave, { previa = null, recibirSugeridas
     const artFila = h('div.inv-campo-art.rc-f-art', h('span.etq', 'Artículo del inventario'), h('div.inv-art-fila', nombreArt, btnArt));
     const campoConv = h('label.etq.inv-c-conv.rc-f-conv', h('span', 'Presentación y conversión de unidades'), h('span.inv-con-unidad', h('span.inv-pre', 'Cada «' + (uFac(l) || 'unidad') + '» de la factura trae'), factor, h('span.inv-unidad.inv-u-art')), factorEco, avisoConv);
     const costoFila = h('div.inv-costo-fila.rc-costo', h('span.inv-costo-et', 'Costo sin IVA:'), costoTxtEl); // el costo sale de la factura: no se corrige a mano (si no cuadra, lo que se corrige es la conversión)
-    const mas = h('details.inv-detalles.rc-mas-campos', h('summary', 'Cantidad, dónde se guarda, vencimiento y costo'),
+    const mas = h('details.inv-detalles.rc-mas-campos', h('summary', 'Cantidad, dónde se guarda y costo'),
       h('div.inv-linea-campos', cantidad.el, h('label.etq.inv-c-ubic', 'Dónde se guarda', ubic),
         h('div.etq.inv-c-vence', h('span', 'Vence'), vence, venceEco, h('label.inv-casilla.chica', noVence, h('span', 'No vence'))), costoDet));
     const sugTxt = sugerenciaTxt(sug);
@@ -765,7 +849,7 @@ export async function abrirFactura(ctx, clave, { previa = null, recibirSugeridas
       const motivos = [];
       if (sug.fuente !== 'memoria') motivos.push(sug.fuente ? 'Es una sugerencia del sistema, no una compra anterior de este proveedor (' + String(FUENTES[sug.fuente] || 'por parecido').replace(/^./, (c) => c.toLowerCase()) + ').' : 'No hay una compra anterior de este proveedor con lo mismo.');
       else if (sug.articulo_id && sug.articulo_id !== art.id) motivos.push('Se cambió el artículo que recordaba el sistema.');
-      if (sug.fuente === 'memoria' && sug.factor != null && Number(sug.factor) !== fv) motivos.push('La conversión es distinta a la de la vez pasada (' + num(sug.factor, 6) + ').');
+      if (sug.fuente === 'memoria' && sug.factor != null && Number(sug.factor) !== fv && !(pdfOk && Number(pdf.factor) === fv)) motivos.push('La conversión es distinta a la de la vez pasada (' + num(sug.factor, 6) + ').');
       if (pdfOk && !enColones() && Number(pdf.factor) !== fv) motivos.push('El PDF de la factura dice que cada unidad cobrada trae ' + num(pdf.factor, 6) + ' y aquí hay ' + num(fv, 6) + '.');
       else if (pdf && pdf.estado === 'revision' && pdf.regla === 'femsa_sub_unidad' && !enColones()) motivos.push('No se pudo confirmar la conversión con el PDF. ' + (pdf.motivo || ''));
       if (notaAuto && fv === 1) motivos.push('La conversión quedó en 1 porque el precio de la factura cuadra con unidades sueltas.');
@@ -789,12 +873,13 @@ export async function abrirFactura(ctx, clave, { previa = null, recibirSugeridas
     const leidoNom = h('strong.rc-leido-nom'), leidoPres = h('span.rc-leido-pres'), leidoFac = h('small.rc-leido-fac'), leidoPdf1 = h('small.rc-leido-pdf.rc-leido-pdf1'), leidoPdf2 = h('small.rc-leido-pdf');
     const cantL1 = h('strong.rc-cant-l1'), cantL2 = h('small.rc-cant-l2');
     const destL1 = h('strong.rc-dest-l1'), destL2 = h('small.rc-dest-l2');
+    const destAviso = h('small.rc-dest-aviso', { role: 'status' }); // destino sugerido por la categoría; si se escoge otro, avisa sin bloquear
     const celdaAcc = h('div.rc-c-acc');
     const filaEl = h('div.rc-fila',
       h('div.rc-c-sem', semPunto, semPalabra),
       h('div.rc-c-leido', h('div.rc-leido-l1', leidoNom, leidoPres), leidoFac, leidoPdf1, leidoPdf2),
       h('div.rc-c-cant', cantL1, cantL2),
-      h('div.rc-c-dest', destL1, destL2),
+      h('div.rc-c-dest', destL1, destL2, destAviso),
       celdaAcc);
     // Botones de acción: «Recibir esta línea» (una sola línea, una sola clave), «No es de inventario» (un toque) y «Cambiar» (abre la fila de una verde)
     const btnUna = h('button.btn.rc-recibir-una', { type: 'button' }, 'Recibir esta línea');
@@ -881,20 +966,34 @@ export async function abrirFactura(ctx, clave, { previa = null, recibirSugeridas
       leidoPdf2.textContent = pt.l2; leidoPdf2.hidden = !pt.l2;
       cantL1.textContent = num(l.cantidad, 3) + ' ' + uFac(l) + ' × ' + costoTxt(l.costo_unitario_factura);
       const c = costoCalculado(), r = art && refCosto.get(art.id), v = r && r.hay ? Number(r.precio_venta_sin_iva) : 0;
-      cantL2.textContent = enColones() ? 'Entra por su valor: ' + money(valorLinea()) + ' sin IVA' : art && c != null && c > 0 ? costoTxt(c) + ' por ' + unidadTxt(art.unidad, 1) + (v > 0 ? ' · ' + num(c / v * 100, 0) + ' % del precio de venta' : '') : 'sin IVA';
+      const entran = art && !enColones() ? Number(l.cantidad) * Number(leerFactor()) : 0;
+      cantL2.textContent = enColones() ? 'Entra por su valor: ' + money(valorLinea()) + ' sin IVA' : art && c != null && c > 0 ? (entran > 0 ? 'Entran ' + num(entran, 3) + ' ' + unidadTxt(art.unidad, entran) + ' · ' : '') + costoTxt(c) + ' por ' + unidadTxt(art.unidad, 1) + (v > 0 ? ' · ' + num(c / v * 100, 0) + ' % del precio de venta' : '') : 'sin IVA';
       const g = bolsa || grupoDeRubro(rubro.value);
       const donde = ubic.value ? (ubic.selectedOptions[0]?.textContent || '') : '';
       destL1.textContent = nombreRubro() || (sug.no_inventario ? 'No es de inventario (sugerido)' : 'Falta escoger el rubro');
       destL1.classList.toggle('falta', !nombreRubro() && !sug.no_inventario);
       destL2.textContent = [GRUPOS[g] || '', donde].filter(Boolean).join(' · ') || ' ';
+      pintarDestinoSugerido();
+    }
+    // El destino por norma sale de la categoría del artículo (fact.inv_categorias.entrada, la misma columna que usa la base para sugerir): bebidas, helados, pulpería, medicinas, snacks, galletas y caramelos a Local Soda; el resto a Bodega central.
+    // Si la persona escoge otro lugar no se le impide nada: solo se le dice cuál era el sugerido y se le ofrece volver a él con un toque.
+    function pintarDestinoSugerido() {
+      const sugerido = art ? ubicacionPorOmision(art) : '';
+      destAviso.replaceChildren(); destAviso.className = 'rc-dest-aviso'; destAviso.hidden = !(sugerido && ubic.value);
+      if (destAviso.hidden) return;
+      const nomUb = (id) => (cat.ubicaciones || []).find((u) => u.id === id)?.nombre || 'otro lugar';
+      if (ubic.value === sugerido) { destAviso.classList.add('ok'); destAviso.textContent = 'Destino sugerido por su categoría: ' + nomUb(sugerido) + '.'; return; }
+      destAviso.classList.add('distinto');
+      destAviso.append('Esta categoría se guarda por norma en ' + nomUb(sugerido) + ' y usted escogió ' + nomUb(ubic.value) + '. Puede dejarlo así. ',
+        h('button.btn.chico.rc-dest-volver', { type: 'button', onclick: () => { ubic.value = sugerido; ubic.dispatchEvent(new Event('change')); } }, 'Usar ' + nomUb(sugerido)));
     }
     function pintarAccion() {
       const principal = sem.nivel === 'verde' ? btnCambiar : (sem.nivel === 'rojo' && sug.no_inventario) ? ignorarBtn : btnUna;
-      // Si el sistema sugiere «No es de inventario», la persona igual puede decidir lo contrario: queda a la vista «Sí es de inventario», que abre la fila para escoger el rubro y recibirla
-      const sugiereNo = sem.nivel === 'rojo' && !!sug.no_inventario;
-      celdaAcc.replaceChildren(...(sugiereNo ? [principal, btnCambiar] : [principal]));
+      // Si la IA sugiere «No es de inventario» (roja), la persona manda: también puede decir que sí es de inventario
+      const sugeridaNo = sem.nivel === 'rojo' && sug.no_inventario;
+      if (sugeridaNo) celdaAcc.replaceChildren(principal, btnCambiar); else celdaAcc.replaceChildren(principal);
       panelAcc.replaceChildren(...[btnUna, ignorarBtn].filter((b) => b !== principal));
-      btnCambiar.textContent = abierta ? 'Cerrar' : (sugiereNo ? 'Sí es de inventario' : 'Cambiar');
+      btnCambiar.textContent = abierta ? 'Cerrar' : sugeridaNo ? 'Sí es de inventario' : 'Cambiar';
       btnUna.classList.toggle('primario', principal === btnUna);
       ignorarBtn.classList.toggle('primario', principal === ignorarBtn);
       if (!btnUna.dataset.ocupado) btnUna.disabled = !!sem.bloquea;
@@ -918,13 +1017,13 @@ export async function abrirFactura(ctx, clave, { previa = null, recibirSugeridas
       let fac = mismo && sug.factor != null ? Number(sug.factor) : sug.factor_sugerido != null ? Number(sug.factor_sugerido) : 1;
       // El nombre puede decir «8U» y la factura cobrar cada unidad suelta: si con ese número el costo por litro no es creíble y con 1 sí, se empieza en 1 (y se explica)
       notaAuto = '';
-      if (pdfOk && !enColones() && !(mismo && sug.factor != null && sug.fuente === 'memoria')) { fac = Number(pdf.factor); }
+      if (pdfOk && !enColones()) { fac = Number(pdf.factor); } // decisión 12 nov 2026: si el PDF confirma cuántas unidades trae la línea, manda el PDF sobre la memoria de la vez pasada
       else if (!(mismo && sug.factor != null && sug.fuente === 'memoria') && fac !== 1) { const r0 = revisarConversion({ descripcion: l.descripcion, subtotal: l.subtotal_crc, cantidad: l.cantidad, factorActual: fac }, (n) => money(n)); fac = r0.factor; if (r0.cambiado) notaAuto = r0.aviso; }
       factor.value = String(fac).replace('.', ',');
       if (!cantidadTocada) cantidad.poner(Math.round(Number(l.cantidad) * fac * 1000) / 1000);
       ubic.value = (mismo && sug.ubicacion_id) || ubicacionPorOmision(art) || '';
       const ven = mismo ? sug.vence_en : venceDe(art);
-      venceEditada = false; noVence.checked = !ven; vence.disabled = !ven; vence.value = ven || '';
+      venceEditada = false; noVence.checked = true; vence.disabled = true; vence.value = ''; // decisión 10 nov 2026: no se maneja vencimiento al recibir
       if (enColones()) aplicarColones();
       pintarFactor(); pintarCosto(); pintarVence(); pintarSem();
     }
@@ -1074,7 +1173,7 @@ export async function abrirFactura(ctx, clave, { previa = null, recibirSugeridas
       if (previo.art) { art = articulos.find((a) => a.id === previo.art.id) || previo.art; pintarArticulo(false); }
       factor.value = previo.factor; cantidadTocada = previo.tocada;
       if (Number.isFinite(previo.cantidad)) cantidad.poner(previo.cantidad);
-      ubic.value = previo.ubic; vence.value = previo.vence; venceEditada = !!previo.editada; noVence.checked = previo.noVence; vence.disabled = previo.noVence;
+      ubic.value = previo.ubic; vence.value = ''; venceEditada = false; noVence.checked = true; vence.disabled = true;
       costoDet.open = previo.costoAbierto; costoInput.value = previo.costo;
       pintarFactor(); pintarCosto(); pintarVence();
     }
@@ -1115,7 +1214,7 @@ export async function abrirFactura(ctx, clave, { previa = null, recibirSugeridas
       return h('article.inv-linea.rc-dec.decidida.recibida', { 'data-linea': l.linea },
         h('span.chip.ok', 'Recibida'),
         h('div.rc-dec-txt', h('strong', 'Línea ' + l.linea + ': ' + l.descripcion),
-          h('small', `${limpiaNombre(r.articulo) || 'Artículo'}: ${cantR(r.cantidad, r.unidad)} a ${r.ubicacion || 'sin dato'}` + (r.vence_en ? ', vence el ' + dma(r.vence_en) : ', no vence') + (r.costo_unitario != null && r.unidad !== 'colon' ? ', ' + costoTxt(r.costo_unitario) + ' por ' + unidadTxt(r.unidad, 1) + ' sin IVA' : '') + quien),
+          h('small', `${limpiaNombre(r.articulo) || 'Artículo'}: ${cantR(r.cantidad, r.unidad)} a ${r.ubicacion || 'sin dato'}` + '' + (r.costo_unitario != null && r.unidad !== 'colon' ? ', ' + costoTxt(r.costo_unitario) + ' por ' + unidadTxt(r.unidad, 1) + ' sin IVA' : '') + quien),
           r.lote_estado && r.lote_estado !== 'activo' ? h('small.tenue', 'El lote está ' + ({ agotado: 'agotado (ya se usó todo)', vencido: 'vencido', anulado: 'anulado' })[r.lote_estado] + (r.lote_cantidad_actual != null ? ' · quedan ' + cantR(r.lote_cantidad_actual, r.unidad) : '') + '.') : null),
         deshacer ? h('div.rc-dec-acc', deshacer, zona) : null);
     }

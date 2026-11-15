@@ -55,7 +55,7 @@ export function clienteDe(cur, correosOff = []) {
       nombre_comercial: comercial && comercial.toLowerCase() !== nombre.toLowerCase() ? comercial : null,
       nombre_personal: null,
       correo: textoONulo(c.correo),
-      // correos que la cajera desactivó para esta venta: la pantalla del cliente los muestra tachados («no se enviará»)
+      // correos que la cajera desactivó para esta venta: la pantalla del cliente deja de mostrarlos
       correo_off: (Array.isArray(correosOff) ? correosOff : []).map((x) => String(x).trim().toLowerCase()).filter(Boolean).slice(0, 8),
     };
   } catch { return null; }
@@ -70,9 +70,9 @@ export function iniciar(app, opciones = {}) {
   let configLista = false; // ya se leyó el ajuste (o se agotó la espera): hasta entonces no sale nada
   let bc = null;
   let fallos = 0;
-  let correosOff = [];     // correos desactivados por la cajera en el cobro (solo de la venta en curso)
   let ackEn = 0;           // cuándo contestó por última vez la ventana del cliente
   let modo = 'cuenta';     // cuenta | pago (hay una ventana de cobro abierta)
+  let correosOff = [];     // correos desactivados por la cajera en el cobro (solo de la venta en curso)
   let ultimo = null;       // último cuerpo de «estado» publicado (sin ts)
   let ultimoJson = '';
   let retieneHasta = 0, timerRetencion = null;
@@ -172,16 +172,16 @@ export function iniciar(app, opciones = {}) {
         publicar(cuerpo(modo === 'pago' ? 'pago' : 'cuenta', cur));
       } catch { fallos++; }
     },
-    // Se abrió la ventana de cobro
-    pago(cur) {
-      try { if (!activo || !cur || !(cur.lineas || []).length) return; modo = 'pago'; publicar(cuerpo('pago', cur)); } catch { fallos++; }
-    },
     // La cajera destildó o volvió a marcar un correo del cliente: la pantalla del cliente lo muestra al instante
     correos(lista) {
       try {
         correosOff = Array.isArray(lista) ? lista.map((x) => String(x).trim().toLowerCase()).filter(Boolean).slice(0, 8) : [];
         if (activo && ultimo && ultimo.cliente && ultimo.estado !== 'pagado') publicar({ ...ultimo, cliente: { ...ultimo.cliente, correo_off: correosOff } });
       } catch { fallos++; }
+    },
+    // Se abrió la ventana de cobro
+    pago(cur) {
+      try { if (!activo || !cur || !(cur.lineas || []).length) return; modo = 'pago'; publicar(cuerpo('pago', cur)); } catch { fallos++; }
     },
     // La ventana de cobro se cerró sin cobrar
     cerrarPago(cur) { modo = 'cuenta'; api.cuenta(cur); },

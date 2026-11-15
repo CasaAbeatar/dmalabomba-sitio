@@ -22,6 +22,7 @@ export const periodoEstado = (soc, anio, mes, cerrar, nota = null) => rpc('fx_co
 // Fase 3: facturas de proveedores a cuentas
 export const compras = (soc, desde, hasta, filtro = 'por_clasificar', q = null) => rpc('fx_contable_compras', { p_soc: soc, p_desde: desde, p_hasta: hasta, p_filtro: filtro, p_q: q });
 export const compra = (soc, clave) => rpc('fx_contable_compra', { p_soc: soc, p_clave: clave });
+export const compraAsiento = (soc, clave) => rpc('fx_contable_compra_asiento', { p_soc: soc, p_clave: clave });
 export const compraConfirmar = (soc, clave, items, contabilizar = true) => rpc('fx_contable_compra_confirmar', { p_soc: soc, p_clave: clave, p_items: items, p_contabilizar: contabilizar });
 export const comprasAceptarSugerencias = (soc, claves) => rpc('fx_contable_compras_aceptar_sugerencias', { p_soc: soc, p_claves: claves });
 export const reglas = (soc) => rpc('fx_contable_reglas', { p_soc: soc });
@@ -52,3 +53,17 @@ export const planilla = (soc, periodo) => rpc('fx_contable_planilla', { p_soc: s
 export const planillaCargar = (soc, datos) => rpc('fx_contable_planilla_cargar', { p_soc: soc, p: datos });
 export const planillaContabilizar = (soc, periodo) => rpc('fx_contable_planilla_contabilizar', { p_soc: soc, p_periodo: periodo });
 export const planillaHistoria = (soc) => rpc('fx_contable_planilla_historia', { p_soc: soc });
+
+// Revisión de la contadora al ingresar: una sola lista para las dos empresas (Soda y Pollos)
+export const revisionLista = () => rpc('fx_contable_revision', {});
+export const revisionResponder = (clave, valor, cambia) => rpc('fx_contable_revision_responder', { p_clave: clave, p_valor: valor, p_cambia: cambia });
+
+// Calendario de obligaciones (con casilla «hecho») e IVA del período en vivo
+export const calendario = (soc, desde = null, hasta = null) => rpc('fx_contable_calendario', { p_soc: soc, p_desde: desde, p_hasta: hasta });
+export const calendarioMarcar = (soc, clave, periodo, estado, nota = null) => rpc('fx_contable_calendario_marcar', { p_soc: soc, p_clave: clave, p_periodo: periodo, p_estado: estado, p_nota: nota });
+export const ivaPeriodo = (soc, mes = null) => rpc('fx_contable_iva_periodo', { p_soc: soc, p_mes: mes });
+
+// Conciliación del BCR contra el facturador y posición de caja a 30 días (sql/70)
+export const conciliacion = (soc, desde, hasta) => rpc('fx_contable_conciliacion', { p_soc: soc, p_desde: desde, p_hasta: hasta });
+export const caja30 = (soc) => rpc('fx_contable_caja30', { p_soc: soc });
+export const caja30Guardar = (soc, datos) => rpc('fx_contable_caja30_guardar', { p_soc: soc, p: datos });

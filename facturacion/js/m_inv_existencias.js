@@ -21,13 +21,14 @@ export async function abrir(ctx, _id, pedido = {}) {
   const hoyCaja = h('div.inv-hoy-filtros', { role: 'group', 'aria-label': 'Ver solo', hidden: true });
   const lista = h('div.inv-exis', cargando('Cargando existencias…'));
   const totales = h('div.inv-resumen');
+  const porCategoria = h('button.btn.primario', { type: 'button', onclick: async () => (await import('./m_inv_mover_cat.js')).formTrasladoCategoria(ctx, { origen: est.ubicacion || '', categoriaId: est.categoria || '' }) }, 'Mover productos a otra bodega');
   const admin = ctx.esAdmin ? h('div.inv-admin-btns',
     h('button.btn', { type: 'button', onclick: async () => (await import('./m_inv_mover.js')).formEntradaManual(ctx, { ubicacion: est.ubicacion }) }, 'Entrada manual (administrador)'),
     h('button.btn', { type: 'button', onclick: async () => (await import('./m_inv_mover.js')).formAjuste(ctx, { ubicacion: est.ubicacion }) }, 'Corregir existencias (administrador)')) : null;
   const alCambio = () => { if (vivo) cargar(); };
   document.addEventListener('inv:cambio', alCambio);
   ventana({ titulo: 'Existencias', contenido: [
-    h('div.inv-ventana-cab', h('p', 'Lo que hay hoy en cada bodega y local, de las dos empresas. Toque un artículo para ver sus lotes y vencimientos. Valores al costo, sin IVA.'), admin),
+    h('div.inv-ventana-cab', h('p', 'Lo que hay hoy en cada bodega y local, de las dos empresas. Toque un artículo para ver sus lotes y vencimientos. Valores al costo, sin IVA.'), h('div.inv-admin-btns', porCategoria), admin),
     hoyCaja,
     h('div.inv-filtros.cuatro', h('label.etq', 'Bodega o local', ubic), h('label.etq', 'Categoría', categ), h('label.etq.inv-buscar', 'Buscar', campoBusqueda(buscar, () => { est.q = ''; cargar(); }))),
     h('label.inv-casilla', ceros, h('span', 'Mostrar también los artículos en cero que tienen un mínimo')),

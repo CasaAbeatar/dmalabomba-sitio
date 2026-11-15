@@ -1,0 +1,18 @@
+/* Asiento explicado de una factura de proveedor (Contabilidad, Compras). Sin tiras de lado: la explicación va debajo del nombre de la cuenta. */
+.asx{margin:.6rem 0;border:1px solid var(--linea2);border-radius:10px;padding:.7rem .8rem;background:#fff}
+.asx-cab{display:flex;flex-wrap:wrap;gap:.4rem .6rem;align-items:center;margin-bottom:.4rem}
+.asx-cab h3{margin:0;font-size:1rem;flex:1 1 220px}
+.asx .chip.prov{background:#fff3d6;color:#6b4a00;border-color:#e6c26a}
+.asx-tabla{width:100%;border-collapse:collapse;font-size:.95rem;table-layout:fixed}
+.asx-tabla th{font-weight:600;color:var(--tinta2);font-size:.82rem;text-align:left;border-bottom:1px solid var(--linea2);padding:.4rem .4rem}
+.asx-tabla th.der,.asx-tabla td.der{text-align:right;font-variant-numeric:tabular-nums;width:8.4rem;white-space:nowrap}
+.asx-tabla td{border-bottom:1px solid var(--linea);padding:.5rem .4rem;vertical-align:top;overflow-wrap:anywhere}
+.asx-cod{color:var(--tinta2);font-size:.82rem}
+.asx-exp{display:block;color:var(--tinta2);font-size:.84rem;margin-top:.15rem}
+.asx-det{display:block;font-size:.84rem;margin-top:.1rem}
+.asx-tabla tfoot td{font-weight:700;border-bottom:0;border-top:2px solid var(--linea2)}
+.asx-cuadra{margin:.5rem 0 0;font-weight:600}
+.asx-cuadra.ok{color:#1d6b3a}
+.asx-cuadra.mal{color:#a4161a}
+.asx-nota{margin:.4rem 0 0;font-size:.85rem;color:var(--tinta2)}
+@media(max-width:560px){.asx-tabla{font-size:.88rem}.asx-tabla th.der,.asx-tabla td.der{width:5.3rem;font-size:.8rem;padding-left:.2rem;padding-right:.2rem}}

@@ -69,10 +69,16 @@ const DISTRITOS_SARAPIQUI = { 1: 'Puerto Viejo', 2: 'La Virgen', 3: 'Horquetas',
 const AJUSTES_CLAVE = 'fx_impresion';
 const DEFECTO = { papel: 80, copias: 1, auto: false, formato: 'tiquete', hoja: 'carta', modo: 'auto' };
 // El tiquete se entrega en el mismo acto de la venta (Res. MH-DGT-RES-0027-2024, art. 5). Por eso, mientras el aparato no haya guardado
-// su propia opción, la impresión automática viene encendida en computadora y apagada en celular y tableta.
-// Celular o tableta (Android, iPhone, iPad): ahí el tiquete NO sale solo al cobrar; se imprime tocando el botón.
-// La caja de Windows (aunque su pantalla sea táctil) sigue imprimiendo sola.
-const esDispositivo = () => { try { const u = navigator.userAgent || ''; return /Android|iPhone|iPad|iPod|Mobile/i.test(u) || (/Macintosh/i.test(u) && navigator.maxTouchPoints > 1) || window.matchMedia('(max-width:700px)').matches; } catch { return false; } };
+// su propia opción, la impresión automática viene encendida en computadora y tableta (pantalla de más de 700 px) y apagada en celular.
+// 6 nov 2026: la impresión automática al cobrar viene encendida solo en computadora (incluida la de Windows con pantalla táctil). En celular y tableta (Android, iPhone, iPad) viene apagada y el tiquete se imprime con el botón.
+const esCelular = () => {
+  try {
+    const ua = navigator.userAgent || '';
+    if (/Android|iPhone|iPad|iPod/i.test(ua)) return true;
+    if (/Macintosh/i.test(ua) && navigator.maxTouchPoints > 1) return true; // iPad que se presenta como Mac
+    return window.matchMedia('(max-width:700px)').matches;
+  } catch { return false; }
+};
 const CSS_URL = new URL('../css/imprimir.css', import.meta.url).href;
 const FUENTES_URL = 'https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&display=swap';
 
@@ -86,7 +92,7 @@ if (!document.querySelector('link[data-fx-imprimir]')) document.head.append(h('l
 export function leerAjustes() {
   let g = {};
   try { g = JSON.parse(localStorage.getItem(AJUSTES_CLAVE) || '{}') || {}; } catch { g = {}; }
-  const a = { ...DEFECTO, auto: !esDispositivo(), ...g };
+  const a = { ...DEFECTO, auto: !esCelular(), ...g };
   a.papel = Number(a.papel) === 58 ? 58 : 80;
   a.copias = Math.min(5, Math.max(1, parseInt(a.copias, 10) || 1));
   a.auto = !!a.auto;
@@ -269,7 +275,9 @@ function datosSoc(s = {}) {
   const codigo = s.codigo === 'pollos' ? 'pollos' : 'soda';
   return {
     codigo, comercial: nombreComercial(s.nombre_comercial || s.nombre || ''), razon: nombrePropio(s.nombre), cedula: fmtCedula(s.cedula, s.cedula_tipo || '02'),
-    tel: fmtTel(s.telefono), dir: direccion(s), correo: s.correo || '', ambiente: s.ambiente,
+    tel: fmtTel(s.telefono), telLocal: fmtTel(s.telefono_local || s.telefono), telFact: s.telefono_facturas ? fmtTel(s.telefono_facturas) : '',
+    cedulaEnNombre: soloDig(s.nombre).includes(soloDig(s.cedula)) && soloDig(s.cedula).length >= 9,
+    dir: direccion(s), correo: s.correo || '', ambiente: s.ambiente,
   };
 }
 function datosCliente(c) {
@@ -363,9 +371,9 @@ function nodoTiquete(m, { papel, logo, copia }) {
   if (logo) raiz.append(h('img.logo', { src: logo, alt: m.soc.comercial }));
   raiz.append(h('div.nombre', m.soc.comercial));
   if (m.soc.razon && m.soc.razon.toUpperCase() !== m.soc.comercial.toUpperCase()) raiz.append(h('div.razon', m.soc.razon));
-  raiz.append(h('div.dato', 'Cédula jurídica ' + m.soc.cedula));
-  if (m.soc.tel) raiz.append(h('div.dato', 'Tel. ' + m.soc.tel));
-  if (m.soc.dir) raiz.append(h('div.dato', m.soc.dir));
+  if (!m.soc.cedulaEnNombre) raiz.append(h('div.dato', 'Cédula jurídica ' + m.soc.cedula));
+  if (m.soc.telLocal && m.soc.telFact) { raiz.append(h('div.dato', 'Local y pedidos ' + m.soc.telLocal)); raiz.append(h('div.dato', 'Facturas ' + m.soc.telFact)); }
+  else if (m.soc.telLocal) raiz.append(h('div.dato', 'Tel. ' + m.soc.telLocal));
   if (m.soc.correo) raiz.append(h('div.dato', m.soc.correo));
   raiz.append(linea());
   raiz.append(h('div.titulo', m.titulo));
@@ -374,7 +382,7 @@ function nodoTiquete(m, { papel, logo, copia }) {
     raiz.append(h('div.dato', 'Cuenta para revisar con el cliente'));
   } else {
     // Tipo de documento (el título), consecutivo y clave juntos (Anexos v4.4, nota 1)
-    raiz.append(h('div.etq-chica', 'Consecutivo'), h('div.mono.consec-caja', m.consecutivo)); // en recuadro negro y letra un poco mayor para encontrarlo rápido
+    raiz.append(h('div.etq-chica', 'N.° de ' + m.titulo.toLowerCase()), h('div.mono.consec-caja', numCorto(m.consecutivo))); raiz.append(h('div.etq-chica', 'Consecutivo'), h('div.mono', m.consecutivo)); // en recuadro negro y letra un poco mayor para encontrarlo rápido
     raiz.append(h('div.etq-chica', 'Clave numérica'), ...partir(m.clave, 25).map((p) => h('div.mono', p)));
   }
   raiz.append(fila('Fecha', fechaLinea(m.fecha)));
@@ -449,6 +457,7 @@ function nodoTiquete(m, { papel, logo, copia }) {
     raiz.append(h('div.aviso-pre.chico', 'NO ES UN COMPROBANTE ELECTRÓNICO.', h('br'), 'NO VÁLIDA COMO FACTURA'));
     raiz.append(h('div.pie', 'Pida su factura o tiquete electrónico al pagar'));
   }
+  if (m.soc.dir) raiz.append(h('div.dato', m.soc.dir)); // la dirección va al final del tiquete
   if (m.sandbox && !pre) raiz.append(marcaPrueba());
   if (copia) raiz.append(h('div.pie.copia', copia));
   raiz.append(h('div.avance'));
@@ -481,7 +490,8 @@ function nodoCarta(m, { logo, copia }) {
     h('div.ct-etq', 'Emisor'),
     h('div.ct-fuerte', m.soc.comercial),
     m.soc.razon && m.soc.razon.toUpperCase() !== m.soc.comercial.toUpperCase() ? h('div', m.soc.razon) : null,
-    h('div', 'Cédula jurídica ' + m.soc.cedula + (m.soc.tel ? '  ·  Teléfono ' + m.soc.tel : '')),
+    m.soc.cedulaEnNombre ? null : h('div', 'Cédula jurídica ' + m.soc.cedula),
+    h('div', m.soc.telLocal && m.soc.telFact ? 'Local y pedidos ' + m.soc.telLocal + '  ·  Facturas ' + m.soc.telFact : (m.soc.telLocal ? 'Teléfono ' + m.soc.telLocal : '')),
     m.soc.correo ? h('div', m.soc.correo) : null,
     m.soc.dir ? h('div', m.soc.dir) : null);
   const c = m.cliente;
@@ -719,7 +729,7 @@ export async function imprimirComprobante(comprobanteId, { formato, copias } = {
 export function reimprimirComprobante(comprobanteId, { copias, admin = false } = {}) {
   if (!admin) {
     imprimirComprobante(comprobanteId, { formato: 'tiquete', copias })
-      .then(() => toast('Tiquete enviado a la impresora.'))
+      .then(() => toast('Enviado a la impresora (rollo).'))
       .catch((e) => toast('No se pudo imprimir: ' + textoDeError(e) + ' Intente de nuevo; si sigue igual, avise a un administrador.', 'error', 7000));
     return null;
   }
@@ -731,8 +741,8 @@ export function reimprimirComprobante(comprobanteId, { copias, admin = false } =
     try { await imprimirComprobante(comprobanteId, { formato, copias }); m?.cerrar(); }
     catch (e) { estado.textContent = 'No se pudo imprimir: ' + textoDeError(e) + ' Intente de nuevo; si sigue igual, pida a un administrador que revise Administración, Configuración.'; }
   });
-  const b1 = h('button.btn.primario.grande', { type: 'button', onclick: () => lanzar('tiquete', b1) }, 'Tiquete (rollo de ' + aj.papel + ' mm)');
-  const b2 = h('button.btn.grande', { type: 'button', onclick: () => lanzar('carta', b2) }, 'Factura carta (' + (aj.hoja === 'a4' ? 'hoja grande A4' : 'hoja carta') + ')');
+  const b1 = h('button.btn.primario.grande', { type: 'button', onclick: () => lanzar('tiquete', b1) }, 'Rollo de ' + aj.papel + ' mm');
+  const b2 = h('button.btn.grande', { type: 'button', onclick: () => lanzar('carta', b2) }, 'Hoja ' + (aj.hoja === 'a4' ? 'A4' : 'carta') + ' o PDF');
   m = modal({ titulo: 'Imprimir otra vez', ancho: 460, contenido: h('div.col', h('p', '¿Cómo quiere imprimirlo?'), b1, b2, estado) });
   return m;
 }
@@ -785,8 +795,8 @@ export function armarAjustesImpresion() {
   const pintarEstadoAuto = () => {
     estadoAuto.className = 'fx-estado ' + (aj.auto ? 'si' : 'no');
     estadoAuto.textContent = aj.auto
-      ? 'En este aparato: ENCENDIDA. Al terminar cada cobro sale ' + 'el tiquete' + ' solo.'
-      : 'En este aparato: APAGADA. Al terminar el cobro no sale nada solo; aparece el botón «Imprimir tiquete» para tocarlo y entregarle el tiquete al cliente.';
+      ? 'En este aparato: ENCENDIDA. Al terminar cada cobro sale ' + 'el comprobante en rollo' + ' solo.'
+      : 'En este aparato: APAGADA. Al terminar el cobro no sale nada solo; aparece el botón «Imprimir en rollo» para tocarlo y entregarle el comprobante al cliente.';
   };
   const cambiar = (k, v) => { aj = guardarAjustes({ [k]: v }); guardado.textContent = 'Guardado.'; pintarEstadoAuto(); };
   const grupo = (tit, ayuda, ...ctl) => h('div.fx-grupo', h('div.fx-tit', tit), ayuda ? h('div.fx-ayuda', ayuda) : null, ...ctl);
@@ -801,9 +811,9 @@ export function armarAjustesImpresion() {
   const contenido = h('div.fx-aj',
     grupo('Ancho del papel', 'Mire el rollo de la impresora de tiquetes: casi siempre es de 80 mm.',
       seg([[80, 'Papel de 80 mm'], [58, 'Papel de 58 mm']], aj.papel, (v) => cambiar('papel', Number(v)), 'Ancho del papel')),
-    grupo('Copias de cada tiquete', 'Cuántas copias salen cada vez que se imprime.',
+    grupo('Copias de cada impresión en rollo', 'Cuántas copias salen cada vez que se imprime.',
       seg([[1, '1 copia'], [2, '2 copias'], [3, '3 copias']], aj.copias, (v) => cambiar('copias', Number(v)), 'Copias')),
-    grupo('Imprimir automáticamente al cobrar', 'En computadora viene encendido: el tiquete sale solo al terminar el cobro y se entrega al cliente. En celular y tableta viene apagado: el tiquete se imprime tocando el botón y se entrega igual. Cada aparato guarda su propia opción.',
+    grupo('Imprimir automáticamente al cobrar', 'En computadora y tableta viene encendido: el comprobante sale solo al terminar el cobro y se entrega al cliente. En celular viene apagado: se imprime tocando el botón y se entrega igual. Cada aparato guarda su propia opción.',
       seg([['si', 'Sí, imprimir solo'], ['no', 'No, yo lo pido']], aj.auto ? 'si' : 'no', (v) => cambiar('auto', v === 'si'), 'Imprimir automáticamente'), estadoAuto),
     h('div.fx-grupo', h('div.fx-tit', 'Probar la impresora'),
       h('div.fx-ayuda', 'Saca un tiquete con una regla, letras de varios tamaños y tildes, para ver que nada se corta.'), probar, guardado),

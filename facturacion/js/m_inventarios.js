@@ -9,7 +9,8 @@ import { cargarCss, cargando, falla, plural, diaLargo, crearCacheArticulos, empr
 // Las secciones, en el orden en que se ven. cargar() trae su archivo solo cuando se abre.
 const SECCIONES = [
   { id: 'recibir', titulo: 'Por recibir', desc: 'Facturas de proveedores con líneas que todavía no entran a la bodega', cargar: () => import('./m_inv_recibir.js') },
-  { id: 'existencias', titulo: 'Existencias', desc: 'Qué hay en cada bodega y local, con sus lotes y vencimientos', cargar: () => import('./m_inv_existencias.js') },
+  { id: 'existencias', titulo: 'Existencias', desc: 'Qué hay en cada bodega y local, con sus lotes', cargar: () => import('./m_inv_existencias.js') },
+  { id: 'bodega', titulo: 'Bodega', desc: 'Qué hay en cada local, mínimos propuestos, alertas de bajo mínimo y conteo físico', cargar: () => import('./m_inv_bodega.js') },
   { id: 'mover', titulo: 'Mover entre bodegas', desc: 'Pasar mercadería de la bodega central a un local, o de un lugar a otro', cargar: () => import('./m_inv_mover.js') },
   { id: 'salidas', titulo: 'Salidas y mermas', desc: 'Lo que se usó, lo que se dañó o se botó, y el porcionado', cargar: () => import('./m_inv_mover.js') },
   { id: 'conteo', titulo: 'Conteo físico', desc: 'Contar lo que hay de verdad y corregir lo que dice el sistema', cargar: () => import('./m_inv_conteo.js') },

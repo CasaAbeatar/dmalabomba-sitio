@@ -1,7 +1,7 @@
 ﻿# Ajustes de la pantalla del cliente. Cambie solo lo que haga falta.
-$UrlCaja        = "https://dmalabomba.com/facturacion/"
-$UrlCliente     = "https://dmalabomba.com/facturacion/cliente/"
-$Sitio          = "https://dmalabomba.com"         # origen al que se le concede el manejo de ventanas, ventanas emergentes y pantalla completa
+$UrlCaja        = "https://www.dmalabomba.com/facturacion/"
+$UrlCliente     = "https://www.dmalabomba.com/facturacion/cliente/"
+$Sitio          = "https://www.dmalabomba.com"         # origen al que se le concede el manejo de ventanas, ventanas emergentes y pantalla completa
 $Carpeta        = "C:\PantallaCliente"
 $CarpetaPublicidad = "C:\PantallaCliente\publicidad"   # fotos y videos de la pantalla del cliente: subcarpetas soda, pollos y todas (las dos empresas)
 $PuertoPublicidad  = 8766                            # puerto del servidor local de publicidad (solo esta computadora). Si se cambia, tambien hay que cambiarlo en la pagina

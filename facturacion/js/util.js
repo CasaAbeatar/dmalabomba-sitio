@@ -328,6 +328,7 @@ export function pedir({ titulo, etiqueta, valor = '', tipo = 'text', nota = '', 
 
 // Ejecuta una acción mostrando el botón ocupado y avisando los errores
 export async function conBoton(btn, fn) {
+  if (btn?.dataset.ocupado === '1') return; // un segundo toque (o Enter) mientras la acción sigue en curso se ignora: evita el aviso repetido (6 nov 2026)
   const t = btn?.textContent; if (btn) { btn.disabled = true; btn.dataset.ocupado = '1'; }
   try { return await fn(); }
   catch (e) { toast(textoDeError(e), 'error', 7000); }
@@ -384,9 +385,8 @@ function nombrePropioBase(s) {
 
 // PIN demasiado fácil de adivinar: devuelve el motivo en palabras, o '' si sirve. La misma regla debe vivir en el servidor (fx_pin_cambiar).
 export function pinDebil(p) {
-  return ''; // Decisión de Emil (6 nov 2026): ninguna clave de 4 números se rechaza por fácil (0000, 1111 y 0340 sirven). El servidor tampoco la rechaza.
-  // eslint-disable-next-line no-unreachable
   if (!/^\d{4}$/.test(String(p))) return '';
+  return ''; // 6 nov 2026: se quitó el bloqueo de claves débiles (fact.pin_debil devuelve siempre false en la base); lo que sigue queda sin uso
   const d = [...String(p)].map(Number);
   if (d.every((x) => x === d[0])) return 'No use el mismo número cuatro veces, como 1111.';
   const paso = (i) => (d[i + 1] - d[i] + 10) % 10;

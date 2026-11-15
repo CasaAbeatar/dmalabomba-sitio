@@ -6,6 +6,8 @@ import { estiloUsuario, h, toast, modal, conBoton, esqueleto, bloqueError, nombr
 import { buscar, padreDe } from './modulos.js';
 import { pantallaInicio, pantallaAdmin, pintarInsignias } from './ui_inicio.js';
 import { crearAvisosAdmin } from './avisos_admin.js';
+import { crearShell } from './shell.js';
+import { pantallaHoy } from './ui_hoy.js';
 import { iniciarBuscadoresBorrar } from './buscador_borrar.js';
 iniciarBuscadoresBorrar();
 
@@ -136,6 +138,8 @@ const LOGO_NEUTRO = 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http
 const logoDe = (codigo) => LOGOS[String(codigo || '').toLowerCase()] || LOGO_NEUTRO;
 // Ícono de la pestaña del navegador: el de la empresa de la sesión, o el neutro mientras no se sabe
 function iconoPestana(codigo) {
+  // Decisión del 7 nov 2026: la pestaña de facturación lleva siempre el ícono de Facturación del Grupo (campana con recibo), no el logo de cada empresa.
+  return;
   let l = document.querySelector('link[rel~="icon"]');
   if (!l) { l = document.createElement('link'); l.rel = 'icon'; document.head.append(l); }
   l.type = 'image/svg+xml';
@@ -476,7 +480,7 @@ async function actualizarAlertas(forzar = false) {
   } catch (e) { if (!esTransitorio(e) && !esSesionVencida(e)) console.warn('Avisos del encabezado no disponibles:', e?.message || e); }
 }
 // Repinta las insignias de las tarjetas que se ven (lo usan los avisos de administrador cuando llega una cifra nueva)
-function repintarInsignias() { if (cab && vista && (app.moduloActual === INICIO || app.moduloActual?.pantalla === 'admin')) pintarInsignias(vista, app); }
+function repintarInsignias() { shell?.repintar(); if (cab && vista && (app.moduloActual === INICIO || app.moduloActual?.pantalla === 'admin')) pintarInsignias(vista, app); }
 // Insignia de Inventarios (fx_inv_alertas_resumen, una consulta liviana): se pide junto con los avisos, sin cargar el módulo. La bodega es del grupo: no depende de la empresa.
 async function actualizarInventario(mi) {
   try {
@@ -680,11 +684,12 @@ function pintarVista(dest) {
   const tipo = tipoDe(dest);
   cab.dataset.vista = tipo;
   cab.dataset.modulo = dest.id || ''; // en «Anular y reimprimir» el atajo «Anular factura» sobra: ya se está ahí (css/app.css lo oculta)
-  tituloEl.textContent = dest.titulo;
+  tituloEl.textContent = app.admin && (tipo === 'inicio' || tipo === 'admin') ? 'Hoy' : dest.titulo;
   const aAdmin = tipo === 'sub';
-  volverEl.replaceChildren(h('span', { 'aria-hidden': 'true' }, '‹'), ' ', aAdmin ? 'Administración' : 'Inicio');
+  volverEl.replaceChildren(h('span', { 'aria-hidden': 'true' }, '‹'), ' ', aAdmin ? 'Volver a Administración' : 'Volver al inicio');
   volverEl.setAttribute('aria-label', aAdmin ? 'Volver a Administración' : 'Volver al inicio');
-  volverEl.onclick = () => subir(aAdmin ? 'admin' : 'inicio');
+  volverEl.onclick = () => subir(aAdmin && !app.admin ? 'admin' : 'inicio');
+  if (app.admin) { volverEl.replaceChildren(h('span', { 'aria-hidden': 'true' }, '‹'), ' Volver al inicio'); volverEl.setAttribute('aria-label', 'Volver al inicio'); }
   document.title = (dest === INICIO ? 'Facturación' : dest.titulo) + ' · La Bomba';
 }
 
@@ -722,6 +727,7 @@ async function mostrar(dest, forzar = false, { sinFoco = false } = {}) {
   if (app.moduloActual && app.moduloActual.id !== dest.id) { veniaDe = app.moduloActual.id; cerrarVentanas(); }
   app.moduloActual = dest;
   pintarVista(dest);
+  shell?.marcar(dest, tipoDe(dest));
   abrirMenu(false);
   try { limpieza?.(); } catch { /* nada */ }
   limpieza = null;
@@ -729,7 +735,9 @@ async function mostrar(dest, forzar = false, { sinFoco = false } = {}) {
   const tipo = tipoDe(dest);
   if (tipo === 'inicio' || tipo === 'admin') {
     const alAbrir = (m) => ir(m.id);
-    vista.replaceChildren(tipo === 'inicio'
+    vista.replaceChildren(app.admin
+      ? pantallaHoy(app, { alAbrir, alCerrarCaja: () => ir('turno'), alAbrirCaja: () => ir('caja'), abrirAtencion: () => shell?.abrirRail(true) })
+      : tipo === 'inicio'
       ? pantallaInicio(app, { alAbrir, alCerrarCaja: () => ir('turno'), alAbrirCaja: () => ir('caja') })
       : pantallaAdmin(app, { alAbrir, cambiarPin: cambiarPinDialogo }));
     app.pedido = null;
@@ -783,7 +791,9 @@ document.addEventListener('keydown', (e) => {
   subir(tipo === 'sub' ? 'admin' : 'inicio');
 });
 
+let shell = null;
 function armarApp(reciente = false) {
+  shell?.destruir(); shell = null;
   document.onkeydown = null;
   raiz.replaceChildren();
   vista = h('main#vista');
@@ -815,13 +825,18 @@ function armarApp(reciente = false) {
       // Atajo siempre visible: anular una factura no debe esconderse dentro de otra pantalla. Lleva a «Anular y reimprimir» con el cursor en el buscador.
       h('button.btn.cab-anular', { type: 'button', onclick: irAAnular }, 'Anular factura'),
       menuEl),
-    alertaEl, avisosAdmin ? avisosAdmin.el : null, avisosAdmin ? avisosAdmin.elReceptor : null, avisosAdmin ? avisosAdmin.elHacienda : null, redEl);
-  raiz.append(cab, vista);
+    // El administrador ve los avisos en la columna «Requiere atención» (shell.js); en el encabezado solo queda la banda de sin conexión. La persona de caja sigue como antes.
+    ...(app.admin ? [] : [alertaEl]), redEl);
+  if (app.admin) {
+    shell = crearShell({ app, raiz, cab, vista, bandas: [alertaEl, avisosAdmin?.el, avisosAdmin?.elReceptor, avisosAdmin?.elHacienda], ir, subir, cambiarPin: cambiarPinDialogo, cerrarSesion });
+  } else raiz.append(cab, vista);
   if (window.ResizeObserver) new ResizeObserver(() => sincronizarAlturas()).observe(cab);
   pintarCabecera();
   // Recién entró: al inicio. Si recargó la página, o regresó tras un fallo, se queda en la dirección que tenía.
   mostrar(reciente ? INICIO : destinoDe(location.hash), true);
   programarAlertas(); // después de pintar: no retrasa la carga inicial
+  // La contadora, apenas entra, ve primero lo que le toca responder o confirmar (vale para las dos empresas)
+  if (reciente && app.admin && String(app.ctx.usuario || '').toLowerCase() === 'adriana') import('./revision_contadora.js').then((m) => m.abrirRevisionContadora(app)).catch((e) => console.error(e));
 }
 function irAAnular() {
   // Si ya está en «Anular y reimprimir», basta con llevar el cursor al buscador y no se pierde lo que se ve
@@ -849,6 +864,7 @@ async function cerrarSesion() {
     olvidarPinDeEntrada();
     app.ctx = null; app.socId = null; app.moduloActual = null; app.pedido = null; app.alertas.datos = null; app.recepcion = null; app.inventario = null; app.respaldo = null; app.seguridad = null;
     recepcionCache = null; recepcionHora = 0; veniaDe = null;
+    shell?.destruir(); shell = null;
     cab = vista = alertaEl = redEl = menuEl = tituloEl = volverEl = inicioEl = avisosAdmin = null; cambioPinActivo = false;
     document.body.classList.remove('fx-caja');
     iconoPestana(null);
