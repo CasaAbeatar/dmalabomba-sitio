@@ -395,7 +395,7 @@ async function abrirLista(ctx) {
         h('span.rc-lin-art', h('span.rc-seg-desc', l.descripcion || ''), h('span.rc-seg-flecha', { 'aria-hidden': 'true' }, '→'), detalleSeguro(cat, f.sociedad_id, l)),
         h('span.rc-seg-cant.cifra', num(Number(l.cantidad) || 0, 3)),
         h('span.rc-lin-imp.cifra', money0(l.subtotal_crc)),
-        puedeMarcar ? h('span.rc-lin-acc') : h('button.btn.chico', { type: 'button', onclick: () => abrirFactura(ctx, f.clave, { previa: f }) }, 'Revisar'));
+        puedeMarcar ? h('span.rc-lin-acc') : h('button.btn.chico', { type: 'button', onclick: () => abrirCola(f) }, 'Revisar'));
     });
     const btnRecibir = h('button.btn.primario.grande', { type: 'button', disabled: !nMarc }, nMarc ? 'Recibir ' + (nMarc === 1 ? 'la línea marcada' : 'las ' + nMarc + ' líneas marcadas') + ' · ' + money0(totMarc) : 'Marque las líneas que quiere recibir');
     btnRecibir.addEventListener('click', async () => {
@@ -435,12 +435,23 @@ async function abrirLista(ctx) {
   const pill = (nivel, n, uno, varios) => (n ? h('span.rc-pill.' + nivel, h('i', { 'aria-hidden': 'true' }), n + ' ' + (n === 1 ? uno : varios)) : null);
 
   // Una fila compacta por factura: documento, proveedor, líneas, semáforo, total y las acciones, todo en una sola línea (en celular baja a dos)
+  // Cola de trabajo (16 nov 2026): al terminar una factura se abre sola la siguiente, en el orden en que se ven las filas; las ya trabajadas no vuelven
+  const visitadas = new Set();
+  function siguienteDe(clave) {
+    visitadas.add(clave);
+    const claves = [...lista.querySelectorAll('article.rc-fac[data-clave]:not(.rechazada)')].map((el) => el.dataset.clave);
+    const i = Math.max(0, claves.indexOf(clave));
+    const resto = claves.slice(i + 1).concat(claves.slice(0, i)).filter((c) => !visitadas.has(c) && (est.datos?.facturas || []).some((x) => x.clave === c && infoFactura(x).puede));
+    if (!resto.length) return null;
+    return { clave: resto[0], previa: est.datos.facturas.find((x) => x.clave === resto[0]), faltan: resto.length };
+  }
+  const abrirCola = (f) => { visitadas.clear(); return abrirFactura(ctx, f.clave, { previa: f, siguiente: siguienteDe }); };
   function fila(f, inf, conProveedor, conEmpresa) {
     const et = etapaDe(inf);
     const ec = f.estado_contable || {};
     const hoyLlego = f.llego && ymdCR(f.llego) === (est.datos.hoy || ctx.hoy);
     const cuando = hoyLlego ? 'hoy ' + horaCorta(f.llego) : dm(f.llego || f.fecha);
-    const ver = () => abrirFactura(ctx, f.clave, { previa: f });
+    const ver = () => abrirCola(f);
     const botones = [];
     if (!inf.puede) botones.push(h('button.btn', { type: 'button', onclick: ver }, 'Ver la factura'));
     else {
@@ -537,16 +548,17 @@ export function pedirIgnorar(ctx, f, lineas, alTerminar) {
 /* =====================================================================================================================
    Ventana de una factura: recibir sus líneas
    ===================================================================================================================== */
-export async function abrirFactura(ctx, clave, { previa = null, recibirSugeridas = false, soloLineas = null, alRecibir = null, alFin = null } = {}) {
+export async function abrirFactura(ctx, clave, { previa = null, recibirSugeridas = false, soloLineas = null, alRecibir = null, alFin = null, siguiente = null } = {}) {
   await cargarCssPantallas();
   let autoRecibir = recibirSugeridas;
   let silencioso = recibirSugeridas; // «Recibir las N líneas seguras» desde la lista: no se abre la ventana salvo que algo necesite revisarse
   const cat = ctx.cat;
   const banda = bandaCostoPrecio(cat);
   let vivo = true;
+  let vent = null, pendInicial = null, avanzado = false; // cola: al quedar sin líneas por recibir se abre sola la factura siguiente de la lista (16 nov 2026)
   const cuerpo = h('div.inv-factura.rc-factura', cargando('Cargando la factura…'));
   const resultado = h('div.inv-resultado', { 'aria-live': 'polite' });
-  const mostrar = () => { if (!silencioso) return; silencioso = false; ventana({ titulo: 'Factura de proveedor', volver: 'Por recibir', contenido: [resultado, cuerpo], alCerrar: () => { vivo = false; } }).el.classList.add('rc-vent'); };
+  const mostrar = () => { if (!silencioso) return; silencioso = false; vent = ventana({ titulo: 'Factura de proveedor', volver: 'Por recibir', contenido: [resultado, cuerpo], alCerrar: () => { vivo = false; } }); vent.el.classList.add('rc-vent'); };
   if (!silencioso) { silencioso = true; mostrar(); }
   const recordados = new Map(); // línea -> sugerencia que trajo la lista (por si la consulta de la factura no la repite)
   (previa?.lineas || []).forEach((l) => recordados.set(l.linea, l.sugerencia));
@@ -569,6 +581,19 @@ export async function abrirFactura(ctx, clave, { previa = null, recibirSugeridas
     if (!vivo) return;
     pintar(d);
     if (primera) enfocar(cuerpo);
+  }
+
+  // Cola de trabajo: terminada una factura, la persona no vuelve a la lista: se abre la siguiente (mismo orden que ve en la lista) o se cierra si ya no hay más
+  function avanzar(f) {
+    const sig = siguiente(clave), quien = proveedorTxt(f.proveedor_nombre);
+    setTimeout(() => {
+      if (!vivo) return;
+      const fondo = vent?.el?.parentElement;
+      if (!sig) { toastOk('Factura de ' + quien + ' completa. No quedan más facturas por recibir en la lista.'); fondo?._cerrar?.(); return; }
+      toastOk('Factura de ' + quien + ' completa. Sigue ' + proveedorTxt(sig.previa.proveedor_nombre) + ', N.° ' + numFactura(sig.previa.consecutivo) + ' (' + (sig.faltan === 1 ? 'es la última' : 'quedan ' + sig.faltan) + ').');
+      vivo = false; fondo?._cerrar?.();
+      abrirFactura(ctx, sig.clave, { previa: sig.previa, siguiente, alRecibir, alFin });
+    }, 700);
   }
 
   // Lo que entró, en palabras; el detalle va plegado para que no empuje lo importante
@@ -659,6 +684,8 @@ export async function abrirFactura(ctx, clave, { previa = null, recibirSugeridas
         h('ul.inv-datos-lista', d.notas_proveedor.map((n) => h('li', h('span', tipoDocTxt(n.tipo) + ' N.° ' + numFactura(n.consecutivo) + ' del ' + dma(n.fecha)), h('strong', ({ por_revisar: 'Por revisar', devuelta: 'Mercadería devuelta', ignorada: 'No afecta el inventario' })[n.estado] || n.estado || '')))),
         h('button.btn', { type: 'button', onclick: () => ctx.abrir('notas') }, 'Abrir Notas de proveedor')) : null);
     pintarBarra();
+    if (pendInicial == null) pendInicial = pend.length;
+    else if (siguiente && puede && !pend.length && pendInicial > 0 && !avanzado && vivo && !autoRecibir) { avanzado = true; avanzar(f); }
     if (scroller && yAntes && cuerpo.isConnected) scroller.scrollTop = yAntes;
     // «Recibir las N líneas seguras» desde la lista: se aceptan las verdes y la comida preparada o suministros con rubro; si algo falla se avisa y la factura se puede abrir con «Revisar»
     if (autoRecibir && !puede) { autoRecibir = false; if (silencioso) { silencioso = false; vivo = false; toastMal('La factura de ' + proveedorTxt(f.proveedor_nombre) + ' no se puede recibir ahora.'); } alFin?.(); }

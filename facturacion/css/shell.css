@@ -420,3 +420,10 @@ body.fx-admin .inv-aviso.ok,body.fx-admin .inv-opcion.sugerida,body.fx-admin .in
 
 /* La barra inferior del celular es opaca: nada se transparenta bajo los botones */
 .fx-barra{background:#f7f1e6!important;-webkit-backdrop-filter:none!important;backdrop-filter:none!important}
+
+/* 16 nov 2026: sin la barra «Buscar o ir a…», en el celular quedan Atención y Anular arriba y el usuario abajo, sin huecos */
+@media(max-width:979px){
+  .fx-shell .cab-fila .cab-atencion{grid-row:2;grid-column:1}
+  .fx-shell .cab-fila .cab-anular{grid-row:2;grid-column:2}
+  .fx-shell .cab-fila .cab-usuario{grid-row:3;grid-column:1/-1}
+}

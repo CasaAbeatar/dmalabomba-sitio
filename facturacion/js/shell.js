@@ -115,7 +115,6 @@ export function crearShell({ app, raiz, cab, vista, bandas, ir, subir, cambiarPi
   const teclaBuscar = (e) => {
     if ((e.ctrlKey || e.metaKey) && String(e.key).toLowerCase() === 'k') { if (!document.body.classList.contains('fx-admin') || !raiz.isConnected) return; e.preventDefault(); if (!document.querySelector('.modal-fondo')) abrirBusqueda(); }
   };
-  document.addEventListener('keydown', teclaBuscar);
 
   /* ---------- Barra inferior del celular ---------- */
   const barraN = h('span.bb-n', { hidden: true });
@@ -161,7 +160,7 @@ export function crearShell({ app, raiz, cab, vista, bandas, ir, subir, cambiarPi
   // botones del encabezado (después del título): buscar y atención
   const fila = cab.querySelector('.cab-fila');
   const anular = fila?.querySelector('.cab-anular');
-  if (fila) fila.insertBefore(h('div.cab-acciones', btnBuscar, btnAtencion), anular || null);
+  if (fila) fila.insertBefore(h('div.cab-acciones', btnAtencion), anular || null); // 16 nov 2026: se quitó la barra «Buscar o ir a…» (orden de Emil); la función sigue disponible por si se reactiva
   contar();
 
   const marcar = (dest, tipo) => {
@@ -184,7 +183,7 @@ export function crearShell({ app, raiz, cab, vista, bandas, ir, subir, cambiarPi
     marcar, repintar, abrirRail, abrirBusqueda,
     destruir() {
       eventos.forEach((e) => document.removeEventListener(e, repintar));
-      document.removeEventListener('keydown', teclaBuscar); obs?.disconnect();
+      obs?.disconnect();
       document.body.classList.remove('fx-admin', 'sin-cristal'); raiz.classList.remove('fx-shell', 'sin-rail'); delete raiz.dataset.vista; delete raiz.dataset.grupo; delete raiz.dataset.atencion;
     },
   };
