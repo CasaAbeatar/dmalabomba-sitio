@@ -35,9 +35,9 @@ $SegundosVigilar = 15                              # cada cuanto se revisa; mas 
 
 # --- v2 (16 nov): identidad de la computadora y latido hacia el panel ---
 # La identidad (Soda o Pollos) se guarda UNA vez en esta PC y no depende de la empresa que se use en el facturador.
-$VersionKit       = "3.0 18nov sin probar"
+$VersionKit       = "3.1 18nov sin probar"
 $SupabaseUrl      = "https://dwlbcbtwdungyrykgahm.supabase.co"
-$SupabaseClave    = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR3bGJjYnR3ZHVuZ3lyeWtnYWhtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTIxNjQ5NjcsImV4cCI6MjEwNzc0MDk2N30.GTLrTIQQ9ZIcKMpcxRBkRC6n1dZpCUAwmHb4ZeC4u-w"   # clave PUBLICA (anon): solo permite llamar a las funciones abiertas; no da acceso a datos
+$SupabaseClave    = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR3bGJjYnR3ZHVuZ3lyeWtnYWhtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTIxNjQ5NjcsImV4cCI6MjEwNzc0MDk2N30.GTLrTIQQ9ZIcKMpcxRRBkC6n1dZpCUAwmHb4ZeC4u-w"   # clave PUBLICA (anon): solo permite llamar a las funciones abiertas; no da acceso a datos
 $ArchivoIdentidad = "C:\PantallaCliente\datos\equipo.json"   # estacion + clave propia de esta PC (solo permite enviar latidos de esta caja)
 $SegundosLatido   = 60                                        # cada cuanto se avisa al panel
 $CajaCerradaAvisaDesde = 6                                    # solo se avisa caja cerrada dentro de este horario (hora de Costa Rica)

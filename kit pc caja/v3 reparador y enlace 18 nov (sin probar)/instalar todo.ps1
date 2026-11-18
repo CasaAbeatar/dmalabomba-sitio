@@ -1,4 +1,4 @@
-# INSTALAR TODO (v3 reparador y enlace).
+# INSTALAR TODO (v3.1 reparador y enlace).
 # Se puede correr ENCIMA de cualquier version anterior (v1 14 nov, v2 propuesta 15 nov, Kit v2 15 nov, v2 identidad y latido 16 nov) y las veces que haga falta:
 # detecta lo que hay, lo corrige y deja la PC en el estado final. Al terminar muestra que corrigio y que falta.
 # La identidad (Soda o Pollos) se verifica SIEMPRE aqui mismo, sin depender de otro archivo.
@@ -19,19 +19,53 @@ if ($faltan.Count -gt 0) {
   exit 1
 }
 
-New-Item -ItemType Directory -Force -Path $Carpeta | Out-Null
-New-Item -ItemType Directory -Force -Path $Datos | Out-Null
+# ===== Registro a prueba de fallos y permisos de la carpeta de datos (v3.1) =====
+$script:RegistroTemp = Join-Path $env:TEMP "kit-v3-registro.txt"
+function Anotar-Registro($texto) {
+  # Nunca falla: si no se puede escribir en la carpeta de datos, deja el texto en %TEMP%\kit-v3-registro.txt.
+  $t = [string]$texto
+  try { Add-Content -LiteralPath $registro -Value $t -Encoding UTF8 -ErrorAction Stop }
+  catch { try { Add-Content -LiteralPath $script:RegistroTemp -Value $t -Encoding UTF8 -ErrorAction Stop } catch { $null = 1 } }
+}
+function Escribir-Archivo($ruta, $lineas) {
+  # Escribe un archivo de texto; si la carpeta de datos no deja, lo deja en %TEMP% con el mismo nombre. Devuelve $true si quedo en su lugar.
+  try { Set-Content -LiteralPath $ruta -Value $lineas -Encoding UTF8 -ErrorAction Stop; return $true }
+  catch {
+    try { Set-Content -LiteralPath (Join-Path $env:TEMP ("kit-v3 " + (Split-Path $ruta -Leaf))) -Value $lineas -Encoding UTF8 -ErrorAction Stop } catch { $null = 1 }
+    return $false
+  }
+}
+function Preparar-Datos {
+  # Como administrador: restablece los permisos de C:\PantallaCliente\datos (una instalacion vieja pudo dejarlos cerrados) para poder escribir el registro.
+  # Administradores y SYSTEM: control total; Usuarios (la cuenta de la caja): modificar. Solo toca la carpeta de datos (y la raiz sin recursion).
+  try { New-Item -ItemType Directory -Force -Path $Carpeta -ErrorAction Stop | Out-Null; New-Item -ItemType Directory -Force -Path $Datos -ErrorAction Stop | Out-Null } catch { $null = 1 }
+  if (-not (Es-Admin)) { return }
+  try {
+    & takeown.exe /F $Datos /R /D Y 2>&1 | Out-Null
+    & icacls.exe $Datos /reset /T /C 2>&1 | Out-Null
+    & icacls.exe $Datos /remove:d "*S-1-5-32-544" "*S-1-5-32-545" "*S-1-1-0" /T /C 2>&1 | Out-Null
+    & icacls.exe $Datos /grant "*S-1-5-18:(OI)(CI)F" "*S-1-5-32-544:(OI)(CI)F" "*S-1-5-32-545:(OI)(CI)M" /T /C 2>&1 | Out-Null
+    & icacls.exe $Carpeta /grant "*S-1-5-18:F" "*S-1-5-32-544:F" "*S-1-5-32-545:RX" /C 2>&1 | Out-Null
+  } catch { $null = 1 }
+  $prueba = Join-Path $Datos "prueba escritura.tmp"
+  try { Set-Content -LiteralPath $prueba -Value "ok" -ErrorAction Stop; Remove-Item -LiteralPath $prueba -Force -ErrorAction SilentlyContinue; return $true } catch { return $false }
+}
+
+$ErrorActionPreference = "Continue"
+$datosListo = Preparar-Datos
 $registro = "$Datos\instalacion.txt"
 function Paso($nombre, [scriptblock]$bloque) {
-  try { & $bloque *>> $registro; Hecho $nombre }
-  catch { Falta ("FALLO: " + $nombre + " (" + $_.Exception.Message + ")"); Add-Content $registro ("FALLO " + $nombre + ": " + $_.Exception.Message) }
+  # Todo lo que diga el paso (incluidos errores) va al registro, no a la pantalla en rojo.
+  try { $salida = (& $bloque 2>&1 | Out-String); if ($salida.Trim()) { Anotar-Registro $salida.TrimEnd() }; Hecho $nombre }
+  catch { Falta ("FALLO: " + $nombre + " (" + $_.Exception.Message + ")"); Anotar-Registro ("FALLO " + $nombre + ": " + $_.Exception.Message) }
 }
-Add-Content $registro ("==== {0:yyyy-MM-dd HH:mm:ss} instalacion v3 en {1} ====" -f (Get-Date), $env:COMPUTERNAME)
+Anotar-Registro ("==== {0:yyyy-MM-dd HH:mm:ss} instalacion v3.1 en {1} ====" -f (Get-Date), $env:COMPUTERNAME)
+if (-not $datosListo) { Falta ("No se pudo escribir en " + $Datos + " (permisos). El registro de esta instalacion queda en " + $script:RegistroTemp) }
 
 # 1) Detectar lo que hay
 Write-Host "Revisando lo que ya hay en esta computadora..."
 $det = Detectar-Instalacion
-foreach ($l in $det.Lineas) { Write-Host ("  " + $l); Add-Content $registro $l }
+foreach ($l in $det.Lineas) { Write-Host ("  " + $l); Anotar-Registro $l }
 if ($det.Existe) { Hecho ("Instalacion previa detectada: " + $det.Version + ". Se actualiza encima") } else { Hecho "Instalacion nueva (no habia kit anterior)" }
 
 # 2) Detener lo que corre con codigo viejo y limpiar tareas, arranques y accesos que dejaron las versiones anteriores
@@ -46,6 +80,7 @@ if (-not (Buscar-Navegador)) {
 
 # 4) Copiar el kit, migrar datos viejos, permisos y accesos
 Paso "1 Copiar el kit, migrar datos y crear accesos" { & "$PSScriptRoot\1 crear accesos y arranque automatico.ps1" -Silencioso }
+[void](Preparar-Datos)
 $vigentes = @(Get-ChildItem -LiteralPath $PSScriptRoot -File | Where-Object { $_.Extension -in ".ps1", ".bat" } | ForEach-Object { $_.Name })
 Paso "Apartar archivos de versiones anteriores (no se borran)" { Apartar-Archivos-Viejos $vigentes }
 
@@ -107,14 +142,14 @@ Falta "Pendiente de Emil, una sola vez por PC: vincular el control remoto (abrir
 if ($idr.Resultado -ne "ok") { Falta "SIN IDENTIDAD VALIDA: abrir ENLAZAR EQUIPO.bat (o tocar Reparar) con un codigo nuevo cuando lo tenga" }
 
 # 10) Resumen
-try { Set-Content -LiteralPath "$Datos\version kit.txt" -Encoding UTF8 -Value @($VersionKit, ("Instalada: " + (Get-Date).ToString("s")), ("Equipo: " + $env:COMPUTERNAME)) } catch { Write-Verbose "version kit" }
+[void](Escribir-Archivo "$Datos\version kit.txt" @($VersionKit, ("Instalada: " + (Get-Date).ToString("s")), ("Equipo: " + $env:COMPUTERNAME)))
 $completo = Texto-Resumen 0
-$completo | Set-Content -LiteralPath "$Datos\resumen instalacion.txt" -Encoding UTF8
-Add-Content $registro $completo
+[void](Escribir-Archivo "$Datos\resumen instalacion.txt" $completo)
+Anotar-Registro $completo
 Write-Host ""
 Write-Host "================ RESUMEN DE LA INSTALACION (kit $VersionKit) ================"
 Write-Host $completo
-Write-Host "Resumen guardado en $Datos\resumen instalacion.txt   Registro completo: $registro"
+Write-Host "Resumen guardado en $Datos\resumen instalacion.txt   Registro completo: $registro (si no se pudo escribir ahi: $script:RegistroTemp)"
 $corto = Texto-Resumen 8
 if ($corto.Length -gt 1500) { $corto = $corto.Substring(0, 1500) + "..." }
 [void](Dialogo ("Resumen de la instalacion (kit " + $VersionKit + ")") ($corto.Replace("`r`n", "`n").Replace("`n", "`r`n")) @("Aceptar") -tam 11)

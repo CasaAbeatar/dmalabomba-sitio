@@ -73,7 +73,7 @@ $n = @(Get-ChildItem -LiteralPath $CarpetaPublicidad -File -Recurse -Depth 4 -Er
 $sal.Add("Fotos y videos encontrados (con subcarpetas): $n")
 $sal.Add("--- Registro del kit (ultimas 15 lineas) ---")
 if (Test-Path "$Datos\registro.txt") { Get-Content "$Datos\registro.txt" -Tail 15 | ForEach-Object { $sal.Add($_) } }
-$sal | Set-Content -Encoding UTF8 "$Datos\diagnostico.txt"
+try { $sal | Set-Content -Encoding UTF8 "$Datos\diagnostico.txt" -ErrorAction Stop } catch { $sal | Set-Content -Encoding UTF8 (Join-Path $env:TEMP "kit-v3 diagnostico.txt"); Write-Host "No se pudo escribir en $Datos; el diagnostico quedo en $env:TEMP" }
 $sal | ForEach-Object { Write-Host $_ }
 Write-Host ""
 Write-Host "Guardado en $Datos\diagnostico.txt"
