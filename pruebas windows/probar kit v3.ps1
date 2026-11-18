@@ -16,8 +16,9 @@ Dice ("1) Archivos con error de sintaxis en 5.1: " + $malos)
 
 # 2) cuenta normal de prueba (la cajera)
 $clave = "Kit-Prueba-2026-xZ9!"
-net user cajaprueba $clave /add 2>&1 | Out-Null
-Dice ("2) Cuenta normal creada: " + (net localgroup Users | Select-String cajaprueba))
+$r = net user cajaprueba $clave /add 2>&1; Dice ("2) net user: " + ($r -join " "))
+Dice ("   existe: " + ((net user cajaprueba 2>&1) -join " ").Substring(0, 120))
+Dice ("   servicio Programador de tareas: " + (Get-Service Schedule).Status + "; seclogon: " + (Get-Service seclogon).Status)
 
 # 3) instalar la copia y los permisos con el script REAL del kit, como administrador
 & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $origen "1 crear accesos y arranque automatico.ps1") -Silencioso 2>&1 | ForEach-Object { Dice ("   paso1: " + $_) }
@@ -33,8 +34,8 @@ function Como-Normal($nombre, $comando, $segundos) {
   Set-Content -LiteralPath $bat -Value ('@echo off' + "`r`n" + $comando + ' > "' + $o + '" 2>&1')
   icacls.exe $bat /grant "cajaprueba:(RX)" 2>&1 | Out-Null
   icacls.exe C:\Windows\Temp /grant "cajaprueba:(OI)(CI)M" 2>&1 | Out-Null
-  schtasks.exe /Create /TN "kit$nombre" /TR "`"$bat`"" /SC ONCE /ST 23:59 /RU cajaprueba /RP $clave /RL LIMITED /F 2>&1 | Out-Null
-  schtasks.exe /Run /TN "kit$nombre" 2>&1 | Out-Null
+  $c1 = schtasks.exe /Create /TN "kit$nombre" /TR "`"$bat`"" /SC ONCE /ST 23:59 /RU cajaprueba /RP $clave /RL LIMITED /F 2>&1; Dice ("   crear tarea: " + ($c1 -join " "))
+  $c2 = schtasks.exe /Run /TN "kit$nombre" 2>&1; Dice ("   ejecutar tarea: " + ($c2 -join " "))
   $t = 0; while ($t -lt $segundos) { Start-Sleep -Seconds 2; $t += 2; $est = (schtasks.exe /Query /TN "kit$nombre" /FO CSV /NH 2>&1) -join ""; if ($est -notmatch "Running|En ejecuci") { break } }
   Dice ("   [" + $nombre + "] terminado tras ~" + $t + " s")
   schtasks.exe /End /TN "kit$nombre" 2>&1 | Out-Null
