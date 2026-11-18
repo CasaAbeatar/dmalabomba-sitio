@@ -34,12 +34,15 @@ function Como-Normal($nombre, $comando, $segundos) {
   Set-Content -LiteralPath $bat -Value ('@echo off' + "`r`n" + $comando + ' > "' + $o + '" 2>&1')
   icacls.exe $bat /grant "cajaprueba:(RX)" 2>&1 | Out-Null
   icacls.exe C:\Windows\Temp /grant "cajaprueba:(OI)(CI)M" 2>&1 | Out-Null
-  $c1 = schtasks.exe /Create /TN "kit$nombre" /TR "`"$bat`"" /SC ONCE /ST 23:59 /RU cajaprueba /RP $clave /RL LIMITED /F 2>&1; Dice ("   crear tarea: " + ($c1 -join " "))
-  $c2 = schtasks.exe /Run /TN "kit$nombre" 2>&1; Dice ("   ejecutar tarea: " + ($c2 -join " "))
-  $t = 0; while ($t -lt $segundos) { Start-Sleep -Seconds 2; $t += 2; $est = (schtasks.exe /Query /TN "kit$nombre" /FO CSV /NH 2>&1) -join ""; if ($est -notmatch "Running|En ejecuci") { break } }
+  Set-Service seclogon -StartupType Manual -ErrorAction SilentlyContinue; Start-Service seclogon -ErrorAction SilentlyContinue
+  $cred = New-Object System.Management.Automation.PSCredential(($env:COMPUTERNAME + "\cajaprueba"), (ConvertTo-SecureString $clave -AsPlainText -Force))
+  $t = 0
+  try {
+    $pr = Start-Process -FilePath "cmd.exe" -ArgumentList ('/c "' + $bat + '"') -Credential $cred -WorkingDirectory "C:\Windows\Temp" -LoadUserProfile -WindowStyle Hidden -PassThru -ErrorAction Stop
+    if (-not $pr.WaitForExit($segundos * 1000)) { Dice "   (sigue corriendo tras el tiempo; se cierra)"; Get-CimInstance Win32_Process | Where-Object { $_.ParentProcessId -eq $pr.Id } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }; Stop-Process -Id $pr.Id -Force -ErrorAction SilentlyContinue }
+    $t = $segundos
+  } catch { Dice ("   NO SE PUDO LANZAR COMO CUENTA NORMAL: " + $_.Exception.Message) }
   Dice ("   [" + $nombre + "] terminado tras ~" + $t + " s")
-  schtasks.exe /End /TN "kit$nombre" 2>&1 | Out-Null
-  schtasks.exe /Delete /TN "kit$nombre" /F 2>&1 | Out-Null
   if (Test-Path $o) { foreach ($x in @(Get-Content $o)) { Dice ("      " + $x) } }
 }
 
