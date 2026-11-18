@@ -50,8 +50,22 @@ if ($PSScriptRoot -ne $Carpeta) {
 # La carpeta la crea el administrador: se le da permiso de modificar a todos los usuarios para que la cuenta de la PC pueda escribir el perfil y el registro.
 # Seguridad: la cuenta de la caja solo LEE el kit (para que nadie con acceso a la caja cambie los scripts que corren con permisos altos) y solo ESCRIBE en la subcarpeta datos.
 if (Es-Admin) {
-  & icacls.exe $Carpeta /inheritance:r /grant "*S-1-5-18:(OI)(CI)F" "*S-1-5-32-544:(OI)(CI)F" "*S-1-5-32-545:(OI)(CI)RX" /T /C | Out-Null
-  & icacls.exe $Datos /grant "*S-1-5-32-545:(OI)(CI)M" /T /C | Out-Null
+  # v3.2c (CAUSA RAIZ del fallo de latido y facturador, probada en Windows real): "/inheritance:r ... /T" con permisos (OI)(CI) dejaba cada ARCHIVO con la lista de permisos VACIA
+  # y la cuenta de la caja no podia ni leer los scripts. Ahora los hijos se limpian primero (heredan) y solo la carpeta raiz se protege, SIN /T.
+  & icacls.exe $Carpeta /reset /T /C 2>&1 | Out-Null
+  & icacls.exe $Carpeta /inheritance:r /grant "*S-1-5-18:(OI)(CI)F" "*S-1-5-32-544:(OI)(CI)F" "*S-1-5-32-545:(OI)(CI)RX" /C 2>&1 | Out-Null
+  & icacls.exe $Datos /grant "*S-1-5-32-545:(OI)(CI)M" /C 2>&1 | Out-Null
+  # Comprobacion: cada script debe quedar legible para el grupo Usuarios (se mira por SID, sirve en cualquier idioma de Windows).
+  $sinAcceso = @()
+  foreach ($a2 in @(Get-ChildItem -LiteralPath $Carpeta -File -ErrorAction SilentlyContinue | Where-Object { $_.Extension -in ".ps1", ".bat" })) {
+    $ok2 = $false
+    try { foreach ($r2 in (Get-Acl -LiteralPath $a2.FullName).GetAccessRules($true, $true, [Security.Principal.SecurityIdentifier])) { if ($r2.IdentityReference.Value -eq "S-1-5-32-545") { $ok2 = $true } } } catch { $null = 1 }
+    if (-not $ok2) { $sinAcceso += $a2.Name }
+  }
+  if ($sinAcceso.Count -gt 0) {
+    & icacls.exe "$Carpeta\*.*" /reset /C 2>&1 | Out-Null
+    Write-Output ("Se repararon los permisos de " + $sinAcceso.Count + " archivo(s) que habian quedado sin acceso para la cuenta de la caja: " + ($sinAcceso -join ", "))
+  }
 }
 $ws = New-Object -ComObject WScript.Shell
 function Hacer-Acceso($ruta, $archivo, $texto) {
