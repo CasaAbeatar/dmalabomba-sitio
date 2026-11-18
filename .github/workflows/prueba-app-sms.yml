@@ -47,6 +47,7 @@ jobs:
             sleep 6
             adb logcat -d > registro-android.txt
             adb exec-out screencap -p > pantalla-final.png
+            bash ../scripts-prueba/e2e.sh | tee resultado-e2e.txt
             ./gradlew connectedDebugAndroidTest
       - uses: actions/upload-artifact@v4
         if: always()
@@ -56,5 +57,9 @@ jobs:
             app sms android/pantalla-inicial.png
             app sms android/pantalla-final.png
             app sms android/registro-android.txt
+            app sms android/registro-e2e.txt
+            app sms android/resultado-e2e.txt
+            app sms android/recibidos.jsonl
+            app sms android/pantalla-con-regla.png
             app sms android/app/build/reports/androidTests/connected
             app sms android/app/build/reports/tests/testDebugUnitTest
