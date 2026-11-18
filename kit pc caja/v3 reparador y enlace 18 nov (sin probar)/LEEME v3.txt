@@ -1,0 +1,41 @@
+KIT v3 REPARADOR Y ENLACE (18 nov 2026, SIN PROBAR en Windows)
+PC de caja estandar: Athlon 3000G + Skitphrati tactil (pantalla 1) + LG 24MK430H-B (pantalla 2). Sirve para Soda y para Pollos.
+
+QUE HACE
+Se instala ENCIMA de cualquier version anterior (v1 del 14 nov, "v2 propuesta" del 15 nov, "Kit v2" del 15 nov, "v2 identidad y latido" del 16 nov) o en una PC nueva. Detecta lo que hay, lo corrige y deja la PC en el estado final. Se puede repetir las veces que haga falta.
+1) Detecta: version instalada, carpeta C:\PantallaCliente, equipo.json, tareas programadas, iconos del Escritorio, arranques de Windows, procesos viejos y cuentas.
+2) Limpia sin duplicar: detiene lo viejo, quita tareas y arranques repetidos, deja una sola ventana 1 y una sola ventana 2, y APARTA (no borra) los archivos de versiones anteriores en C:\PantallaCliente\datos\kit anterior.
+3) Pregunta SIEMPRE la identidad, en pantalla: "Esta computadora es de SODA o de POLLOS?", pide confirmar y pide el codigo de enlace de 8 caracteres. La pregunta sale si falta equipo.json, esta danado, es de otra PC, el panel no reconoce la clave o no coincide con el nombre de la PC. Si ya esta bien enlazada, igual pide confirmar "Es correcto?" al instalar.
+4) Si no hay codigo a mano, se puede tocar "Enlazar despues": queda un recordatorio visible (cada 30 minutos) y el icono Reparar vuelve a preguntar. Hasta enlazar, el panel no ve esa caja.
+5) Fija pantalla 1 = tactil (principal) y pantalla 2 = LG del cliente. Una sola ventana 2. Si se cierra la ventana 1, se cierra la 2 y se vuelve con el icono Facturador.
+6) Plan B: si hay una sola pantalla (tactil desconectada), el facturador queda solo en la LG, sin ventana del cliente. Al reconectar la tactil vuelve solo al modo de dos pantallas (Reparar lo fuerza).
+7) Escritorio: solo los iconos Facturador, Reparar y Control remoto. No crea usuarios de Windows. La cajera no puede instalar nada (solo el administrador; ademas se cierran instalaciones por usuario, extensiones del navegador y Microsoft Store).
+8) Latido al panel cada minuto (public.equipo_latido). No escribe claves en archivos del kit: la clave propia de la PC la guarda equipo.json al enlazar.
+9) Al final muestra un resumen: FALTA O REVISAR / CORREGIDO O INSTALADO / YA ESTABA BIEN (tambien queda en C:\PantallaCliente\datos\resumen instalacion.txt).
+
+COMO INSTALAR ENCIMA DE LO ANTERIOR
+1. Extraiga TODO el zip "Kit v3 PC de caja" en una carpeta de la PC (no copie solo algunos archivos: el instalador se detiene si falta alguno).
+2. Doble clic en INSTALAR TODO.bat y diga que si al permiso de administrador.
+3. Conteste las preguntas de identidad (Soda o Pollos, confirmar, codigo).
+4. Lea el resumen final.
+
+OTROS ARCHIVOS
+ENLAZAR EQUIPO.bat      repite el enlace cuando haga falta (suelto y visible en esta carpeta y en C:\PantallaCliente)
+REPARAR.bat             lo mismo que el icono Reparar
+DIAGNOSTICO.bat         muestra identidad, pantallas, ventanas y ultimas lineas del latido (nunca la clave)
+FIJAR PANTALLAS.bat, SALIR PARA MANTENIMIENTO.bat, ASOCIAR TACTO.bat, INICIO DE SESION AUTOMATICO.bat, OLVIDAR SESION DEL NAVEGADOR.bat: igual que en la v2.
+
+QUE FALTABA EN LA v2 (por que no pregunto Soda o Pollos)
+- ENLAZAR EQUIPO.bat (109 bytes) y "13 identidad del equipo.ps1" SI estan en la carpeta "v2 identidad y latido 16 nov" (verificado en OneDrive el 18 nov). NO estan en "v2 propuesta 15 nov" ni en la carpeta "Kit v2 Athlon 3000G + Skitphrati + LG": las dos tienen la misma lista de archivos, sin 11 latido, 13 identidad, 14 control remoto ni ENLAZAR EQUIPO.bat, y su "instalar todo.ps1" (2262 bytes) no tiene paso de identidad. Quien instala desde la carpeta llamada "Kit v2" (la mas visible) nunca ve la pregunta, y esa es la explicacion mas probable de lo ocurrido en la PC de la oficina.
+- Aun con la v2 del 16 nov, la pregunta iba AL FINAL del instalador (despues de descargar el control remoto) y solo si NO habia un equipo.json valido; nunca verificaba una identidad existente, ni la comparaba con la PC, ni la reconfirmaba con el panel.
+- El instalador no comprobaba que el paquete estuviera completo y el resultado de cada paso quedaba solo en un archivo, sin resumen claro de lo que falto.
+- Para saber que paso en la PC de la oficina: abrir C:\PantallaCliente\datos\instalacion.txt y buscar la linea que empieza con "13" (enlazada) o "PENDIENTE 13".
+
+LIMITES (lo que NO se pudo comprobar)
+- Este kit se escribio y reviso sin ejecutarlo: no hay Windows en el entorno de trabajo. Se valido la sintaxis por analisis estatico y la logica de deteccion con casos simulados, no corriendo PowerShell. Hay que probarlo en la PC de Pollos de la oficina antes de usarlo en las cajas.
+- El codigo de enlace lo crea Emil (o Claude por orden suya); el kit nunca crea ni canjea codigos por su cuenta.
+- El control remoto sigue necesitando un paso manual por PC: abrir el icono Control remoto, Configurar acceso remoto y poner el PIN.
+- Pendiente del lado del facturador (web), no del kit: uso con mouse y teclado en el plan B, aviso antes de cerrar con una cuenta a medias y el alta de cliente en vivo en la pantalla del cliente.
+
+REVERSA
+Las carpetas anteriores (v1, v2 propuesta, Kit v2, v2 identidad y latido) quedan intactas en OneDrive. Para volver atras: instalar de nuevo una de ellas; los archivos que v3 aparto estan en C:\PantallaCliente\datos\kit anterior.
