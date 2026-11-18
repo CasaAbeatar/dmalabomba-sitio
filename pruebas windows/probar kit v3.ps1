@@ -15,7 +15,7 @@ foreach ($f in Get-ChildItem $origen -Filter *.ps1) { $e = $null; $t = $null; [v
 Dice ("1) Archivos con error de sintaxis en 5.1: " + $malos)
 
 # 2) cuenta normal de prueba (la cajera)
-$clave = "Kit-Prueba-2026-xZ9!"
+$clave = "Kp-2026-xZ9!q"
 $r = net user cajaprueba $clave /add 2>&1; Dice ("2) net user: " + ($r -join " "))
 Dice ("   existe: " + ((net user cajaprueba 2>&1) -join " ").Substring(0, 120))
 Dice ("   servicio Programador de tareas: " + (Get-Service Schedule).Status + "; seclogon: " + (Get-Service seclogon).Status)
