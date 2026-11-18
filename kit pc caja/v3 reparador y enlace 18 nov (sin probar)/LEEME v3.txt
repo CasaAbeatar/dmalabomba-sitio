@@ -1,4 +1,18 @@
-KIT v3.1 REPARADOR Y ENLACE (18 nov 2026, probado a medias: ver CAMBIOS DE LA v3.1)
+﻿KIT v3.2c REPARADOR Y ENLACE (18 nov 2026, probado en Windows real por GitHub Actions; falta confirmar en la PC de Pollos)
+
+CAMBIOS DE LA v3.2c (18 nov 14:00) CAUSA RAIZ DEL LATIDO Y DEL FACTURADOR QUE NO ARRANCABAN
+- Los permisos: el paso "icacls /inheritance:r ... /T" dejaba cada archivo del kit con la lista de permisos vacia, y la cuenta de la caja no podia ni leer los scripts (PowerShell oculto no los abria y no dejaba rastro). Probado en Windows real. Ahora los archivos heredan los permisos de la carpeta (Usuarios solo leen, en datos modifican) y el instalador verifica cada script y repara el que quede sin permiso.
+- Cada programa (latido, abrir caja, servidor de publicidad) escribe arranque.txt en C:\PantallaCliente\datos apenas empieza: dice usuario, si es administrador, el resultado del candado y cualquier error con su linea. El resumen del instalador muestra sus ultimas lineas.
+- El candado de "una sola copia" ahora es Local y abierto a todos los usuarios.
+- El instalador cierra los programas de prueba que dejaba vivos con privilegios de administrador y vuelve a abrir latido y facturador sin privilegios.
+- Latido: corregida una variable que pisaba la carpeta de datos, envio de 5 eventos por vez y manejo de paquete demasiado grande.
+- takeown sin /D Y (en Windows en espanol falla).
+
+CAMBIOS DE LA v3.2 (18 nov 13:30, tras la segunda prueba en la PC de Pollos)
+- La copia del kit ya no se detiene si un archivo viejo tiene los permisos cerrados (fallo con "14 control remoto.ps1"): recupera permisos, reintenta, y si no puede aparta el viejo y copia el nuevo. Los demas archivos y los accesos se crean siempre.
+- El latido se reintenta directo si el acceso del inicio no lo arranca.
+- Si el facturador no abre con el acceso, se arranca directo y se espera un minuto mas.
+
 PC de caja estandar: Athlon 3000G + Skitphrati tactil (pantalla 1) + LG 24MK430H-B (pantalla 2). Sirve para Soda y para Pollos.
 
 CAMBIOS DE LA v3.1 (tras la primera prueba en la PC de Pollos, 18 nov 12:45)
