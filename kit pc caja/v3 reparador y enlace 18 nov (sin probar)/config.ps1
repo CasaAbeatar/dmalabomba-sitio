@@ -1,4 +1,4 @@
-# Ajustes de la pantalla del cliente. Cambie solo lo que haga falta.
+﻿# Ajustes de la pantalla del cliente. Cambie solo lo que haga falta.
 $UrlCaja        = "https://dmalabomba.com/facturacion/"
 $UrlCliente     = "https://dmalabomba.com/facturacion/cliente/"
 $Sitio          = "https://dmalabomba.com"         # origen al que se le concede el manejo de ventanas, ventanas emergentes y pantalla completa
@@ -35,7 +35,7 @@ $SegundosVigilar = 15                              # cada cuanto se revisa; mas 
 
 # --- v2 (16 nov): identidad de la computadora y latido hacia el panel ---
 # La identidad (Soda o Pollos) se guarda UNA vez en esta PC y no depende de la empresa que se use en el facturador.
-$VersionKit       = "3.1 18nov sin probar"
+$VersionKit       = "3.2c 18nov sin probar"
 $SupabaseUrl      = "https://dwlbcbtwdungyrykgahm.supabase.co"
 $SupabaseClave    = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR3bGJjYnR3ZHVuZ3lyeWtnYWhtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTIxNjQ5NjcsImV4cCI6MjEwNzc0MDk2N30.GTLrTIQQ9ZIcKMpcxRRBkC6n1dZpCUAwmHb4ZeC4u-w"   # clave PUBLICA (anon): solo permite llamar a las funciones abiertas; no da acceso a datos
 $ArchivoIdentidad = "C:\PantallaCliente\datos\equipo.json"   # estacion + clave propia de esta PC (solo permite enviar latidos de esta caja)
@@ -50,3 +50,23 @@ $ArchivoPendienteEnlace = "C:\PantallaCliente\datos\pendiente enlace.txt" # exis
 $MinutosAvisoPendiente  = 30                                  # cada cuantos minutos se vuelve a mostrar el recordatorio mientras falte el enlace
 $CarpetaKitAnterior     = "C:\PantallaCliente\datos\kit anterior"   # aqui se APARTAN (no se borran) los archivos de versiones viejas del kit
 $ReabrirTrasCierreDeliberado = $false                         # $false = si la cajera cierra la ventana 1, se cierra la 2 y NO se reabre sola: se vuelve con el icono Facturador. $true = se reabre sola a los pocos segundos
+
+# --- v3.2c: candado de "una sola copia" abierto a todos los usuarios y con constancia de lo que pasa ---
+function Crear-Mutex($nombre) {
+  $r = @{ Mutex = $null; Tengo = $false; Motivo = "" }
+  try {
+    $seg = New-Object System.Security.AccessControl.MutexSecurity
+    $todos = New-Object System.Security.Principal.SecurityIdentifier([System.Security.Principal.WellKnownSidType]::WorldSid, $null)
+    $seg.AddAccessRule((New-Object System.Security.AccessControl.MutexAccessRule($todos, [System.Security.AccessControl.MutexRights]::FullControl, [System.Security.AccessControl.AccessControlType]::Allow)))
+    $creado = $false
+    $m = New-Object System.Threading.Mutex($false, $nombre, [ref]$creado, $seg)
+    $r.Mutex = $m
+    try { $r.Tengo = $m.WaitOne(0) } catch [System.Threading.AbandonedMutexException] { $r.Tengo = $true; $r.Motivo = "se retoma (la copia anterior se cerro a la fuerza)" }
+    if (-not $r.Tengo) { $r.Motivo = "otra copia ya esta corriendo" }
+  } catch [System.UnauthorizedAccessException] {
+    $r.Tengo = $false; $r.Motivo = "el candado es de una copia con otros privilegios (UnauthorizedAccess)"
+  } catch {
+    $r.Tengo = $true; $r.Motivo = "no se pudo crear el candado (" + $_.Exception.GetType().Name + ": " + $_.Exception.Message + "); se sigue sin candado"
+  }
+  return $r
+}

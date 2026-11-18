@@ -1,4 +1,4 @@
-# INSTALAR TODO (v3.1 reparador y enlace).
+﻿# INSTALAR TODO (v3.2 reparador y enlace).
 # Se puede correr ENCIMA de cualquier version anterior (v1 14 nov, v2 propuesta 15 nov, Kit v2 15 nov, v2 identidad y latido 16 nov) y las veces que haga falta:
 # detecta lo que hay, lo corrige y deja la PC en el estado final. Al terminar muestra que corrigio y que falta.
 # La identidad (Soda o Pollos) se verifica SIEMPRE aqui mismo, sin depender de otro archivo.
@@ -41,7 +41,7 @@ function Preparar-Datos {
   try { New-Item -ItemType Directory -Force -Path $Carpeta -ErrorAction Stop | Out-Null; New-Item -ItemType Directory -Force -Path $Datos -ErrorAction Stop | Out-Null } catch { $null = 1 }
   if (-not (Es-Admin)) { return }
   try {
-    & takeown.exe /F $Datos /R /D Y 2>&1 | Out-Null
+    & takeown.exe /F $Datos /R 2>&1 | Out-Null
     & icacls.exe $Datos /reset /T /C 2>&1 | Out-Null
     & icacls.exe $Datos /remove:d "*S-1-5-32-544" "*S-1-5-32-545" "*S-1-1-0" /T /C 2>&1 | Out-Null
     & icacls.exe $Datos /grant "*S-1-5-18:(OI)(CI)F" "*S-1-5-32-544:(OI)(CI)F" "*S-1-5-32-545:(OI)(CI)M" /T /C 2>&1 | Out-Null
@@ -49,6 +49,35 @@ function Preparar-Datos {
   } catch { $null = 1 }
   $prueba = Join-Path $Datos "prueba escritura.tmp"
   try { Set-Content -LiteralPath $prueba -Value "ok" -ErrorAction Stop; Remove-Item -LiteralPath $prueba -Force -ErrorAction SilentlyContinue; return $true } catch { return $false }
+}
+
+function Cola-Arranque {
+  # v3.2c: ultimas lineas del registro de arranque de los programas (dicen si el candado, los privilegios o un error los detuvo).
+  $x = Join-Path $Datos "arranque.txt"
+  if (-not (Test-Path -LiteralPath $x)) { $x = Join-Path $env:TEMP "arranque.txt" }
+  if (-not (Test-Path -LiteralPath $x)) { return "sin arranque.txt (los programas no llegaron a ejecutar su primera linea)" }
+  return ((@(Get-Content -LiteralPath $x -Tail 4 -ErrorAction SilentlyContinue) -join " | ") -replace "\s+", " ")
+}
+function Capturar-Fallo($archivo, $segundos) {
+  # v3.2b: lanza el programa y devuelve lo que dijo (errores incluidos) para mostrarlo en el resumen en vez de adivinar.
+  $o = Join-Path $env:TEMP "kit-v3-salida.txt"; $e = Join-Path $env:TEMP "kit-v3-error.txt"
+  Remove-Item $o, $e -Force -ErrorAction SilentlyContinue
+  $vivo = $false; $cod = ""
+  try {
+    $p = Start-Process -FilePath "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$Carpeta\$archivo`"" -RedirectStandardOutput $o -RedirectStandardError $e -WindowStyle Hidden -PassThru
+    [void]$p.WaitForExit($segundos * 1000)
+    $vivo = -not $p.HasExited
+    if (-not $vivo) { $cod = [string]$p.ExitCode }
+  } catch { return ("no se pudo lanzar: " + $_.Exception.Message) }
+  $t = ""
+  foreach ($x in @($e, $o)) { if (Test-Path -LiteralPath $x) { $t += ([string](Get-Content -LiteralPath $x -Raw -ErrorAction SilentlyContinue) + " ") } }
+  $t = ($t -replace "\s+", " ").Trim(); if ($t.Length -gt 400) { $t = $t.Substring(0, 400) }
+  if ($vivo) { if (-not $t) { $t = "sigue corriendo sin errores tras " + $segundos + " s" } } else { $t = "termino con codigo " + $cod + ": " + $t }
+  # v3.2c: el programa de prueba corre con privilegios de administrador; se cierra para no dejar un candado ni un perfil en manos de una copia elevada.
+  if ($vivo) { try { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue; Start-Sleep -Seconds 2 } catch { $null = 1 } }
+  # tambien el navegador que esa copia haya abierto con el perfil del kit (si quedara con privilegios de administrador retendria el perfil)
+  try { foreach ($q in @(Get-CimInstance Win32_Process -Filter "Name='msedge.exe' OR Name='chrome.exe'" -ErrorAction SilentlyContinue)) { if ([string]$q.CommandLine -like "*PantallaCliente*datos*perfil*") { Stop-Process -Id $q.ProcessId -Force -ErrorAction SilentlyContinue } } } catch { $null = 1 }
+  return ($t + " || arranque: " + (Cola-Arranque))
 }
 
 $ErrorActionPreference = "Continue"
@@ -59,7 +88,7 @@ function Paso($nombre, [scriptblock]$bloque) {
   try { $salida = (& $bloque 2>&1 | Out-String); if ($salida.Trim()) { Anotar-Registro $salida.TrimEnd() }; Hecho $nombre }
   catch { Falta ("FALLO: " + $nombre + " (" + $_.Exception.Message + ")"); Anotar-Registro ("FALLO " + $nombre + ": " + $_.Exception.Message) }
 }
-Anotar-Registro ("==== {0:yyyy-MM-dd HH:mm:ss} instalacion v3.1 en {1} ====" -f (Get-Date), $env:COMPUTERNAME)
+Anotar-Registro ("==== {0:yyyy-MM-dd HH:mm:ss} instalacion v3.2c en {1} ====" -f (Get-Date), $env:COMPUTERNAME)
 if (-not $datosListo) { Falta ("No se pudo escribir en " + $Datos + " (permisos). El registro de esta instalacion queda en " + $script:RegistroTemp) }
 
 # 1) Detectar lo que hay
@@ -109,8 +138,13 @@ Paso "11 Iniciar el latido hacia el panel" {
   $lnk = Join-Path ([Environment]::GetFolderPath("CommonStartup")) "Latido.lnk"
   if (Test-Path $lnk) { Start-Process -FilePath "$env:SystemRoot\explorer.exe" -ArgumentList "`"$lnk`"" }
   else { Start-Process -FilePath "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -ArgumentList "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$Carpeta\11 latido.ps1`"" -WindowStyle Hidden }
-  $t = 0; while (-not (Test-Path "$Datos\latido.txt") -and $t -lt 30) { Start-Sleep -Seconds 1; $t++ }
-  if (-not (Test-Path "$Datos\latido.txt")) { throw "El latido no arranco (no escribio su registro)" }
+  $t = 0; while (-not (Test-Path "$Datos\latido.txt") -and $t -lt 20) { Start-Sleep -Seconds 1; $t++ }
+  if (-not (Test-Path "$Datos\latido.txt")) {
+    # v3.2: segundo intento directo, sin pasar por el acceso del inicio.
+    Start-Process -FilePath "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -ArgumentList "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$Carpeta\11 latido.ps1`"" -WindowStyle Hidden
+    $t = 0; while (-not (Test-Path "$Datos\latido.txt") -and $t -lt 30) { Start-Sleep -Seconds 1; $t++ }
+  }
+  if (-not (Test-Path "$Datos\latido.txt")) { $dl = Capturar-Fallo "11 latido.ps1" 25; if (Test-Path "$Datos\latido.txt") { if (Test-Path $lnk) { Start-Process -FilePath "$env:SystemRoot\explorer.exe" -ArgumentList "`"$lnk`"" }; return }; throw ("El latido no arranco (no escribio su registro). Salida: " + $dl) }
 }
 
 # 9) Abrir el facturador y la pantalla del cliente (estado final) y comprobar que quedo UNA ventana 1 y UNA ventana 2
@@ -132,7 +166,21 @@ while ((Get-Date) -lt $hasta) {
   }
   if (($nCaja -ge 1) -and (($nCli -ge 1) -or ($pantallasN -lt 2))) { break }
 }
-if ($nCaja -eq 1) { Bien "Ventana 1 (facturador): una sola, abierta" } elseif ($nCaja -eq 0) { Falta "La ventana 1 (facturador) no se abrio en 90 segundos. Tocar el icono Reparar" } else { Falta ("Hay " + $nCaja + " ventanas de facturador abiertas; el kit cierra las sobrantes en la siguiente vuelta, o tocar Reparar") }
+if ($nCaja -eq 0) {
+  # v3.2: si el acceso no la abrio, se arranca el programa de la caja directamente y se espera un minuto mas.
+  $diagCaja = Capturar-Fallo "0 abrir caja y pantalla.ps1" 25
+  Anotar-Registro ("Salida de 0 abrir caja y pantalla: " + $diagCaja)
+  $lnkF = Join-Path ([Environment]::GetFolderPath("CommonStartup")) "Facturador.lnk"
+  if (Test-Path $lnkF) { Start-Process -FilePath "$env:SystemRoot\explorer.exe" -ArgumentList "`"$lnkF`"" }
+  $hasta = (Get-Date).AddSeconds(40)
+  while ((Get-Date) -lt $hasta) {
+    Start-Sleep -Seconds 3
+    $nCaja = 0; $nCli = 0
+    foreach ($h in @(Ventanas-Nuestras $Perfil @(Procesos-Navegador $Perfil))) { $t = [W32]::Titulo($h); if ([string]::IsNullOrWhiteSpace($t)) { continue }; if (Es-Titulo-Cliente $t) { $nCli++ } else { $nCaja++ } }
+    if (($nCaja -ge 1) -and (($nCli -ge 1) -or ($pantallasN -lt 2))) { break }
+  }
+}
+if ($nCaja -eq 1) { Bien "Ventana 1 (facturador): una sola, abierta" } elseif ($nCaja -eq 0) { Falta ("La ventana 1 (facturador) no se abrio. Salida del programa: " + $diagCaja) } else { Falta ("Hay " + $nCaja + " ventanas de facturador abiertas; el kit cierra las sobrantes en la siguiente vuelta, o tocar Reparar") }
 if ($pantallasN -ge 2) {
   if ($nCli -eq 1) { Bien "Ventana 2 (pantalla del cliente): una sola, abierta" } elseif ($nCli -eq 0) { Falta "La ventana 2 (pantalla del cliente) todavia no abrio (el kit la abre solo en hasta 1 minuto; si no, tocar Reparar)" } else { Falta ("Hay " + $nCli + " ventanas del cliente; el kit cierra las sobrantes solo") }
 }

@@ -1,4 +1,4 @@
-# Copia el kit a C:\PantallaCliente, crea los accesos del escritorio y lo pone en el inicio de Windows.
+﻿# Copia el kit a C:\PantallaCliente, crea los accesos del escritorio y lo pone en el inicio de Windows.
 param([switch]$Silencioso)
 . "$PSScriptRoot\config.ps1"
 . "$PSScriptRoot\funciones.ps1"
@@ -19,9 +19,33 @@ if ((Test-Path $CarpetaPublicidadVieja) -and ([IO.Path]::GetFullPath($CarpetaPub
   }
 }
 Set-Content -Path "$CarpetaPublicidad\LEEME.txt" -Encoding UTF8 -Value @("PUBLICIDAD DE LA PANTALLA DEL CLIENTE","","Esta carpeta es la que usa la pantalla del cliente. Ponga aqui fotos (jpg, png, webp, gif) y videos (mp4, webm), sueltos o dentro de las subcarpetas que quiera: redes sociales, videos, productos, promociones...","  Una subcarpeta llamada Soda se ve solo en la caja de Soda La Bomba.","  Una subcarpeta llamada Pollos (o Papea) se ve solo en la caja de Pollos La Bomba.","  Todo lo demas se ve en las dos.","Se pasan en orden alfabetico de subcarpeta y de nombre (01 promo.jpg, 02 combo.jpg...). Cada foto dura 10 segundos; el video dura lo que dura.","Lo que agregue o quite se actualiza solo en un minuto. No hace falta reiniciar nada.")
+$fallosCopia = @()
 if ($PSScriptRoot -ne $Carpeta) {
-  Get-ChildItem -Path $PSScriptRoot -File | Where-Object { $_.Extension -in ".ps1", ".bat", ".exe" } |
-    ForEach-Object { Copy-Item $_.FullName -Destination $Carpeta -Force }
+  # v3.2: una instalacion vieja pudo dejar archivos con permisos cerrados. Como administrador se recuperan los permisos de los archivos sueltos de la raiz (sin tocar el perfil del navegador).
+  if (Es-Admin) {
+    & takeown.exe /F "$Carpeta\*" 2>&1 | Out-Null
+    & icacls.exe "$Carpeta\*" /reset /C 2>&1 | Out-Null
+    & attrib.exe -R -S -H "$Carpeta\*.*" 2>&1 | Out-Null
+  }
+  foreach ($a in @(Get-ChildItem -Path $PSScriptRoot -File | Where-Object { $_.Extension -in ".ps1", ".bat", ".exe" })) {
+    $dest = Join-Path $Carpeta $a.Name
+    $ok = $false
+    try { Copy-Item -LiteralPath $a.FullName -Destination $dest -Force -ErrorAction Stop; $ok = $true } catch { Write-Output ("Copia de " + $a.Name + " fallo: " + $_.Exception.Message) }
+    if (-not $ok) {
+      # Segundo intento: tomar el archivo, darse control total, y si sigue sin dejar, apartarlo con otro nombre y copiar el nuevo.
+      try {
+        if (Es-Admin) { & takeown.exe /F $dest 2>&1 | Out-Null; & icacls.exe $dest /grant "*S-1-5-32-544:F" "*S-1-5-18:F" 2>&1 | Out-Null }
+        & attrib.exe -R -S -H $dest 2>&1 | Out-Null
+        Copy-Item -LiteralPath $a.FullName -Destination $dest -Force -ErrorAction Stop; $ok = $true
+      } catch {
+        try { Rename-Item -LiteralPath $dest -NewName ($a.Name + ".viejo-" + (Get-Date -Format "yyyyMMddHHmmss")) -Force -ErrorAction Stop; Copy-Item -LiteralPath $a.FullName -Destination $dest -Force -ErrorAction Stop; $ok = $true } catch { Write-Output ("Segundo intento de " + $a.Name + " fallo: " + $_.Exception.Message) }
+      }
+    }
+    if (-not $ok) {
+      $fallosCopia += $a.Name
+      try { Write-Output ("Permisos de " + $dest + ": " + ((& icacls.exe $dest 2>&1) -join " | ") + "  Atributos: " + (Get-Item -LiteralPath $dest -Force -ErrorAction SilentlyContinue).Attributes) } catch { $null = 1 }
+    }
+  }
 }
 # La carpeta la crea el administrador: se le da permiso de modificar a todos los usuarios para que la cuenta de la PC pueda escribir el perfil y el registro.
 # Seguridad: la cuenta de la caja solo LEE el kit (para que nadie con acceso a la caja cambie los scripts que corren con permisos altos) y solo ESCRIBE en la subcarpeta datos.
@@ -49,3 +73,4 @@ Hacer-Acceso "$inicio\Facturador.lnk" "0 abrir caja y pantalla.ps1" "Abre el fac
 Hacer-Acceso "$escr\Facturador.lnk" "0 abrir caja y pantalla.ps1" "Abre el facturador y la pantalla del cliente"
 Hacer-Acceso "$escr\Reparar.lnk" "6 reparar.ps1" "Cierra y vuelve a abrir las dos ventanas"
 Write-Host "Listo. Accesos creados en el escritorio y en el inicio de Windows (para todos los usuarios)."
+if ($fallosCopia.Count -gt 0) { throw ("No se pudo copiar: " + ($fallosCopia -join ", ") + " (los demas archivos y los accesos si quedaron)") }

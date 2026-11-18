@@ -1,11 +1,14 @@
 # Abre la caja (pantalla del cajero) y la pantalla del cliente, las acomoda en su monitor y las vigila.
 # v3: una sola ventana 2, cerrar la ventana 1 cierra la 2, plan B de una sola pantalla y recordatorio si falta el enlace.
+function Arranque($t) { foreach ($d in @("C:\PantallaCliente\datos", $env:TEMP)) { try { Add-Content -LiteralPath "$d\arranque.txt" -Value ("{0:yyyy-MM-dd HH:mm:ss}  [abrir pid {1}] {2}" -f (Get-Date), $PID, $t) -ErrorAction Stop; return } catch { $null = 1 } } }
+trap { Arranque ("ERROR " + $_.Exception.GetType().Name + ": " + $_.Exception.Message + " (linea " + $_.InvocationInfo.ScriptLineNumber + ")"); break }
+$esAdminArr = $false; try { $esAdminArr = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator) } catch { $null = 1 }
+Arranque ("inicio. usuario " + $env:USERNAME + ", con privilegios de administrador: " + $esAdminArr)
 . "$PSScriptRoot\config.ps1"
 . "$PSScriptRoot\funciones.ps1"
 . "$PSScriptRoot\funciones v3.ps1"
-$m = New-Object Threading.Mutex($false, "Global\PantallaClienteLB")
-$tengo = $false
-try { $tengo = $m.WaitOne(0) } catch [Threading.AbandonedMutexException] { $tengo = $true }   # la copia anterior se cerro a la fuerza (REPARAR): se retoma
+$c = Crear-Mutex "Local\PantallaClienteLB"; $m = $c.Mutex; $tengo = $c.Tengo
+Arranque ("candado PantallaClienteLB: " + $(if ($tengo) { "obtenido" } else { "NO obtenido" }) + ". " + $c.Motivo)
 if (-not $tengo) {
   # Ya hay una vigilancia corriendo: se le pide abrir el facturador (si la cajera cerro la caja, vuelve) y esta copia termina.
   try { New-Item -ItemType Directory -Force -Path $Datos | Out-Null; Set-Content -LiteralPath "$Datos\abrir.flag" -Value (Get-Date).ToString("s") } catch { Write-Verbose "no se pudo pedir la apertura" }

@@ -1,9 +1,12 @@
 # Servidor de la publicidad de la pantalla del cliente. Entrega las fotos y videos de la carpeta Publicidad del Escritorio (con todas sus subcarpetas)
 # SOLO a esta computadora (127.0.0.1) y SOLO a la pagina de La Bomba. No usa internet ni base de datos.
+function Arranque($t) { foreach ($d in @("C:\PantallaCliente\datos", $env:TEMP)) { try { Add-Content -LiteralPath "$d\arranque.txt" -Value ("{0:yyyy-MM-dd HH:mm:ss}  [servidor pid {1}] {2}" -f (Get-Date), $PID, $t) -ErrorAction Stop; return } catch { $null = 1 } } }
+trap { Arranque ("ERROR " + $_.Exception.GetType().Name + ": " + $_.Exception.Message + " (linea " + $_.InvocationInfo.ScriptLineNumber + ")"); break }
+$esAdminArr = $false; try { $esAdminArr = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator) } catch { $null = 1 }
+Arranque ("inicio. usuario " + $env:USERNAME + ", con privilegios de administrador: " + $esAdminArr)
 . "$PSScriptRoot\config.ps1"
-$m = New-Object Threading.Mutex($false, "Global\ServidorPublicidadLB")
-$tengo = $false
-try { $tengo = $m.WaitOne(0) } catch [Threading.AbandonedMutexException] { $tengo = $true }
+$c = Crear-Mutex "Local\ServidorPublicidadLB"; $m = $c.Mutex; $tengo = $c.Tengo
+Arranque ("candado ServidorPublicidadLB: " + $(if ($tengo) { "obtenido" } else { "NO obtenido" }) + ". " + $c.Motivo)
 if (-not $tengo) { exit }   # ya hay un servidor corriendo
 try { (Get-Process -Id $PID).PriorityClass = "BelowNormal" } catch { Write-Verbose "sin prioridad baja" }
 $raiz = $CarpetaPublicidad
@@ -11,7 +14,7 @@ New-Item -ItemType Directory -Force -Path $raiz | Out-Null
 $raizCompleta = [IO.Path]::GetFullPath($raiz).TrimEnd("\") + "\"
 $MaxArchivos = 400
 $log = "$Datos\registro.txt"
-function Anotar($t) { Add-Content -Path $log -Value ("{0:yyyy-MM-dd HH:mm:ss}  [publicidad] {1}" -f (Get-Date), $t) }
+function Anotar($t) { try { Add-Content -Path $log -Value ("{0:yyyy-MM-dd HH:mm:ss}  [publicidad] {1}" -f (Get-Date), $t) } catch { $null = 1 } }
 $tipos = @{ ".jpg" = "image/jpeg"; ".jpeg" = "image/jpeg"; ".png" = "image/png"; ".webp" = "image/webp"; ".gif" = "image/gif"; ".mp4" = "video/mp4"; ".webm" = "video/webm" }
 $MaxTrozo = 4MB   # cada respuesta de un video es de hasta 4 MB (el navegador pide el resto); asi una peticion nunca deja esperando a otra
 function Json-Texto($t) { return '"' + ($t -replace '\\', '\\' -replace '"', '\"') + '"' }

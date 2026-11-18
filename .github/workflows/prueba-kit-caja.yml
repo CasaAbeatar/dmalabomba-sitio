@@ -1,0 +1,21 @@
+name: Prueba del kit de caja en Windows
+on:
+  workflow_dispatch:
+  push:
+    branches: [kit-v3-18nov]
+    paths: ['kit pc caja/**', 'pruebas windows/probar kit v3.ps1', '.github/workflows/prueba-kit-caja.yml']
+jobs:
+  kit:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Probar el kit con Windows PowerShell 5.1
+        shell: powershell
+        working-directory: pruebas windows
+        run: ./"probar kit v3.ps1"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: resultados-kit
+          path: pruebas windows/resultados

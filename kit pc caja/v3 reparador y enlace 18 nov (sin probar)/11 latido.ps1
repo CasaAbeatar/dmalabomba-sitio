@@ -1,12 +1,13 @@
 # Avisa al panel cada minuto que esta computadora esta viva y como esta (pantallas, ventanas, internet, tiempo de respuesta).
 # Corre aparte de la vigilancia de la caja: sigue avisando aunque la caja este cerrada. Si no hay internet, guarda los eventos y los manda al volver.
+function Arranque($t) { foreach ($d in @("C:\PantallaCliente\datos", $env:TEMP)) { try { Add-Content -LiteralPath "$d\arranque.txt" -Value ("{0:yyyy-MM-dd HH:mm:ss}  [latido pid {1}] {2}" -f (Get-Date), $PID, $t) -ErrorAction Stop; return } catch { $null = 1 } } }
+trap { Arranque ("ERROR " + $_.Exception.GetType().Name + ": " + $_.Exception.Message + " (linea " + $_.InvocationInfo.ScriptLineNumber + ")"); break }
+$esAdminArr = $false; try { $esAdminArr = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator) } catch { $null = 1 }
+Arranque ("inicio. usuario " + $env:USERNAME + ", con privilegios de administrador: " + $esAdminArr)
 . "$PSScriptRoot\config.ps1"
 . "$PSScriptRoot\funciones.ps1"
-try {
-  $m = New-Object Threading.Mutex($false, "Global\LatidoLB")
-  $tengo = $false
-  try { $tengo = $m.WaitOne(0) } catch [Threading.AbandonedMutexException] { $tengo = $true }
-} catch { exit }
+$c = Crear-Mutex "Local\LatidoLB"; $m = $c.Mutex; $tengo = $c.Tengo
+Arranque ("candado LatidoLB: " + $(if ($tengo) { "obtenido" } else { "NO obtenido" }) + ". " + $c.Motivo)
 if (-not $tengo) { exit }
 try { (Get-Process -Id $PID).PriorityClass = "BelowNormal" } catch { Write-Verbose "sin prioridad baja" }
 New-Item -ItemType Directory -Force -Path $Datos | Out-Null
@@ -75,20 +76,20 @@ while ($true) {
       $nuncaAbrioAvisado = $true
     }
     # --- Envio ---
-    $cola = Leer-Eventos 20
+    $cola = Leer-Eventos 5
     $eventos = @($cola.Eventos)
     if (((Get-Date) - $telemetriaHora).TotalMinutes -ge 30) { try { $telemetria = Telemetria-Lenta } catch { $telemetria = $null }; $telemetriaHora = Get-Date }
     $detalle = [ordered]@{ pc = $env:COMPUTERNAME; caja_abierta = $hayCaja; ventanas_cliente = $ventanasCliente; modo_pantallas = $(if ($pantallas -ge 2) { "dos" } else { "una (plan B)" }); vigilancia_kit_corre = $kitCorre; arranque_hace_min = $arranque }
     if ($telemetria) { foreach ($k in $telemetria.Keys) { $detalle[$k] = $telemetria[$k] } }
-    $datos = [ordered]@{
+    $paquete = [ordered]@{
       version_kit = $VersionKit; pantallas = $pantallas; ventanas = $ventanas; internet_ok = (Probar-Internet)
       detalle = $detalle
       eventos = $eventos
     }
-    if ($null -ne $script:UltimaLatencia) { $datos["latencia_ms"] = $script:UltimaLatencia }
+    if ($null -ne $script:UltimaLatencia) { $paquete["latencia_ms"] = $script:UltimaLatencia }
     $reloj = [Diagnostics.Stopwatch]::StartNew()
     try {
-      $r = Llamar-Rpc "equipo_latido" ([ordered]@{ p_estacion = $id.estacion; p_token = $id.token; p_datos = $datos }) 20
+      $r = Llamar-Rpc "equipo_latido" ([ordered]@{ p_estacion = $id.estacion; p_token = $id.token; p_datos = $paquete }) 20
       $reloj.Stop()
       $erroresHttp = 0
       if ($r.ok) {
@@ -100,7 +101,8 @@ while ($true) {
           if ($min -ge 2) { Registrar-Evento "caida_internet" ("Sin conexion con la base durante unos {0} minutos, desde las {1:HH:mm}" -f $min, $sinConexionDesde) }
           $sinConexionDesde = $null
         }
-      } else { Anotar "La base no reconoce esta computadora (clave o estacion). Hay que enlazarla de nuevo con ENLAZAR EQUIPO.bat o el icono Reparar." }
+      } elseif ("$($r.motivo)" -match "grande") { Quitar-Eventos 1; Anotar "El paquete era demasiado grande para la base: se descarto un evento." }
+      else { Anotar "La base no reconoce esta computadora (clave o estacion). Hay que enlazarla de nuevo con ENLAZAR EQUIPO.bat o el icono Reparar." }
       Anotar ("Latido {0}: pantallas={1} ventanas={2} kit={3} {4} ms{5}" -f $id.estacion, $pantallas, $ventanas, $kitCorre, $reloj.ElapsedMilliseconds, $(if ($r.omitido) { " (omitido)" } else { "" }))
       $script:UltimaLatencia = [int]$reloj.ElapsedMilliseconds
     } catch {
