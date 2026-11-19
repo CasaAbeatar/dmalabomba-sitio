@@ -101,4 +101,16 @@ Set-Content -LiteralPath (Join-Path $res "ficha-ejemplo.json") -Value $json -Enc
 Dice ("   Cliente-cerrado y cursor: el supervisor ya no mueve el mouse = " + (-not (Select-String -LiteralPath "C:\PantallaCliente\0 abrir caja y pantalla.ps1" -Pattern 'Cursor\]::Position = ' -Quiet)))
 Dice ("   Supervisor reconoce cierre a mano = " + (Select-String -LiteralPath "C:\PantallaCliente\0 abrir caja y pantalla.ps1" -Pattern 'clienteCerradoAMano' -Quiet))
 Stop-Process -Id $pr.Id -Force -ErrorAction SilentlyContinue
+Dice "   v3.4: metricas por latido, version del facturador, ficha en proceso aparte"
+$swm = [Diagnostics.Stopwatch]::StartNew(); $met = Metricas-Rapidas; $swm.Stop()
+Dice ("   Metricas-Rapidas (" + $swm.ElapsedMilliseconds + " ms): " + ($met | ConvertTo-Json -Compress))
+Dice ("   Version-Facturador: " + (Version-Facturador))
+foreach ($k in @("encendidos_y_fallos", "cola_impresion", "servicios", "arranque_de_windows", "tareas_programadas_no_microsoft", "energia")) { Dice ("   " + $k + ": " + ($ficha[$k] | ConvertTo-Json -Compress -Depth 4)) }
+Dice ("   kit.integridad_archivos: " + @($ficha["kit"]["integridad_archivos"].Keys).Count + " archivos con huella; servicios_del_kit: " + (($ficha["kit"]["servicios_del_kit"]) -join ", "))
+Dice ("   variables.calidad_red: " + ($ficha["variables"]["calidad_red"] | ConvertTo-Json -Compress -Depth 4))
+Remove-Item "C:\PantallaCliente\datos\ficha.txt" -Force -ErrorAction SilentlyContinue
+& powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\PantallaCliente\18 enviar ficha.ps1" 2>&1 | ForEach-Object { Dice ("   18: " + $_) }
+Volcar "ficha.txt (sin identidad, debe decirlo)" "C:\PantallaCliente\datos\ficha.txt"
+$lat = Get-Content "C:\PantallaCliente\11 latido.ps1" -Raw
+Dice ("   latido usa 18 enviar ficha en proceso aparte = " + ($lat -match '18 enviar ficha') + "; manda version_facturador = " + ($lat -match 'version_facturador'))
 Dice "FIN"
