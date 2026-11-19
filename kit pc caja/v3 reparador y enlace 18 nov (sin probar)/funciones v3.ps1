@@ -241,7 +241,7 @@ function Asegurar-Identidad($modo, $declarada) {
 $script:ArchivosKit = @("config.ps1", "funciones.ps1", "funciones v3.ps1", "0 abrir caja y pantalla.ps1", "1 crear accesos y arranque automatico.ps1", "2 energia y pantalla.ps1",
   "3 inicio de sesion automatico.ps1", "4 actualizaciones de Windows.ps1", "5 pantallas y permiso de ventanas.ps1", "6 reparar.ps1", "7 salir.ps1",
   "8 olvidar sesion del navegador.ps1", "9 tacto de la pantalla de caja.ps1", "10 diagnostico.ps1", "11 latido.ps1", "12 fijar pantallas.ps1",
-  "13 identidad del equipo.ps1", "14 control remoto.ps1", "15 aviso pendiente.ps1", "16 bloquear instalaciones.ps1", "17 ficha del equipo.ps1", "servidor publicidad.ps1",
+  "13 identidad del equipo.ps1", "14 control remoto.ps1", "15 aviso pendiente.ps1", "16 bloquear instalaciones.ps1", "17 ficha del equipo.ps1", "18 enviar ficha.ps1", "servidor publicidad.ps1",
   "instalar todo.ps1", "INSTALAR TODO.bat", "ENLAZAR EQUIPO.bat", "REPARAR.bat")
 function Verificar-Paquete {
   # Devuelve la lista de archivos que FALTAN en la carpeta desde la que se instala (por ejemplo si solo se copiaron algunos).
@@ -363,7 +363,7 @@ function Detener-Kit {
   foreach ($p in @(Get-CimInstance Win32_Process -Filter "Name='powershell.exe'")) {
     if ($p.ProcessId -eq $PID) { continue }
     $c = [string]$p.CommandLine
-    if ($c -match '0 abrir caja y pantalla|servidor publicidad|11 latido|15 aviso pendiente') { Stop-Process -Id $p.ProcessId -Force -ErrorAction SilentlyContinue; $n++ }
+    if ($c -match '0 abrir caja y pantalla|servidor publicidad|11 latido|15 aviso pendiente|18 enviar ficha') { Stop-Process -Id $p.ProcessId -Force -ErrorAction SilentlyContinue; $n++ }
   }
   return $n
 }

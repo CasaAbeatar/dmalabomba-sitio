@@ -162,6 +162,8 @@ while ($true) {
       }
       continue
     }
+    # v3.4: estado de la vigilancia para el latido (se ve en el panel)
+    try { ([ordered]@{ ts = (Get-Date).ToString("s"); caja = $hayCaja; cliente = $hayCliente; cliente_cerrado_a_mano = $clienteCerradoAMano; cierre_deliberado = $cierreDeliberado; pantallas = $p.Cuantas } | ConvertTo-Json -Compress) | Set-Content -LiteralPath "$Datos\estado.json" -Encoding ASCII } catch { Write-Verbose "sin estado.json" }
     $exe = Buscar-Navegador
     if ((-not $hayCaja) -and $exe) {
       if ($cajaVista -and -not $ReabrirCajaSiSeCierra) { Anotar "Se cerro la caja con la X. El kit no la reabre y termina (para volver: icono Facturador)."; break }
