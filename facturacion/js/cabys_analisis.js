@@ -23,23 +23,9 @@ export async function copiarTexto(texto, areaRespaldo) {
   return false;
 }
 
-/** Ventana para escribir qué se hizo. La nota es obligatoria: sin ella el botón avisa y no guarda. Devuelve el texto o null. */
-export function pedirNotaAtencion(titulo) {
-  return new Promise((ok) => {
-    let hecho = false;
-    const area = h('textarea.campo', { rows: 4, maxlength: 300, 'aria-label': 'Qué hizo', placeholder: 'Por ejemplo: Se lo pedí al proveedor y mandó la factura corregida.' });
-    const err = h('p.ah-error', { role: 'alert', hidden: true }, 'Escriba qué hizo. Es obligatorio.');
-    const fin = (v, c) => { hecho = true; c?.(); ok(v); };
-    modal({
-      titulo: 'Ya lo atendí', ancho: 460, alCerrar: () => { if (!hecho) ok(null); },
-      contenido: h('div.ah-nota-campo', h('p.conf', titulo), h('label.etq', 'Escriba qué hizo (obligatorio)', area), err),
-      botones: [
-        { texto: 'Cancelar', onclick: (c) => fin(null, c) },
-        { texto: 'Guardar que ya lo atendí', clase: 'primario', onclick: (c) => { const v = area.value.trim(); if (v.length < 3) { err.hidden = false; area.focus(); return; } fin(v, c); } },
-      ],
-    });
-    setTimeout(() => area.focus(), 50);
-  });
+/** «Ya lo atendí» se guarda con un solo toque (decisión de Emil, 16 nov 2026): ya no se pide una nota. Se conserva quién y cuándo; el servidor recibe un texto fijo. Devuelve siempre el texto. */
+export function pedirNotaAtencion() {
+  return Promise.resolve('Atendida desde el facturador');
 }
 
 function dato(t, ...v) { return h('div.cb-dato', h('span.cb-et', t), h('div', ...v)); }

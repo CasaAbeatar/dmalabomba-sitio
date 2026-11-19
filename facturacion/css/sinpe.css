@@ -1,0 +1,92 @@
+/* Lista de consulta «SINPE Móvil recibidos» (caja, Express y administración). Líneas finas, sin negro, sin tiras que se deslizan de lado.
+   Diseño simétrico: nombre a la izquierda y monto a la derecha, con los mismos márgenes a ambos lados.
+   Soda: franja roja con letras ámbar. Pollos: franja ámbar con letras rojas. */
+.sinpe-cobro{margin:.5rem 0}
+.sinpe-lista-caja{--s-tinta:#24402f;--s-suave:#5d6a61;border:1px solid var(--linea2);border-radius:12px;background:#fdfbf7;overflow:hidden;font-family:var(--letra)}
+.sinpe-banda{display:flex;align-items:center;justify-content:space-between;gap:.5rem;padding:.45rem 1rem;font-weight:600;letter-spacing:.02em;background:var(--rojo);color:var(--ambar)}
+.sinpe-lista-caja[data-emp=pollos] .sinpe-banda{background:var(--ambar);color:var(--rojo-osc)}
+.sinpe-hoy{font-weight:500;font-size:.85rem}
+.sinpe-barra{display:flex;align-items:center;justify-content:space-between;gap:.6rem;flex-wrap:wrap;padding:.55rem 1rem;border-bottom:1px solid var(--linea)}
+.sinpe-ultimo{color:var(--s-tinta);font-size:.95rem;min-width:0;overflow-wrap:anywhere}
+.sinpe-buscar{padding:.55rem 1rem;border-bottom:1px solid var(--linea)}
+.sinpe-buscar .campo{width:100%}
+.sinpe-aviso{margin:.5rem 1rem;padding:.5rem .8rem;border:1px solid var(--borde-ambar);border-radius:10px;background:var(--ambar-suave);color:#7a4f00;font-size:.92rem;overflow-wrap:anywhere}
+.sinpe-filas{max-height:min(46vh,420px);overflow-y:auto}
+.sinpe-dia{margin:0;padding:.4rem 1rem;font-size:.8rem;letter-spacing:.06em;text-transform:uppercase;color:var(--s-suave);background:#f6f0e4;border-top:1px solid var(--linea);border-bottom:1px solid var(--linea);font-weight:500}
+.sinpe-fila{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);grid-template-areas:"i d" "m a";gap:.2rem 1rem;align-items:center;padding:.6rem 1rem;border-top:1px solid var(--linea)}
+.sinpe-dia+.sinpe-fila{border-top:0}
+.sinpe-izq{grid-area:i;display:flex;flex-direction:column;min-width:0;overflow-wrap:anywhere}
+.sinpe-der{grid-area:d;display:flex;flex-direction:column;align-items:flex-end;text-align:right;min-width:0;overflow-wrap:anywhere}
+.sinpe-fila>span:nth-of-type(1){grid-area:m}
+.sinpe-fila>:nth-child(4){grid-area:a;justify-self:end}
+.sinpe-fila small{color:var(--s-suave)}
+.sinpe-nombre{font-weight:600;color:var(--s-tinta)}
+.sinpe-monto{font-weight:600;font-size:1.15rem;color:var(--s-tinta)}
+.sinpe-fila.usado{background:#faf7f0}
+.sinpe-fila.usado .sinpe-nombre,.sinpe-fila.usado .sinpe-monto{color:var(--s-suave)}
+.sinpe-fila.prueba .sinpe-nombre::after{content:' · de prueba';font-weight:400;color:var(--s-suave);font-size:.85rem}
+.sinpe-chip{display:inline-flex;align-items:center;gap:.3rem;padding:.1rem .6rem;border-radius:999px;border:1px solid;font-size:.85rem;font-weight:500;background:#fff;white-space:nowrap}
+.sinpe-chip.neutro{color:var(--s-suave);border-color:var(--linea2)}
+.sinpe-vacio{margin:0;padding:.8rem 1rem;color:var(--s-suave);overflow-wrap:anywhere}
+@media(max-width:520px){
+  .sinpe-fila{grid-template-columns:minmax(0,1fr);grid-template-areas:"i" "d" "m" "a";gap:.15rem}
+  .sinpe-der{align-items:flex-start;text-align:left}
+  .sinpe-fila>:nth-child(4){justify-self:stretch}
+  .sinpe-fila>:nth-child(4) .btn,.sinpe-fila>button.btn{width:100%;min-height:44px}
+  .sinpe-filas{max-height:none}
+}
+/* Administración */
+.sinpe-admin{max-width:900px;margin:0 auto;padding:.5rem 0 2rem;color:var(--s-tinta,#24402f)}
+.sinpe-admin h2{font-size:1.4rem}
+.sinpe-admin-cab{margin-bottom:.8rem}
+.sinpe-admin-cab p{margin:.15rem 0 0;color:var(--tinta2)}
+.sinpe-admin .sinpe-filas{max-height:none}
+/* Bloque del cobro: botón «Escoger SINPE de la lista» y el SINPE escogido, con las mismas columnas y márgenes a ambos lados */
+.sinpe-escoger{--s-tinta:#24402f;--s-suave:#5d6a61;display:flex;flex-direction:column;gap:.6rem;font-family:var(--letra)}
+.sinpe-escoger .sinpe-filas{max-height:min(32vh,260px)}
+.sinpe-escoger>.sinpe-nota{margin:0;color:var(--s-suave);font-size:.9rem;text-align:center}
+.sinpe-elegido{border:1px solid var(--borde-ok);border-radius:12px;background:var(--verde-suave);padding:.7rem 1rem;display:flex;flex-direction:column;gap:.4rem;color:var(--s-tinta)}
+.sinpe-elegido-fila{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:.2rem 1rem}
+.sinpe-elegido-pie{display:flex;align-items:center;justify-content:space-between;gap:.6rem;flex-wrap:wrap}
+.sinpe-elegido .sinpe-nota{margin:0;color:var(--s-suave);font-size:.9rem;overflow-wrap:anywhere}
+.sinpe-izq small,.sinpe-der small{color:var(--s-suave)}
+@media(max-width:520px){.sinpe-elegido-fila{grid-template-columns:minmax(0,1fr)}.sinpe-elegido-fila .sinpe-der{align-items:flex-start;text-align:left}.sinpe-elegido-pie .btn{min-height:44px}}
+.sinpe-elegido-fila .sinpe-izq,.sinpe-elegido-fila .sinpe-der{grid-area:auto}
+/* Barra de la lista: última hora de aviso y actualización a la izquierda; «Refrescar» bien visible a la derecha */
+.sinpe-barra-txt{display:flex;flex-direction:column;gap:.1rem;min-width:0;flex:1 1 12rem}
+.sinpe-act{color:var(--s-suave);font-size:.85rem;min-height:1.1em}
+.sinpe-refrescar{min-height:44px;padding:0 1.2rem;border:1.5px solid var(--rojo);color:var(--rojo);background:#fff;font-weight:600;letter-spacing:.01em}
+.sinpe-refrescar:hover:not(:disabled){background:var(--rojo-suave)}
+.sinpe-refrescar:disabled{opacity:.75}
+.sinpe-lista-caja[data-emp=pollos] .sinpe-refrescar{border-color:var(--rojo-osc);color:var(--rojo-osc)}
+@media(max-width:520px){.sinpe-refrescar{width:100%}}
+/* Lista flotante «SINPE»: pastilla pequeña y ventana que se abre solo al tocarla. Soda: rojo con ámbar. Pollos: ámbar con rojo. */
+.sinpe-flot-pastilla{position:fixed;left:1rem;bottom:1rem;z-index:28;display:inline-flex;align-items:center;gap:.5rem;min-height:40px;padding:0 1rem;border-radius:999px;border:1px solid var(--rojo-osc);background:var(--rojo);color:var(--ambar);font:600 .95rem/1 var(--letra);letter-spacing:.03em;cursor:pointer;box-shadow:0 4px 14px rgba(143,16,26,.22)}
+.sinpe-flot-pastilla[data-emp=pollos]{background:var(--ambar);border-color:var(--borde-ambar);color:var(--rojo-osc);box-shadow:0 4px 14px rgba(168,116,0,.25)}
+.sinpe-flot-pastilla[hidden]{display:none}
+.sinpe-flot-nuevo{padding:.12rem .5rem;border-radius:999px;background:#fff;color:var(--rojo);border:1px solid var(--rojo);font-size:.75rem;font-weight:600;letter-spacing:.02em}
+.sinpe-flot-nuevo[hidden]{display:none}
+.sinpe-flot-pastilla:focus-visible,.sinpe-flot-cerrar:focus-visible{outline:3px solid var(--ambar);outline-offset:2px;box-shadow:0 0 0 5px var(--rojo)}
+.sinpe-flot-ventana{position:fixed;left:1rem;bottom:1rem;z-index:60;width:min(440px,calc(100vw - 2rem));max-height:min(70vh,560px);max-height:min(70dvh,560px);display:flex;flex-direction:column;border:1px solid var(--linea2);border-radius:14px;background:#fdfbf7;overflow:hidden;box-shadow:0 14px 40px rgba(29,26,23,.22);font-family:var(--letra)}
+.sinpe-flot-ventana:focus{outline:none}
+.sinpe-flot-cab{flex:0 0 auto;display:flex;align-items:center;justify-content:space-between;gap:.8rem;padding:.5rem .8rem .5rem 1rem;background:var(--rojo);color:var(--ambar);letter-spacing:.02em}
+.sinpe-flot-ventana[data-emp=pollos] .sinpe-flot-cab{background:var(--ambar);color:var(--rojo-osc)}
+.sinpe-flot-cab strong{font-weight:600}
+.sinpe-flot-cerrar{min-height:44px;min-width:96px;padding:0 1.1rem;border:1.5px solid currentColor;background:#fff;color:var(--rojo);font-weight:600}
+.sinpe-flot-ventana[data-emp=pollos] .sinpe-flot-cerrar{color:var(--rojo-osc)}
+.sinpe-flot-ventana .sinpe-lista-caja{flex:1 1 auto;min-height:0;display:flex;flex-direction:column;border:0;border-radius:0}
+.sinpe-flot-ventana .sinpe-banda{display:none}
+.sinpe-flot-ventana .sinpe-filas{flex:1 1 auto;min-height:0;max-height:none;overflow-y:auto;overscroll-behavior:contain}
+/* La pastilla vive al pie de la columna de la cuenta, a la derecha: fila de 0 de alto, la pastilla cuelga hacia abajo (no desplaza nada) */
+.sinpe-flot-fila{display:flex;justify-content:flex-end;height:0;margin-top:-.5rem;overflow:visible;position:relative;z-index:5}
+.sinpe-flot-fila[hidden]{display:none}
+.sinpe-flot-pastilla.en-fila{position:static;z-index:auto;min-height:36px;box-shadow:none;margin-top:.9rem}
+.sinpe-flot-pastilla.abierta{opacity:.6}
+@media(max-width:979px){
+  /* celular y tableta: la pastilla cuelga bajo el final del contenido (a la derecha), por encima de la barra Ver cuenta / Cobrar; solo crece el final del desplazamiento */
+  .sinpe-flot-fila{margin-top:0}
+  .sinpe-flot-pastilla.en-fila{margin-top:.5rem}
+  .caja:has(.sinpe-flot-fila:not([hidden])){padding-bottom:calc(84px + 46px)}
+  .sinpe-flot-ventana{left:0;right:0;bottom:0;width:auto;max-height:70vh;max-height:70dvh;border-radius:16px 16px 0 0;border-bottom:0}
+}
+@media(max-height:520px){.sinpe-flot-ventana{max-height:78vh;max-height:78dvh}}

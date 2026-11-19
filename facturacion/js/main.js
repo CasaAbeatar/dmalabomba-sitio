@@ -3,7 +3,7 @@
 if (window.top !== window.self) { document.documentElement.replaceChildren(); throw new Error('El facturador no se muestra dentro de otra página.'); }
 import { sb, api, entrar, salir, consultarEmpresa, normalizarEmpresa, esTransitorio, esSesionVencida, esPinObligatorio } from './api.js';
 import { estiloUsuario, h, toast, modal, conBoton, esqueleto, bloqueError, nombreLocal, cerrarVentanas, asentarVentanas, popEsDeVentana, conPunto, pinDebil, textoDeError, MSG_SIN_INTERNET } from './util.js';
-import { buscar, padreDe } from './modulos.js';
+import { buscar, padreDe, habilitado } from './modulos.js';
 import { pantallaInicio, pantallaAdmin, pintarInsignias } from './ui_inicio.js';
 import { crearAvisosAdmin } from './avisos_admin.js';
 import { crearShell } from './shell.js';
@@ -75,6 +75,20 @@ window.addEventListener('unhandledrejection', (ev) => {
   if (m === ultimoAviso.m && Date.now() - ultimoAviso.t < 2500) return;
   ultimoAviso = { t: Date.now(), m };
   toast(m, 'error', 7000);
+});
+// Lo mismo para los errores que se lanzan de golpe (no son promesas), por ejemplo dentro de un botón: se anotan en la consola y sale el mismo aviso, sin romper nada más.
+// Los errores de carga de imágenes o archivos (sin objeto de error) y los de otros orígenes («Script error.») no traen datos útiles: se ignoran.
+window.addEventListener('error', (ev) => {
+  try {
+    const e = ev.error;
+    if (!e) return;
+    if (e?.name === 'AbortError' || esSesionVencida(e)) return;
+    console.error('Error no atendido:', e, ev.filename ? '(' + String(ev.filename).split('/').slice(-2).join('/') + ':' + ev.lineno + ')' : '');
+    const m = textoDeError(e);
+    if (m === ultimoAviso.m && Date.now() - ultimoAviso.t < 2500) return;
+    ultimoAviso = { t: Date.now(), m };
+    toast(m, 'error', 7000);
+  } catch { /* el manejador de errores nunca debe fallar él mismo */ }
 });
 
 /* ---------- Campo de clave (lo usan el inicio de sesión y «Entrar de nuevo») ---------- */
@@ -517,7 +531,7 @@ function abrirAyudaSinRed() {
   modal({
     titulo: 'Si no hay internet', ancho: 600,
     contenido: h('div.ayuda-red',
-      h('p.ayuda-red-intro', 'Deje esta pantalla abierta. Cuando la conexión vuelva, el aviso amarillo se quita; si tarda, toque «Revisar ahora».'),
+      h('p.ayuda-red-intro', 'Deje esta pantalla abierta. Cuando la conexión vuelva, el aviso ámbar se quita; si tarda, toque «Revisar ahora».'),
       bloque('Qué hacer', [
         'Si el local tiene un segundo internet (los datos de un celular o el otro router), conecte la caja a ese y toque «Revisar ahora».',
         'Si no hay ninguna forma de conectarse, llame a la persona encargada. Solo ella usa el talonario de comprobantes provisionales, si el local lo tiene. No entregue notas escritas a mano: no son comprobantes.',
@@ -638,6 +652,7 @@ function mostrarSesionVencida() {
 const INICIO = { id: 'inicio', titulo: 'Inicio', ruta: 'inicio', grupo: 'principal' };
 const tipoDe = (d) => (d === INICIO ? 'inicio' : d.pantalla === 'admin' ? 'admin' : d.id === 'caja' ? 'facturar' : d.grupo === 'admin' ? 'sub' : 'ventana');
 // De cualquier forma de nombrar una pantalla (id, alias, dirección con o sin #) al destino. Lo desconocido, o lo que no le toca a esta persona, va al inicio.
+let enlaceEnEspera = null;
 function destinoDe(clave) {
   let k = '';
   try { k = decodeURIComponent(String(clave ?? '')); } catch { k = String(clave ?? ''); }
@@ -647,7 +662,8 @@ function destinoDe(clave) {
   const enlaceFactura = /^(?:admin\/)?(?:contabilidad|contable|recepcion)\/(?:factura|clave)[\/=](\d{50})$/.exec(k);
   if (enlaceFactura && app.admin) { app.pedido = { clave: enlaceFactura[1] }; return buscar('contabilidad') || INICIO; }
   const m = buscar(k);
-  if (!m || (m.soloAdmin && !app.admin)) return INICIO;
+  if (m && m.requiere && app.admin && !habilitado(m)) enlaceEnEspera = m.id; // la bandera todavía no se conoce: si se enciende, se abre esta pantalla
+  if (!m || (m.soloAdmin && !app.admin) || !habilitado(m)) return INICIO;
   return m;
 }
 // Cada entrada del historial guarda de dónde se vino ({ de: 'admin' }): así «‹ Administración» e «‹ Inicio» usan el botón Atrás en lugar de apilar entradas repetidas
@@ -677,6 +693,8 @@ async function subir(clave) {
 const alCambiarDireccion = () => { if (cab && app.ctx && !popEsDeVentana()) mostrar(destinoDe(location.hash)); };
 window.addEventListener('popstate', alCambiarDireccion);
 window.addEventListener('hashchange', alCambiarDireccion);
+// Enlace directo a «Pagos SINPE»: la bandera se conoce unos instantes después de abrir. Al encenderse se abre la pantalla que ya estaba en la dirección (apagada no cambia nada)
+document.addEventListener('app:sinpe-bandera', (e) => { const id = enlaceEnEspera; enlaceEnEspera = null; if (e.detail?.activa && id === 'sinpe' && cab && app.ctx && app.moduloActual === INICIO) mostrar(destinoDe('pagos-sinpe')); });
 
 // Qué tarjeta lleva el foco al volver al inicio o a Administración: la del módulo del que se viene
 let veniaDe = null;

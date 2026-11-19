@@ -371,22 +371,34 @@ async function pedirConfig() {
 }
 
 let pidiendo = false;
+// El navegador anota en la consola cada intento fallido de llegar al servidor local (no se puede evitar desde la página). En la computadora de caja el servidor del kit siempre está
+// y un fallo ahí SÍ es una avería: se sigue preguntando cada minuto. En cualquier otro aparato (administrador, celular, quien abre la dirección sin el kit) el servidor nunca
+// responde: tras el primer fallo se espera 5, 10, 20 y hasta 30 minutos entre intentos, para no llenar la consola ni los monitores de errores.
+const LLAVE_LOCAL = 'fx_cliente_servidor_local';
+let localRespondio = false; try { localRespondio = localStorage.getItem(LLAVE_LOCAL) === '1'; } catch { /* sin almacenamiento: se trata como aparato sin servidor */ }
+let fallosLocal = 0, noAntesDe = 0;
 // La publicidad sale de la carpeta Publicidad del Escritorio de la computadora (decisión de Emil, 5 y 14 nov 2026): sin internet ni base de datos.
 async function pedirAnuncios() {
   if (params.get('demo')) return;
   if (Date.now() - ultimaConfig > 10 * 60 * 1000) { ultimaConfig = Date.now(); pedirConfig(); }
-  if (pidiendo) return;
+  if (pidiendo || Date.now() < noAntesDe) return;
   pidiendo = true;
   try {
     const r = await fetch(LOCAL + '/lista?e=' + encodeURIComponent(empresaActual || 'ninguna'), { cache: 'no-store', credentials: 'omit' });
     if (!r.ok) throw new Error('http ' + r.status);
     const datos = await r.json();
+    fallosLocal = 0; noAntesDe = 0;
+    if (!localRespondio) { localRespondio = true; try { localStorage.setItem(LLAVE_LOCAL, '1'); } catch { /* nada */ } }
     const lista = (datos && Array.isArray(datos.anuncios) ? datos.anuncios : []).map((a, n) => ({
       id: a.carpeta + '/' + a.nombre, tipo: a.tipo === 'video' ? 'video' : 'imagen', segundos: SEG_FOTO, orden: n,
       url: LOCAL + '/a/' + encodeURIComponent(a.carpeta) + '/' + encodeURIComponent(a.nombre) + '?v=' + encodeURIComponent(String(a.mod || '')),
     }));
     await rotador.sincronizar(lista, { soloMostrar: true });
-  } catch (e) { aviso('no se pudo leer la carpeta de publicidad (¿está corriendo el servidor del kit?):', e && e.message); }
+  } catch (e) {
+    fallosLocal++;
+    if (!localRespondio) noAntesDe = Date.now() + Math.min(30, 5 * 2 ** (fallosLocal - 1)) * 60 * 1000;
+    aviso('no se pudo leer la carpeta de publicidad (¿está corriendo el servidor del kit?):', e && e.message);
+  }
   finally { pidiendo = false; }
 }
 
@@ -466,6 +478,24 @@ else {
 try { navigator.wakeLock && navigator.wakeLock.request('screen').catch(() => {}); } catch { /* nada */ }
 document.addEventListener('visibilitychange', () => { rotador.pausar(document.hidden); if (!document.hidden) { try { navigator.wakeLock && navigator.wakeLock.request('screen').catch(() => {}); } catch { /* nada */ } } });
 addEventListener('contextmenu', (e) => e.preventDefault());
+// Mouse del administrador: al moverlo aparece el cursor y el botón «Cerrar pantalla»; a los 3 s sin moverlo se oculta otra vez.
+// Cerrar a propósito avisa a la caja para que no la vuelva a abrir sola (vuelve con el icono Facturador, al recargar la caja o al cambiar las pantallas).
+try {
+  let ox = -1, oy = -1, tMouse = null;
+  addEventListener('mousemove', (e) => {
+    if (ox >= 0 && Math.abs(e.clientX - ox) + Math.abs(e.clientY - oy) < 3) return;
+    ox = e.clientX; oy = e.clientY;
+    document.body.classList.add('con-mouse'); clearTimeout(tMouse);
+    tMouse = setTimeout(() => document.body.classList.remove('con-mouse'), 3000);
+  }, { passive: true });
+  const bCerrar = document.getElementById('cerrar-cli');
+  if (bCerrar) bCerrar.addEventListener('click', () => {
+    enviar({ evento: 'cerrar-a-mano', payload: { ts: Date.now() } });
+    try { if (document.fullscreenElement) document.exitFullscreen(); } catch { /* nada */ }
+    setTimeout(() => { try { window.close(); } catch { /* nada */ } }, 150);
+    setTimeout(() => { if (!window.closed) bCerrar.textContent = 'Cierre con Alt+F4'; }, 900);
+  });
+} catch { /* sin mouse */ }
 addEventListener('dragstart', (e) => e.preventDefault());
 addEventListener('resize', () => { if (cliente) { repintarCliente(); } if (vista === 'cuenta') ajustarTotalCuenta(); });
 try { document.fonts && document.fonts.addEventListener && document.fonts.addEventListener('loadingdone', () => { if (cliente) repintarCliente(); }); document.fonts && document.fonts.load && document.fonts.load('700 1em "Atkinson Hyperlegible"').catch(() => {}); } catch { /* nada */ }

@@ -1,8 +1,21 @@
+# Cabeceras de dmalabomba.com (Cloudflare Pages). 19 nov 2026.
+# - Sin «Access-Control-Allow-Origin: *»: ningún otro sitio ni app lee recursos de www.dmalabomba.com (panel, Soda, Pollos y Dixiapp solo enlazan); el sitio y el facturador son del mismo origen.
+# - X-Frame-Options SAMEORIGIN y no DENY: el facturador y la pantalla del cliente usan marcos del mismo origen (impresión, informes); nada los pone dentro de otro sitio.
+# - Permissions-Policy solo cierra lo que ninguna pantalla usa; no toca pantalla completa, manejo de ventanas ni impresión, que sí usa la caja.
+# - Los dominios de prueba *.pages.dev no se indexan (la regla solo cubre esos dominios, nunca www.dmalabomba.com).
 /*
-  Access-Control-Allow-Origin: *
+  ! Access-Control-Allow-Origin
   Referrer-Policy: strict-origin-when-cross-origin
   X-Content-Type-Options: nosniff
+  Strict-Transport-Security: max-age=31536000
+  X-Frame-Options: SAMEORIGIN
+  Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=()
 /
   Link: <https://fonts.googleapis.com>; rel=preconnect
-/facturacion/
-  Link: <https://fonts.googleapis.com>; rel=preconnect
+https://:project.pages.dev/*
+  X-Robots-Tag: noindex
+https://:version.:project.pages.dev/*
+  X-Robots-Tag: noindex
+/kit-caja/*
+  X-Robots-Tag: noindex, nofollow
+  Cache-Control: no-cache

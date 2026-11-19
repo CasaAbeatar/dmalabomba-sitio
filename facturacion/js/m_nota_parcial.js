@@ -279,7 +279,7 @@ function cobrarTxt(pagos, { cierre = true } = {}) {
   return pagos.map((p) => h('li', (por[p.medio] || ((x) => `${MEDIOS[p.medio] || p.medio} ${money(x)}: cóbrelo por ese medio.`))(Number(p.monto))));
 }
 // turno: 'abierto' | 'cerrado' | 'desconocido' (leído al revisar). Solo con el turno abierto se habla del cierre de caja; sin turno o sin saberlo queda el aviso, sin frases que lo contradigan.
-function mostrarResultado({ clase, credito, orig: o, nota, pagos, totalCalc, turno, alVerNota }) {
+function mostrarResultado({ app, clase, credito, orig: o, nota, pagos, totalCalc, turno, alVerNota }) {
   const pagosNum = pagos.map((p) => ({ medio: p.medio, monto: Number(p.monto) }));
   const abierto = turno === 'abierto';
   // Con la caja cerrada solo se llega aquí si la nota no movió efectivo (la base lo exige): se dice que no entra en ningún cierre y que en Informes sale «sin turno»
@@ -352,7 +352,7 @@ function seguirEnFondo(reg) {
         const pasado = ahoraMs() - reg.falloMs;
         if (r.tipo === 'propia' || r.tipo === 'ajena' || (r.tipo === 'ninguna' && pasado >= MS_SEGURO)) {
           resolver(reg);
-          const a = avisoPersistente(textoDeAviso(reg, r), r.tipo === 'propia' ? { boton: 'Ver qué hacer con el dinero', alBoton: () => mostrarResultado({ clase: reg.clase, credito: reg.credito, orig: reg.orig, nota: r.nota, pagos: reg.pagos, totalCalc: reg.totalCalc, turno: reg.turno, alVerNota: reg.alVerNota }) } : {});
+          const a = avisoPersistente(textoDeAviso(reg, r), r.tipo === 'propia' ? { boton: 'Ver qué hacer con el dinero', alBoton: () => mostrarResultado({ app: reg.app, clase: reg.clase, credito: reg.credito, orig: reg.orig, nota: r.nota, pagos: reg.pagos, totalCalc: reg.totalCalc, turno: reg.turno, alVerNota: reg.alVerNota }) } : {});
           void a;
           if (r.tipo !== 'ninguna') { try { await reg.alTerminar?.(r.nota || null); } catch { /* la lista se actualiza sola */ } }
           return;
@@ -922,7 +922,7 @@ function abrir(app, d, clase, { alTerminar, alVerNota } = {}) {
   async function terminarConNota(reg, nota) {
     resolver(reg); ponerEstado('');
     S.enVuelo = false; m.cerrar();
-    mostrarResultado({ clase, credito: reg.credito, orig: reg.orig, nota, pagos: reg.pagos, totalCalc: reg.totalCalc, turno: reg.turno, alVerNota });
+    mostrarResultado({ app: reg.app, clase, credito: reg.credito, orig: reg.orig, nota, pagos: reg.pagos, totalCalc: reg.totalCalc, turno: reg.turno, alVerNota });
     try { await alTerminar?.(nota); } catch { /* la lista se actualiza sola en unos segundos */ }
   }
   // Lo que se hace con el resultado de una comprobación hecha desde esta ventana (la nota propia se maneja aparte)

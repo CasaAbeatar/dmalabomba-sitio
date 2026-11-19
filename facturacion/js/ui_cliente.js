@@ -30,6 +30,7 @@ import { api, funcion } from './api.js';
 import { clientesTodos, clienteActivar } from './api_clientes.js';
 import { UBICACIONES } from './data_ubicaciones.js';
 import { cargarCss, campo, aviso, conBotonM, mensajeSeguro } from './ui_mant.js';
+import { cargarHoja } from './ui_hojas.js';
 import { crearCampoIdentificacion, leerCorreos, llevaLetras, limpiarNumeroId } from './ui_cedula.js';
 import { TARIFAS_CLIENTE, tarifaHabitual, clienteTraeTarifa } from './iva.js';
 import { revisarClienteConClaude } from './claude_ayuda.js';
@@ -64,6 +65,7 @@ const nombresOrdenados = (obj, i) => Object.entries(obj || {}).sort((a, b) => St
 
 export function abrirFormCliente(app, cliente, { alGuardar, alCambiarEstado, titulo, numeroInicial, completo } = {}) {
   cargarCss();
+  cargarHoja('clientes.css'); // filas de exoneraciones (.mt-exo): la hoja existía pero ninguna pantalla la cargaba
   const soc = app.soc;
   const c = cliente || {};
   const esNuevo = !c.id;

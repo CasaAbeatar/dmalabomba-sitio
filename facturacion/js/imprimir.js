@@ -47,7 +47,7 @@ const LEYENDA_RESOLUCION = 'Comprobante electrónico según la resolución ' + R
 const TITULOS = { '01': 'FACTURA ELECTRÓNICA', '02': 'NOTA DE DÉBITO ELECTRÓNICA', '03': 'NOTA DE CRÉDITO ELECTRÓNICA', '04': 'TIQUETE ELECTRÓNICO' };
 const NOMBRE_DOC = { '01': 'Factura electrónica', '02': 'Nota de débito electrónica', '03': 'Nota de crédito electrónica', '04': 'Tiquete electrónico' };
 
-// Textos publicados en el sitio de Grupo DMA La Bomba (dmalabomba-sitio/index.html), reutilizados tal cual.
+// Textos publicados en el sitio de Grupo DMA-La Bomba (dmalabomba-sitio/index.html), reutilizados tal cual.
 const CONTACTO = { instagram: '@sodaypolloslabomba' };
 const MARCA = {
   soda: {
@@ -565,7 +565,7 @@ function nodoCarta(m, { logo, copia }) {
   const pieIzq = h('div.ct-quienes',
     h('div.ct-etq', marca.historia ? 'Quiénes somos' : m.soc.comercial),
     h('p', marca.historia || marca.lema),
-    (marca.historia || marca.propia) ? null : h('p.ct-tenue', 'Grupo DMA La Bomba, empresa familiar de la Ruta 4, Horquetas de Sarapiquí.'));
+    (marca.historia || marca.propia) ? null : h('p.ct-tenue', 'Parte de Grupo DMA-La Bomba, empresa familiar de la Ruta 4, Horquetas de Sarapiquí.'));
   const pieDer = h('div.ct-contacto',
     h('div.ct-etq', 'Contáctenos'),
     h('div', marca.correo),

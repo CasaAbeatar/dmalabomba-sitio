@@ -96,13 +96,15 @@ export default {
       const clave = d.clave || it.clave_ref;
       const conFactura = (TIPOS_FACTURA.includes(it.tipo) || it.tipo === 'plazo_8_dias') && /^\d{50}$/.test(String(clave || ''));
       const atender = (btn) => atenderAlerta(it, btn);
+      const nFactura = (String(it.texto || '').match(/n\.º\s*(\d+)/) || [])[1] || '';
       const detalleCuerpo = cuerpoPorTipo(it, d);
       const trae = TIPOS_FACTURA.includes(it.tipo) && d.proveedor; // el panel de CABYS ya explica cómo atenderla
       // Un solo botón grande con palabras para ir a la factura; «Ya lo atendí» (con nota obligatoria) queda al lado. El panel de CABYS ya trae su propio «Ya lo atendí».
       const botones = estado === 'abiertas' ? h('div.ah-botones',
         conFactura ? h('button.btn.primario.grande', { type: 'button', onclick: () => app.ir('contabilidad', { clave }) }, 'Abrir esta factura') : null,
         h('button.btn' + (conFactura ? '' : '.primario'), { type: 'button', onclick: (e) => atender(e.currentTarget) }, 'Ya lo atendí'),
-        !conFactura && destino ? h('button.btn', { type: 'button', onclick: () => destino.ir(app) }, destino.texto) : null) : null;
+        !conFactura && it.destino === 'emitidas' && it.comprobante_id ? h('button.btn', { type: 'button', onclick: () => app.ir('emitidas', { comprobante: it.comprobante_id }) }, 'Ir a la factura' + (nFactura ? ' n.º ' + nFactura : ''))
+          : (!conFactura && destino ? h('button.btn', { type: 'button', onclick: () => destino.ir(app) }, destino.texto) : null)) : null;
       return h('li.ah-item.' + (it.cerrada_en ? 'atendida' : it.severidad),
         h('div.ah-fila', h('span.chip.' + (it.severidad === 'urgente' ? 'mal' : 'espera'), it.severidad === 'urgente' ? 'Urgente' : 'Importante'), it.es_prueba ? h('span.chip', 'Prueba') : (it.ambiente && it.ambiente !== 'produccion' ? h('span.chip', 'Ambiente de pruebas') : null),
           h('span.ah-sub', it.empresa + ' · ' + haceCuanto(it.creada_en) + ' · ' + hora(it.creada_en))),

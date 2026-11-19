@@ -1,2 +1,5 @@
 User-agent: *
 Disallow: /facturacion/
+Disallow: /kit-caja/
+
+Sitemap: https://www.dmalabomba.com/sitemap.xml

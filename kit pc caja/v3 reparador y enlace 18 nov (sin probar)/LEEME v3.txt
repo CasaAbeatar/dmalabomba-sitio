@@ -1,0 +1,70 @@
+﻿KIT v3.3 (19 nov 2026, probado en Windows real por GitHub Actions; falta confirmar en la PC de Pollos)
+
+CAMBIOS DE LA v3.3 (19 nov)
+- Latido y Facturador ya no abren una ventana de consola. En Windows 11 con Windows Terminal como terminal predeterminada, cada script lanzado desde un acceso abria su ventana aunque se pidiera oculta. Ahora los accesos y los programas de apoyo arrancan con "conhost.exe --headless" (sin ninguna ventana) y el instalador deja la consola clasica de Windows como terminal predeterminada de la cuenta.
+- Pantalla del cliente: el mouse ya puede pasar a esa pantalla (antes el kit lo llevaba a la esquina cada 15 segundos). Al mover el mouse aparece el cursor y un boton "Cerrar pantalla" arriba a la derecha; a los 3 segundos sin moverlo se oculta.
+- Si la pantalla del cliente se cierra a mano (boton, Alt+F4 o la X), ni el kit ni la caja la vuelven a abrir sola. Vuelve con el icono Facturador, con el reinicio diario, al cambiar las pantallas (conectar o desconectar el monitor) o si alguien la abre a mano.
+- Ficha completa de la computadora (archivo nuevo "17 ficha del equipo.ps1"): equipo, procesador, memoria, discos y su salud, monitores con modelo y serie, tacto, impresoras, dispositivos USB, red, seguridad de Windows, programas, errores recientes y uso actual. Solo lee, nunca cambia nada. El latido la manda al panel al arrancar y cada 6 horas (tabla equipos_ficha, con historial de cambios).
+- La caja necesita la pagina del cliente nueva (cliente/ y js/pantalla_ventana.js del sitio, ya publicadas el 19 nov).
+
+VERSION ANTERIOR: KIT v3.2c REPARADOR Y ENLACE (18 nov 2026, probado en Windows real por GitHub Actions; falta confirmar en la PC de Pollos)
+
+CAMBIOS DE LA v3.2c (18 nov 14:00) CAUSA RAIZ DEL LATIDO Y DEL FACTURADOR QUE NO ARRANCABAN
+- Los permisos: el paso "icacls /inheritance:r ... /T" dejaba cada archivo del kit con la lista de permisos vacia, y la cuenta de la caja no podia ni leer los scripts (PowerShell oculto no los abria y no dejaba rastro). Probado en Windows real. Ahora los archivos heredan los permisos de la carpeta (Usuarios solo leen, en datos modifican) y el instalador verifica cada script y repara el que quede sin permiso.
+- Cada programa (latido, abrir caja, servidor de publicidad) escribe arranque.txt en C:\PantallaCliente\datos apenas empieza: dice usuario, si es administrador, el resultado del candado y cualquier error con su linea. El resumen del instalador muestra sus ultimas lineas.
+- El candado de "una sola copia" ahora es Local y abierto a todos los usuarios.
+- El instalador cierra los programas de prueba que dejaba vivos con privilegios de administrador y vuelve a abrir latido y facturador sin privilegios.
+- Latido: corregida una variable que pisaba la carpeta de datos, envio de 5 eventos por vez y manejo de paquete demasiado grande.
+- takeown sin /D Y (en Windows en espanol falla).
+
+CAMBIOS DE LA v3.2 (18 nov 13:30, tras la segunda prueba en la PC de Pollos)
+- La copia del kit ya no se detiene si un archivo viejo tiene los permisos cerrados (fallo con "14 control remoto.ps1"): recupera permisos, reintenta, y si no puede aparta el viejo y copia el nuevo. Los demas archivos y los accesos se crean siempre.
+- El latido se reintenta directo si el acceso del inicio no lo arranca.
+- Si el facturador no abre con el acceso, se arranca directo y se espera un minuto mas.
+
+PC de caja estandar: Athlon 3000G + Skitphrati tactil (pantalla 1) + LG 24MK430H-B (pantalla 2). Sirve para Soda y para Pollos.
+
+CAMBIOS DE LA v3.1 (tras la primera prueba en la PC de Pollos, 18 nov 12:45)
+- Corregido: la clave publica del panel en config.ps1 estaba mal copiada (un error de transcripcion), por eso el enlace daba "401 No autorizado". Ahora es la clave anon del proyecto; se comprobo con una llamada de prueba (codigo falso) y el panel responde 200, ya no 401.
+- Corregido: "Add-Content: Acceso denegado". El instalador ahora, como administrador y antes de escribir nada, restablece los permisos de C:\PantallaCliente\datos (Administradores y SYSTEM control total, Usuarios modificar). Todo registro va con respaldo: si no se puede escribir en esa carpeta, queda en %TEMP%\kit-v3-registro.txt y el instalador sigue. Los errores de cada paso se anotan y se resumen al final, no salen en rojo.
+- El kit nunca escribe en la carpeta desde donde se ejecuta (D:\ u otra); todo va a C:\PantallaCliente\datos.
+- Por que no se vio antes: no hay Windows en el entorno de trabajo y la clave mala solo se nota al llamar de verdad al panel.
+
+QUE HACE
+Se instala ENCIMA de cualquier version anterior (v1 del 14 nov, "v2 propuesta" del 15 nov, "Kit v2" del 15 nov, "v2 identidad y latido" del 16 nov) o en una PC nueva. Detecta lo que hay, lo corrige y deja la PC en el estado final. Se puede repetir las veces que haga falta.
+1) Detecta: version instalada, carpeta C:\PantallaCliente, equipo.json, tareas programadas, iconos del Escritorio, arranques de Windows, procesos viejos y cuentas.
+2) Limpia sin duplicar: detiene lo viejo, quita tareas y arranques repetidos, deja una sola ventana 1 y una sola ventana 2, y APARTA (no borra) los archivos de versiones anteriores en C:\PantallaCliente\datos\kit anterior.
+3) Pregunta SIEMPRE la identidad, en pantalla: "Esta computadora es de SODA o de POLLOS?", pide confirmar y pide el codigo de enlace de 8 caracteres. La pregunta sale si falta equipo.json, esta danado, es de otra PC, el panel no reconoce la clave o no coincide con el nombre de la PC. Si ya esta bien enlazada, igual pide confirmar "Es correcto?" al instalar.
+4) Si no hay codigo a mano, se puede tocar "Enlazar despues": queda un recordatorio visible (cada 30 minutos) y el icono Reparar vuelve a preguntar. Hasta enlazar, el panel no ve esa caja.
+5) Fija pantalla 1 = tactil (principal) y pantalla 2 = LG del cliente. Una sola ventana 2. Si se cierra la ventana 1, se cierra la 2 y se vuelve con el icono Facturador.
+6) Plan B: si hay una sola pantalla (tactil desconectada), el facturador queda solo en la LG, sin ventana del cliente. Al reconectar la tactil vuelve solo al modo de dos pantallas (Reparar lo fuerza).
+7) Escritorio: solo los iconos Facturador, Reparar y Control remoto. No crea usuarios de Windows. La cajera no puede instalar nada (solo el administrador; ademas se cierran instalaciones por usuario, extensiones del navegador y Microsoft Store).
+8) Latido al panel cada minuto (public.equipo_latido). No escribe claves en archivos del kit: la clave propia de la PC la guarda equipo.json al enlazar.
+9) Al final muestra un resumen: FALTA O REVISAR / CORREGIDO O INSTALADO / YA ESTABA BIEN (tambien queda en C:\PantallaCliente\datos\resumen instalacion.txt).
+
+COMO INSTALAR ENCIMA DE LO ANTERIOR
+1. Extraiga TODO el zip "Kit v3 PC de caja" en una carpeta de la PC (no copie solo algunos archivos: el instalador se detiene si falta alguno).
+2. Doble clic en INSTALAR TODO.bat y diga que si al permiso de administrador.
+3. Conteste las preguntas de identidad (Soda o Pollos, confirmar, codigo).
+4. Lea el resumen final.
+
+OTROS ARCHIVOS
+ENLAZAR EQUIPO.bat      repite el enlace cuando haga falta (suelto y visible en esta carpeta y en C:\PantallaCliente)
+REPARAR.bat             lo mismo que el icono Reparar
+DIAGNOSTICO.bat         muestra identidad, pantallas, ventanas y ultimas lineas del latido (nunca la clave)
+FIJAR PANTALLAS.bat, SALIR PARA MANTENIMIENTO.bat, ASOCIAR TACTO.bat, INICIO DE SESION AUTOMATICO.bat, OLVIDAR SESION DEL NAVEGADOR.bat: igual que en la v2.
+
+QUE FALTABA EN LA v2 (por que no pregunto Soda o Pollos)
+- ENLAZAR EQUIPO.bat (109 bytes) y "13 identidad del equipo.ps1" SI estan en la carpeta "v2 identidad y latido 16 nov" (verificado en OneDrive el 18 nov). NO estan en "v2 propuesta 15 nov" ni en la carpeta "Kit v2 Athlon 3000G + Skitphrati + LG": las dos tienen la misma lista de archivos, sin 11 latido, 13 identidad, 14 control remoto ni ENLAZAR EQUIPO.bat, y su "instalar todo.ps1" (2262 bytes) no tiene paso de identidad. Quien instala desde la carpeta llamada "Kit v2" (la mas visible) nunca ve la pregunta, y esa es la explicacion mas probable de lo ocurrido en la PC de la oficina.
+- Aun con la v2 del 16 nov, la pregunta iba AL FINAL del instalador (despues de descargar el control remoto) y solo si NO habia un equipo.json valido; nunca verificaba una identidad existente, ni la comparaba con la PC, ni la reconfirmaba con el panel.
+- El instalador no comprobaba que el paquete estuviera completo y el resultado de cada paso quedaba solo en un archivo, sin resumen claro de lo que falto.
+- Para saber que paso en la PC de la oficina: abrir C:\PantallaCliente\datos\instalacion.txt y buscar la linea que empieza con "13" (enlazada) o "PENDIENTE 13".
+
+LIMITES (lo que NO se pudo comprobar)
+- Este kit se escribio y reviso sin ejecutarlo: no hay Windows en el entorno de trabajo. Se valido la sintaxis por analisis estatico y la logica de deteccion con casos simulados, no corriendo PowerShell. Despues de la v3.1 hay que repetir la prueba en la PC de Pollos de la oficina antes de usarlo en las cajas.
+- El codigo de enlace lo crea Emil (o Claude por orden suya); el kit nunca crea ni canjea codigos por su cuenta.
+- El control remoto sigue necesitando un paso manual por PC: abrir el icono Control remoto, Configurar acceso remoto y poner el PIN.
+- Pendiente del lado del facturador (web), no del kit: uso con mouse y teclado en el plan B, aviso antes de cerrar con una cuenta a medias y el alta de cliente en vivo en la pantalla del cliente.
+
+REVERSA
+Las carpetas anteriores (v1, v2 propuesta, Kit v2, v2 identidad y latido) quedan intactas en OneDrive. Para volver atras: instalar de nuevo una de ellas; los archivos que v3 aparto estan en C:\PantallaCliente\datos\kit anterior.

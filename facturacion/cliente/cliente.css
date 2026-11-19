@@ -36,6 +36,11 @@ html{-webkit-text-size-adjust:100%;font-size:min(.5208333vw,.9259259vh);overflow
 html,body{margin:0;height:100%;width:100%;overflow:hidden}
 body{font-family:var(--letra);font-size:3rem;line-height:1.2;color:var(--tinta);background:var(--fondo);-webkit-font-smoothing:antialiased;touch-action:none}
 ::-webkit-scrollbar{display:none}
+/* El cursor se oculta solo para el cliente. Al mover el mouse aparece (y el botón de cierre) y a los 3 s se vuelve a ocultar. */
+body.con-mouse,body.con-mouse *{cursor:default!important}
+.cerrar-cli{position:fixed;top:1.4rem;right:1.4rem;z-index:50;padding:1rem 2.2rem;border:.2rem solid #171212;border-radius:99rem;background:#fff;color:#171212;font:700 2.2rem/1 var(--letra,system-ui,sans-serif);opacity:0;pointer-events:none;transition:opacity .15s}
+body.con-mouse .cerrar-cli{opacity:1;pointer-events:auto}
+.cerrar-cli:hover,.cerrar-cli:focus-visible{background:#b81622;color:#fff;border-color:#b81622;outline:none}
 p,dl,dd,dt,h1,h2{margin:0}
 #raiz{position:fixed;top:0;right:0;bottom:0;left:0;overflow:hidden}
 .monto{font-variant-numeric:tabular-nums;font-feature-settings:"tnum";white-space:nowrap}

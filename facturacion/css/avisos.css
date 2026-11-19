@@ -1,4 +1,4 @@
-/* Avisos de efectivo por WhatsApp (Administración). Se suma a app.css, no lo reemplaza. También la carga ui_efectivo.js. */
+/* Avisos de efectivo por WhatsApp (Administración). Se suma a app.css, no lo reemplaza. La carga m_avisos.js. */
 .av{max-width:980px;margin:0 auto;display:flex;flex-direction:column;gap:1rem}
 .av-cab{display:flex;flex-wrap:wrap;gap:.6rem 1rem;align-items:center;justify-content:space-between}
 .av-cab p{margin:0;color:var(--tinta2);flex:1 1 22rem}

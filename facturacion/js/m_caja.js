@@ -7,6 +7,10 @@ import { estadoDireccion } from './direccion_cliente.js';
 import { apiM } from './api_mantenimiento.js';
 import { esTransitorio, esPinObligatorio } from './api.js';
 import { reemplazoInfo, cobrarReemplazo, esRespuestaDeNegocio, tiposIdentificacion, avisoTipoId, correoActivo } from './api_documentos.js';
+import { cargarBanderaSinpe } from './api_sinpe.js';
+import { sinpeActivo } from './bandera_sinpe.js';
+import { escogerSinpe } from './ui_sinpe.js';
+import { flotanteSinpe } from './sinpe_flotante.js';
 import { TARIFAS_IVA, tarifaDeLinea, desgloseIva, tarifaHabitual } from './iva.js';
 import { infoActividad, textoActividad } from './actividades.js';
 import { ordenarMenu } from './orden_menu.js';
@@ -218,7 +222,6 @@ export default {
     let pantalla = null; // pantalla del cliente (módulo aparte y opcional; si falla o no hay pantalla emparejada, no pasa nada)
     import('./pantalla_emisor.js').then((m) => { if (vivo) { pantalla = m.iniciar(app); pantalla.cuenta(cur); } }).catch(() => {});
     document.body.classList.add('fx-caja');
-
     /* ---------- Estado ---------- */
     let catalogo = { cajones: [], productos: [] };
     let catalogoJson = '';
@@ -370,8 +373,25 @@ export default {
       form.enfocar();
     }
 
+    /* ---------- Lista flotante «SINPE» (bandera sinpe_tarjeta) ----------
+       Pastilla pequeña «Ver SINPE» en la esquina; al tocarla abre una ventana flotante con la lista de solo lectura (filtro, hora del último aviso, «Refrescar» y refresco
+       automático). Se cierra y no vuelve a abrirse sola. No muestra totales ni sumas ni conteos, no toca el cierre de turno y nada depende de ella (Emil, 17 nov 2026). Apagada la bandera, no existe. */
+    let sinpeFlot = null;
+    const sinpeFila = h('div.sinpe-flot-fila', { hidden: true }); // lugar fijo de la pastilla: esquina inferior derecha, al pie de la columna de la cuenta; mide 0 de alto, no mueve nada ni tapa cajones ni botones
+    function quitarSinpeFija() { sinpeFlot?.destruir(); sinpeFlot = null; sinpeFila.hidden = true; }
+    function sincronizarSinpeFija() {
+      if (!vivo) return;
+      if (!sinpeActivo()) { quitarSinpeFija(); return; }
+      if (sinpeFlot || !cajaEl) return;
+      sinpeFlot = flotanteSinpe({ soc: socId, empresa: app.empresa?.codigo || 'soda', anclaje: sinpeFila });
+      sinpeFila.hidden = false;
+    }
+    const alBanderaSinpe = () => sincronizarSinpeFija();
+    document.addEventListener('app:sinpe-bandera', alBanderaSinpe);
+
     /* ---------- Estructura de la caja con turno abierto ---------- */
     function armarCaja() {
+      quitarSinpeFija();
       barraCuentas = h('div.cuentas-bar');
       buscador = crearBuscador({ alElegir: (p) => agregarProducto(p), enLinea: false });
       buscadorWrap = h('div.buscador', buscador.el);
@@ -390,9 +410,10 @@ export default {
         h('div.caja-cuerpo',
           h('div.caja-izq', barraCuentas, buscadorWrap,
             h('section.caja-catalogo', { 'aria-label': 'Productos' }, tabsCajon, medioCat)),
-          h('div.caja-der', asideCuenta)),
+          h('div.caja-der', asideCuenta, sinpeFila)),
         barraMovil);
       root.replaceChildren(cajaEl);
+      Promise.race([cargarBanderaSinpe(), new Promise((ok) => setTimeout(ok, 3000))]).then(sincronizarSinpeFija).catch(() => {});
       buscador.inp.addEventListener('focus', () => { cajaEl.classList.add('bus-activo'); if (!fino()) setTimeout(irAlBuscador, 250); });
       // La barra compacta se queda un instante después de cerrar el teclado: si no, al tocar «Cobrar» el botón se movería antes de soltar el dedo y el toque se perdería
       buscador.inp.addEventListener('blur', () => setTimeout(() => { if (cajaEl && document.activeElement !== buscador.inp) cajaEl.classList.remove('bus-activo'); }, 300));
@@ -1190,8 +1211,7 @@ export default {
             h('div.total-fila', h('span.et', 'Total a pagar (IVA incluido)'), h('div.total-monto', { 'aria-live': 'polite' }, money(v.total))),
             h('button.btn.primario.grande.btn-cobrar-aside', { type: 'button', disabled: !puede, onclick: seguro(abrirCobro) }, 'Cobrar'),
             v.tipo_servicio === 'buffet' ? h('div.fila-espera',
-              h('button.btn.ambar.grande.btn-espera', { type: 'button', disabled: !cur.lineas.length, onclick: seguro(() => ponerEnEspera(false)) }, 'Poner en espera'),
-              h('button.btn.ambar.grande.btn-espera-pref', { type: 'button', disabled: !cur.lineas.length, onclick: seguro(() => ponerEnEspera(true)) }, 'En espera e imprimir prefactura')) : null),
+              h('button.btn.ambar.grande.btn-espera', { type: 'button', disabled: !cur.lineas.length, onclick: seguro(() => ponerEnEspera(true)) }, 'En espera e imprimir prefactura')) : null),
           h('div.acciones-cuenta', prefBtn, h('button.btn.peligro' + (prefBtn ? '' : '.ancho'), { type: 'button', onclick: anularCuenta }, 'Anular esta cuenta'))));
       const nuevo = asideCuenta.querySelector('.cuenta-lineas');
       nuevo.scrollTop = irAlFinal ? nuevo.scrollHeight : scroll;
@@ -1256,6 +1276,10 @@ export default {
       if (!sePuedeCobrar(cur)) { toast('La cuenta está vacía. Agregue productos antes de cobrar.', 'error'); return; }
       let venta = cur.venta;
       const ventaId = venta.id;
+      // La bandera se pregunta una vez (queda guardada); si tarda más de 1,5 s o falla, se sigue como siempre (apagada)
+      await Promise.race([cargarBanderaSinpe(), new Promise((ok) => setTimeout(ok, 1500))]);
+      const sinpeOn = sinpeActivo();
+      let listaSinpeCobro = null; // lista de consulta de SINPE Móvil de esta ventana de cobro (solo con la bandera encendida y SINPE Móvil elegido); solo se mira, nunca condiciona el cobro
       if (ventasEnCobro.has(ventaId)) { toast('Esta cuenta tiene un cobro en camino. Espere unos segundos a que termine.', 'error'); return; }
       let totalC = cents(venta.total);
       let cliente = cur.cliente || null;
@@ -1385,6 +1409,7 @@ export default {
       const cortesia = totalC === 0 && esCortesiaTotal(cur);
       const avisoCortesia = h('div.cobro-cortesia', { hidden: !cortesia, role: 'status' }, h('strong', 'Cuenta de cortesía: no se cobra nada.'), h('span', 'Todas las líneas tienen descuento del 100 %. Toque «Registrar cortesía» para emitir el comprobante en cero.'));
       const formaPago = h('div.col', { hidden: cortesia }, h('strong', 'Forma de pago'), h('div.medios', mediosBtns));
+      const sinpeEl = h('div.sinpe-cobro', { hidden: true });
       const bloqueMixto = h('div.cobro-mixto', { hidden: cortesia }, enlaceMixto);
       const etqMonto = h('label.etq', { hidden: cortesia }, lblMonto, inpMonto);
       const vistaPago = h('div.cobro',
@@ -1402,7 +1427,7 @@ export default {
         exoEl,
         actEl,
         avisoCortesia,
-        formaPago, etqMonto,
+        formaPago, sinpeEl, etqMonto,
         refEtq, btnOtro, bloqueMixto, errEl, btnRevisar,
         h('div.cobro-pie', pedirMedio, razonCobro, btnVolver, btnCobrar));
 
@@ -1607,6 +1632,14 @@ export default {
       }
       function actualizar() {
         mediosBtns.forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.medio === medio)));
+        // Lista de consulta de SINPE Móvil (bandera encendida): se muestra al elegir SINPE Móvil, solo para mirar. No cambia el botón Cobrar ni nada del cobro.
+        const sinpeVista = sinpeOn && medio === 'sinpe' && !cortesia;
+        if (sinpeVista && !listaSinpeCobro) {
+          listaSinpeCobro = escogerSinpe({ soc: socId, empresa: app.empresa?.codigo || 'soda', ventaId, ventaNumero: numCuenta(venta.numero), total: Number(venta.total) || 0,
+            alCambiar: (p) => { if (p && p.comprobante) inpRef.value = String(p.comprobante); else if (!p) inpRef.value = ''; actualizar(); } });
+          sinpeEl.replaceChildren(listaSinpeCobro.el);
+        } else if (!sinpeVista && listaSinpeCobro) { listaSinpeCobro.destruir(); listaSinpeCobro = null; sinpeEl.replaceChildren(); }
+        sinpeEl.hidden = !sinpeVista;
         lblMonto.textContent = medio === 'efectivo' ? 'Recibido: efectivo que entrega el cliente (₡)' : 'Monto a cobrar con ' + (MEDIOS[medio] || '') + ' (₡)';
         // Un solo medio: el monto solo se pide en efectivo (Recibido); con SINPE o tarjeta se cobra el total. En pago mixto el monto se pide en cada fila.
         etqMonto.hidden = cortesia || !medio || !(mixto || medio === 'efectivo');
@@ -1741,7 +1774,7 @@ export default {
         } catch { return { estado: 'desconocido' }; }
       }
       async function terminar(comp, aviso, vueltoLocal) {
-        terminado = true;
+        terminado = true; listaSinpeCobro?.conservar();
         pantalla?.pagado(comp, vueltoLocal);
         duda = false; ventasEnDuda.delete(ventaId); ventasEnCobro.delete(ventaId);
         m.cerrar();
@@ -1830,7 +1863,7 @@ export default {
       // Con el cobro en camino la ventana no se puede cerrar (ni con Escape, ni tocando fuera, ni con «Volver», ni con el botón Atrás)
       m = modal({ titulo: 'Cobrar', contenido: raiz, ancho: 960,
         bloqueo: () => (cobrando ? 'El cobro va en camino. Espere a que termine; la ventana se cierra sola.' : ''),
-        alCerrar: () => { cobroAbierto = false; if (!terminado) pantalla?.cerrarPago(cur); vigilaAjustes.disconnect(); if (vivo && !terminado && buscador && fino()) buscador.inp.focus(); } });
+        alCerrar: () => { cobroAbierto = false; listaSinpeCobro?.destruir(); listaSinpeCobro = null; if (!terminado) pantalla?.cerrarPago(cur); vigilaAjustes.disconnect(); if (vivo && !terminado && buscador && fino()) buscador.inp.focus(); } });
       avisarCreada();
       pantalla?.pago(cur);
       mostrar(vistaPago);
@@ -2031,6 +2064,7 @@ export default {
 
     return () => {
       vivo = false;
+      quitarSinpeFija(); document.removeEventListener('app:sinpe-bandera', alBanderaSinpe);
       pantalla?.detener();
       timers.forEach(clearInterval);
       roCajones?.disconnect(); roCajones = null;

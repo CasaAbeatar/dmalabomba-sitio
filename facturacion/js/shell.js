@@ -3,10 +3,11 @@
 // Los permisos NO viven aquí: cada módulo y cada función del servidor (fx_*) los vuelven a exigir.
 import { h, modal, toast } from './util.js';
 import { cambiarEmpresa } from './api.js';
-import { MODULOS, GRUPOS_NAV, grupoNavDe, buscar, insigniaDe, itemsDeGrupo, esDixia } from './modulos.js';
+import { cargarBanderaSinpe } from './api_sinpe.js';
+import { MODULOS, GRUPOS_NAV, grupoNavDe, buscar, insigniaDe, itemsDeGrupo, esDixia, habilitado } from './modulos.js';
 
 const norm = (t) => String(t || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
-const visibles = (app) => MODULOS.filter((m) => m.soloAdmin ? app.admin : true);
+const visibles = (app) => MODULOS.filter((m) => (m.soloAdmin ? app.admin : true) && habilitado(m));
 
 export function crearShell({ app, raiz, cab, vista, bandas, ir, subir, cambiarPin, cerrarSesion }) {
   document.body.classList.add('fx-admin');
@@ -32,7 +33,7 @@ export function crearShell({ app, raiz, cab, vista, bandas, ir, subir, cambiarPi
   const botonHoy = h('button.nv-item.nv-hoy', { type: 'button', 'data-nav': 'hoy', onclick: () => ir('inicio') }, h('span.nv-tit', 'Hoy'));
   nav.append(botonHoy);
   for (const g of GRUPOS_NAV.filter((x) => x.items.length)) {
-    const mods = itemsDeGrupo(g, app).map(modDe).filter(Boolean).filter((m) => !m.soloAdmin || app.admin);
+    const mods = itemsDeGrupo(g, app).map(modDe).filter(Boolean).filter((m) => (!m.soloAdmin || app.admin) && habilitado(m));
     if (!mods.length) continue;
     nav.append(h('div.nv-grupo', { 'data-grupo': g.id },
       h('div.nv-grupo-tit', g.titulo),
@@ -122,7 +123,7 @@ export function crearShell({ app, raiz, cab, vista, bandas, ir, subir, cambiarPi
   const hojaVela = h('div.fx-vela.hoja-vela', { hidden: true, onclick: () => cerrarHoja() });
   function cerrarHoja() { hoja.hidden = true; hojaVela.hidden = true; barra.querySelectorAll('[aria-expanded=true]').forEach((b) => b.setAttribute('aria-expanded', 'false')); }
   function abrirHoja(ids, titulo, boton) {
-    const mods = ids.map(modDe).filter(Boolean);
+    const mods = ids.map(modDe).filter(Boolean).filter(habilitado);
     hoja.replaceChildren(h('div.hoja-tit', titulo, h('button.btn.chico', { type: 'button', onclick: cerrarHoja }, 'Cerrar')),
       h('div.hoja-rejilla', mods.map((m) => h('button.hoja-item', { type: 'button', onclick: () => { cerrarHoja(); ir(m.id); } }, h('b', m.titulo), insigniaTxt(m)))));
     hoja.hidden = false; hojaVela.hidden = false;
@@ -175,6 +176,21 @@ export function crearShell({ app, raiz, cab, vista, bandas, ir, subir, cambiarPi
     botonesNav.forEach((b, id) => { b.querySelector('.nv-ins')?.remove(); const m = modDe(id); const i = m && insigniaTxt(m); if (i) b.append(i); });
     contar();
   };
+  // SINPE Móvil: la bandera se lee después de armar el menú; cuando se enciende (o apaga), «Pagos SINPE» aparece o desaparece del grupo Vender sin recargar
+  const sincronizarSinpe = () => {
+    const m = modDe('sinpe'); if (!m || !app.admin) return;
+    const hay = botonesNav.has('sinpe');
+    if (habilitado(m) && !hay) {
+      const grupo = nav.querySelector('.nv-grupo[data-grupo=vender]'); if (!grupo) return;
+      const b = h('button.nv-item', { type: 'button', 'data-nav': m.id, onclick: () => ir(m.id) }, h('span.nv-tit', m.titulo));
+      botonesNav.set(m.id, b);
+      const despuesDe = botonesNav.get('clientes');
+      if (despuesDe && despuesDe.parentElement === grupo) despuesDe.after(b); else grupo.append(b);
+      repintar();
+    } else if (!habilitado(m) && hay) { botonesNav.get('sinpe').remove(); botonesNav.delete('sinpe'); repintar(); }
+  };
+  document.addEventListener('app:sinpe-bandera', sincronizarSinpe);
+  if (app.admin) cargarBanderaSinpe().catch(() => {}); // la bandera se pregunta una vez; apagada (lo normal) no cambia el menú
   const eventos = ['app:alertas', 'app:alertas-cambio', 'app:alertas-hacienda-cambio', 'app:cambio'];
   eventos.forEach((e) => document.addEventListener(e, repintar));
   repintar();
@@ -183,6 +199,7 @@ export function crearShell({ app, raiz, cab, vista, bandas, ir, subir, cambiarPi
     marcar, repintar, abrirRail, abrirBusqueda,
     destruir() {
       eventos.forEach((e) => document.removeEventListener(e, repintar));
+      document.removeEventListener('app:sinpe-bandera', sincronizarSinpe);
       obs?.disconnect();
       document.body.classList.remove('fx-admin', 'sin-cristal'); raiz.classList.remove('fx-shell', 'sin-rail'); delete raiz.dataset.vista; delete raiz.dataset.grupo; delete raiz.dataset.atencion;
     },

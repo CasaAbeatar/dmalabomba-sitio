@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Kit de la PC de caja · Facturador</title>
+<link rel="icon" href="/favicon.ico" sizes="any">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png?v=2">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png?v=2">
+<meta name="theme-color" content="#fbf8f2">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Figtree:wght@300;400;600;800&display=swap" rel="stylesheet">
+<style>
+:root{--red:#B81622;--amber:#F3A62C;--black:#171212;--paper:#fbf8f2;--ln:rgba(23,18,18,.85)}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--paper);color:var(--black);font:400 17px/1.6 Figtree,system-ui,-apple-system,"Segoe UI",sans-serif}
+a{color:inherit}
+.wrap{max-width:820px;margin:0 auto;padding:0 20px}
+header{border-bottom:1px solid var(--ln)}
+header .wrap{display:flex;align-items:center;justify-content:space-between;min-height:64px;gap:16px}
+.mark{font-weight:800;letter-spacing:.22em;font-size:14px;text-decoration:none}
+.tag{font-size:13px;letter-spacing:.14em;text-transform:uppercase}
+h1{font-weight:300;font-size:clamp(34px,7vw,58px);line-height:1.05;letter-spacing:-.03em;margin:44px 0 16px}
+h1 em{font-style:normal;color:var(--red)}
+h2{font-weight:800;font-size:13px;letter-spacing:.18em;text-transform:uppercase;margin:0 0 14px}
+.lead{max-width:56ch;font-size:19px;margin:0 0 28px}
+.card{border:2px solid var(--black);border-radius:14px;padding:22px;margin:0 0 36px;background:#fff}
+.dl{display:inline-flex;align-items:center;justify-content:center;min-height:56px;padding:0 28px;border-radius:999px;background:var(--red);color:#fff;font-weight:800;font-size:18px;text-decoration:none;letter-spacing:.02em}
+.dl:hover,.dl:focus-visible{background:var(--black)}
+.meta{margin:16px 0 0;font-size:15px;word-break:break-all}
+.meta b{font-weight:600}
+section{border-top:1px solid var(--ln);padding:30px 0}
+ol,ul{margin:0;padding-left:1.3em}
+li{margin:0 0 10px}
+code,.k{font-family:ui-monospace,Consolas,monospace;font-size:.92em;background:rgba(23,18,18,.08);padding:1px 6px;border-radius:5px}
+.est{border-left:6px solid var(--amber);padding:6px 0 6px 16px;margin:0}
+.est p{margin:0 0 8px}
+footer{border-top:1px solid var(--ln);padding:24px 0 40px;font-size:14px}
+</style>
+</head>
+<body>
+<header><div class="wrap"><a class="mark" href="/">LA BOMBA</a><span class="tag">Solo administración</span></div></header>
+<main class="wrap">
+<h1>Kit de la <em>PC de caja</em></h1>
+<p class="lead">Deja la computadora de caja lista para el facturador: dos pantallas, accesos, arranque automático, enlace con el panel y reparación. Sirve para Soda y para Pollos, y se puede instalar encima de cualquier versión anterior.</p>
+
+<div class="card">
+  <a class="dl" href="/kit-caja/kit-pc-de-caja-v3.3.zip" download>Descargar kit v3.3</a>
+  <p class="meta"><b>Versión:</b> 3.3 · 19 nov 2026 · <b>Tamaño:</b> 66 KB · 33 archivos<br>
+  <b>SHA-256:</b> df409fd9d87a40b5f7284956bcf7dd172a030d2f9f5312668694d6a39c2e1455</p>
+</div>
+
+<section>
+<h2>Cómo instalar</h2>
+<ol>
+<li>Descargue el zip en la PC de caja. Clic derecho y <b>Extraer todo</b> en una carpeta. No lo abra desde dentro del zip y no copie solo algunos archivos: el instalador se detiene si falta alguno.</li>
+<li>Doble clic en <span class="k">INSTALAR TODO.bat</span> y diga que sí al permiso de administrador. Si Windows avisa que protegió la PC, toque Más información y Ejecutar de todas formas.</li>
+<li>Conteste la pregunta de identidad: <b>¿Esta computadora es de Soda o de Pollos?</b> Confirme y escriba el código de enlace de 8 caracteres. Si no lo tiene a mano, toque Enlazar después. El panel no ve esa caja hasta que se enlace.</li>
+<li>Lea el resumen final: FALTA O REVISAR, CORREGIDO O INSTALADO y YA ESTABA BIEN. También queda guardado en <span class="k">C:\PantallaCliente\datos\resumen instalacion.txt</span>.</li>
+</ol>
+</section>
+
+<section>
+<h2>Para qué PC es</h2>
+<p>PC de caja estándar: Athlon 3000G, pantalla táctil Skitphrati como pantalla 1 (la de la cajera) y monitor LG 24MK430H-B como pantalla 2 (la del cliente). Si falta la táctil, el facturador queda solo en la LG y vuelve al modo de dos pantallas al reconectarla.</p>
+</section>
+
+<section>
+<h2>Qué queda en la PC</h2>
+<ul>
+<li>Una sola ventana de caja y una sola ventana del cliente, sin duplicados.</li>
+<li>En el Escritorio solo tres accesos: Facturador, Reparar y Control remoto.</li>
+<li>Arranque automático del facturador y señal de vida al panel cada minuto, sin ventanas de consola a la vista.</li>
+<li>Pantalla del cliente: el mouse puede pasar a ella. Al moverlo aparece el botón Cerrar pantalla; una vez cerrada no se reabre sola hasta que se use el icono Facturador, el reinicio diario o se cambien las pantallas.</li>
+<li>Ficha completa de la computadora (equipo, discos, monitores, impresoras, USB, red, seguridad y errores recientes) que viaja al panel al arrancar y cada 6 horas.</li>
+<li>La cajera no puede instalar programas. No se crean usuarios de Windows.</li>
+<li>Lo de versiones anteriores se aparta en <span class="k">C:\PantallaCliente\datos\kit anterior</span>, no se borra.</li>
+</ul>
+</section>
+
+<section>
+<h2>Estado de la prueba</h2>
+<div class="est">
+<p>Los scripts se probaron con PowerShell 5.1 en Windows real mediante GitHub Actions (rama kit-v3-18nov, 19 nov): sintaxis, instalación, permisos, accesos sin consola, arranque sin ventana y lectura de la ficha. GitHub no tiene el Windows Terminal de la caja ni las pantallas físicas, así que <b>falta confirmar en la PC de Pollos</b> que ya no se vean Latido y Facturador y que el mouse pase a la pantalla del cliente. La PC de Pollos hoy reporta con la v3.2c. Instale la v3.3 encima y revise el resumen final.</p>
+<p>El kit no lleva claves privadas. Solo trae la clave pública del panel. La clave propia de cada PC se guarda al enlazar.</p>
+</div>
+</section>
+
+<section>
+<h2>Lo que sigue siendo manual</h2>
+<ul>
+<li>El código de enlace lo crea Emil. El kit nunca crea ni canjea códigos por su cuenta.</li>
+<li>Control remoto: en cada PC, abrir el icono Control remoto, Configurar acceso remoto y poner el PIN.</li>
+</ul>
+</section>
+
+<section>
+<h2>Otros archivos del kit</h2>
+<ul>
+<li><span class="k">ENLAZAR EQUIPO.bat</span> repite el enlace cuando haga falta.</li>
+<li><span class="k">REPARAR.bat</span> es lo mismo que el icono Reparar.</li>
+<li><span class="k">DIAGNOSTICO.bat</span> muestra identidad, pantallas, ventanas y las últimas líneas del latido, sin mostrar nunca la clave.</li>
+<li>El archivo <span class="k">LEEME v3.txt</span> trae el detalle completo y cómo volver a una versión anterior.</li>
+</ul>
+</section>
+</main>
+<footer><div class="wrap">Página interna, no aparece en buscadores. · Parte de Grupo <b>DMA-La Bomba</b></div></footer>
+</body>
+</html>
