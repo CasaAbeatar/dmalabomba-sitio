@@ -33,7 +33,7 @@ $avisoIdentidad = $null
 $script:UltimaLatencia = $null
 $pantallasBajas = 0
 $telemetria = $null; $telemetriaHora = [DateTime]::MinValue
-$fichaHora = [DateTime]::MinValue; $inicioLatido = Get-Date   # v3.3: ficha completa al arrancar (a los 2 minutos, sin frenar el encendido) y cada 6 horas
+$fichaHora = [DateTime]::MinValue; $inicioLatido = Get-Date; $navegacionHora = [DateTime]::MinValue   # v3.3: ficha completa al arrancar (a los 2 minutos, sin frenar el encendido) y cada 6 horas
 while ($true) {
   try {
     $id = Leer-Identidad
@@ -83,8 +83,17 @@ while ($true) {
     if (((Get-Date) - $telemetriaHora).TotalMinutes -ge 30) { try { $telemetria = Telemetria-Lenta } catch { $telemetria = $null }; $telemetriaHora = Get-Date }
     $detalle = [ordered]@{ pc = $env:COMPUTERNAME; caja_abierta = $hayCaja; ventanas_cliente = $ventanasCliente; modo_pantallas = $(if ($pantallas -ge 2) { "dos" } else { "una (plan B)" }); vigilancia_kit_corre = $kitCorre; arranque_hace_min = $arranque }
     if ($telemetria) { foreach ($k in $telemetria.Keys) { $detalle[$k] = $telemetria[$k] } }
+    # v3.4: metricas de este momento (CPU, memoria, disco, navegador, temperatura, consolas a la vista) y estado de la vigilancia
+    if (Get-Command Metricas-Rapidas -ErrorAction SilentlyContinue) {
+      try { $detalle["m"] = Metricas-Rapidas } catch { Write-Verbose "sin metricas" }
+      try { $sup = Get-Content -LiteralPath "$Datos\estado.json" -Raw -ErrorAction Stop | ConvertFrom-Json; $detalle["sup"] = [ordered]@{ cliente_a_mano = [bool]$sup.cliente_cerrado_a_mano; caja_cerrada_a_mano = [bool]$sup.cierre_deliberado; hace_s = [int]((Get-Date) - [datetime]$sup.ts).TotalSeconds } } catch { Write-Verbose "sin estado del supervisor" }
+    }
+    # la base descarta el detalle si pasa de 3000 bytes: si crece, se quitan primero los datos lentos
+    try { if ([Text.Encoding]::UTF8.GetByteCount(($detalle | ConvertTo-Json -Depth 5 -Compress)) -gt 2900) { foreach ($k in @("reinicios_inesperados_24h", "navegador_version", "windows_build", "espera_reinicio", "perfil_temporal", "usuario")) { $detalle.Remove($k) } } } catch { Write-Verbose "sin tamano" }
+    $verFact = $null; try { if (Get-Command Version-Facturador -ErrorAction SilentlyContinue) { $verFact = Version-Facturador } } catch { Write-Verbose "sin version del facturador" }
     $paquete = [ordered]@{
       version_kit = $VersionKit; pantallas = $pantallas; ventanas = $ventanas; internet_ok = (Probar-Internet)
+      version_facturador = $verFact
       detalle = $detalle
       eventos = $eventos
     }
@@ -127,15 +136,15 @@ while ($true) {
       }
       Anotar ("No se pudo enviar{0}: {1}" -f $(if ($sinRed) { " (sin red)" } else { " (error de la base)" }), $ex.Message)
     }
-    # --- Ficha completa del equipo (v3.3) ---
-    if ((Get-Command Ficha-Equipo -ErrorAction SilentlyContinue) -and (((Get-Date) - $inicioLatido).TotalMinutes -ge 2) -and (((Get-Date) - $fichaHora).TotalHours -ge 6)) {
-      $fichaHora = (Get-Date).AddMinutes(-345)   # si falla, se reintenta en 15 minutos
-      try {
-        $ficha = Ficha-Equipo
-        $rf = Llamar-Rpc "equipo_ficha" ([ordered]@{ p_estacion = $id.estacion; p_token = $id.token; p_ficha = $ficha }) 40
-        if ($rf.ok) { $fichaHora = Get-Date; Anotar ("Ficha del equipo enviada{0}." -f $(if ($rf.cambio) { " (hubo cambios)" } else { "" })) }
-        else { Anotar ("La base no acepto la ficha: {0}" -f $rf.motivo) }
-      } catch { Anotar ("No se pudo enviar la ficha: {0}" -f $_.Exception.Message) }
+    # --- Sitios visitados (v3.4): solo dominios, cada 30 minutos, en un proceso aparte ---
+    if ((Test-Path -LiteralPath "$PSScriptRoot\19 navegacion.ps1") -and (((Get-Date) - $inicioLatido).TotalMinutes -ge 3) -and (((Get-Date) - $navegacionHora).TotalMinutes -ge 30)) {
+      $navegacionHora = Get-Date
+      try { Lanzar-Oculto ("-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$PSScriptRoot\19 navegacion.ps1`"") } catch { Anotar ("No se pudo lanzar la navegacion: {0}" -f $_.Exception.Message) }
+    }
+    # --- Ficha completa del equipo (v3.4): en un proceso aparte, al arrancar (a los 2 minutos) y cada 6 horas ---
+    if ((Test-Path -LiteralPath "$PSScriptRoot\18 enviar ficha.ps1") -and (((Get-Date) - $inicioLatido).TotalMinutes -ge 2) -and (((Get-Date) - $fichaHora).TotalHours -ge 6)) {
+      $fichaHora = Get-Date
+      try { Lanzar-Oculto ("-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$PSScriptRoot\18 enviar ficha.ps1`""); Anotar "Se lanzo la ficha del equipo (proceso aparte)." } catch { Anotar ("No se pudo lanzar la ficha: {0}" -f $_.Exception.Message) }
     }
   } catch { Anotar "Error: $($_.Exception.Message)" }
   Start-Sleep -Seconds $SegundosLatido

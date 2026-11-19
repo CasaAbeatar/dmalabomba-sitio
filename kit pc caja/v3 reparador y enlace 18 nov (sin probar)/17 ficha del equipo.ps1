@@ -65,7 +65,6 @@ function Ficha-Equipo {
   $red["adaptadores"] = Dato { @(Get-NetAdapter -Physical -ErrorAction Stop | Where-Object { $_.Status -eq 'Up' } | ForEach-Object { [ordered]@{ nombre = Texto-Corto $_.Name 40; tipo = Texto-Corto $_.InterfaceDescription 60; velocidad = [string]$_.LinkSpeed } }) }
   $red["configuracion_ip"] = Dato { @(Get-NetIPConfiguration -ErrorAction Stop | Where-Object { $_.IPv4DefaultGateway } | ForEach-Object { [ordered]@{ interfaz = $_.InterfaceAlias; ip = (@($_.IPv4Address) | Select-Object -First 1).IPAddress; puerta = (@($_.IPv4DefaultGateway) | Select-Object -First 1).NextHop; dns = @($_.DnsServer.ServerAddresses) } }) }
   $red["wifi"] = Dato { $w = (netsh wlan show interfaces 2>$null) -join "`n"; if ($w -match 'SSID\s+:\s+(.+)') { $ss = $Matches[1].Trim(); $sg = ""; if ($w -match 'Signal\s+:\s+(\d+)') { $sg = $Matches[1] }; [ordered]@{ red = $ss; senal_pct = $sg } } else { $null } }
-  $f["red"] = $red
 
   # --- Seguridad y mantenimiento de Windows ---
   $seg = [ordered]@{}
@@ -80,7 +79,6 @@ function Ficha-Equipo {
   $seg["reinicio_pendiente"] = Dato { [bool](Test-Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Auto Update\RebootRequired") }
   $seg["plan_de_energia"] = Dato { ((powercfg /getactivescheme 2>$null) -join " ") -replace '^.*\((.*)\).*$', '$1' }
   $seg["hora_sincronizada"] = Dato { $r = (w32tm /query /status 2>$null) -join "|"; $o = [ordered]@{}; if ($r -match 'Source:\s*([^|]+)') { $o["fuente"] = $Matches[1].Trim() }; if ($r -match 'Last Successful Sync Time:\s*([^|]+)') { $o["ultima"] = $Matches[1].Trim() }; $o }
-  $f["seguridad"] = $seg
 
   # --- Navegadores, kit y servicios ---
   $sw = [ordered]@{}
@@ -98,7 +96,6 @@ function Ficha-Equipo {
   $kit["registro_kb"] = Dato { [int]((Get-Item "$Datos\registro.txt" -ErrorAction Stop).Length / 1KB) }
   $kit["ultimas_lineas_registro"] = Dato { @(Get-Content "$Datos\registro.txt" -Tail 6 -ErrorAction Stop | ForEach-Object { Texto-Corto $_ 160 }) }
   $kit["inicio_con_windows"] = Dato { @(Get-ChildItem ([Environment]::GetFolderPath("CommonStartup")) -Filter *.lnk -ErrorAction Stop | ForEach-Object { $_.Name }) }
-  $f["kit"] = $kit
 
   # --- Errores recientes (7 dias) ---
   $ev = [ordered]@{}
@@ -108,6 +105,31 @@ function Ficha-Equipo {
   $ev["ultimos_errores"] = Dato { @(Get-WinEvent -FilterHashtable @{ LogName = "System", "Application"; Level = 1, 2; StartTime = (Get-Date).AddHours(-24) } -MaxEvents 6 -ErrorAction SilentlyContinue | ForEach-Object { (Texto-Corto $_.ProviderName 30) + " #" + $_.Id + " " + $_.TimeCreated.ToString("MM-dd HH:mm") }) }
   $f["eventos"] = $ev
 
+  # --- v3.4: historial de encendidos, fallos, impresion, servicios, arranque e integridad del kit ---
+  $enc = [ordered]@{}
+  $enc["historial_7d"] = Dato { @(Get-WinEvent -FilterHashtable @{ LogName = "System"; Id = 6005, 6006, 6008, 41, 1074; StartTime = (Get-Date).AddDays(-7) } -MaxEvents 60 -ErrorAction SilentlyContinue | Sort-Object TimeCreated | ForEach-Object { $t = switch ($_.Id) { 6005 { "enciende" } 6006 { "apaga" } 6008 { "apagado inesperado" } 41 { "reinicio sin apagar" } 1074 { "apagado pedido" } default { [string]$_.Id } }; $_.TimeCreated.ToString("MM-dd HH:mm") + " " + $t }) }
+  $enc["fallos_navegador_7d"] = Dato { @(Get-WinEvent -FilterHashtable @{ LogName = "Application"; Id = 1000; StartTime = (Get-Date).AddDays(-7) } -MaxEvents 300 -ErrorAction SilentlyContinue | Where-Object { $_.Message -match 'chrome\.exe|msedge\.exe' }).Count }
+  $enc["fallos_powershell_7d"] = Dato { @(Get-WinEvent -FilterHashtable @{ LogName = "Application"; Id = 1000; StartTime = (Get-Date).AddDays(-7) } -MaxEvents 300 -ErrorAction SilentlyContinue | Where-Object { $_.Message -match 'powershell\.exe' }).Count }
+  $f["encendidos_y_fallos"] = $enc
+  $f["cola_impresion"] = Dato { @(Get-Printer -ErrorAction Stop | ForEach-Object { $j = @(Get-PrintJob -PrinterName $_.Name -ErrorAction SilentlyContinue); [ordered]@{ impresora = Texto-Corto $_.Name 40; trabajos = $j.Count; con_error = @($j | Where-Object { [string]$_.JobStatus -match 'Error|Offline|Paper' }).Count } }) }
+  $f["servicios"] = Dato { @("Spooler", "wuauserv", "WinDefend", "W32Time", "Schedule", "Dnscache", "BITS" | ForEach-Object { $s = Get-Service -Name $_ -ErrorAction SilentlyContinue; if ($s) { $_ + "=" + $s.Status + "/" + $s.StartType } }) }
+  $f["arranque_de_windows"] = Dato { @(@("HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run", "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run") | ForEach-Object { $k = Get-Item $_ -ErrorAction SilentlyContinue; if ($k) { $k.GetValueNames() } } | Sort-Object -Unique) }
+  $f["tareas_programadas_no_microsoft"] = Dato { @(Get-ScheduledTask -ErrorAction Stop | Where-Object { $_.TaskPath -notlike "\Microsoft\*" } | ForEach-Object { Texto-Corto $_.TaskName 50 } | Select-Object -First 25) }
+  $f["energia"] = Dato { [ordered]@{ bateria_o_ups = [bool](Get-CimInstance Win32_Battery -ErrorAction SilentlyContinue); estados_de_suspension = ((powercfg /a 2>$null | Select-String -Pattern 'Standby|En espera|Hibern' | Select-Object -First 4 | ForEach-Object { Texto-Corto $_.Line.Trim() 60 }) -join " | ") } }
+  $kit["servicios_del_kit"] = Dato { @(Get-CimInstance Win32_Process -Filter "Name='powershell.exe'" -ErrorAction Stop | Where-Object { $_.CommandLine -match 'PantallaCliente' } | ForEach-Object { if ($_.CommandLine -match '(\d+ [a-z ]+|servidor publicidad)\.ps1') { $Matches[1] } }) }
+  $kit["integridad_archivos"] = Dato { $h = [ordered]@{}; foreach ($a in @(Get-ChildItem -LiteralPath $Carpeta -File -ErrorAction Stop | Where-Object { $_.Extension -in ".ps1", ".bat" } | Sort-Object Name)) { $h[$a.Name] = (Get-FileHash -LiteralPath $a.FullName -Algorithm SHA256).Hash.Substring(0, 8) }; $h }
+  $kit["perfil_navegador_mb"] = Dato { Redondear ((Get-ChildItem -LiteralPath $Perfil -Recurse -File -ErrorAction SilentlyContinue | Measure-Object Length -Sum).Sum / 1MB) 0 }
+  $kit["carpeta_temp_mb"] = Dato { Redondear ((Get-ChildItem -LiteralPath $env:TEMP -Recurse -File -ErrorAction SilentlyContinue | Measure-Object Length -Sum).Sum / 1MB) 0 }
+  $kit["estado_supervisor"] = Dato { Get-Content -LiteralPath "$Datos\estado.json" -Raw -ErrorAction Stop | ConvertFrom-Json }
+  $seg["tpm"] = Dato { $t = Get-Tpm -ErrorAction Stop; "presente=" + $t.TpmPresent + " listo=" + $t.TpmReady }
+  $seg["arranque_seguro"] = Dato { Confirm-SecureBootUEFI -ErrorAction Stop }
+  $seg["windows_activado"] = Dato { [bool](@(Get-CimInstance SoftwareLicensingProduct -Filter "PartialProductKey IS NOT NULL" -ErrorAction Stop | Where-Object { $_.Name -like "Windows*" -and $_.LicenseStatus -eq 1 }).Count) }
+  $red["mac"] = Dato { @(Get-NetAdapter -Physical -ErrorAction Stop | Where-Object { $_.Status -eq 'Up' } | ForEach-Object { [string]$_.MacAddress }) }
+
+  $f["red"] = $red
+  $f["seguridad"] = $seg
+  $f["kit"] = $kit
+
   # --- Variables (cambian siempre; no cuentan como cambio de la ficha) ---
   $va = [ordered]@{}
   $va["encendida_horas"] = Dato { if ($so) { Redondear (((Get-Date) - $so.LastBootUpTime).TotalHours) 1 } }
@@ -116,6 +138,41 @@ function Ficha-Equipo {
   $va["navegador_ram_mb"] = Dato { Redondear ((@(Get-Process chrome, msedge -ErrorAction SilentlyContinue) | Measure-Object WorkingSet64 -Sum).Sum / 1MB) 0 }
   $va["procesos_pesados"] = Dato { @(Get-Process -ErrorAction Stop | Sort-Object WorkingSet64 -Descending | Select-Object -First 5 | ForEach-Object { $_.ProcessName + " " + [int]($_.WorkingSet64 / 1MB) + "MB" }) }
   $va["ping_panel_ms"] = Dato { $sw2 = [Diagnostics.Stopwatch]::StartNew(); $c = New-Object Net.Sockets.TcpClient; $a = $c.BeginConnect(([Uri]$SupabaseUrl).Host, 443, $null, $null); $ok = $a.AsyncWaitHandle.WaitOne(3000); $sw2.Stop(); try { $c.Close() } catch { $null = 1 }; if ($ok) { [int]$sw2.ElapsedMilliseconds } else { $null } }
+  $va["calidad_red"] = Dato { @(([Uri]$SupabaseUrl).Host, "1.1.1.1", "8.8.8.8" | ForEach-Object { $h = $_; $ms = @(); $perd = 0; for ($i = 0; $i -lt 5; $i++) { $sw3 = [Diagnostics.Stopwatch]::StartNew(); $c3 = New-Object Net.Sockets.TcpClient; try { $a3 = $c3.BeginConnect($h, 443, $null, $null); if ($a3.AsyncWaitHandle.WaitOne(1500) -and $c3.Connected) { $ms += [int]$sw3.ElapsedMilliseconds } else { $perd++ } } catch { $perd++ } finally { try { $c3.Close() } catch { $null = 1 } } }; [ordered]@{ destino = $h; prom_ms = $(if ($ms.Count) { [int](($ms | Measure-Object -Average).Average) } else { $null }); max_ms = $(if ($ms.Count) { ($ms | Measure-Object -Maximum).Maximum } else { $null }); perdidos_de_5 = $perd } }) }
+  $va["dns_ms"] = Dato { [int](Measure-Command { [void][Net.Dns]::GetHostAddresses(([Uri]$SupabaseUrl).Host) }).TotalMilliseconds }
+  $va["sesiones_abiertas"] = Dato { @(quser 2>$null).Count - 1 }
+  $va["temperatura_c"] = Dato { $tz = @(Get-CimInstance -Namespace root/wmi -ClassName MSAcpi_ThermalZoneTemperature -ErrorAction Stop); if ($tz.Count) { [int]([math]::Round(($tz[0].CurrentTemperature / 10) - 273.15, 0)) } }
   $f["variables"] = $va
   return $f
+}
+
+# ===== v3.4: metricas rapidas (cada latido) y version del facturador =====
+function Metricas-Rapidas {
+  $m = [ordered]@{}
+  $so = Dato { Get-CimInstance Win32_OperatingSystem -ErrorAction Stop }
+  $m["cpu_pct"] = Dato { [int]((Get-CimInstance Win32_Processor -ErrorAction Stop | Measure-Object -Property LoadPercentage -Average).Average) }
+  if ($so) { $m["ram_libre_mb"] = [int]($so.FreePhysicalMemory / 1KB); $m["encendida_min"] = [int](((Get-Date) - $so.LastBootUpTime).TotalMinutes) }
+  $m["disco_libre_gb"] = Dato { Redondear ((Get-PSDrive -Name C -ErrorAction Stop).Free / 1GB) 1 }
+  $nav = Dato { @(Get-Process chrome, msedge -ErrorAction SilentlyContinue) }
+  if ($nav) { $m["nav_procesos"] = $nav.Count; $m["nav_ram_mb"] = [int](($nav | Measure-Object WorkingSet64 -Sum).Sum / 1MB) } else { $m["nav_procesos"] = 0 }
+  $m["temperatura_c"] = Dato { $tz = @(Get-CimInstance -Namespace root/wmi -ClassName MSAcpi_ThermalZoneTemperature -ErrorAction Stop); if ($tz.Count) { [int]([math]::Round(($tz[0].CurrentTemperature / 10) - 273.15, 0)) } }
+  # Ventanas de consola a la vista (deben ser 0): permite comprobar desde el panel que Latido y Facturador no se ven.
+  $m["consolas_visibles"] = Dato { @(Get-Process powershell, pwsh, cmd, conhost, WindowsTerminal, OpenConsole -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne 0 }).Count }
+  return $m
+}
+$script:VersionFactCache = $null; $script:VersionFactHora = [DateTime]::MinValue
+function Version-Facturador {
+  # Huella corta de la pagina que sirve el facturador (cambia con cada version publicada) mas la version de su service worker.
+  if ($script:VersionFactCache -and (((Get-Date) - $script:VersionFactHora).TotalMinutes -lt 60)) { return $script:VersionFactCache }
+  try {
+    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+    $base = ([string]$UrlCaja).Split("?")[0]
+    $r = Invoke-WebRequest -Uri $base -UseBasicParsing -TimeoutSec 8 -ErrorAction Stop
+    $sha = [Security.Cryptography.SHA256]::Create()
+    $hx = -join ($sha.ComputeHash([Text.Encoding]::UTF8.GetBytes([string]$r.Content)) | Select-Object -First 4 | ForEach-Object { $_.ToString("x2") })
+    $sw = ""
+    try { $s = Invoke-WebRequest -Uri ((New-Object Uri((New-Object Uri($base)), "sw.js")).AbsoluteUri) -UseBasicParsing -TimeoutSec 8 -ErrorAction Stop; if ([string]$s.Content -match "PREFIJO \+ '(v\d+)'|const V = '([^']+)'") { $sw = "sw-" + ($Matches[1] + $Matches[2]) + " " } } catch { $sw = "" }
+    $script:VersionFactCache = ($sw + "pag-" + $hx); $script:VersionFactHora = Get-Date
+  } catch { if (-not $script:VersionFactCache) { return $null } }
+  return $script:VersionFactCache
 }
