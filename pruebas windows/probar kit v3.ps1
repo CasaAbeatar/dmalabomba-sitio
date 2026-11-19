@@ -121,7 +121,7 @@ Remove-Item -LiteralPath $hf -Force -ErrorAction SilentlyContinue
 $ahora = [long](([DateTime]::UtcNow - [DateTime]::new(1601, 1, 1, 0, 0, 0, [DateTimeKind]::Utc)).TotalMilliseconds * 1000)
 [LbSqlite]::Exec($hf, "create table urls(id integer primary key, url text, title text, visit_count integer, last_visit_time integer); create table visits(id integer primary key, url integer, visit_time integer); insert into urls values (1,'https://www.facebook.com/marketplace?x=1','Marketplace',3,$ahora),(2,'https://dmalabomba.com/facturacion/','Facturador',9,$ahora),(3,'https://www.google.com/search?q=pollos+baratos+heredia&hl=es','pollos baratos heredia - Google',1,$ahora),(4,'chrome://settings','Config',1,$ahora); insert into visits values (1,1,$ahora),(2,1,$ahora-1000000),(3,2,$ahora-2000000),(4,3,$ahora-3000000),(5,4,$ahora-4000000)")
 $rn = Sitios-Visitados 24
-Dice ("   historiales leidos: " + $rn.Historiales + "; sitios: " + (($rn.Sitios | ForEach-Object { $_.sitio + "=" + $_.veces + (if ($_.permitido) { " (permitido)" } else { " (FUERA)" }) }) -join ", "))
+Dice ("   historiales leidos: " + $rn.Historiales + "; sitios: " + (($rn.Sitios | ForEach-Object { $_.sitio + "=" + $_.veces + $(if ($_.permitido) { " (permitido)" } else { " (FUERA)" }) }) -join ", "))
 Dice ("   visitas con detalle: " + @($rn.Visitas).Count + " | " + (($rn.Visitas | ForEach-Object { $_.url + " [" + $_.titulo + "] busqueda='" + $_.busqueda + "'" }) -join " ; "))
 Remove-Item -LiteralPath $hf -Force -ErrorAction SilentlyContinue
 Remove-Item "C:\PantallaCliente\datos\navegacion.txt" -Force -ErrorAction SilentlyContinue

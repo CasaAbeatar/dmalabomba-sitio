@@ -1,4 +1,10 @@
-﻿KIT v3.3 (19 nov 2026, probado en Windows real por GitHub Actions; falta confirmar en la PC de Pollos)
+﻿KIT v3.4 (19 nov 2026, probado en Windows real por GitHub Actions; falta confirmar en la PC de Pollos)
+
+CAMBIOS DE LA v3.4 (19 nov, por orden de Emil)
+- Ficha ampliada del equipo (encendidos y fallos, impresora, servicios, arranque de Windows, tareas programadas, energia, integridad de los archivos del kit, seguridad, red) en un proceso aparte ("18 enviar ficha.ps1"), al arrancar y cada 6 horas.
+- El latido manda ademas metricas (CPU, memoria libre, tiempo encendida, disco, procesos del navegador, consolas visibles), la version del facturador y el estado del supervisor.
+- NUEVO "19 navegacion.ps1": cada 30 minutos lee el historial de Chrome y Edge de las ultimas 24 horas y manda al panel un resumen por sitio y, de cada visita, la direccion completa, el titulo de la pagina y lo que se busco en buscadores. Marca como "fuera del sistema" lo que no esta en la lista $SitiosPermitidos de config.ps1 y abre un aviso la primera vez que aparece cada sitio nuevo. Las visitas se conservan 90 dias. El kit NO lee archivos ni toma capturas de pantalla.
+- Aviso a las empleadas: se hace por escrito, aparte del kit (decision de Emil).
 
 CAMBIOS DE LA v3.3 (19 nov)
 - Latido y Facturador ya no abren una ventana de consola. En Windows 11 con Windows Terminal como terminal predeterminada, cada script lanzado desde un acceso abria su ventana aunque se pidiera oculta. Ahora los accesos y los programas de apoyo arrancan con "conhost.exe --headless" (sin ninguna ventana) y el instalador deja la consola clasica de Windows como terminal predeterminada de la cuenta.
