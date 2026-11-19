@@ -45,6 +45,9 @@ public class MainActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+        // La Bomba 2.7.0: si la app es Device Owner (modo telefono dedicado), concede sus permisos y deja
+        // la pantalla encendida cargando ANTES de pedir permisos al usuario. Sin efecto si no es Device Owner.
+        Guardian.aplicarPoliticasDedicado(this);
         findViewById(R.id.btn_history).setOnClickListener(v -> startHistory());
         findViewById(R.id.btn_health).setOnClickListener(v -> startActivity(new Intent(this, HealthActivity.class)));
 

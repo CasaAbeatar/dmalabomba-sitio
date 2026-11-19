@@ -1,5 +1,5 @@
 # Verifica lo que recibio el servidor falso y la memoria de la app. Sale con codigo 1 si algo falla.
-import json, re, sys
+import json, os, re, sys
 CAMPOS = ["app", "cargando", "ahorro_bateria", "sin_restriccion_bateria", "red_validada", "tipo_red", "ultimo_sms_ts",
           "ultimo_reenvio_ok_ts", "fallidos_pendientes", "permiso_sms", "notificaciones", "android", "marca_modelo"]
 rec = [json.loads(l) for l in open("guardian-recibidos.jsonl")]
@@ -10,6 +10,9 @@ def chk(nombre, cond, extra=""):
     res.append((nombre, bool(cond)))
     print(("PASA  " if cond else "FALLA ") + nombre + (("  [" + str(extra) + "]") if extra else ""))
 
+inst = open("guardian-instalacion.txt").read() if os.path.exists("guardian-instalacion.txt") else ""
+chk("la 2.6.0 (versionCode 15) se instalo", "instala-2.6.0: Success" in inst and "versionCode=15" in inst)
+chk("la 2.7.0 (versionCode 16) se instalo ENCIMA de la 2.6.0 sin desinstalar", "actualiza-a-2.7.0-encima: Success" in inst and "versionCode=16" in inst and "versionName=2.7.0" in inst, inst.replace("\n", " | ")[-160:])
 lat = [r for r in rec if r["ruta"].startswith("/latido")]
 sms = [r for r in rec if r["ruta"].startswith("/sms")]
 chk("llegaron latidos", len(lat) >= 2, len(lat))
@@ -28,7 +31,6 @@ chk("el SMS simulado llego a /sms con firma valida", any("TEST UNO" in r["cuerpo
 b = [json.loads(r["cuerpo"]) for r in en_vivo if "TEST UNO" in r["cuerpo"]]
 chk("el SMS reenviado trae from 4066 y empresa soda", any(x.get("from") == "4066" and x.get("empresa") == "soda" for x in b))
 hist = [json.loads(r["cuerpo"]) for r in sms if "historico" in r["cuerpo"]]
-import os
 log = open("guardian-logcat.txt", errors="replace").read() if os.path.exists("guardian-logcat.txt") else ""
 m_h = re.search(r"historial remoto: leidos=(\d+)", log)
 if m_h and int(m_h.group(1)) == 0:

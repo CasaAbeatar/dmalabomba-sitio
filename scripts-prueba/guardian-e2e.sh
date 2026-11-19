@@ -27,16 +27,20 @@ python3 ../scripts-prueba/guardian-mock.py & echo $! > srv.pid
 sleep 2
 
 nota "1. instalar 2.6.0 (versionCode 15) y actualizar encima con 2.7.0 (versionCode 16)"
-adb install -r "$VIEJO" 2>&1 | tail -1
-adb shell dumpsys package $P | grep -E "versionCode|versionName" | head -2
+{
+adb install -r "$VIEJO" 2>&1 | tail -1 | sed 's/^/instala-2.6.0: /'
+adb shell dumpsys package $P | grep -E "versionCode|versionName" | head -2 | sed 's/^ */antes: /'
+} | tee guardian-instalacion.txt
 adb shell pm grant $P android.permission.RECEIVE_SMS
 adb shell pm grant $P android.permission.READ_SMS
 adb shell pm grant $P android.permission.POST_NOTIFICATIONS 2>/dev/null
 # SMS ya en la bandeja antes de configurar (para el historial)
 adb emu sms send 4066 "Recibiste un SINPE Movil por 3000 colones de ANA PRUEBA. Comprobante 111 historico"
 sleep 3
-adb install -r "$NUEVO" 2>&1 | tail -1
-adb shell dumpsys package $P | grep -E "versionCode|versionName" | head -2
+{
+adb install -r "$NUEVO" 2>&1 | tail -1 | sed 's/^/actualiza-a-2.7.0-encima: /'
+adb shell dumpsys package $P | grep -E "versionCode|versionName" | head -2 | sed 's/^ */despues: /'
+} | tee -a guardian-instalacion.txt
 sleep 5
 
 nota "2. regla firmada (empresa soda, remitente 4066) y latido cada 1 min hacia el servidor falso"
@@ -65,10 +69,14 @@ tap_id btn_health
 sleep 3
 adb exec-out screencap -p > guardian-salud-1.png
 adb shell uiautomator dump /sdcard/u.xml >/dev/null 2>&1; adb pull /sdcard/u.xml guardian-salud-1.xml >/dev/null 2>&1
-adb shell input swipe 500 1800 500 600 400; sleep 1
+read W H <<< "$(adb shell wm size | grep -o '[0-9]*x[0-9]*' | tail -1 | tr x ' ')"
+X=$((W/2)); Y1=$((H*80/100)); Y2=$((H*25/100))
+adb shell input swipe $X $Y1 $X $Y2 400; sleep 1
 adb exec-out screencap -p > guardian-salud-2.png
-adb shell input swipe 500 1800 500 600 400; sleep 1
+adb shell input swipe $X $Y1 $X $Y2 400; sleep 1
 adb exec-out screencap -p > guardian-salud-3.png
+adb shell input swipe $X $Y1 $X $Y2 400; sleep 1
+adb exec-out screencap -p > guardian-salud-4.png
 adb shell input keyevent KEYCODE_BACK
 sleep 2
 

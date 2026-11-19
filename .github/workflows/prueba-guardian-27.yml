@@ -57,7 +57,7 @@ jobs:
             adb uninstall tech.bogomolov.incomingsmsgateway
             gradle connectedDebugAndroidTest
       - name: Emulador limpio (modo telefono dedicado, Device Owner, reinicio remoto)
-        if: always()
+        if: always() && matrix.api == 33
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: ${{ matrix.api }}

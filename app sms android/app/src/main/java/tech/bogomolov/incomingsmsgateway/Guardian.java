@@ -66,7 +66,9 @@ public final class Guardian {
             try {
                 GuardianState st = new GuardianState(app);
                 long ahora = System.currentTimeMillis();
-                if (!Watchdog.pasaDedupe(ahora, st.getUltimoLatidoIntento(), forzar)) {
+                Map<Long, String> acks = st.getAcksPendientes();
+                // Con ordenes por confirmar el latido sale aunque sea reciente (se confirma una sola vez y se limpia).
+                if (!Watchdog.pasaDedupe(ahora, st.getUltimoLatidoIntento(), forzar || !acks.isEmpty())) {
                     return "omitido";
                 }
                 SigningRule rule = SigningRule.find(app);
@@ -74,7 +76,6 @@ public final class Guardian {
                     Log.e(TAG, "heartbeat: no signing rule, not sent");
                     return "no signing rule";
                 }
-                Map<Long, String> acks = st.getAcksPendientes();
                 HeartbeatBody.Detalle d = snapshot(app);
                 d.comandosHechos = new long[acks.size()];
                 int i = 0;

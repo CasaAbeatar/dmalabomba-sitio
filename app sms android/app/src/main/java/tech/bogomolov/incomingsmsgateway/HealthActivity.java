@@ -106,7 +106,12 @@ public class HealthActivity extends AppCompatActivity {
 
         lista.removeAllViews();
         LayoutInflater inf = LayoutInflater.from(this);
-        for (final HealthCheck.Item it : actuales) {
+        // Lo que falta (rojo) va arriba; luego lo que está bien; al final lo que solo informa.
+        List<HealthCheck.Item> ordenados = new ArrayList<>();
+        for (HealthCheck.Item i : actuales) if (i.pendiente()) ordenados.add(i);
+        for (HealthCheck.Item i : actuales) if (!i.pendiente() && !i.informativo) ordenados.add(i);
+        for (HealthCheck.Item i : actuales) if (i.informativo) ordenados.add(i);
+        for (final HealthCheck.Item it : ordenados) {
             View v = inf.inflate(R.layout.item_health, lista, false);
             v.setTag(it.id);
             int color = it.informativo ? ContextCompat.getColor(this, R.color.colorNeutral)

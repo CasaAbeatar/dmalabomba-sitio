@@ -4,7 +4,7 @@
 # que la app revive sola tras el arranque, que NO vuelve a reiniciar (la orden queda registrada) y que confirma la orden.
 P=tech.bogomolov.incomingsmsgateway
 NUEVO=app/build/outputs/apk/debug/app-debug.apk
-rm -f guardian-recibidos.jsonl
+rm -f guardian-recibidos.jsonl guardian-go
 PREF=$(grep -o 'key_phones_preference">[^<]*' app/src/main/res/values/strings.xml | sed 's/.*>//')
 nota() { echo "=== $(date +%H:%M:%S) $*"; }
 MODO=do python3 ../scripts-prueba/guardian-mock.py & echo $! > srv.pid
@@ -15,8 +15,13 @@ nota "1. convertir en Device Owner"
 adb shell dpm set-device-owner $P/.GuardianAdminReceiver 2>&1 | tee guardian-do-1.txt
 adb shell dpm list-owners 2>&1 | tee -a guardian-do-1.txt
 adb shell dumpsys device_policy 2>&1 | grep -i -A3 "device owner" | head -12 | tee -a guardian-do-1.txt
-sleep 3
-nota "2. configurar la regla y el latido"
+sleep 6
+nota "2. politicas aplicadas por ser Device Owner (antes de abrir la app ni configurar nada)"
+{
+  echo "stay_on_while_plugged_in=$(adb shell settings get global stay_on_while_plugged_in | tr -d '\r')"
+  adb shell dumpsys package $P | grep -E "android.permission.(RECEIVE_SMS|READ_SMS|POST_NOTIFICATIONS): granted" | sed 's/^ *//'
+} | tee guardian-do-2.txt
+nota "3. configurar la regla y el latido"
 REGLA='{"key":"r1","sender":"4066","is_sender_regex":false,"sms_filter":"SINPE","url":"http://10.0.2.2:8099/sms","sim_slot":0,"template":"{\"from\":\"%from%\",\"text\":\"%text%\",\"sentStamp\":\"%sentStamp%\",\"empresa\":\"soda\"}","headers":"{\"Content-Type\":\"application/json\"}","retries_number":3,"ignore_ssl":false,"chunked_mode":false,"is_sms_enabled":true,"sign_hmac_sha256":true,"sign_hmac_sha256_secret":"claveprueba","store_failed":true,"local_mode":true}'
 printf '<?xml version="1.0" encoding="utf-8" standalone="yes" ?>\n<map>\n<string name="r1">%s</string>\n</map>\n' "$(echo "$REGLA" | sed 's/&/\&amp;/g;s/"/\&quot;/g')" > prefs.xml
 printf '<?xml version="1.0" encoding="utf-8" standalone="yes" ?>\n<map>\n<boolean name="enabled" value="true" />\n<string name="url">http://10.0.2.2:8099/latido</string>\n<int name="interval_minutes" value="1" />\n</map>\n' > hb.xml
@@ -29,12 +34,12 @@ adb shell "run-as $P cp /data/local/tmp/hb.xml shared_prefs/heartbeat.xml"
 adb logcat -c
 adb shell am start -n $P/.MainActivity >/dev/null
 sleep 10
-nota "3. politicas aplicadas por ser Device Owner"
 {
   echo "stay_on_while_plugged_in=$(adb shell settings get global stay_on_while_plugged_in | tr -d '\r')"
   adb shell dumpsys package $P | grep -E "android.permission.(RECEIVE_SMS|READ_SMS|POST_NOTIFICATIONS): granted" | sed 's/^ *//'
-} | tee guardian-do-2.txt
+} | tee guardian-do-2b.txt
 adb exec-out screencap -p > guardian-do-antes.png
+touch guardian-go
 BOOT_ANTES=$(adb shell cat /proc/uptime | cut -d. -f1)
 echo "uptime antes: $BOOT_ANTES s"
 nota "4. esperar el primer latido (la orden reiniciar_telefono llega en su respuesta) y el reinicio"
@@ -62,7 +67,7 @@ python3 - <<'PY' | tee guardian-resultado.txt
 import json,re,sys
 rec=[json.loads(l) for l in open("guardian-recibidos.jsonl")]
 est=open("guardian-estado.xml").read()
-d1=open("guardian-do-1.txt").read(); d2=open("guardian-do-2.txt").read()
+d1=open("guardian-do-1.txt").read(); d2=open("guardian-do-2.txt").read(); d2b=open("guardian-do-2b.txt").read()
 lat=[r for r in rec if r["ruta"].startswith("/latido")]
 cuerpos=[json.loads(r["cuerpo"]) for r in lat if r["firma_ok"]]
 t0=float(open("guardian-t-reinicio.txt").read())
@@ -70,8 +75,9 @@ res=[]
 def chk(n,c,e=""):
     res.append(bool(c)); print(("PASA  " if c else "FALLA ")+n+(("  ["+str(e)+"]") if e else ""))
 chk("dpm set-device-owner dio Success", "Success" in d1, d1.splitlines()[0] if d1 else "")
-chk("politica: pantalla encendida cargando (stay_on_while_plugged_in=7)", "stay_on_while_plugged_in=7" in d2, [l for l in d2.splitlines() if "stay_on" in l])
-chk("politica: permisos de SMS concedidos sin tocar nada", "RECEIVE_SMS: granted=true" in d2 and "READ_SMS: granted=true" in d2)
+chk("al ser Device Owner (sin abrir la app): pantalla encendida cargando = 7", "stay_on_while_plugged_in=7" in d2, [l for l in d2.splitlines() if "stay_on" in l])
+chk("al ser Device Owner (sin abrir la app): permisos de SMS concedidos solos", "RECEIVE_SMS: granted=true" in d2 and "READ_SMS: granted=true" in d2, d2.count("granted=true"))
+chk("con la app abierta: pantalla encendida cargando = 7 y permisos concedidos", "stay_on_while_plugged_in=7" in d2b and "RECEIVE_SMS: granted=true" in d2b and "READ_SMS: granted=true" in d2b)
 ej=re.findall(r"(\d+)\|(\w+)\|(\w+)\|",est)
 chk("la orden 7 reiniciar_telefono se ejecuto una sola vez con resultado ok", [(a,b,c) for a,b,c in ej if a=="7"]==[("7","reiniciar_telefono","ok")], ej)
 conf=[c for c in cuerpos if 7 in c["detalle"].get("comandos_hechos",[])]

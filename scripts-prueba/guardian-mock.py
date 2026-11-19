@@ -33,7 +33,10 @@ class H(BaseHTTPRequestHandler):
         if not ok:
             self.send_response(401); self.send_header("Content-Length", "0"); self.end_headers(); return
         if self.path.startswith("/latido"):
-            resp = json.dumps(ORDENES).encode()
+            ordenes = ORDENES
+            if os.environ.get("MODO") == "do" and not os.path.exists("guardian-go"):
+                ordenes = {"comandos": []}   # en la prueba de dedicado, las ordenes empiezan cuando el guion lo permite
+            resp = json.dumps(ordenes).encode()
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.send_header("X-Signature", firma(resp))
