@@ -66,7 +66,10 @@ export const inv = {
   pendientes: (sociedad = null, q = '', limite = 100) => leer('fx_inv_pendientes', { p_sociedad: sociedad, p_q: q, p_limite: limite }),
   factura: (clave) => leer('fx_inv_factura', { p_clave: clave }),
   facturaEstado: (clave) => leer('fx_inv_factura_estado', { p_clave: clave }),
-  existencias: (ubicacion = null, categoria = null, q = '', incluirCeros = false) => leer('fx_inv_existencias', { p_ubicacion: ubicacion, p_categoria: categoria, p_q: q, p_incluir_ceros: !!incluirCeros }),
+  // sociedad = empresa de origen del lote (Soda o Pollos); null = las dos (19 nov 2026)
+  existencias: (ubicacion = null, categoria = null, q = '', incluirCeros = false, sociedad = null) => leer('fx_inv_existencias', { p_ubicacion: ubicacion, p_categoria: categoria, p_q: q, p_incluir_ceros: !!incluirCeros, p_sociedad: sociedad }),
+  // Lo que hay en bodega agrupado por el proveedor de la factura que lo trajo (19 nov 2026)
+  existenciasPorProveedor: (ubicacion = null, categoria = null, q = '', sociedad = null) => leer('fx_inv_existencias_por_proveedor', { p_ubicacion: ubicacion, p_categoria: categoria, p_q: q, p_sociedad: sociedad }),
   lotes: (articulo = null, ubicacion = null, incluirAgotados = false, limite = 200) => leer('fx_inv_lotes', { p_articulo: articulo, p_ubicacion: ubicacion, p_incluir_agotados: !!incluirAgotados, p_limite: limite }),
   movimientos: (desde, hasta, { articulo = null, ubicacion = null, tipo = null, limite = 500 } = {}) => leer('fx_inv_movimientos', { p_desde: desde, p_hasta: hasta, p_articulo: articulo, p_ubicacion: ubicacion, p_tipo: tipo, p_limite: limite }),
   alertas: () => leer('fx_inv_alertas'),

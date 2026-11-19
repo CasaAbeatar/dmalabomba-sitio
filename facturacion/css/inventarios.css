@@ -598,3 +598,6 @@ body:has(.inv-fondo) .cabecera:has(.cab-usuario.abierto){z-index:120}
 .inv-al-lineas li span:first-child{overflow-wrap:anywhere}
 .inv-al-lineas .cifra{white-space:nowrap;color:var(--tinta2)}
 @media (max-width:700px){.inv-al-rech{grid-template-columns:minmax(0,1fr)}.inv-al-rech .inv-al-btns{justify-content:stretch}.inv-al-rech .inv-al-btns .btn{flex:1 1 100%;min-height:48px}}
+
+/* Existencias: la búsqueda ocupa su propia fila cuando hay cuatro filtros (19 nov 2026) */
+.inv-filtros.cuatro.exis .inv-buscar{grid-column:1/-1}
