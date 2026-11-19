@@ -1,0 +1,34 @@
+name: Instalar el APK publicado en Android 15
+on:
+  workflow_dispatch:
+  push:
+    paths: [".github/workflows/instalar-android15.yml"]
+    branches: [prueba-app-sms]
+jobs:
+  instalar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Bajar el APK desde la pagina publica
+        run: |
+          curl -fsSL -o app.apk https://pagos.dmalabomba.com/instalar/reenviador-sms-la-bomba-2.5.0.apk
+          sha256sum app.apk; ls -l app.apk
+      - name: Activar KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          script: |
+            adb install app.apk 2>&1 | tee instalacion.txt
+            adb shell pm list packages | grep bogomolov | tee -a instalacion.txt
+            adb shell dumpsys package tech.bogomolov.incomingsmsgateway | grep -E "versionName|targetSdk|minSdk" | tee -a instalacion.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: instalacion-android15
+          path: instalacion.txt
