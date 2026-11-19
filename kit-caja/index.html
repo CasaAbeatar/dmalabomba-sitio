@@ -48,9 +48,9 @@ footer{border-top:1px solid var(--ln);padding:24px 0 40px;font-size:14px}
 <p class="lead">Deja la computadora de caja lista para el facturador: dos pantallas, accesos, arranque automático, enlace con el panel y reparación. Sirve para Soda y para Pollos, y se puede instalar encima de cualquier versión anterior.</p>
 
 <div class="card">
-  <a class="dl" href="/kit-caja/kit-pc-de-caja-v3.4.zip" download>Descargar kit v3.4</a>
-  <p class="meta"><b>Versión:</b> 3.4 · 19 nov 2026 · <b>Tamaño:</b> 75 KB · 35 archivos<br>
-  <b>SHA-256:</b> 384378f90167da37d13a51718469ff074786cf47284896e0bb0014043b24b6a6</p>
+  <a class="dl" href="/kit-caja/kit-pc-de-caja-v3.5.zip" download>Descargar kit v3.5</a>
+  <p class="meta"><b>Versión:</b> 3.5 · 19 nov 2026 · <b>Tamaño:</b> 75 KB · 35 archivos<br>
+  <b>SHA-256:</b> b8e02ce2f3bf5d6eed1df0c8e3f59703f14876c644f426b7047c1361a04de3bd</p>
 </div>
 
 <section>
@@ -78,6 +78,7 @@ footer{border-top:1px solid var(--ln);padding:24px 0 40px;font-size:14px}
 <li>Ficha completa de la computadora (equipo, discos, monitores, impresoras, USB, red, seguridad, servicios, arranque, energía, integridad de los archivos del kit y errores recientes) que viaja al panel al arrancar y cada 6 horas, y métricas en vivo (CPU, memoria, disco, consolas visibles) con cada señal de vida.</li>
 <li>Sitios visitados: cada 30 minutos el kit lee el historial de Chrome y Edge de las últimas 24 horas y manda al panel la dirección completa, el título y lo que se buscó, y marca lo que está fuera de la lista de sitios permitidos del sistema. Se conserva 90 días. No lee archivos ni toma capturas de pantalla. El aviso previo a las empleadas lo hace la administración por escrito, aparte del kit.</li>
 <li>La cajera no puede instalar programas. No se crean usuarios de Windows.</li>
+<li>Control remoto: la extensión Chrome Remote Desktop está permitida; las demás extensiones siguen bloqueadas (en Edge ninguna).</li>
 <li>Lo de versiones anteriores se aparta en <span class="k">C:\PantallaCliente\datos\kit anterior</span>, no se borra.</li>
 </ul>
 </section>
@@ -85,7 +86,7 @@ footer{border-top:1px solid var(--ln);padding:24px 0 40px;font-size:14px}
 <section>
 <h2>Estado de la prueba</h2>
 <div class="est">
-<p>Los scripts se probaron con PowerShell 5.1 en Windows real mediante GitHub Actions (rama kit-v3-18nov, 19 nov): sintaxis, instalación, permisos, accesos sin consola, arranque sin ventana, lectura de la ficha y lectura del historial de navegación (con un historial inventado). GitHub no tiene el Windows Terminal de la caja ni las pantallas físicas, así que <b>falta confirmar en la PC de Pollos</b> que ya no se vean Latido y Facturador y que el mouse pase a la pantalla del cliente. La PC de Pollos hoy reporta con la v3.2c. Instale la v3.4 encima y revise el resumen final.</p>
+<p>Los scripts se probaron con PowerShell 5.1 en Windows real mediante GitHub Actions (rama kit-v3-18nov, 19 nov): sintaxis, instalación, permisos, accesos sin consola, arranque sin ventana, lectura de la ficha y lectura del historial de navegación (con un historial inventado) y las reglas de extensiones de Chrome y Edge. GitHub no tiene el Windows Terminal de la caja ni las pantallas físicas, así que <b>falta confirmar en la PC de Pollos</b> que ya no se vean Latido y Facturador y que el mouse pase a la pantalla del cliente. La PC de Pollos hoy reporta con la v3.2c. Instale la v3.4 encima y revise el resumen final.</p>
 <p>El kit no lleva claves privadas. Solo trae la clave pública del panel. La clave propia de cada PC se guarda al enlazar.</p>
 </div>
 </section>
