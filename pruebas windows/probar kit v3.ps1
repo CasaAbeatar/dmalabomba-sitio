@@ -113,4 +113,19 @@ Remove-Item "C:\PantallaCliente\datos\ficha.txt" -Force -ErrorAction SilentlyCon
 Volcar "ficha.txt (sin identidad, debe decirlo)" "C:\PantallaCliente\datos\ficha.txt"
 $lat = Get-Content "C:\PantallaCliente\11 latido.ps1" -Raw
 Dice ("   latido usa 18 enviar ficha en proceso aparte = " + ($lat -match '18 enviar ficha') + "; manda version_facturador = " + ($lat -match 'version_facturador'))
+Dice "   v3.4: navegacion (solo la prueba, con un historial de Chrome inventado)"
+. "C:\PantallaCliente\19 navegacion.ps1"
+$hf = Join-Path $Perfil "Default\History"
+New-Item -ItemType Directory -Force -Path (Split-Path $hf) | Out-Null
+Remove-Item -LiteralPath $hf -Force -ErrorAction SilentlyContinue
+$ahora = [long](([DateTime]::UtcNow - [DateTime]::new(1601, 1, 1, 0, 0, 0, [DateTimeKind]::Utc)).TotalMilliseconds * 1000)
+[LbSqlite]::Exec($hf, "create table urls(id integer primary key, url text, title text, visit_count integer, last_visit_time integer); create table visits(id integer primary key, url integer, visit_time integer); insert into urls values (1,'https://www.facebook.com/marketplace?x=1','Marketplace',3,$ahora),(2,'https://dmalabomba.com/facturacion/','Facturador',9,$ahora),(3,'https://www.google.com/search?q=pollos+baratos+heredia&hl=es','pollos baratos heredia - Google',1,$ahora),(4,'chrome://settings','Config',1,$ahora); insert into visits values (1,1,$ahora),(2,1,$ahora-1000000),(3,2,$ahora-2000000),(4,3,$ahora-3000000),(5,4,$ahora-4000000)")
+$rn = Sitios-Visitados 24
+Dice ("   historiales leidos: " + $rn.Historiales + "; sitios: " + (($rn.Sitios | ForEach-Object { $_.sitio + "=" + $_.veces + (if ($_.permitido) { " (permitido)" } else { " (FUERA)" }) }) -join ", "))
+Dice ("   visitas con detalle: " + @($rn.Visitas).Count + " | " + (($rn.Visitas | ForEach-Object { $_.url + " [" + $_.titulo + "] busqueda='" + $_.busqueda + "'" }) -join " ; "))
+Remove-Item -LiteralPath $hf -Force -ErrorAction SilentlyContinue
+Remove-Item "C:\PantallaCliente\datos\navegacion.txt" -Force -ErrorAction SilentlyContinue
+& powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\PantallaCliente\19 navegacion.ps1" 2>&1 | ForEach-Object { Dice ("   19: " + $_) }
+Volcar "navegacion.txt (sin identidad, debe decirlo)" "C:\PantallaCliente\datos\navegacion.txt"
+Dice ("   latido lanza 19 navegacion = " + ($lat -match '19 navegacion'))
 Dice "FIN"

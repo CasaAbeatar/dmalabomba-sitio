@@ -36,6 +36,8 @@ $SegundosVigilar = 15                              # cada cuanto se revisa; mas 
 # --- v2 (16 nov): identidad de la computadora y latido hacia el panel ---
 # La identidad (Soda o Pollos) se guarda UNA vez en esta PC y no depende de la empresa que se use en el facturador.
 $VersionKit       = "3.4 19nov"
+# v3.4: sitios que NO cuentan como salir del sistema (el kit solo registra dominios visitados; ver 19 navegacion.ps1). Emil puede agregar o quitar.
+$SitiosPermitidos = @("dmalabomba.com", "polloslabomba.com", "sodalabomba.com", "supabase.co", "localhost", "127.0.0.1", "hacienda.go.cr", "remotedesktop.google.com", "google.com")
 $SupabaseUrl      = "https://dwlbcbtwdungyrykgahm.supabase.co"
 $SupabaseClave    = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR3bGJjYnR3ZHVuZ3lyeWtnYWhtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTIxNjQ5NjcsImV4cCI6MjEwNzc0MDk2N30.GTLrTIQQ9ZIcKMpcxRRBkC6n1dZpCUAwmHb4ZeC4u-w"   # clave PUBLICA (anon): solo permite llamar a las funciones abiertas; no da acceso a datos
 $ArchivoIdentidad = "C:\PantallaCliente\datos\equipo.json"   # estacion + clave propia de esta PC (solo permite enviar latidos de esta caja)

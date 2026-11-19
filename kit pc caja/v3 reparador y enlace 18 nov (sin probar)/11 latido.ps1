@@ -33,7 +33,7 @@ $avisoIdentidad = $null
 $script:UltimaLatencia = $null
 $pantallasBajas = 0
 $telemetria = $null; $telemetriaHora = [DateTime]::MinValue
-$fichaHora = [DateTime]::MinValue; $inicioLatido = Get-Date   # v3.3: ficha completa al arrancar (a los 2 minutos, sin frenar el encendido) y cada 6 horas
+$fichaHora = [DateTime]::MinValue; $inicioLatido = Get-Date; $navegacionHora = [DateTime]::MinValue   # v3.3: ficha completa al arrancar (a los 2 minutos, sin frenar el encendido) y cada 6 horas
 while ($true) {
   try {
     $id = Leer-Identidad
@@ -135,6 +135,11 @@ while ($true) {
         }
       }
       Anotar ("No se pudo enviar{0}: {1}" -f $(if ($sinRed) { " (sin red)" } else { " (error de la base)" }), $ex.Message)
+    }
+    # --- Sitios visitados (v3.4): solo dominios, cada 30 minutos, en un proceso aparte ---
+    if ((Test-Path -LiteralPath "$PSScriptRoot\19 navegacion.ps1") -and (((Get-Date) - $inicioLatido).TotalMinutes -ge 3) -and (((Get-Date) - $navegacionHora).TotalMinutes -ge 30)) {
+      $navegacionHora = Get-Date
+      try { Lanzar-Oculto ("-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$PSScriptRoot\19 navegacion.ps1`"") } catch { Anotar ("No se pudo lanzar la navegacion: {0}" -f $_.Exception.Message) }
     }
     # --- Ficha completa del equipo (v3.4): en un proceso aparte, al arrancar (a los 2 minutos) y cada 6 horas ---
     if ((Test-Path -LiteralPath "$PSScriptRoot\18 enviar ficha.ps1") -and (((Get-Date) - $inicioLatido).TotalMinutes -ge 2) -and (((Get-Date) - $fichaHora).TotalHours -ge 6)) {
