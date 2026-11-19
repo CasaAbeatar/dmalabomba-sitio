@@ -128,4 +128,21 @@ Remove-Item "C:\PantallaCliente\datos\navegacion.txt" -Force -ErrorAction Silent
 & powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\PantallaCliente\19 navegacion.ps1" 2>&1 | ForEach-Object { Dice ("   19: " + $_) }
 Volcar "navegacion.txt (sin identidad, debe decirlo)" "C:\PantallaCliente\datos\navegacion.txt"
 Dice ("   latido lanza 19 navegacion = " + ($lat -match '19 navegacion'))
+Dice "   v3.5: extensiones del navegador (paso 16 con el script REAL, dos veces para comprobar que es idempotente)"
+$id = "inomeogfingihgjfjlpeplalcfajhgai"
+$fallos16 = 0
+foreach ($vuelta in 1..2) { & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $origen "16 bloquear instalaciones.ps1") -Silencioso 2>&1 | ForEach-Object { Dice ("   16 (vuelta " + $vuelta + "): " + $_) } }
+function Valor-Reg($ruta) { if (Test-Path $ruta) { $p = Get-ItemProperty -Path $ruta; @($p.PSObject.Properties | Where-Object { $_.Name -notmatch '^PS' } | ForEach-Object { $_.Name + "=" + $_.Value }) } else { @("(no existe)") } }
+$cB = Valor-Reg "HKLM:\SOFTWARE\Policies\Google\Chrome\ExtensionInstallBlocklist"
+$cA = Valor-Reg "HKLM:\SOFTWARE\Policies\Google\Chrome\ExtensionInstallAllowlist"
+$eB = Valor-Reg "HKLM:\SOFTWARE\Policies\Microsoft\Edge\ExtensionInstallBlocklist"
+$eA = Valor-Reg "HKLM:\SOFTWARE\Policies\Microsoft\Edge\ExtensionInstallAllowlist"
+Dice ("   Chrome Blocklist: " + ($cB -join ", ") + " | Chrome Allowlist: " + ($cA -join ", "))
+Dice ("   Edge Blocklist: " + ($eB -join ", ") + " | Edge Allowlist: " + ($eA -join ", "))
+if (-not (($cB.Count -eq 1) -and ($cB[0] -eq "1=*"))) { $fallos16++; Dice "   FALLO: Chrome Blocklist debe ser exactamente 1=*" }
+if (-not (($cA.Count -eq 1) -and ($cA[0] -eq ("1=" + $id)))) { $fallos16++; Dice "   FALLO: Chrome Allowlist debe ser exactamente 1=<Chrome Remote Desktop>" }
+if (-not (($eB.Count -eq 1) -and ($eB[0] -eq "1=*"))) { $fallos16++; Dice "   FALLO: Edge Blocklist debe ser exactamente 1=*" }
+if (-not ($eA.Count -eq 1 -and $eA[0] -eq "(no existe)")) { $fallos16++; Dice "   FALLO: Edge no debe tener Allowlist" }
+Dice ("16) Extensiones: " + $(if ($fallos16 -eq 0) { "OK (Chrome permite solo Chrome Remote Desktop y bloquea el resto; Edge bloqueo total)" } else { "FALLO (" + $fallos16 + ")" }))
 Dice "FIN"
+if ($fallos16 -gt 0) { exit 1 }

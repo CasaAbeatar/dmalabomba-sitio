@@ -1,4 +1,7 @@
-﻿KIT v3.4 (19 nov 2026, probado en Windows real por GitHub Actions; falta confirmar en la PC de Pollos)
+﻿KIT v3.5 (19 nov 2026, probado en Windows real por GitHub Actions; falta confirmar en la PC de Pollos)
+
+CAMBIOS DE LA v3.5 (19 nov, por orden de Emil)
+- Control remoto: en Chrome queda permitida la extension Chrome Remote Desktop (ID inomeogfingihgjfjlpeplalcfajhgai), por la lista de permitidas de Chrome (ExtensionInstallAllowlist). Todas las demas extensiones de Chrome siguen bloqueadas y Edge sigue con bloqueo total. Se aplica con el paso 16 al instalar el kit encima (INSTALAR TODO.bat); REPARAR no lo repite.
 
 CAMBIOS DE LA v3.4 (19 nov, por orden de Emil)
 - Ficha ampliada del equipo (encendidos y fallos, impresora, servicios, arranque de Windows, tareas programadas, energia, integridad de los archivos del kit, seguridad, red) en un proceso aparte ("18 enviar ficha.ps1"), al arrancar y cada 6 horas.
