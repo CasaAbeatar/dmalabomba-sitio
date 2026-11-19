@@ -52,17 +52,33 @@ jobs:
           working-directory: app sms android
           script: |
             bash ../scripts-prueba/guardian-e2e.sh
+            mkdir -p e2e-resultados
+            for f in guardian-*.png guardian-*.txt guardian-*.xml guardian-recibidos.jsonl; do [ -f "$f" ] && cp "$f" e2e-resultados/; done
             adb uninstall tech.bogomolov.incomingsmsgateway
             gradle connectedDebugAndroidTest
+      - name: Emulador limpio (modo telefono dedicado, Device Owner, reinicio remoto)
+        if: always()
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: ${{ matrix.api }}
+          arch: x86_64
+          target: google_apis
+          working-directory: app sms android
+          script: |
+            mkdir -p do-resultados
+            bash ../scripts-prueba/guardian-do.sh
+            for f in guardian-do-*.txt guardian-do-*.png guardian-estado.xml guardian-resultado.txt guardian-logcat.txt guardian-recibidos.jsonl; do [ -f "$f" ] && cp "$f" "do-resultados/$f"; done
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: resultados-guardian-dedicado-api${{ matrix.api }}
+          path: app sms android/do-resultados
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: resultados-guardian-api${{ matrix.api }}
           path: |
-            app sms android/guardian-*.png
-            app sms android/guardian-*.txt
-            app sms android/guardian-*.xml
-            app sms android/guardian-recibidos.jsonl
+            app sms android/e2e-resultados
             app sms android/app/build/reports/androidTests/connected
             app sms android/app/build/outputs/androidTest-results/connected
             app sms android/app/build/reports/tests/testDebugUnitTest

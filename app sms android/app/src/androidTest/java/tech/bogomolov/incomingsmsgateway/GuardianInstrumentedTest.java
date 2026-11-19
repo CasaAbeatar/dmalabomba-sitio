@@ -87,6 +87,8 @@ public class GuardianInstrumentedTest {
         c.setSmsFilter("");
         c.setUrl("http://127.0.0.1:" + server.port + "/sms");
         c.setTemplate("{\"from\":\"%from%\",\"text\":\"%text%\",\"sentStamp\":\"%sentStamp%\",\"empresa\":\"soda\"}");
+        c.setHeaders("{}");
+        c.setRetriesNumber(3);
         c.setSignHmacSha256(true);
         c.setSignHmacSha256Secret(SECRETO);
         c.setLocalMode(true);

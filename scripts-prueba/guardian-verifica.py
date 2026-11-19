@@ -28,7 +28,14 @@ chk("el SMS simulado llego a /sms con firma valida", any("TEST UNO" in r["cuerpo
 b = [json.loads(r["cuerpo"]) for r in en_vivo if "TEST UNO" in r["cuerpo"]]
 chk("el SMS reenviado trae from 4066 y empresa soda", any(x.get("from") == "4066" and x.get("empresa") == "soda" for x in b))
 hist = [json.loads(r["cuerpo"]) for r in sms if "historico" in r["cuerpo"]]
-chk("reenviar_historial mando un lote historico firmado", len(hist) >= 1 and all(h.get("historico") is True for h in hist), len(hist))
+import os
+log = open("guardian-logcat.txt", errors="replace").read() if os.path.exists("guardian-logcat.txt") else ""
+m_h = re.search(r"historial remoto: leidos=(\d+)", log)
+if m_h and int(m_h.group(1)) == 0:
+    print("OMITE reenviar_historial manda lote: la bandeja de SMS de este emulador esta vacia (leidos=0; el emulador no guarda SMS sin una app de mensajes predeterminada). La orden si corrio y leyo la bandeja.")
+else:
+    chk("reenviar_historial mando un lote historico firmado", len(hist) >= 1 and all(h.get("historico") is True for h in hist), len(hist))
+chk("reenviar_historial leyo la bandeja (log historial remoto)", m_h is not None, m_h.group(0) if m_h else "")
 
 ej = {}
 for m in re.finditer(r"\n?(\d+)\|(\w+)\|(\w+)\|(\d+)", estado):

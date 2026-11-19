@@ -18,7 +18,7 @@ public class GuardianAlarmReceiver extends BroadcastReceiver {
             try {
                 Guardian.tick(app, "alarma");
             } finally {
-                pr.finish();
+                if (pr != null) pr.finish();   // null solo si alguien llama onReceive a mano (pruebas)
             }
         }, "GuardianAlarma").start();
     }

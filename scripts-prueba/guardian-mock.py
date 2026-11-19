@@ -13,6 +13,9 @@ ORDENES = {"comandos": [
     {"id": 5, "cmd": "reiniciar_servicio"},
 ]}
 
+if os.environ.get("MODO") == "do":
+    ORDENES = {"comandos": [{"id": 7, "cmd": "reiniciar_telefono"}]}
+
 def firma(b):
     return hmac.new(SECRETO, b, hashlib.sha256).hexdigest()
 

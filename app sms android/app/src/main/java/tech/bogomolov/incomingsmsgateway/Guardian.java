@@ -272,8 +272,9 @@ public final class Guardian {
 
             @Override
             public void onDone(HistoryForwarder.Result r) {
-                Log.i(TAG, "historial remoto: nuevos=" + r.nuevos + " repetidos=" + r.repetidos
-                        + " fallidos=" + r.fallidos + (r.error != null ? " error=" + r.error : ""));
+                Log.i(TAG, "historial remoto: leidos=" + r.leidos + " aEnviar=" + r.aEnviar + " nuevos=" + r.nuevos
+                        + " repetidos=" + r.repetidos + " fallidos=" + r.fallidos
+                        + (r.error != null ? " error=" + r.error : ""));
             }
         }), "GuardianHistorial").start();
     }
