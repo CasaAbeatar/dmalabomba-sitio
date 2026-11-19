@@ -1,4 +1,13 @@
-﻿KIT v3.2c REPARADOR Y ENLACE (18 nov 2026, probado en Windows real por GitHub Actions; falta confirmar en la PC de Pollos)
+﻿KIT v3.3 (19 nov 2026, probado en Windows real por GitHub Actions; falta confirmar en la PC de Pollos)
+
+CAMBIOS DE LA v3.3 (19 nov)
+- Latido y Facturador ya no abren una ventana de consola. En Windows 11 con Windows Terminal como terminal predeterminada, cada script lanzado desde un acceso abria su ventana aunque se pidiera oculta. Ahora los accesos y los programas de apoyo arrancan con "conhost.exe --headless" (sin ninguna ventana) y el instalador deja la consola clasica de Windows como terminal predeterminada de la cuenta.
+- Pantalla del cliente: el mouse ya puede pasar a esa pantalla (antes el kit lo llevaba a la esquina cada 15 segundos). Al mover el mouse aparece el cursor y un boton "Cerrar pantalla" arriba a la derecha; a los 3 segundos sin moverlo se oculta.
+- Si la pantalla del cliente se cierra a mano (boton, Alt+F4 o la X), ni el kit ni la caja la vuelven a abrir sola. Vuelve con el icono Facturador, con el reinicio diario, al cambiar las pantallas (conectar o desconectar el monitor) o si alguien la abre a mano.
+- Ficha completa de la computadora (archivo nuevo "17 ficha del equipo.ps1"): equipo, procesador, memoria, discos y su salud, monitores con modelo y serie, tacto, impresoras, dispositivos USB, red, seguridad de Windows, programas, errores recientes y uso actual. Solo lee, nunca cambia nada. El latido la manda al panel al arrancar y cada 6 horas (tabla equipos_ficha, con historial de cambios).
+- La caja necesita la pagina del cliente nueva (cliente/ y js/pantalla_ventana.js del sitio, ya publicadas el 19 nov).
+
+VERSION ANTERIOR: KIT v3.2c REPARADOR Y ENLACE (18 nov 2026, probado en Windows real por GitHub Actions; falta confirmar en la PC de Pollos)
 
 CAMBIOS DE LA v3.2c (18 nov 14:00) CAUSA RAIZ DEL LATIDO Y DEL FACTURADOR QUE NO ARRANCABAN
 - Los permisos: el paso "icacls /inheritance:r ... /T" dejaba cada archivo del kit con la lista de permisos vacia, y la cuenta de la caja no podia ni leer los scripts (PowerShell oculto no los abria y no dejaba rastro). Probado en Windows real. Ahora los archivos heredan los permisos de la carpeta (Usuarios solo leen, en datos modifican) y el instalador verifica cada script y repara el que quede sin permiso.

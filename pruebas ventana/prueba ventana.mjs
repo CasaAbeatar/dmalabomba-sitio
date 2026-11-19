@@ -226,6 +226,29 @@ await caso(chromium, 'vigilia', { ventanaFalsa: true }, async ({ pag }) => {
   await espera(5600);
   anotar('Vigilia: una ventana cerrada se vuelve a abrir sola', (await ev(pag, () => window.__calls.open)).length === 2);
 });
+// 12c. v3.3: cerrada a mano (boton de la pantalla del cliente) o cerrada despues de un buen rato: no se reabre sola
+await caso(chromium, 'cerrada a mano por mensaje', { ventanaFalsa: true }, async ({ pag, errores }) => {
+  await ev(pag, () => window.iniciar());
+  await espera(400);
+  await ev(pag, () => { const c = new BroadcastChannel('lb-pantalla-cliente'); c.postMessage({ evento: 'cerrar-a-mano', payload: {} }); setTimeout(() => c.close(), 100); window.__w.closed = true; });
+  await espera(6000);
+  const e = await ev(pag, () => window.v.estadoVentana());
+  anotar('Cerrada a mano (mensaje): no se reabre sola', (await ev(pag, () => window.__calls.open)).length === 1, JSON.stringify(e));
+  anotar('Cerrada a mano (mensaje): fase cerrada-a-mano', e.fase === 'cerrada-a-mano', JSON.stringify(e));
+  await ev(pag, () => window.iniciar());
+  anotar('Cerrada a mano: llamar de nuevo a iniciar tampoco la reabre', (await ev(pag, () => window.__calls.open)).length === 1);
+  await ev(pag, () => { window.__det.dispatchEvent(new Event('currentscreenchange')); });
+  await espera(3200);
+  anotar('Cerrada a mano: un cambio de pantallas vuelve al comportamiento normal (se reabre)', (await ev(pag, () => window.__calls.open)).length === 2);
+  anotar('Cerrada a mano: sin mensajes en la consola', errores.length === 0, errores.join(' | '));
+});
+await caso(chromium, 'cerrada tras un buen rato', { ventanaFalsa: true }, async ({ pag }) => {
+  await ev(pag, () => window.iniciar());
+  await espera(400);
+  await ev(pag, () => { const d = Date.now.bind(Date); Date.now = () => d() + 25000; window.__w.closed = true; });
+  await espera(6000);
+  anotar('Cerrada tras 20 s o mas abierta: se respeta, no se reabre', (await ev(pag, () => window.__calls.open)).length === 1);
+});
 // 13. Enlace manual
 await caso(chromium, 'enlace manual', {}, async ({ pag, ctx }) => {
   await pag.evaluate(() => { document.body.innerHTML = '<button id=b>abrir</button>'; document.getElementById('b').onclick = () => { window.__r = window.v.abrirManual('/__cliente.html'); }; });

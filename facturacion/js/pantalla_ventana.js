@@ -38,7 +38,7 @@ let activo = false;
 let cfg = { rutaCliente: RUTA_CLIENTE, monitorCliente: '', alAbrir: null, alFallar: null, modoKit: false };
 let bc = null, ackEn = 0;
 let ventana = null, detalles = null, pantalla = null;
-let fase = 'inactiva';           // inactiva | iniciando | abierta | cerrada | una-pantalla | sin-api | sin-permiso | bloqueada | kit
+let fase = 'inactiva';           // inactiva | iniciando | abierta | cerrada | cerrada-a-mano | una-pantalla | sin-api | sin-permiso | bloqueada | kit
 let via = null;                  // api | manual | externa | kit
 let completa = null;             // null: no se sabe / no se intentó; true: pantalla completa; false: se intentó y no se pudo
 let motivo = null;               // último motivo de fallo
@@ -51,6 +51,9 @@ let intentoAuto = false;         // ya se pidió pantalla completa por cuenta pr
 let gesto = null;                // escucha armada para el único reintento con el primer toque del cajero
 const reintentos = { abrir: false, completa: false };
 let notificado = '';             // último motivo comunicado a alFallar (para no repetirlo)
+let cerradaAMano = false;        // el administrador cerró la pantalla del cliente a propósito: no se reabre sola (hasta recargar la caja, volver el icono Facturador o cambiar las pantallas)
+let abiertaEn = 0;               // cuándo se abrió la ventana actual (una que se cierra al instante no cuenta como cierre a propósito)
+const VIDA_MINIMA = 20000;       // la ventana debe haber vivido al menos esto para que su cierre se tome como a propósito
 
 const ahora = () => Date.now();
 const seguro = (f, ...a) => { try { return typeof f === 'function' ? f(...a) : undefined; } catch { return undefined; } };
@@ -98,8 +101,10 @@ function abrirCanal() {
     bc = new BroadcastChannel(NOMBRE_CANAL);
     bc.onmessage = (ev) => {
       const e = ev?.data?.evento;
+      if (e === 'cerrar-a-mano') { alCerrarAMano(); return; }
       if (e === 'ack' || e === 'hola') {
         ackEn = ahora();
+        if (cerradaAMano) { cerradaAMano = false; if (fase === 'cerrada-a-mano') fase = 'abierta'; } // la ventana volvió (alguien la abrió): se vigila otra vez
         if (e === 'hola') seguro(alHola);
       }
     };
@@ -118,6 +123,11 @@ function sondear(ms = ESPERA_ACK) {
     const paso = () => (ackEn !== antes ? ok(true) : ahora() - t0 >= ms ? ok(false) : setTimeout(paso, 50));
     paso();
   });
+}
+// La pantalla del cliente avisó que la cerraron a propósito (botón de cierre): no se reabre sola.
+function alCerrarAMano() {
+  cerradaAMano = true; fase = 'cerrada-a-mano'; motivo = null; ackEn = 0;
+  if (ventana && !ventanaViva()) perdida();
 }
 // La página del cliente avisó que acaba de cargar («hola»): si la abrimos nosotros, ya se puede pedir pantalla completa.
 function alHola() { if (ventanaViva() && completa !== true) pantallaCompleta(false); }
@@ -192,6 +202,7 @@ function registrarApertura() {
 const puedeAbrir = () => aperturas.filter((x) => ahora() - x < VENTANA_APERTURAS).length < MAX_APERTURAS;
 
 function intentarAbrir(origen) {
+  if (cerradaAMano && origen !== 'gesto') return Promise.resolve(estadoVentana());
   if (abriendo) return abriendo;
   abriendo = (async () => {
     try { return await abrirEnOtraPantalla(origen); } catch { return estadoVentana(); } finally { abriendo = null; }
@@ -217,7 +228,7 @@ async function abrirEnOtraPantalla() {
   try { w = window.open(cfg.rutaCliente, NOMBRE_VENTANA, caracteristicas(p)); } catch { w = null; }
   if (!w) { armarGesto('abrir'); return fallar('bloqueada'); }
   ventana = w; pantalla = p; via = 'api'; fase = 'abierta'; motivo = null; notificado = ''; completa = null;
-  reintentos.completa = false;
+  reintentos.completa = false; abiertaEn = ahora();
   registrarApertura();
   seguro(cfg.alAbrir, info());
   armarToqueEnVentana(w);
@@ -306,6 +317,7 @@ function alCambiarPantallas() {
 async function revisarCambio() {
   if (!activo) return;
   reubicacionesSeguidas = 0; reintentos.abrir = false;
+  cerradaAMano = false; // cambió la configuración de pantallas: se vuelve al comportamiento normal
   const dos = detalles ? Array.from(detalles.screens || []).length >= 2 : !!window.screen?.isExtended;
   if (!dos) {
     // Quedó una sola pantalla: la ventana del cliente caería encima de la caja, se cierra y se reabre cuando vuelva la otra
@@ -331,10 +343,20 @@ function vigilar() {
   try {
     if (!activo) return;
     if (ventana) {
-      if (!ventanaViva()) { perdida(); fase = 'cerrada'; intentarAbrir('cerrada'); return; }
+      if (!ventanaViva()) {
+        const vivio = ahora() - abiertaEn;
+        perdida();
+        if (cerradaAMano) { fase = 'cerrada-a-mano'; return; }
+        // Cerrada después de haber estado abierta un buen rato: la cerraron a propósito y se respeta. Cerrada al instante: se reintenta.
+        if (abiertaEn && vivio >= VIDA_MINIMA) { cerradaAMano = true; fase = 'cerrada-a-mano'; return; }
+        fase = 'cerrada'; intentarAbrir('cerrada'); return;
+      }
       revisarPosicion();
       return;
     }
+    if (cerradaAMano) return;
+    // Ventana que abrió otro (el kit): si contestaba y dejó de contestar, la cerraron; se respeta igual.
+    if (fase === 'abierta' && via === 'externa' && ackEn > 0 && !responde()) { cerradaAMano = true; fase = 'cerrada-a-mano'; return; }
     if (cfg.modoKit) return;
     // Sin ventana conocida: solo se vuelve a intentar si la causa pudo cambiar (cerrada, una sola pantalla, o una externa que dejó de contestar)
     const puede = fase === 'cerrada' || fase === 'una-pantalla' || fase === 'iniciando' || (fase === 'abierta' && !responde());
@@ -384,6 +406,7 @@ export function abrirManual(rutaCliente) {
     const w = window.open(ruta, NOMBRE_VENTANA, p ? caracteristicas(p) : 'popup=yes,width=1280,height=720');
     if (!w) return false;
     ventana = w; via = 'manual'; fase = 'abierta'; motivo = null; completa = null;
+    cerradaAMano = false; abiertaEn = ahora();
     if (p) pantalla = p;
     registrarApertura();
     armarToqueEnVentana(w);
@@ -403,6 +426,7 @@ export function detenerVentana() {
   setTimeout(() => { try { b?.close(); } catch { /* ya cerrado */ } }, 100);
   detalles = null; ventana = null; pantalla = null; abriendo = null;
   fase = 'inactiva'; via = null; completa = null; motivo = null; notificado = ''; ackEn = 0; aperturas = [];
+  cerradaAMano = false; abiertaEn = 0;
   reintentos.abrir = false; reintentos.completa = false;
   ultimoSondeo = 0; ultimaReubicacion = 0; reubicacionesSeguidas = 0;
 }
