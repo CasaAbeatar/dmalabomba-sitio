@@ -215,7 +215,9 @@ public class GuardianInstrumentedTest {
         assertTrue("cuenta el arranque", new GuardianState(ctx).getReiniciosServicio() > antes);
         // el primer latido periodico sale a los ~15 s y deja anotado su atraso (>= 0)
         assertTrue(esperar(() -> new GuardianState(ctx).getLatidoRetrasoMs() >= 0, 40_000));
-        assertTrue(esperar(() -> server.latidos().size() >= 1, 15_000));
+        // un latido por evento (red) puede haber salido antes y el periodico omitirse por repetido: el
+        // siguiente latido ya lleva el atraso medido
+        assertEquals(Request.RESULT_SUCCESS, Guardian.sendHeartbeat(ctx, urlLatido(), true, 0));
         JSONObject d = new JSONObject(server.latidos().get(server.latidos().size() - 1).cuerpo).getJSONObject("detalle");
         assertTrue(d.getLong("latido_retraso_ms") >= 0);
         assertTrue(d.getInt("reinicios_servicio") >= 1);
