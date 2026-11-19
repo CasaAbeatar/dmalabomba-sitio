@@ -133,10 +133,10 @@ $id = "inomeogfingihgjfjlpeplalcfajhgai"
 $fallos16 = 0
 foreach ($vuelta in 1..2) { & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $origen "16 bloquear instalaciones.ps1") -Silencioso 2>&1 | ForEach-Object { Dice ("   16 (vuelta " + $vuelta + "): " + $_) } }
 function Valor-Reg($ruta) { if (Test-Path $ruta) { $p = Get-ItemProperty -Path $ruta; @($p.PSObject.Properties | Where-Object { $_.Name -notmatch '^PS' } | ForEach-Object { $_.Name + "=" + $_.Value }) } else { @("(no existe)") } }
-$cB = Valor-Reg "HKLM:\SOFTWARE\Policies\Google\Chrome\ExtensionInstallBlocklist"
-$cA = Valor-Reg "HKLM:\SOFTWARE\Policies\Google\Chrome\ExtensionInstallAllowlist"
-$eB = Valor-Reg "HKLM:\SOFTWARE\Policies\Microsoft\Edge\ExtensionInstallBlocklist"
-$eA = Valor-Reg "HKLM:\SOFTWARE\Policies\Microsoft\Edge\ExtensionInstallAllowlist"
+$cB = @(Valor-Reg "HKLM:\SOFTWARE\Policies\Google\Chrome\ExtensionInstallBlocklist")
+$cA = @(Valor-Reg "HKLM:\SOFTWARE\Policies\Google\Chrome\ExtensionInstallAllowlist")
+$eB = @(Valor-Reg "HKLM:\SOFTWARE\Policies\Microsoft\Edge\ExtensionInstallBlocklist")
+$eA = @(Valor-Reg "HKLM:\SOFTWARE\Policies\Microsoft\Edge\ExtensionInstallAllowlist")
 Dice ("   Chrome Blocklist: " + ($cB -join ", ") + " | Chrome Allowlist: " + ($cA -join ", "))
 Dice ("   Edge Blocklist: " + ($eB -join ", ") + " | Edge Allowlist: " + ($eA -join ", "))
 if (-not (($cB.Count -eq 1) -and ($cB[0] -eq "1=*"))) { $fallos16++; Dice "   FALLO: Chrome Blocklist debe ser exactamente 1=*" }
