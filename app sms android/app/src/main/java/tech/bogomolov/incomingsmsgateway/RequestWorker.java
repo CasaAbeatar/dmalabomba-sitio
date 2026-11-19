@@ -112,6 +112,14 @@ public class RequestWorker extends Worker {
         } catch (Exception ignored) {
             // la memoria del Guardian nunca debe afectar el resultado del envio
         }
+        // 2.7.1: un SMS reenviado es prueba de vida. Si el latido periodico esta dormido (ahorro de
+        // bateria del fabricante), este lo reactiva. El filtro de repetidos del Guardian evita rafagas
+        // y nunca puede cambiar el resultado del reenvio.
+        try {
+            Guardian.sendHeartbeat(getApplicationContext(), false);
+        } catch (Exception ignored) {
+            // el latido es accesorio: el SMS ya quedo reenviado
+        }
         return Result.success();
     }
 

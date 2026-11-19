@@ -135,7 +135,7 @@ public class GuardianInstrumentedTest {
             assertTrue("falta detalle." + k, d.has(k));
         }
         assertEquals(BuildConfig.VERSION_NAME, d.getString("app"));
-        assertEquals("2.7.0", d.getString("app"));
+        assertEquals("2.7.1", d.getString("app"));
         assertEquals(Build.VERSION.SDK_INT, d.getInt("android"));
         assertTrue(d.getBoolean("permiso_sms"));
         assertTrue(Arrays.asList("wifi", "datos", "ninguna").contains(d.getString("tipo_red")));
@@ -156,6 +156,47 @@ public class GuardianInstrumentedTest {
         assertEquals("omitido", Guardian.sendHeartbeat(ctx, urlLatido(), false, 0));
         assertEquals(Request.RESULT_SUCCESS, Guardian.sendHeartbeat(ctx, urlLatido(), true, 0));
         assertEquals(2, server.latidos().size());
+    }
+
+    // ------------------------------------------------------------------ 2.7.1: un SMS reenviado deja un latido
+
+    private ListenableWorker reenvio(String url) {
+        androidx.work.Data datos = new androidx.work.Data.Builder()
+                .putString(RequestWorker.DATA_URL, url)
+                .putString(RequestWorker.DATA_TEXT, "{\"from\":\"4066\",\"text\":\"Ha recibido 100.00 Colones\"}")
+                .putString(RequestWorker.DATA_HEADERS, "{}")
+                .putBoolean(RequestWorker.DATA_CHUNKED_MODE, false)
+                .putInt(RequestWorker.DATA_MAX_RETRIES, 3)
+                .build();
+        return TestListenableWorkerBuilder.from(ctx, RequestWorker.class).setInputData(datos).build();
+    }
+
+    @Test
+    public void unSmsReenviadoDejaUnLatidoFirmadoYLosRepetidosSeFiltran() throws Exception {
+        String urlSms = "http://127.0.0.1:" + server.port + "/sms";
+        assertEquals(ListenableWorker.Result.success(), reenvio(urlSms).startWork().get());
+        assertEquals("el reenvio reactiva el latido", 1, server.latidos().size());
+        Peticion p = server.latidos().get(0);
+        assertEquals(Request.computeHmacSha256Hex(SECRETO, p.cuerpo), p.cabecera("x-signature"));
+        assertTrue(new JSONObject(p.cuerpo).getJSONObject("detalle").getLong("ultimo_reenvio_ok_ts") > 0);
+
+        // una rafaga de SMS no debe generar una rafaga de latidos (filtro de 30 s)
+        assertEquals(ListenableWorker.Result.success(), reenvio(urlSms).startWork().get());
+        assertEquals(1, server.latidos().size());
+    }
+
+    @Test
+    public void siElReenvioFallaNoHayLatidoNiCambiaElResultado() throws Exception {
+        ListenableWorker.Result r = reenvio("http://127.0.0.1:1/sms").startWork().get();
+        assertFalse("el reenvio fallido no es exito", ListenableWorker.Result.success().equals(r));
+        assertEquals(0, server.latidos().size());
+    }
+
+    @Test
+    public void siElLatidoFallaElReenvioSigueSiendoExitoso() throws Exception {
+        new HeartbeatSettings(true, "http://127.0.0.1:1/latido", 5).save(ctx);
+        assertEquals(ListenableWorker.Result.success(),
+                reenvio("http://127.0.0.1:" + server.port + "/sms").startWork().get());
     }
 
     // ------------------------------------------------------------------ órdenes remotas

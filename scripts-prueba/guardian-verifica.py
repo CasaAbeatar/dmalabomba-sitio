@@ -12,7 +12,7 @@ def chk(nombre, cond, extra=""):
 
 inst = open("guardian-instalacion.txt").read() if os.path.exists("guardian-instalacion.txt") else ""
 chk("la 2.6.0 (versionCode 15) se instalo", "instala-2.6.0: Success" in inst and "versionCode=15" in inst)
-chk("la 2.7.0 (versionCode 16) se instalo ENCIMA de la 2.6.0 sin desinstalar", "actualiza-a-2.7.0-encima: Success" in inst and "versionCode=16" in inst and "versionName=2.7.0" in inst, inst.replace("\n", " | ")[-160:])
+chk("la 2.7.1 (versionCode 17) se instalo ENCIMA de la 2.6.0 sin desinstalar", "actualiza-a-2.7.1-encima: Success" in inst and "versionCode=17" in inst and "versionName=2.7.1" in inst, inst.replace("\n", " | ")[-160:])
 lat = [r for r in rec if r["ruta"].startswith("/latido")]
 sms = [r for r in rec if r["ruta"].startswith("/sms")]
 chk("llegaron latidos", len(lat) >= 2, len(lat))
@@ -20,7 +20,7 @@ chk("todas las peticiones llegaron con firma valida", all(r["firma_ok"] for r in
 cuerpos = [json.loads(r["cuerpo"]) for r in lat if r["firma_ok"]]
 chk("latido conserva tipo/ts/empresa/telefono/bateria", all(all(k in c for k in ["tipo", "ts", "empresa", "telefono", "bateria"]) and c["tipo"] == "latido" and c["empresa"] == "soda" for c in cuerpos))
 chk("latido trae detalle con los 13 campos", all("detalle" in c and all(k in c["detalle"] for k in CAMPOS) for c in cuerpos))
-chk("detalle.app es 2.7.0", all(c["detalle"]["app"] == "2.7.0" for c in cuerpos if "detalle" in c))
+chk("detalle.app es 2.7.1", all(c["detalle"]["app"] == "2.7.1" for c in cuerpos if "detalle" in c))
 chk("detalle.permiso_sms es verdadero", any(c["detalle"]["permiso_sms"] is True for c in cuerpos))
 chk("detalle.tipo_red es wifi, datos o ninguna", all(c["detalle"]["tipo_red"] in ("wifi", "datos", "ninguna") for c in cuerpos))
 vivos = [c for c in cuerpos if c["detalle"].get("ultimo_sms_ts", 0) > 0]
