@@ -90,3 +90,10 @@
   .sinpe-flot-ventana{left:0;right:0;bottom:0;width:auto;max-height:70vh;max-height:70dvh;border-radius:16px 16px 0 0;border-bottom:0}
 }
 @media(max-height:520px){.sinpe-flot-ventana{max-height:78vh;max-height:78dvh}}
+
+/* Períodos y totales (Administración y perfil de Dixia) */
+.sinpe-periodos{display:flex;gap:.5rem;flex-wrap:wrap;padding:.55rem 1rem;border-bottom:1px solid var(--linea)}
+.sinpe-resumen{display:flex;align-items:baseline;justify-content:space-between;gap:.6rem;padding:.55rem 1rem;border-bottom:1px solid var(--linea);background:#fbf7ee;font-variant-numeric:tabular-nums}
+.sinpe-resumen strong{font-size:1.15rem}
+.sinpe-dia{display:flex;justify-content:space-between;gap:.6rem}
+.sinpe-dia-total{text-transform:none;letter-spacing:0;font-variant-numeric:tabular-nums}

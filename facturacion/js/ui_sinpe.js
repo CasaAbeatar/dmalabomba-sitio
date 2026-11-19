@@ -38,6 +38,13 @@ export function coincide(p, consulta) {
   }
   return [p.pagador, p.telefono, p.detalle, p.comprobante].some((t) => quitarTildes(t).includes(q));
 }
+const PERIODOS = [['hoy', 'Hoy'], ['semana', 'Esta semana'], ['mes', 'Este mes']];
+// Cuántos días hay que pedir para cubrir el período, contados en hora de Costa Rica (la semana empieza el lunes; la base admite hasta 31 días)
+export function diasDe(periodo, ahora = new Date()) {
+  const f = new Intl.DateTimeFormat('en-US', { timeZone: TZ, weekday: 'short', day: 'numeric' }).formatToParts(ahora);
+  const dia = Number(f.find((x) => x.type === 'day').value), sem = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].indexOf(f.find((x) => x.type === 'weekday').value) + 1;
+  return periodo === 'semana' ? sem : periodo === 'mes' ? Math.min(31, dia) : 1;
+}
 export function nombreDia(d, ahora) {
   const hoy = diaCR(ahora || Date.now()), ayer = diaCR(new Date(new Date(ahora || Date.now()) - 864e5));
   const x = diaCR(d);
@@ -48,8 +55,10 @@ export function nombreDia(d, ahora) {
 
 // opciones: soc (id de la empresa), empresa ('soda'|'pollos'), alEscoger(pago) (si existe, cada SINPE se puede escoger para el cobro), alQuitar(pago),
 // ventaId / ventaNumero (a qué venta queda ligado un SINPE escogido: «Usado en la venta N»), api, intervaloMs
-export function listaSinpe({ soc, empresa = 'soda', alEscoger = null, alQuitar = null, ventaId = null, ventaNumero = '', api = apiSinpe, intervaloMs = 6000, titulo = 'SINPE Móvil recibidos', alCargar = null } = {}) {
+export function listaSinpe({ soc, empresa = 'soda', alEscoger = null, alQuitar = null, ventaId = null, ventaNumero = '', api = apiSinpe, intervaloMs = 6000, titulo = 'SINPE Móvil recibidos', alCargar = null, periodos = false } = {}) {
   cargarCssSinpe();
+  // periodos (Administración y perfil de Dixia, 19 nov 2026): Hoy / Esta semana / Este mes, cada pago uno por uno y con el total de cada día y del período
+  let dias = periodos ? diasDe('hoy') : undefined, periodo = 'hoy';
   const raiz = h('section.sinpe-lista-caja', { dataset: { emp: empresa }, 'aria-label': titulo });
   let r = null, falla = '', cargando = false, muerto = false, consulta = '', timer = null, ultimoUsado = null, manualActiva = false, repetir = false, actualizadoEn = null;
   const clave = 'fx_sinpe_usados_' + (soc || '');
@@ -61,11 +70,18 @@ export function listaSinpe({ soc, empresa = 'soda', alEscoger = null, alQuitar =
   const actualizado = h('span.sinpe-act', { role: 'status' }, '');
   const btnActualizar = h('button.btn.sinpe-refrescar', { type: 'button', onclick: () => cargar(true) }, 'Refrescar');
   const aviso = h('div.sinpe-aviso', { hidden: true, role: 'status' });
+  const resumenPeriodo = h('div.sinpe-resumen', { hidden: true, role: 'status' });
+  function selectorPeriodo() {
+    const botones = PERIODOS.map(([id, txt]) => h('button.btn.chico' + (id === periodo ? '.primario' : ''), { type: 'button', dataset: { periodo: id }, 'aria-pressed': String(id === periodo),
+      onclick: () => { periodo = id; dias = diasDe(id); r = null; botones.forEach((b) => { const on = b.dataset.periodo === id; b.classList.toggle('primario', on); b.setAttribute('aria-pressed', String(on)); }); pintarFilas(); cargar(true); } }, txt));
+    return h('div.sinpe-periodos', { role: 'group', 'aria-label': 'Período' }, botones);
+  }
   raiz.append(
     h('div.sinpe-banda', h('span', titulo), h('span.sinpe-hoy', 'Más reciente primero')),
     h('div.sinpe-barra', h('div.sinpe-barra-txt', ultimo, actualizado), btnActualizar),
+    periodos ? selectorPeriodo() : null,
     h('div.sinpe-buscar', buscador),
-    aviso, cuerpo);
+    aviso, resumenPeriodo, cuerpo);
 
   const usado = (p) => !!p.usado || locales.has(p.id);
   const ventaDe = (p) => p.usado_venta || locales.get(p.id) || '';
@@ -78,12 +94,19 @@ export function listaSinpe({ soc, empresa = 'soda', alEscoger = null, alQuitar =
     if (!r) { cuerpo.replaceChildren(h('p.sinpe-vacio', falla ? '' : 'Cargando los SINPE Móvil recibidos…')); return; }
     const todos = [...(r.pagos || [])].sort((a, b) => new Date(b.hora) - new Date(a.hora));
     const lista = todos.filter((p) => coincide(p, consulta));
-    if (!lista.length) { cuerpo.replaceChildren(h('p.sinpe-vacio', todos.length ? 'Ningún SINPE coincide con «' + consulta.trim() + '». Podría no haber llegado el aviso todavía.' : 'Todavía no hay SINPE Móvil recibidos en estos días.')); return; }
+    if (!lista.length) { if (periodos) { resumenPeriodo.hidden = false; resumenPeriodo.replaceChildren(h('span', 'Sin pagos en este período'), h('strong', money(0))); } cuerpo.replaceChildren(h('p.sinpe-vacio', todos.length ? 'Ningún SINPE coincide con «' + consulta.trim() + '». Podría no haber llegado el aviso todavía.' : 'Todavía no hay SINPE Móvil recibidos en estos días.')); return; }
     const nodos = []; let dia = null;
+    const porDia = new Map();
+    for (const p of lista) { const d = diaCR(p.hora); const x = porDia.get(d) || { n: 0, t: 0 }; x.n++; x.t += Number(p.monto) || 0; porDia.set(d, x); }
     for (const p of lista) {
       const d = diaCR(p.hora);
-      if (d !== dia) { dia = d; nodos.push(h('h3.sinpe-dia', nombreDia(p.hora, r.ahora))); }
+      if (d !== dia) { dia = d; const x = porDia.get(d); nodos.push(h('h3.sinpe-dia', nombreDia(p.hora, r.ahora), periodos ? h('span.sinpe-dia-total', x.n + (x.n === 1 ? ' pago · ' : ' pagos · ') + money(x.t)) : null)); }
       nodos.push(fila(p));
+    }
+    if (periodos) {
+      const tot = lista.reduce((a, p) => a + (Number(p.monto) || 0), 0);
+      resumenPeriodo.hidden = false;
+      resumenPeriodo.replaceChildren(h('span', (periodo === 'hoy' ? 'Hoy' : periodo === 'semana' ? 'Esta semana' : 'Este mes') + ': ' + lista.length + (lista.length === 1 ? ' pago' : ' pagos') + ' en ' + porDia.size + (porDia.size === 1 ? ' día' : ' días')), h('strong', money(tot)));
     }
     cuerpo.replaceChildren(...nodos);
   }
@@ -114,7 +137,7 @@ export function listaSinpe({ soc, empresa = 'soda', alEscoger = null, alQuitar =
     if (muerto) return;
     if (cargando) { if (manual) { repetir = true; manualActiva = true; pintarFilas(); } return; } // un toque en «Refrescar» durante un refresco automático pide otra consulta al terminar
     cargando = true; manualActiva = manual; if (manual) pintarFilas();
-    try { const x = await api.lista(soc); if (muerto) return; if (x && x.activa !== false) { r = x; actualizadoEn = Date.now(); try { alCargar?.(x); } catch { /* nada */ } } falla = ''; }
+    try { const x = await (dias ? api.lista(soc, dias) : api.lista(soc)); if (muerto) return; if (x && x.activa !== false) { r = x; actualizadoEn = Date.now(); try { alCargar?.(x); } catch { /* nada */ } } falla = ''; }
     catch (e) { falla = 'No se pudieron consultar los SINPE Móvil (' + textoDeError(e) + ').'; }
     cargando = false; manualActiva = false; pintarFilas();
     if (repetir && !muerto) { repetir = false; cargar(true); }

@@ -274,12 +274,10 @@ body.fx-admin .cab-franja .amb-prueba{background:#fdf2dc;color:#5c3d00;border:1p
 .pista-abajo{bottom:0}.pista-abajo span{bottom:8px}
 .mas-arriba>.pista-arriba,.mas-abajo>.pista-abajo{display:block}
 
-/* Perfil de Dixia: Hoy = 4 tarjetas grandes y parejas (2×2), quietas; la columna derecha se queda */
-.hoy-dixia .hoy-grandes{grid-template-columns:repeat(2,minmax(0,1fr));grid-auto-rows:1fr}
-.hoy-dixia .hoy-acceso{min-height:200px;padding:28px;justify-content:center;gap:10px}
-.hoy-dixia .hoy-acceso b{font-size:1.6rem}
-.hoy-dixia .hoy-acceso span{font-size:1.02rem;-webkit-line-clamp:3}
-@media(max-width:700px){.hoy-dixia .hoy-grandes{grid-template-columns:1fr}.hoy-dixia .hoy-acceso{min-height:132px;padding:20px}.hoy-dixia .hoy-acceso b{font-size:1.3rem}}
+/* Perfil de Dixia: Hoy = franja resumida y tarjetas con dibujo como las de caja (6 parejas: 3 × 2 ancho, 2 × 3 celular) */
+.hoy-dixia .hoy-resumen{flex:1 0 100%;font-size:.92rem}
+.hoy-dixia .dixia-tarjetas{grid-template-columns:repeat(2,minmax(0,1fr));grid-auto-rows:minmax(170px,1fr)}
+@media(min-width:1100px){.hoy-dixia .dixia-tarjetas{grid-template-columns:repeat(3,minmax(0,1fr));grid-auto-rows:minmax(200px,1fr)}}
 /* Columna derecha: botones en ámbar (acorde con Atención y el resto), no en verde sólido */
 .fx-rail .rail-lista .alerta-in button,.fx-rail .rail-lista .btn.alerta-ver{background:var(--ambar)!important;color:#3d2900!important;border-color:#d9992a!important}
 .fx-rail .rail-lista .alerta-in button:hover{background:#f7b54a!important}

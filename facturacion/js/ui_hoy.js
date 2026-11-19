@@ -1,7 +1,8 @@
 // «Hoy»: la pantalla de inicio del administrador. Reemplaza la cuadrícula de tarjetas: lo de hoy primero (caja, ventas), lo que requiere atención y los accesos de siempre.
 // Todas las cifras salen de las mismas funciones del servidor que ya usan los informes; aquí no se calcula nada que decida dinero.
 import { h, money, horaCorta, hoyCR } from './util.js';
-import { modulosDe, buscar, insigniaDe, esDixia, RAPIDOS_DIXIA } from './modulos.js';
+import { modulosDe, buscar, insigniaDe, esDixia, RAPIDOS_DIXIA, habilitado } from './modulos.js';
+import { tarjetaModulo } from './ui_inicio.js';
 import { listados2 } from './api_listados.js';
 
 const saludo = () => { const hr = Number(new Intl.DateTimeFormat('es-CR', { hour: 'numeric', hour12: false, timeZone: 'America/Costa_Rica' }).format(new Date())); return hr < 12 ? 'Buenos días' : hr < 18 ? 'Buenas tardes' : 'Buenas noches'; };
@@ -25,9 +26,20 @@ export function pantallaHoy(app, { alAbrir, alCerrarCaja, alAbrirCaja, abrirAten
   }).catch(() => { vV.textContent = vN.textContent = vD.textContent = '—'; });
 
   if (esDixia(app)) {
-    const grandes = RAPIDOS_DIXIA.map(buscar).filter(Boolean);
+    // Perfil de Dixia (19 nov 2026): el mismo aspecto visual que el de las cajeras (tarjetas grandes con dibujo), con lo de hoy resumido en una franja.
+    // Las tarjetas son 6 (3 × 2 en pantalla ancha, 2 × 3 en el celular): lo de caja, Pagos SINPE (si está encendido) e Informes.
+    const ids = [...RAPIDOS_DIXIA, 'sinpe', 'listados'].map(buscar).filter((m) => m && habilitado(m));
+    if (ids.length < 6) { const e = buscar('emitidas'); if (e && !ids.includes(e)) ids.push(e); }
+    const resumen = h('small.tenue.hoy-resumen', 'Ventas de hoy: …');
+    listados2(app.soc.id, hoy, hoy).then((r) => {
+      const x = (r && (r.resumen || r)) || {};
+      resumen.textContent = 'Ventas de hoy ' + money(Number(x.ventas_netas || 0)) + ' sin IVA · ' + String(x.vigentes_n ?? 0) + ' facturas y tiquetes';
+    }).catch(() => { resumen.textContent = ''; });
+    const franja = h('div.hoy-franja', { role: 'status' },
+      h('div.hoy-texto', h('span.hoy-et', 'Hoy'), h('strong', t ? 'Caja abierta desde las ' + horaCorta(t.abierto_en) : 'Caja cerrada'), resumen),
+      t ? h('button.btn', { type: 'button', onclick: alCerrarCaja }, 'Cerrar caja') : h('button.btn.primario', { type: 'button', onclick: alAbrirCaja }, 'Abrir caja'));
     return h('div.inicio.hoy.hoy-dixia', h('header.hoy-cab', h('h1', saludo() + (nombre ? ', ' + nombre : '')), h('p.tenue', fecha.charAt(0).toUpperCase() + fecha.slice(1))),
-      h('div.hoy-accesos.hoy-grandes', grandes.map((m) => h('button.hoy-acceso', { type: 'button', onclick: () => alAbrir(m) }, h('b', m.titulo), h('span', typeof m.descripcion === 'string' ? m.descripcion : '')))));
+      franja, h('div.mod-rejilla.dixia-tarjetas', ids.map((m) => tarjetaModulo(m, app, alAbrir))));
   }
   const caja = h('div.hoy-caja' + (t ? '' : '.cerrada'), { role: 'status' },
     h('div', h('span.hoy-et', 'Caja'), h('strong', t ? 'Abierta desde las ' + horaCorta(t.abierto_en) : 'Cerrada')),
