@@ -34,7 +34,7 @@ a{color:inherit}
 .wrap{max-width:1080px;margin:0 auto;padding:0 24px}
 .on-amber,.on-red{background:#fbf8f2;color:var(--black);--ln:rgba(23,18,18,.85);--lnsoft:rgba(23,18,18,.35)}
 header.top{border-bottom:1px solid var(--ln)}
-header.top .wrap{display:flex;align-items:center;justify-content:flex-end;height:64px}
+header.top .wrap{display:flex;align-items:center;justify-content:space-between;height:64px}
 .mark{font-weight:800;letter-spacing:.22em;font-size:14px;text-decoration:none}
 header.top .right{display:flex;align-items:center;gap:28px}
 header.top nav{display:flex;gap:26px;font-size:14px}
@@ -104,18 +104,15 @@ a:focus-visible{outline:2px solid currentColor;outline-offset:4px}
 
 <header class="top on-amber">
   <div class="wrap">
-    <div class="right">
-      <nav aria-label="Secciones">
-        <a href="#negocios">Negocios</a>
-        <a href="#nosotros">Nosotros</a>
-        <a href="#contacto">Contacto</a>
-      </nav>
-      <div class="team" aria-label="Acceso del equipo">
-        <a href="/facturacion/">Facturación</a>
-        <a href="https://panel.dmalabomba.com">Panel</a>
-        <a href="https://outlook.office.com/mail/">Correo</a>
-      </div>
+    <div class="team" aria-label="Acceso del equipo">
+      <a href="/facturacion/">Facturación</a>
+      <a href="https://panel.dmalabomba.com">Panel</a>
     </div>
+    <nav aria-label="Secciones">
+      <a href="#negocios">Negocios</a>
+      <a href="#nosotros">Nosotros</a>
+      <a href="#contacto">Contacto</a>
+    </nav>
   </div>
 </header>
 
