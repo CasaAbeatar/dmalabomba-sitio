@@ -68,6 +68,9 @@ public class SmsReceiverService extends Service {
     private HandlerThread thread;
     private Handler handler;
     private Runnable heartbeatRunnable;
+    // 2.8.0: hora (reloj de pared) en que debia correr el proximo latido periodico; la diferencia con la hora real
+    // en que corre mide cuanto tiempo estuvo dormido el telefono.
+    private volatile long latidoPlaneadoMs;
     private Runnable keeperRunnable;
 
     private PowerManager.WakeLock wakeLock;
@@ -107,6 +110,11 @@ public class SmsReceiverService extends Service {
 
         running = true;
         creaciones.incrementAndGet();
+        try {
+            new GuardianState(this).contarReinicioServicio();
+        } catch (Exception ignored) {
+            // contar no debe impedir que el servicio arranque
+        }
         adquirirCandados();
         iniciarVigilancia();
         registrarEventos();
@@ -184,10 +192,19 @@ public class SmsReceiverService extends Service {
                 if (!s.isEnabled() || s.getUrl().isEmpty()) {
                     return;
                 }
+                try {
+                    long planeado = latidoPlaneadoMs;
+                    if (planeado > 0) {
+                        new GuardianState(SmsReceiverService.this).marcarLatidoRetraso(System.currentTimeMillis() - planeado);
+                    }
+                } catch (Exception ignored) {
+                    // medir no debe impedir el latido
+                }
                 Log.i(TAG, "heartbeat: " + Guardian.sendHeartbeat(SmsReceiverService.this, s.getUrl(), false, 0));
                 if (handler != null) {
                     long espera = Watchdog.siguienteLatidoEn(System.currentTimeMillis(),
                             new GuardianState(SmsReceiverService.this).getUltimoLatidoIntento(), s.getIntervalMillis());
+                    latidoPlaneadoMs = System.currentTimeMillis() + espera;
                     handler.postDelayed(this, espera);
                 }
             }
@@ -199,6 +216,7 @@ public class SmsReceiverService extends Service {
         long primero = st.getAcksPendientes().isEmpty()
                 ? Watchdog.siguienteLatidoEn(System.currentTimeMillis(), st.getUltimoLatidoIntento(), settings.getIntervalMillis())
                 : Watchdog.PRIMER_LATIDO_MIN_MS;
+        latidoPlaneadoMs = System.currentTimeMillis() + primero;
         handler.postDelayed(heartbeatRunnable, primero);
     }
 

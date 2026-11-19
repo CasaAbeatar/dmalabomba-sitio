@@ -1,9 +1,11 @@
 package tech.bogomolov.incomingsmsgateway;
 
 import android.Manifest;
+import android.app.ActivityManager;
 import android.app.AlarmManager;
 import android.app.PendingIntent;
 import android.app.admin.DevicePolicyManager;
+import android.app.usage.UsageStatsManager;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
@@ -16,7 +18,9 @@ import android.net.NetworkInfo;
 import android.os.BatteryManager;
 import android.os.Build;
 import android.os.PowerManager;
+import android.os.SystemClock;
 import android.provider.Settings;
+import android.telephony.TelephonyManager;
 import android.util.Log;
 
 import androidx.core.app.NotificationManagerCompat;
@@ -126,7 +130,103 @@ public final class Guardian {
         d.notificaciones = notificacionesPermitidas(ctx);
         d.android = Build.VERSION.SDK_INT;
         d.marcaModelo = (Build.MANUFACTURER + " " + Build.MODEL).replace("\\", "").replace("\"", "");
+        // 2.8.0: mediciones del teléfono. Cada una es independiente y nunca rompe el latido.
+        d.senalNivel = senalDbm(ctx);
+        d.operador = operador(ctx);
+        d.simEstado = simEstado(ctx);
+        d.modoAvion = modoAvion(ctx);
+        d.memoriaLibreMb = memoriaLibreMb(ctx);
+        d.arranqueTs = System.currentTimeMillis() - SystemClock.elapsedRealtime();
+        d.bucketStandby = bucketStandby(ctx);
+        d.doze = enDoze(ctx);
+        d.latidoRetrasoMs = st.getLatidoRetrasoMs();
+        d.reiniciosServicio = st.getReiniciosServicio();
         return d;
+    }
+
+    // ------------------------------------------------------------------ 2.8.0: mediciones (sin permisos nuevos)
+
+    /** dBm de la red activa si Android lo entrega sin permisos especiales (API 29+); 0 si no. */
+    public static int senalDbm(Context ctx) {
+        try {
+            if (Build.VERSION.SDK_INT < 29) return 0;
+            ConnectivityManager cm = (ConnectivityManager) ctx.getSystemService(Context.CONNECTIVITY_SERVICE);
+            Network n = cm == null ? null : cm.getActiveNetwork();
+            NetworkCapabilities caps = n == null ? null : cm.getNetworkCapabilities(n);
+            if (caps == null) return 0;
+            int v = caps.getSignalStrength();
+            return v == NetworkCapabilities.SIGNAL_STRENGTH_UNSPECIFIED ? 0 : v;
+        } catch (Throwable e) {
+            return 0;
+        }
+    }
+
+    public static String operador(Context ctx) {
+        try {
+            TelephonyManager tm = (TelephonyManager) ctx.getSystemService(Context.TELEPHONY_SERVICE);
+            String o = tm == null ? "" : tm.getNetworkOperatorName();
+            return o == null ? "" : o.replaceAll("[^\\p{L}\\p{N} .-]", "");
+        } catch (Throwable e) {
+            return "";
+        }
+    }
+
+    public static String simEstado(Context ctx) {
+        try {
+            TelephonyManager tm = (TelephonyManager) ctx.getSystemService(Context.TELEPHONY_SERVICE);
+            if (tm == null) return "desconocido";
+            switch (tm.getSimState()) {
+                case TelephonyManager.SIM_STATE_READY: return "listo";
+                case TelephonyManager.SIM_STATE_ABSENT: return "ausente";
+                case TelephonyManager.SIM_STATE_PIN_REQUIRED:
+                case TelephonyManager.SIM_STATE_PUK_REQUIRED:
+                case TelephonyManager.SIM_STATE_NETWORK_LOCKED: return "bloqueado";
+                default: return "desconocido";
+            }
+        } catch (Throwable e) {
+            return "desconocido";
+        }
+    }
+
+    public static boolean modoAvion(Context ctx) {
+        try {
+            return Settings.Global.getInt(ctx.getContentResolver(), Settings.Global.AIRPLANE_MODE_ON, 0) != 0;
+        } catch (Throwable e) {
+            return false;
+        }
+    }
+
+    public static int memoriaLibreMb(Context ctx) {
+        try {
+            ActivityManager am = (ActivityManager) ctx.getSystemService(Context.ACTIVITY_SERVICE);
+            if (am == null) return -1;
+            ActivityManager.MemoryInfo mi = new ActivityManager.MemoryInfo();
+            am.getMemoryInfo(mi);
+            return (int) (mi.availMem / (1024 * 1024));
+        } catch (Throwable e) {
+            return -1;
+        }
+    }
+
+    /** Cubeta de espera de Android para esta app (API 28+): 10 activa, 20 en uso, 30 frecuente, 40 rara, 45 restringida. */
+    public static int bucketStandby(Context ctx) {
+        try {
+            if (Build.VERSION.SDK_INT < 28) return -1;
+            UsageStatsManager u = (UsageStatsManager) ctx.getSystemService(Context.USAGE_STATS_SERVICE);
+            return u == null ? -1 : u.getAppStandbyBucket();
+        } catch (Throwable e) {
+            return -1;
+        }
+    }
+
+    public static boolean enDoze(Context ctx) {
+        try {
+            if (Build.VERSION.SDK_INT < 23) return false;
+            PowerManager pm = (PowerManager) ctx.getSystemService(Context.POWER_SERVICE);
+            return pm != null && pm.isDeviceIdleMode();
+        } catch (Throwable e) {
+            return false;
+        }
     }
 
     // ------------------------------------------------------------------ lecturas de estado (también las usa la pantalla Salud)

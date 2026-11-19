@@ -1,4 +1,4 @@
-name: Prueba del Guardian 2.7.1 (app de SMS) en Android
+name: Prueba del Guardian 2.8.0 (app de SMS) en Android
 on:
   workflow_dispatch:
   push:
@@ -31,7 +31,7 @@ jobs:
           build-root-directory: app sms android
       - name: Pruebas unitarias (JVM)
         run: gradle testDebugUnitTest
-      - name: Construir el APK 2.7.1 y el 2.6.0 (para probar la actualizacion encima)
+      - name: Construir el APK 2.8.0 y el 2.6.0 (para probar la actualizacion encima)
         run: |
           gradle assembleDebug
           cd "../viejo/app sms android"

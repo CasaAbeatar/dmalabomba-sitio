@@ -1,6 +1,6 @@
 #!/bin/bash
 # Prueba de punta a punta del Guardian 2.7.0 en emulador (se corre desde "app sms android").
-# 1) instala la 2.6.0 y la actualiza ENCIMA con la 2.7.1   2) regla + latido apuntando al servidor falso (10.0.2.2:8099)
+# 1) instala la 2.6.0 y la actualiza ENCIMA con la 2.8.0   2) regla + latido apuntando al servidor falso (10.0.2.2:8099)
 # 3) SMS simulado de 4066   4) pantalla Salud (por toques reales)   5) mata el proceso y espera que reviva solo
 P=tech.bogomolov.incomingsmsgateway
 NUEVO=app/build/outputs/apk/debug/app-debug.apk
@@ -26,7 +26,7 @@ PY
 python3 ../scripts-prueba/guardian-mock.py & echo $! > srv.pid
 sleep 2
 
-nota "1. instalar 2.6.0 (versionCode 15) y actualizar encima con 2.7.0 (versionCode 17)"
+nota "1. instalar 2.6.0 (versionCode 15) y actualizar encima con 2.7.0 (versionCode 18)"
 {
 adb install -r "$VIEJO" 2>&1 | tail -1 | sed 's/^/instala-2.6.0: /'
 adb shell dumpsys package $P | grep -E "versionCode|versionName" | head -2 | sed 's/^ */antes: /'
@@ -38,7 +38,7 @@ adb shell pm grant $P android.permission.POST_NOTIFICATIONS 2>/dev/null
 adb emu sms send 4066 "Recibiste un SINPE Movil por 3000 colones de ANA PRUEBA. Comprobante 111 historico"
 sleep 3
 {
-adb install -r "$NUEVO" 2>&1 | tail -1 | sed 's/^/actualiza-a-2.7.1-encima: /'
+adb install -r "$NUEVO" 2>&1 | tail -1 | sed 's/^/actualiza-a-2.8.0-encima: /'
 adb shell dumpsys package $P | grep -E "versionCode|versionName" | head -2 | sed 's/^ */despues: /'
 } | tee -a guardian-instalacion.txt
 sleep 5

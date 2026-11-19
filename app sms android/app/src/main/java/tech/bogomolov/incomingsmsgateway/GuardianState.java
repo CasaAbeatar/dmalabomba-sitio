@@ -18,6 +18,8 @@ public class GuardianState {
     private static final String K_ULTIMO_REENVIO_OK = "ultimo_reenvio_ok_ts";
     private static final String K_HB_INTENTO = "hb_intento_ts";
     private static final String K_HB_OK = "hb_ok_ts";
+    private static final String K_RETRASO = "hb_retraso_ms";
+    private static final String K_REINICIOS = "reinicios_servicio";
     private static final String K_CMD_LOG = "cmd_log";
     private static final String K_ACKS = "acks";
     private static final String K_EJECUCIONES = "ejecuciones";
@@ -39,6 +41,13 @@ public class GuardianState {
     public void marcarReenvioOk(long ahora) { pref.edit().putLong(K_ULTIMO_REENVIO_OK, ahora).apply(); }
     public void marcarLatidoIntento(long ahora) { pref.edit().putLong(K_HB_INTENTO, ahora).commit(); }
     public void marcarLatidoOk(long ahora) { pref.edit().putLong(K_HB_OK, ahora).apply(); }
+
+    /** 2.8.0: atraso (ms) del último latido periódico frente a lo planeado; -1 si aún no hay dato. */
+    public long getLatidoRetrasoMs() { return pref.getLong(K_RETRASO, -1); }
+    public void marcarLatidoRetraso(long ms) { pref.edit().putLong(K_RETRASO, Math.max(0, ms)).apply(); }
+    /** 2.8.0: cuántas veces arrancó el servicio desde la instalación. */
+    public int getReiniciosServicio() { return pref.getInt(K_REINICIOS, 0); }
+    public void contarReinicioServicio() { pref.edit().putInt(K_REINICIOS, getReiniciosServicio() + 1).apply(); }
 
     // ---- órdenes remotas ----
 

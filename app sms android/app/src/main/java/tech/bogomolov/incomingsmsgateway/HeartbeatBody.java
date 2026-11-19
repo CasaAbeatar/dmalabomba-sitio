@@ -32,6 +32,26 @@ public final class HeartbeatBody {
         public boolean notificaciones;
         public int android;
         public String marcaModelo = "";
+        // ---- 2.8.0: mediciones para entender por qué el teléfono se duerme o se cae ----
+        /** Intensidad de la señal en dBm (negativa) si Android la da sin permisos especiales; 0 = desconocida. */
+        public int senalNivel;
+        /** Nombre del operador de la red (sin número de teléfono). */
+        public String operador = "";
+        /** listo | ausente | bloqueado | desconocido */
+        public String simEstado = "desconocido";
+        public boolean modoAvion;
+        /** Memoria libre del teléfono en MB; -1 = desconocida. */
+        public int memoriaLibreMb = -1;
+        /** Hora (ms) en que arrancó el teléfono; 0 = desconocida. */
+        public long arranqueTs;
+        /** Cubeta de espera de Android: 10 activa, 20 en uso, 30 frecuente, 40 rara, 45 restringida; -1 desconocida. */
+        public int bucketStandby = -1;
+        /** true si Android está en modo Doze (reposo profundo). */
+        public boolean doze;
+        /** Cuánto se atrasó el último latido periódico frente a lo planeado (ms); -1 = sin dato. Un atraso grande es el teléfono dormido. */
+        public long latidoRetrasoMs = -1;
+        /** Cuántas veces ha arrancado el servicio de la app desde que se instaló. */
+        public int reiniciosServicio;
         /** Ids de órdenes ya procesadas, que el servidor aún no ha visto confirmadas. */
         public long[] comandosHechos = new long[0];
         /** id de la orden -> resultado ("ok", "comando_no_soportado", "falta_permiso_sms"...). */
@@ -64,7 +84,17 @@ public final class HeartbeatBody {
                     .append(",\"permiso_sms\":").append(d.permisoSms)
                     .append(",\"notificaciones\":").append(d.notificaciones)
                     .append(",\"android\":").append(d.android)
-                    .append(",\"marca_modelo\":\"").append(esc(d.marcaModelo)).append('"');
+                    .append(",\"marca_modelo\":\"").append(esc(d.marcaModelo)).append('"')
+                    .append(",\"senal_nivel\":").append(d.senalNivel)
+                    .append(",\"operador\":\"").append(esc(d.operador)).append('"')
+                    .append(",\"sim_estado\":\"").append(esc(d.simEstado)).append('"')
+                    .append(",\"modo_avion\":").append(d.modoAvion)
+                    .append(",\"memoria_libre_mb\":").append(d.memoriaLibreMb)
+                    .append(",\"arranque_ts\":").append(d.arranqueTs)
+                    .append(",\"bucket_standby\":").append(d.bucketStandby)
+                    .append(",\"doze\":").append(d.doze)
+                    .append(",\"latido_retraso_ms\":").append(d.latidoRetrasoMs)
+                    .append(",\"reinicios_servicio\":").append(d.reiniciosServicio);
             if (d.comandosHechos != null && d.comandosHechos.length > 0) {
                 b.append(",\"comandos_hechos\":[");
                 for (int i = 0; i < d.comandosHechos.length; i++) {

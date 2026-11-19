@@ -32,6 +32,16 @@ public class HeartbeatBodyTest {
         d.notificaciones = false;
         d.android = 35;
         d.marcaModelo = "HONOR HONOR X6c";
+        d.senalNivel = -87;
+        d.operador = "Kolbi \"ICE\"";
+        d.simEstado = "listo";
+        d.modoAvion = false;
+        d.memoriaLibreMb = 1234;
+        d.arranqueTs = 1763400000000L;
+        d.bucketStandby = 20;
+        d.doze = true;
+        d.latidoRetrasoMs = 2700000L;
+        d.reiniciosServicio = 4;
         return d;
     }
 
@@ -64,6 +74,32 @@ public class HeartbeatBodyTest {
         assertEquals(35, d.getInt("android"));
         assertEquals("HONOR HONOR X6c", d.getString("marca_modelo"));
         assertFalse("sin ordenes pendientes no debe haber comandos_hechos", d.has("comandos_hechos"));
+    }
+
+    @Test
+    public void detalleTraeLasMedicionesDe28ConSuTipo() throws Exception {
+        JSONObject d = new JSONObject(HeartbeatBody.build(1L, "soda", "X", 5, detalle())).getJSONObject("detalle");
+        assertEquals(-87, d.getInt("senal_nivel"));
+        assertEquals("Kolbi \"ICE\"", d.getString("operador"));   // las comillas se escapan y el JSON sigue valido
+        assertEquals("listo", d.getString("sim_estado"));
+        assertFalse(d.getBoolean("modo_avion"));
+        assertEquals(1234, d.getInt("memoria_libre_mb"));
+        assertEquals(1763400000000L, d.getLong("arranque_ts"));
+        assertEquals(20, d.getInt("bucket_standby"));
+        assertTrue(d.getBoolean("doze"));
+        assertEquals(2700000L, d.getLong("latido_retraso_ms"));
+        assertEquals(4, d.getInt("reinicios_servicio"));
+    }
+
+    @Test
+    public void sinMedicionesLosValoresPorDefectoSonDeDesconocido() throws Exception {
+        JSONObject d = new JSONObject(HeartbeatBody.build(1L, "soda", "X", 5, new HeartbeatBody.Detalle())).getJSONObject("detalle");
+        assertEquals(0, d.getInt("senal_nivel"));
+        assertEquals("desconocido", d.getString("sim_estado"));
+        assertEquals(-1, d.getInt("memoria_libre_mb"));
+        assertEquals(-1, d.getInt("bucket_standby"));
+        assertEquals(-1L, d.getLong("latido_retraso_ms"));
+        assertEquals(0, d.getInt("reinicios_servicio"));
     }
 
     @Test

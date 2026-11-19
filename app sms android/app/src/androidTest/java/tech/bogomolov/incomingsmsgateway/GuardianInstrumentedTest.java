@@ -135,7 +135,15 @@ public class GuardianInstrumentedTest {
             assertTrue("falta detalle." + k, d.has(k));
         }
         assertEquals(BuildConfig.VERSION_NAME, d.getString("app"));
-        assertEquals("2.7.1", d.getString("app"));
+        assertEquals("2.8.0", d.getString("app"));
+        for (String k : new String[]{"senal_nivel", "operador", "sim_estado", "modo_avion", "memoria_libre_mb", "arranque_ts",
+                "bucket_standby", "doze", "latido_retraso_ms", "reinicios_servicio"}) {
+            assertTrue("falta detalle." + k, d.has(k));
+        }
+        assertTrue("la memoria libre se midio", d.getInt("memoria_libre_mb") > 0);
+        assertTrue("el arranque es anterior a ahora", d.getLong("arranque_ts") > 0 && d.getLong("arranque_ts") < System.currentTimeMillis());
+        assertTrue(Arrays.asList("listo", "ausente", "bloqueado", "desconocido").contains(d.getString("sim_estado")));
+        assertFalse("el emulador no esta en modo avion", d.getBoolean("modo_avion"));
         assertEquals(Build.VERSION.SDK_INT, d.getInt("android"));
         assertTrue(d.getBoolean("permiso_sms"));
         assertTrue(Arrays.asList("wifi", "datos", "ninguna").contains(d.getString("tipo_red")));
@@ -197,6 +205,20 @@ public class GuardianInstrumentedTest {
         new HeartbeatSettings(true, "http://127.0.0.1:1/latido", 5).save(ctx);
         assertEquals(ListenableWorker.Result.success(),
                 reenvio("http://127.0.0.1:" + server.port + "/sms").startWork().get());
+    }
+
+    @Test
+    public void elServicioContaSusArranquesYElLatidoMideSuAtraso() throws Exception {
+        int antes = new GuardianState(ctx).getReiniciosServicio();
+        Guardian.startServiceSafely(ctx);
+        assertTrue(esperar(() -> SmsReceiverService.isRunning(), 15_000));
+        assertTrue("cuenta el arranque", new GuardianState(ctx).getReiniciosServicio() > antes);
+        // el primer latido periodico sale a los ~15 s y deja anotado su atraso (>= 0)
+        assertTrue(esperar(() -> new GuardianState(ctx).getLatidoRetrasoMs() >= 0, 40_000));
+        assertTrue(esperar(() -> server.latidos().size() >= 1, 15_000));
+        JSONObject d = new JSONObject(server.latidos().get(server.latidos().size() - 1).cuerpo).getJSONObject("detalle");
+        assertTrue(d.getLong("latido_retraso_ms") >= 0);
+        assertTrue(d.getInt("reinicios_servicio") >= 1);
     }
 
     // ------------------------------------------------------------------ órdenes remotas
