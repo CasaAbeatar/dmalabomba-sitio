@@ -10,7 +10,7 @@ const saludo = () => { const hr = Number(new Intl.DateTimeFormat('es-CR', { hour
 export function pantallaHoy(app, { alAbrir, alCerrarCaja, alAbrirCaja, abrirAtencion }) {
   const t = app.turno;
   const fecha = new Intl.DateTimeFormat('es-CR', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'America/Costa_Rica' }).format(new Date());
-  const nombre = String(app.ctx?.nombre || app.usuario || '').split(' ')[0];
+  const nombre = String(app.nombreVisible || app.ctx?.nombre || app.usuario || '').split(' ')[0];
   const cifra = (et, valor, nota) => h('div.hoy-cifra', h('span.hoy-et', et), h('strong.hoy-valor', valor), h('small.tenue', nota || ' '));
   const vV = h('strong.hoy-valor', '…'), vN = h('strong.hoy-valor', '…'), vD = h('strong.hoy-valor', '…');
   const cifras = h('div.hoy-cifras', { 'aria-live': 'polite' },

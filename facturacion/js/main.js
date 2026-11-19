@@ -8,6 +8,7 @@ import { pantallaInicio, pantallaAdmin, pintarInsignias } from './ui_inicio.js';
 import { crearAvisosAdmin } from './avisos_admin.js';
 import { crearShell } from './shell.js';
 import { pantallaHoy } from './ui_hoy.js';
+import { leerVerComo, olvidarVerComo, cintillaVerComo } from './ver_como.js';
 import { iniciarBuscadoresBorrar } from './buscador_borrar.js';
 iniciarBuscadoresBorrar();
 
@@ -39,8 +40,11 @@ export const app = {
   terminal: 1, // una caja por local
   get soc() { return this.ctx?.sociedades.find((s) => s.id === this.socId) || null; },
   get turno() { return this.soc?.turno || null; },
-  get usuario() { return this.ctx?.usuario; },
-  get admin() { return !!this.ctx?.admin; },
+  // «Ver como otro usuario» (ver_como.js): solo cambia lo que se ve; la sesión y los permisos reales siguen siendo los del administrador
+  vistaComo: null,
+  get usuario() { return this.vistaComo ? this.vistaComo.usuario : this.ctx?.usuario; },
+  get nombreVisible() { return this.vistaComo ? this.vistaComo.nombre : this.ctx?.nombre; },
+  get admin() { return this.vistaComo ? !!this.vistaComo.admin : !!this.ctx?.admin; },
   // La empresa de esta sesión: sale de la sociedad que devuelve el servidor, no de lo que haya en el aparato. codigo = el que se escribe para entrar.
   get empresa() { const s = this.soc; return s ? { id: s.id, codigo: String(s.codigo_acceso || s.codigo || '').toLowerCase(), nombre: nombreLocal(s), cedula: s.cedula || null } : null; },
   moduloActual: null, // el módulo (o pantalla) que se ve: una entrada de modulos.js o INICIO
@@ -828,7 +832,7 @@ function armarApp(reciente = false) {
   menuEl = h('div.cab-usuario',
     h('button.btn.cab-menu', { type: 'button', 'aria-haspopup': 'true', 'aria-expanded': 'false', 'aria-controls': 'cab-panel', onclick: () => abrirMenu(!menuEl.classList.contains('abierto')) }, 'Menú ▾'),
     h('div#cab-panel.cab-panel',
-      h('span.cab-sesion', h('span.cab-sesion-pre', 'Sesión de '), h('strong', app.ctx.nombre || app.usuario)),
+      h('span.cab-sesion', h('span.cab-sesion-pre', 'Sesión de '), h('strong', app.nombreVisible || app.usuario)),
       h('button.btn.chico', { type: 'button', onclick: () => { abrirMenu(false); cerrarSesion(); } }, 'Cerrar sesión')));
   volverEl = h('button.btn.cab-volver', { type: 'button' });
   inicioEl = h('button.btn.cab-inicio', { type: 'button', onclick: () => subir('inicio') }, 'Inicio');
@@ -848,6 +852,7 @@ function armarApp(reciente = false) {
   if (app.admin) {
     shell = crearShell({ app, raiz, cab, vista, bandas: [alertaEl, avisosAdmin?.el, avisosAdmin?.elReceptor, avisosAdmin?.elHacienda], ir, subir, cambiarPin: cambiarPinDialogo, cerrarSesion });
   } else raiz.append(cab, vista);
+  { const c = cintillaVerComo(app); if (c) document.body.append(c); } // mientras se ve como otro usuario: quién es y «Volver a mi usuario»
   if (window.ResizeObserver) new ResizeObserver(() => sincronizarAlturas()).observe(cab);
   pintarCabecera();
   // Recién entró: al inicio. Si recargó la página, o regresó tras un fallo, se queda en la dirección que tenía.
@@ -880,7 +885,7 @@ async function cerrarSesion() {
     document.querySelectorAll('#toasts .toast').forEach((t) => t.remove());
     await salir().catch(() => {});
     olvidarPinDeEntrada();
-    app.ctx = null; app.socId = null; app.moduloActual = null; app.pedido = null; app.alertas.datos = null; app.recepcion = null; app.inventario = null; app.respaldo = null; app.seguridad = null;
+    app.ctx = null; app.vistaComo = null; olvidarVerComo(); app.socId = null; app.moduloActual = null; app.pedido = null; app.alertas.datos = null; app.recepcion = null; app.inventario = null; app.respaldo = null; app.seguridad = null;
     recepcionCache = null; recepcionHora = 0; veniaDe = null;
     shell?.destruir(); shell = null;
     cab = vista = alertaEl = redEl = menuEl = tituloEl = volverEl = inicioEl = avisosAdmin = null; cambioPinActivo = false;
@@ -926,6 +931,8 @@ async function arrancar(reciente = false) {
   if (!reciente && location.hash) { const m = buscar(location.hash); m?.cargar?.().catch(() => {}); }
   try {
     app.ctx = await cargarContexto(reciente);
+    app.vistaComo = app.ctx?.admin ? leerVerComo() : null; // solo un administrador real puede estar viendo como otro
+    if (!app.ctx?.admin) olvidarVerComo();
   } catch (e) {
     // La base exige elegir un PIN nuevo antes de contestar cualquier cosa (código PT409): se va a la pantalla de cambio de PIN y, al guardarlo, arrancar() sigue desde aquí
     if (esPinObligatorio(e)) return pantallaCambioPin({ aviso: 'Antes de seguir, elija su clave nueva.' });

@@ -4,6 +4,7 @@
 import { h, modal, toast } from './util.js';
 import { cambiarEmpresa } from './api.js';
 import { cargarBanderaSinpe } from './api_sinpe.js';
+import { listaVerComo } from './ver_como.js';
 import { MODULOS, GRUPOS_NAV, grupoNavDe, buscar, insigniaDe, itemsDeGrupo, esDixia, habilitado } from './modulos.js';
 
 const norm = (t) => String(t || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
@@ -49,7 +50,8 @@ export function crearShell({ app, raiz, cab, vista, bandas, ir, subir, cambiarPi
   } }, h('span.nv-emp-logo.chico', h('img', { src: otra.logo, alt: '' })), h('span.nv-cambio-txt', h('small', 'Cambiar de empresa'), h('b', 'Cambiar a ' + otra.nom)));
   const pie = h('div.nv-pie',
     app.admin ? btnCambio : null,
-    h('span.nv-sesion', 'Sesión de ', h('strong', app.ctx?.nombre || app.usuario)),
+    h('span.nv-sesion', 'Sesión de ', h('strong', app.nombreVisible || app.usuario)),
+    app.vistaComo ? null : listaVerComo(app),
     h('button.nv-item', { type: 'button', onclick: cambiarPin }, h('span.nv-tit', 'Cambiar mi clave')),
     h('button.nv-item', { type: 'button', onclick: cerrarSesion }, h('span.nv-tit', 'Cerrar sesión')));
   nav.append(pie);
