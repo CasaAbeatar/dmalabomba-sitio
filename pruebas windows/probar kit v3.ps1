@@ -75,4 +75,30 @@ Como-Normal "caja" 'powershell -NoProfile -ExecutionPolicy Bypass -WindowStyle H
 Volcar "arranque.txt" "C:\PantallaCliente\datos\arranque.txt"
 Volcar "registro.txt" "C:\PantallaCliente\datos\registro.txt"
 Get-CimInstance Win32_Process -Filter "Name='powershell.exe'" | Where-Object { $_.CommandLine -match "PantallaCliente" } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+
+# 8) v3.3: ventanas ocultas, terminal predeterminada, accesos, ficha del equipo
+Dice "8) v3.3"
+. "C:\PantallaCliente\config.ps1"; . "C:\PantallaCliente\funciones.ps1"; . "C:\PantallaCliente\17 ficha del equipo.ps1"
+Dice ("   version del kit: " + $VersionKit)
+Dice ("   terminal predeterminada: " + (Arreglar-Terminal-Predeterminada) + " | segunda vez: " + (Arreglar-Terminal-Predeterminada))
+Dice ("   conhost existe: " + (Test-Path "$env:SystemRoot\System32\conhost.exe"))
+foreach ($l in @("Latido.lnk", "Facturador.lnk")) { $lnk = Join-Path ([Environment]::GetFolderPath("CommonStartup")) $l; if (Test-Path $lnk) { $a = (New-Object -ComObject WScript.Shell).CreateShortcut($lnk); Dice ("   acceso " + $l + ": " + $a.TargetPath + " " + $a.Arguments) } else { Dice ("   FALTA el acceso " + $l) } }
+$marca = "C:\Windows\Temp\oculto-prueba.txt"; Remove-Item $marca -Force -ErrorAction SilentlyContinue
+Set-Content -LiteralPath "C:\Windows\Temp\oculto-prueba.ps1" -Value '"viva " + (Get-Date).ToString("s") | Set-Content C:\Windows\Temp\oculto-prueba.txt; Start-Sleep -Seconds 12'
+$pr = Lanzar-Oculto "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File C:\Windows\Temp\oculto-prueba.ps1" -PassThru
+$t = 0; while (-not (Test-Path $marca) -and $t -lt 20) { Start-Sleep -Seconds 1; $t++ }
+Dice ("   Lanzar-Oculto: el script corrio = " + (Test-Path $marca) + " (en " + $t + " s)")
+$ps = Get-CimInstance Win32_Process -Filter "Name='powershell.exe'" | Where-Object { $_.CommandLine -like "*oculto-prueba.ps1*" } | Select-Object -First 1
+if ($ps) { $gp = Get-Process -Id $ps.ProcessId -ErrorAction SilentlyContinue; Dice ("   powershell oculto: pid " + $ps.ProcessId + ", ventana principal = " + $gp.MainWindowHandle + ", padre = " + (Get-Process -Id $ps.ParentProcessId -ErrorAction SilentlyContinue).ProcessName) } else { Dice "   no se vio el powershell oculto" }
+Dice "   Ficha-Equipo:"
+$sw = [Diagnostics.Stopwatch]::StartNew()
+$ficha = Ficha-Equipo
+$sw.Stop()
+$json = $ficha | ConvertTo-Json -Depth 8 -Compress
+Dice ("   ficha lista en " + $sw.ElapsedMilliseconds + " ms, " + [Text.Encoding]::UTF8.GetByteCount($json) + " bytes (limite de la base 32768)")
+foreach ($k in $ficha.Keys) { $v = $ficha[$k]; $n = $null; if ($v -is [System.Collections.IDictionary]) { $n = @($v.Keys | Where-Object { $null -eq $v[$_] }).Count; Dice ("     " + $k + ": " + $v.Count + " datos, " + $n + " vacios") } else { Dice ("     " + $k + ": " + $(if ($null -eq $v) { "VACIO" } elseif ($v -is [array]) { "" + $v.Count + " elementos" } else { $v })) } }
+Set-Content -LiteralPath (Join-Path $res "ficha-ejemplo.json") -Value $json -Encoding UTF8
+Dice ("   Cliente-cerrado y cursor: el supervisor ya no mueve el mouse = " + (-not (Select-String -LiteralPath "C:\PantallaCliente\0 abrir caja y pantalla.ps1" -Pattern 'Cursor\]::Position = ' -Quiet)))
+Dice ("   Supervisor reconoce cierre a mano = " + (Select-String -LiteralPath "C:\PantallaCliente\0 abrir caja y pantalla.ps1" -Pattern 'clienteCerradoAMano' -Quiet))
+Stop-Process -Id $pr.Id -Force -ErrorAction SilentlyContinue
 Dice "FIN"

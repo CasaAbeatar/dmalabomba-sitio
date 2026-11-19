@@ -375,3 +375,31 @@ function Telemetria-Lenta {
   try { $o["espera_reinicio"] = [bool](Test-Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Auto Update\RebootRequired") } catch { Write-Verbose "sin reinicio" }
   return $o
 }
+
+# ===== v3.3: ventanas de apoyo sin consola visible =====
+# Con Windows Terminal como terminal predeterminada (Windows 11), un script de PowerShell lanzado desde un acceso abre una ventana
+# aunque se pida -WindowStyle Hidden. "conhost.exe --headless" corre el programa sin ninguna ventana.
+function Comando-Oculto($argsPs) {
+  $ps = Join-Path $env:SystemRoot "System32\WindowsPowerShell\v1.0\powershell.exe"
+  $ch = Join-Path $env:SystemRoot "System32\conhost.exe"
+  if (Test-Path -LiteralPath $ch) { return [pscustomobject]@{ Exe = $ch; Args = ("--headless `"" + $ps + "`" " + $argsPs) } }
+  return [pscustomobject]@{ Exe = $ps; Args = $argsPs }
+}
+function Lanzar-Oculto($argsPs, [switch]$PassThru) {
+  $c = Comando-Oculto $argsPs
+  if ($PassThru) { return (Start-Process -FilePath $c.Exe -ArgumentList $c.Args -WindowStyle Hidden -PassThru) }
+  Start-Process -FilePath $c.Exe -ArgumentList $c.Args -WindowStyle Hidden
+}
+# Pone la "Consola de Windows" como terminal predeterminada de la cuenta actual (lo mismo que Configuracion > Para programadores > Terminal).
+function Arreglar-Terminal-Predeterminada {
+  $clave = "HKCU:\Console\%%Startup"
+  $guid = "{B23D10C0-E52E-411E-9D5B-C09FDF709C7D}"
+  $antes = ""
+  try { if (Test-Path -LiteralPath $clave) { $antes = [string](Get-ItemProperty -LiteralPath $clave -ErrorAction Stop).DelegationTerminal } } catch { $antes = "" }
+  if ($antes -eq $guid) { return "ya era la consola clasica" }
+  if (-not (Test-Path -LiteralPath $clave)) { New-Item -Path $clave -Force | Out-Null }
+  New-ItemProperty -LiteralPath $clave -Name "DelegationConsole" -Value $guid -PropertyType String -Force | Out-Null
+  New-ItemProperty -LiteralPath $clave -Name "DelegationTerminal" -Value $guid -PropertyType String -Force | Out-Null
+  return $(if ($antes) { "cambiada a la consola clasica (antes " + $antes + ")" } else { "fijada a la consola clasica" })
+}
+

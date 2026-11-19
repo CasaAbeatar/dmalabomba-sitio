@@ -67,11 +67,15 @@ if (Es-Admin) {
     Write-Output ("Se repararon los permisos de " + $sinAcceso.Count + " archivo(s) que habian quedado sin acceso para la cuenta de la caja: " + ($sinAcceso -join ", "))
   }
 }
+# v3.3: la terminal predeterminada pasa a ser la clasica de Windows (si no, Windows Terminal muestra una ventana por cada script, aunque se pida oculta).
+try { Write-Output ("Terminal predeterminada: " + (Arreglar-Terminal-Predeterminada)) } catch { Write-Output ("No se pudo revisar la terminal predeterminada: " + $_.Exception.Message) }
 $ws = New-Object -ComObject WScript.Shell
 function Hacer-Acceso($ruta, $archivo, $texto) {
   $a = $ws.CreateShortcut($ruta)
-  $a.TargetPath = "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe"
-  $a.Arguments = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$Carpeta\$archivo`""
+  # v3.3: sin ventana de consola, aunque Windows Terminal sea la terminal predeterminada (conhost --headless).
+  $c = Comando-Oculto ("-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$Carpeta\$archivo`"")
+  $a.TargetPath = $c.Exe
+  $a.Arguments = $c.Args
   $a.WorkingDirectory = $Carpeta
   $a.WindowStyle = 7
   $a.Description = $texto

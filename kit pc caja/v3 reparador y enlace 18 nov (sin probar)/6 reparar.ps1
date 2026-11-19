@@ -17,9 +17,9 @@ Remove-Item "$Datos\mantenimiento.txt" -Force -ErrorAction SilentlyContinue
 Remove-Item "$Datos\abrir.flag" -Force -ErrorAction SilentlyContinue
 Extender-Pantallas
 # 3) Abrir de nuevo el facturador y la pantalla del cliente
-Start-Process powershell.exe -WindowStyle Hidden -ArgumentList "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$PSScriptRoot\0 abrir caja y pantalla.ps1`""
+Lanzar-Oculto ("-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$PSScriptRoot\0 abrir caja y pantalla.ps1`"")
 # 4) El latido debe seguir vivo: si no corre, se arranca
 $lat = Get-CimInstance Win32_Process -Filter "Name='powershell.exe'" | Where-Object { $_.CommandLine -like "*11 latido.ps1*" } | Select-Object -First 1
-if (-not $lat) { Start-Process powershell.exe -WindowStyle Hidden -ArgumentList "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$PSScriptRoot\11 latido.ps1`"" }
+if (-not $lat) { Lanzar-Oculto ("-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$PSScriptRoot\11 latido.ps1`"") }
 # 5) Identidad: si falta, esta danada, es de otra PC o el panel no la reconoce, pregunta Soda o Pollos (la cajera puede elegir Enlazar despues)
 try { [void](Asegurar-Identidad "reparar" "") } catch { Add-Content -Path "$Datos\registro.txt" -Value ("{0:yyyy-MM-dd HH:mm:ss}  Reparar: error al verificar la identidad: {1}" -f (Get-Date), $_.Exception.Message) }

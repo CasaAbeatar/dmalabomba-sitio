@@ -6,6 +6,7 @@ $esAdminArr = $false; try { $esAdminArr = ([Security.Principal.WindowsPrincipal]
 Arranque ("inicio. usuario " + $env:USERNAME + ", con privilegios de administrador: " + $esAdminArr)
 . "$PSScriptRoot\config.ps1"
 . "$PSScriptRoot\funciones.ps1"
+if (Test-Path -LiteralPath "$PSScriptRoot\17 ficha del equipo.ps1") { . "$PSScriptRoot\17 ficha del equipo.ps1" }
 $c = Crear-Mutex "Local\LatidoLB"; $m = $c.Mutex; $tengo = $c.Tengo
 Arranque ("candado LatidoLB: " + $(if ($tengo) { "obtenido" } else { "NO obtenido" }) + ". " + $c.Motivo)
 if (-not $tengo) { exit }
@@ -32,6 +33,7 @@ $avisoIdentidad = $null
 $script:UltimaLatencia = $null
 $pantallasBajas = 0
 $telemetria = $null; $telemetriaHora = [DateTime]::MinValue
+$fichaHora = [DateTime]::MinValue; $inicioLatido = Get-Date   # v3.3: ficha completa al arrancar (a los 2 minutos, sin frenar el encendido) y cada 6 horas
 while ($true) {
   try {
     $id = Leer-Identidad
@@ -124,6 +126,16 @@ while ($true) {
         }
       }
       Anotar ("No se pudo enviar{0}: {1}" -f $(if ($sinRed) { " (sin red)" } else { " (error de la base)" }), $ex.Message)
+    }
+    # --- Ficha completa del equipo (v3.3) ---
+    if ((Get-Command Ficha-Equipo -ErrorAction SilentlyContinue) -and (((Get-Date) - $inicioLatido).TotalMinutes -ge 2) -and (((Get-Date) - $fichaHora).TotalHours -ge 6)) {
+      $fichaHora = (Get-Date).AddMinutes(-345)   # si falla, se reintenta en 15 minutos
+      try {
+        $ficha = Ficha-Equipo
+        $rf = Llamar-Rpc "equipo_ficha" ([ordered]@{ p_estacion = $id.estacion; p_token = $id.token; p_ficha = $ficha }) 40
+        if ($rf.ok) { $fichaHora = Get-Date; Anotar ("Ficha del equipo enviada{0}." -f $(if ($rf.cambio) { " (hubo cambios)" } else { "" })) }
+        else { Anotar ("La base no acepto la ficha: {0}" -f $rf.motivo) }
+      } catch { Anotar ("No se pudo enviar la ficha: {0}" -f $_.Exception.Message) }
     }
   } catch { Anotar "Error: $($_.Exception.Message)" }
   Start-Sleep -Seconds $SegundosLatido

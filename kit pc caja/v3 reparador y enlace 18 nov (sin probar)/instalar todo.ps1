@@ -137,11 +137,11 @@ Paso "11 Iniciar el latido hacia el panel" {
   # Se lanza SIN privilegios de administrador (por el explorador, via el acceso de inicio): el latido solo necesita la cuenta normal de la caja.
   $lnk = Join-Path ([Environment]::GetFolderPath("CommonStartup")) "Latido.lnk"
   if (Test-Path $lnk) { Start-Process -FilePath "$env:SystemRoot\explorer.exe" -ArgumentList "`"$lnk`"" }
-  else { Start-Process -FilePath "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -ArgumentList "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$Carpeta\11 latido.ps1`"" -WindowStyle Hidden }
+  else { Lanzar-Oculto ("-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$Carpeta\11 latido.ps1`"") }
   $t = 0; while (-not (Test-Path "$Datos\latido.txt") -and $t -lt 20) { Start-Sleep -Seconds 1; $t++ }
   if (-not (Test-Path "$Datos\latido.txt")) {
     # v3.2: segundo intento directo, sin pasar por el acceso del inicio.
-    Start-Process -FilePath "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -ArgumentList "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$Carpeta\11 latido.ps1`"" -WindowStyle Hidden
+    Lanzar-Oculto ("-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$Carpeta\11 latido.ps1`"")
     $t = 0; while (-not (Test-Path "$Datos\latido.txt") -and $t -lt 30) { Start-Sleep -Seconds 1; $t++ }
   }
   if (-not (Test-Path "$Datos\latido.txt")) { $dl = Capturar-Fallo "11 latido.ps1" 25; if (Test-Path "$Datos\latido.txt") { if (Test-Path $lnk) { Start-Process -FilePath "$env:SystemRoot\explorer.exe" -ArgumentList "`"$lnk`"" }; return }; throw ("El latido no arranco (no escribio su registro). Salida: " + $dl) }
