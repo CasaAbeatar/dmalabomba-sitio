@@ -37,10 +37,28 @@
 
     </LinearLayout>
 
+    <!-- La Bomba 2.7.0: acceso grande a la pantalla «Salud del teléfono»; el texto y el color
+         (verde/rojo) los pone MainActivity.onResume según lo que falte. -->
+    <Button
+        android:id="@+id/btn_health"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top"
+        android:layout_marginStart="@dimen/spacing_medium"
+        android:layout_marginLeft="@dimen/spacing_medium"
+        android:layout_marginTop="@dimen/spacing_small"
+        android:layout_marginEnd="@dimen/spacing_medium"
+        android:layout_marginRight="@dimen/spacing_medium"
+        android:minHeight="56dp"
+        android:text="@string/btn_health"
+        android:textAllCaps="false"
+        android:textSize="16sp" />
+
     <ListView
         android:id="@+id/listView"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
+        android:layout_marginTop="72dp"
         android:clipToPadding="false"
         android:divider="@null"
         android:dividerHeight="0dp"

@@ -22,6 +22,13 @@ public class SmsBroadcastReceiver extends BroadcastReceiver {
     public void onReceive(Context context, Intent intent) {
         this.context = context;
 
+        // La Bomba 2.7.0: si el sistema arranco el proceso solo para entregar este SMS (el servicio habia
+        // muerto), se intenta revivir el servicio. Sin efecto si ya corre o si Android no lo permite.
+        try {
+            if (!SmsReceiverService.isRunning()) Guardian.startServiceSafely(context);
+        } catch (Exception ignored) {
+        }
+
         Bundle bundle = intent.getExtras();
         if (bundle == null) {
             return;
@@ -74,6 +81,11 @@ public class SmsBroadcastReceiver extends BroadcastReceiver {
                 slotName = "sim" + slotId;
             }
 
+            try {
+                new GuardianState(context).marcarSmsRecibido(System.currentTimeMillis());
+            } catch (Exception ignored) {
+                // la memoria del Guardian nunca debe frenar el reenvio
+            }
             this.callWebHook(config, sender, slotName, content.toString(), messages[0].getTimestampMillis());
         }
     }

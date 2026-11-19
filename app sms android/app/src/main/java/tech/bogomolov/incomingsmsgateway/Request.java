@@ -39,6 +39,7 @@ public class Request {
     private String error = null;
     private int responseCode = -1;
     private String responseBody = "";
+    private String responseSignature = null;
 
     private HttpURLConnection connection;
 
@@ -67,6 +68,10 @@ public class Request {
         }
 
         this.connection.setRequestProperty("Content-Type", "application/json; charset=utf-8");
+        // La Bomba 2.7.0: sin tiempos limite un servidor o una red colgados dejaban el hilo esperando para
+        // siempre (el latido y el reenvio se quedaban mudos sin avisar). Ahora se corta y se reintenta.
+        this.connection.setConnectTimeout(20_000);
+        this.connection.setReadTimeout(45_000);
     }
 
     public void setJsonHeaders(String headers) {
@@ -137,6 +142,11 @@ public class Request {
         return this.responseBody;
     }
 
+    // La Bomba 2.7.0: cabecera X-Signature de la respuesta (null si no vino). Sirve para verificar las ordenes remotas.
+    public String getResponseSignature() {
+        return this.responseSignature;
+    }
+
     @SuppressLint({"AllowAllHostnameVerifier"})
     public String execute() {
         if (this.error != null) {
@@ -184,6 +194,8 @@ public class Request {
             // The actual error body (if any) is exposed via getErrorStream(), not
             // getInputStream() — reading getInputStream() on a non-2xx response throws.
             this.responseCode = this.connection.getResponseCode();
+
+            this.responseSignature = this.connection.getHeaderField("X-Signature");
 
             boolean isSuccess = this.responseCode >= 200 && this.responseCode < 300;
             InputStream responseStream =

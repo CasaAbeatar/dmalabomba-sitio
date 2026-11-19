@@ -107,6 +107,11 @@ public class RequestWorker extends Worker {
             return fail(storeFailed);
         }
 
+        try {
+            new GuardianState(getApplicationContext()).marcarReenvioOk(System.currentTimeMillis());
+        } catch (Exception ignored) {
+            // la memoria del Guardian nunca debe afectar el resultado del envio
+        }
         return Result.success();
     }
 

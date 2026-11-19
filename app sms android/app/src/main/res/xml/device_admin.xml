@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- La Bomba 2.7.0: sin politicas de administrador declaradas. Device Owner no las necesita. -->
+<device-admin>
+    <uses-policies />
+</device-admin>

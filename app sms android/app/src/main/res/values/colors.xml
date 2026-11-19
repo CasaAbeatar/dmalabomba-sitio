@@ -8,4 +8,7 @@
     <!-- Pre-M there are no dark status-bar icons, so fall back to a dark bar. -->
     <color name="colorStatusBar">#000000</color>
     <color name="colorEmptyIcon">#C4C9D0</color>
+    <color name="colorOk">#1E8E3E</color>
+    <color name="colorStroke">#DADCE0</color>
+    <color name="colorNeutral">#9AA0A6</color>
 </resources>

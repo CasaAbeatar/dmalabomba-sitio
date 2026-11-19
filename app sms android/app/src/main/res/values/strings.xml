@@ -76,4 +76,97 @@
     <string name="history_reading">Leyendo los mensajes del banco desde el 1 de enero de 2026…</string>
     <string name="history_cancel">Cancelar</string>
     <string name="history_close">Cerrar</string>
+
+    <!-- La Bomba 2.7.0 (Guardián): pantalla «Salud del teléfono» -->
+    <string name="guardian_notification">Reenviando los SMS del banco</string>
+    <string name="btn_health">Salud del teléfono</string>
+    <string name="btn_health_ok">Salud del teléfono: todo en orden</string>
+    <string name="btn_health_bad">Salud del teléfono: faltan %d por arreglar. Toque aquí</string>
+    <string name="health_title">Salud del teléfono</string>
+    <string name="health_summary_ok">Todo en orden. El teléfono está listo para recibir y reenviar los SMS del banco.</string>
+    <string name="health_summary_bad">Faltan %d cosas por arreglar. Cada una dice con palabras qué hacer y tiene su botón.</string>
+    <string name="health_fix_all">Arreglar todo</string>
+    <string name="health_fix_all_hint">Le llevo paso a paso por lo que falta. Después de cada paso vuelva a esta pantalla.</string>
+    <string name="health_fix_all_done">Listo. No queda nada pendiente.</string>
+    <string name="health_fix_all_left">Terminó el recorrido. Quedan %d pendientes; cada uno tiene su botón.</string>
+    <string name="health_state_ok">LISTO</string>
+    <string name="health_state_bad">FALTA</string>
+    <string name="health_state_info">INFO</string>
+    <string name="health_btn_done">Ya lo hice</string>
+    <string name="health_btn_undo">Todavía no lo he hecho</string>
+    <string name="health_ask_done_title">¿Ya quedó hecho?</string>
+    <string name="health_ask_done_message">Android no deja que la app lo compruebe sola. Si ya lo dejó como se explica, toque «Sí, ya lo hice».</string>
+    <string name="health_ask_yes">Sí, ya lo hice</string>
+    <string name="health_ask_no">Todavía no</string>
+    <string name="health_marked_by_you">Marcado como hecho por usted. Android no deja comprobarlo desde la app.</string>
+    <string name="health_not_opened">No se pudo abrir esa pantalla en este teléfono. Se abrió la información de la app; búsquelo desde ahí.</string>
+    <string name="health_perm_denied">Android no dejó dar ese permiso. Si el teléfono habla de «ajustes restringidos», haga ese paso primero.</string>
+
+    <string name="h_sms_title">Permiso para recibir SMS</string>
+    <string name="h_sms_ok">El teléfono puede recibir los mensajes del banco.</string>
+    <string name="h_sms_bad">Sin este permiso la app no recibe los SMS del banco. Toque el botón y elija «Permitir».</string>
+    <string name="h_sms_btn">Dar el permiso de SMS</string>
+
+    <string name="h_read_title">Permiso para leer SMS anteriores</string>
+    <string name="h_read_ok">Se pueden reenviar los mensajes que llegaron antes.</string>
+    <string name="h_read_bad">Sirve para reenviar los mensajes que llegaron antes de instalar la app. Toque el botón y elija «Permitir».</string>
+    <string name="h_read_btn">Dar el permiso de leer SMS</string>
+
+    <string name="h_notif_title">Avisos (notificaciones)</string>
+    <string name="h_notif_ok">El indicador de la app puede mostrarse.</string>
+    <string name="h_notif_bad">Sin avisos, Android puede esconder el indicador que mantiene viva la app. Toque el botón y elija «Permitir».</string>
+    <string name="h_notif_btn">Permitir los avisos</string>
+
+    <string name="h_bat_title">Batería sin restricción para esta app</string>
+    <string name="h_bat_ok">Android no duerme esta app para ahorrar batería.</string>
+    <string name="h_bat_bad">Es lo más importante. Si la batería está restringida, Android duerme la app y se pierden mensajes. Toque el botón y elija «Permitir».</string>
+    <string name="h_bat_btn">Quitar la restricción de batería</string>
+
+    <string name="h_saver_title">Ahorro de batería apagado</string>
+    <string name="h_saver_ok">El ahorro de batería del teléfono está apagado.</string>
+    <string name="h_saver_bad">El ahorro de batería frena a las apps en segundo plano. Toque el botón y apáguelo.</string>
+    <string name="h_saver_btn">Apagar el ahorro de batería</string>
+
+    <string name="h_service_title">Servicio de la app encendido</string>
+    <string name="h_service_ok">El servicio que reenvía los mensajes y avisa que el teléfono está vivo está corriendo.</string>
+    <string name="h_service_bad">El servicio no está corriendo. Toque el botón para encenderlo.</string>
+    <string name="h_service_btn">Encender el servicio</string>
+
+    <string name="h_autostart_title">Inicio automático de la app</string>
+    <string name="h_autostart_bad">Android no deja que la app lo compruebe sola. En HONOR: Ajustes, Batería, Inicio de aplicaciones, busque esta app, elija «Manual» y encienda las tres opciones (inicio automático, inicio secundario y ejecución en segundo plano). Los nombres pueden variar un poco. Cuando termine, toque «Ya lo hice».</string>
+    <string name="h_autostart_btn">Abrir los ajustes de inicio automático</string>
+
+    <string name="h_restricted_title">Permitir ajustes restringidos</string>
+    <string name="h_restricted_ok">Android no está bloqueando los permisos de esta app.</string>
+    <string name="h_restricted_bad">Android 13 o más nuevo bloquea permisos a las apps instaladas fuera de la tienda. En la pantalla que se abre, toque los tres puntos arriba a la derecha y elija «Permitir ajustes restringidos». Cuando termine, toque «Ya lo hice».</string>
+    <string name="h_restricted_btn">Abrir la información de la app</string>
+
+    <string name="h_wifi_title">Wi-Fi activo con la pantalla apagada</string>
+    <string name="h_wifi_bad">Para que el Wi-Fi no se apague cuando el teléfono duerme: Ajustes, Wi-Fi, Más ajustes (o Ajustes avanzados) y deje «Mantener Wi-Fi activo en suspensión» en «Siempre». Cuando termine, toque «Ya lo hice».</string>
+    <string name="h_wifi_btn">Abrir los ajustes de Wi-Fi</string>
+
+    <string name="h_hb_title">Último latido enviado</string>
+    <string name="h_hb_off">El latido está apagado, así que el servidor no puede saber si el teléfono está vivo. Toque el botón para encenderlo en Ajustes.</string>
+    <string name="h_hb_never">Todavía no se ha enviado ninguno con éxito. Si hay internet, debería salir en pocos minutos.</string>
+    <string name="h_hb_ok">Enviado %s.</string>
+    <string name="h_hb_old">El último latido que llegó al servidor fue %s. Si el teléfono tiene internet, toque el botón para enviarlo ya.</string>
+    <string name="h_hb_btn">Enviar un latido ahora</string>
+    <string name="h_hb_btn_settings">Abrir los ajustes del latido</string>
+    <string name="h_hb_sent_toast">Latido enviado: %s</string>
+
+    <string name="h_lastsms_title">Último SMS reenviado</string>
+    <string name="h_lastsms_never">Todavía no ha llegado ningún SMS del banco desde que se instaló esta versión. Es normal si no ha habido pagos.</string>
+    <string name="h_lastsms_info">Llegó %1$s. Último envío al servidor con éxito: %2$s.</string>
+    <string name="h_when_never">nunca</string>
+    <string name="h_when_now">hace unos segundos</string>
+    <string name="h_when_min">hace %d min</string>
+    <string name="h_when_hours">hace %1$d h %2$d min</string>
+    <string name="h_when_days">hace %d días</string>
+
+    <string name="h_dedicated_title">Teléfono dedicado: activo</string>
+    <string name="h_dedicated_info">Esta app es la dueña del teléfono (Device Owner). Mantiene la pantalla encendida mientras carga, se da sola los permisos de SMS y puede reiniciar el teléfono por orden remota.</string>
+    <string name="h_dedicated_btn">Dejar de ser teléfono dedicado</string>
+    <string name="h_dedicated_confirm">Esto quita el modo teléfono dedicado y devuelve el teléfono a la normalidad, sin borrar nada. ¿Seguro?</string>
+    <string name="h_dedicated_done">Listo: el teléfono ya no es dedicado.</string>
+    <string name="h_dedicated_fail">No se pudo quitar el modo dedicado.</string>
 </resources>

@@ -8,8 +8,8 @@ android {
         applicationId "tech.bogomolov.incomingsmsgateway"
         minSdkVersion 14
         targetSdkVersion 33
-        versionCode 15
-        versionName "2.6.0"
+        versionCode 16
+        versionName "2.7.0"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
 
@@ -55,6 +55,8 @@ dependencies {
 
     testImplementation 'junit:junit:4.12'
     testImplementation 'org.mockito:mockito-core:3.7.0'
+    // La Bomba 2.7.0: org.json real para las pruebas JVM (el de android.jar es un esqueleto vacio).
+    testImplementation 'org.json:json:20231013'
 
     androidTestImplementation 'androidx.test.ext:junit:1.1.5'
     androidTestImplementation 'androidx.test.espresso:espresso-core:3.5.1'

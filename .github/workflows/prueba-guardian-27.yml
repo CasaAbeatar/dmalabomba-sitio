@@ -1,0 +1,68 @@
+name: Prueba del Guardian 2.7.0 (app de SMS) en Android
+on:
+  workflow_dispatch:
+  push:
+    branches: [prueba-guardian-27]
+jobs:
+  android:
+    name: Android API ${{ matrix.api }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        api: [33, 35]
+    defaults:
+      run:
+        working-directory: app sms android
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          ref: prueba-app-sms
+          path: viejo
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.4.1'
+          build-root-directory: app sms android
+      - name: Pruebas unitarias (JVM)
+        run: gradle testDebugUnitTest
+      - name: Construir el APK 2.7.0 y el 2.6.0 (para probar la actualizacion encima)
+        run: |
+          gradle assembleDebug
+          cd "../viejo/app sms android"
+          gradle assembleDebug -p .
+          cp app/build/outputs/apk/debug/app-debug.apk ../../viejo-2.6.0.apk
+          grep -E 'versionCode|versionName' app/build.gradle
+      - name: Activar KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Emulador (de punta a punta con servidor falso, y pruebas instrumentadas)
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: ${{ matrix.api }}
+          arch: x86_64
+          target: google_apis
+          working-directory: app sms android
+          script: |
+            bash ../scripts-prueba/guardian-e2e.sh
+            adb uninstall tech.bogomolov.incomingsmsgateway
+            gradle connectedDebugAndroidTest
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: resultados-guardian-api${{ matrix.api }}
+          path: |
+            app sms android/guardian-*.png
+            app sms android/guardian-*.txt
+            app sms android/guardian-*.xml
+            app sms android/guardian-recibidos.jsonl
+            app sms android/app/build/reports/androidTests/connected
+            app sms android/app/build/outputs/androidTest-results/connected
+            app sms android/app/build/reports/tests/testDebugUnitTest

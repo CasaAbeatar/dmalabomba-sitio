@@ -10,6 +10,18 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
+    <!-- La Bomba 2.7.0 (Guardian). Permisos nuevos, todos de nivel normal (no piden dialogo al usuario):
+         WAKE_LOCK: mantener la CPU despierta con el servicio y el Wi-Fi activo (WakeLock y WifiLock).
+         REQUEST_IGNORE_BATTERY_OPTIMIZATIONS: abrir el dialogo de Android «sin restriccion de bateria».
+         SCHEDULE_EXACT_ALARM (solo Android 12 y 12L): alarma exacta cada ~5 min del segundo vigilante.
+         USE_EXACT_ALARM (Android 13+): lo mismo, concedido al instalar. -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    <uses-permission
+        android:name="android.permission.SCHEDULE_EXACT_ALARM"
+        android:maxSdkVersion="32" />
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+
     <application
         android:allowBackup="false"
         android:icon="@mipmap/ic_launcher"
@@ -43,14 +55,47 @@
             </intent-filter>
         </receiver>
 
+        <!-- La Bomba 2.7.0: tambien LOCKED_BOOT_COMPLETED, MY_PACKAGE_REPLACED y QUICKBOOT_POWERON.
+             directBootAware solo para poder recibir LOCKED_BOOT_COMPLETED; el receptor no toca nada
+             mientras el usuario no haya desbloqueado el telefono. -->
         <receiver
             android:name=".BootCompletedReceiver"
+            android:directBootAware="true"
             android:enabled="true"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.LOCKED_BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+                <action android:name="android.intent.action.QUICKBOOT_POWERON" />
+                <action android:name="com.htc.intent.action.QUICKBOOT_POWERON" />
             </intent-filter>
         </receiver>
+
+        <!-- Segundo vigilante: solo lo dispara la alarma que la propia app programa. -->
+        <receiver
+            android:name=".GuardianAlarmReceiver"
+            android:enabled="true"
+            android:exported="false" />
+
+        <!-- Modo telefono dedicado (opcional): sin efecto salvo que el dueño ejecute dpm set-device-owner. -->
+        <receiver
+            android:name=".GuardianAdminReceiver"
+            android:exported="true"
+            android:permission="android.permission.BIND_DEVICE_ADMIN">
+            <meta-data
+                android:name="android.app.device_admin"
+                android:resource="@xml/device_admin" />
+            <intent-filter>
+                <action android:name="android.app.action.DEVICE_ADMIN_ENABLED" />
+            </intent-filter>
+        </receiver>
+
+        <activity
+            android:name=".HealthActivity"
+            android:exported="false"
+            android:label="@string/health_title"
+            android:parentActivityName=".MainActivity" />
 
         <activity
             android:name=".SettingsActivity"

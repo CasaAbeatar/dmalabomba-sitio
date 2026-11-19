@@ -46,6 +46,7 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
         findViewById(R.id.btn_history).setOnClickListener(v -> startHistory());
+        findViewById(R.id.btn_health).setOnClickListener(v -> startActivity(new Intent(this, HealthActivity.class)));
 
         ArrayList<String> permissions = new ArrayList<>();
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECEIVE_SMS) != PackageManager.PERMISSION_GRANTED) {
@@ -114,6 +115,7 @@ public class MainActivity extends AppCompatActivity {
         // Failures accrue in the background, so refresh the retry counter each
         // time the activity comes forward.
         invalidateOptionsMenu();
+        actualizarBotonSalud();
         // Rules can also change outside this screen (Settings -> import a backup),
         // so reload the list. Null until the permission flow has let showList() run.
         if (listAdapter != null) {
@@ -291,6 +293,22 @@ public class MainActivity extends AppCompatActivity {
 
         if (!this.isServiceRunning()) {
             this.startService();
+        }
+        // La Bomba 2.7.0: deja armados los vigilantes (WorkManager y alarma) cada vez que se abre la app.
+        Guardian.scheduleWatchers(this);
+    }
+
+    // La Bomba 2.7.0: el boton de arriba dice cuantas cosas faltan por arreglar y se pone verde o rojo.
+    private void actualizarBotonSalud() {
+        try {
+            Button b = findViewById(R.id.btn_health);
+            int pend = HealthCheck.contarPendientes(this);
+            b.setText(pend == 0 ? getString(R.string.btn_health_ok) : getString(R.string.btn_health_bad, pend));
+            androidx.core.view.ViewCompat.setBackgroundTintList(b, android.content.res.ColorStateList.valueOf(
+                    ContextCompat.getColor(this, pend == 0 ? R.color.colorOk : R.color.colorDanger)));
+            b.setTextColor(0xFFFFFFFF);
+        } catch (Exception e) {
+            Log.e("SmsGateway", "boton salud: " + e);
         }
     }
 

@@ -7,4 +7,7 @@
     <color name="colorBackground">#121315</color>
     <color name="colorStatusBar">#121315</color>
     <color name="colorEmptyIcon">#3C4043</color>
+    <color name="colorOk">#81C995</color>
+    <color name="colorStroke">#3C4043</color>
+    <color name="colorNeutral">#9AA0A6</color>
 </resources>
