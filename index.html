@@ -9,6 +9,19 @@
 <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png?v=2">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png?v=2">
 <meta name="description" content="La Bomba: Soda La Bomba, Pollos La Bomba y Papea. Empresa familiar con 14 años de experiencia en la Ruta 4, Horquetas de Sarapiquí.">
+<link rel="canonical" href="https://www.dmalabomba.com/">
+<meta name="theme-color" content="#fbf8f2">
+<meta property="og:type" content="website">
+<meta property="og:locale" content="es_CR">
+<meta property="og:site_name" content="Grupo DMA-La Bomba">
+<meta property="og:title" content="Grupo DMA-La Bomba">
+<meta property="og:description" content="Soda La Bomba, Pollos La Bomba y Papea. Empresa familiar con 14 años de experiencia en la Ruta 4, Horquetas de Sarapiquí.">
+<meta property="og:url" content="https://www.dmalabomba.com/">
+<meta property="og:image" content="https://www.dmalabomba.com/og-dma.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Grupo DMA-La Bomba. Ruta 4, Horquetas de Sarapiquí.">
+<meta name="twitter:card" content="summary_large_image">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Figtree:wght@300;400;600;800&display=swap" rel="stylesheet">
@@ -21,15 +34,15 @@ a{color:inherit}
 .wrap{max-width:1080px;margin:0 auto;padding:0 24px}
 .on-amber,.on-red{background:#fbf8f2;color:var(--black);--ln:rgba(23,18,18,.85);--lnsoft:rgba(23,18,18,.35)}
 header.top{border-bottom:1px solid var(--ln)}
-header.top .wrap{display:flex;align-items:center;justify-content:flex-end;height:64px}
+header.top .wrap{display:flex;align-items:center;justify-content:space-between;height:64px}
 .mark{font-weight:800;letter-spacing:.22em;font-size:14px;text-decoration:none}
 header.top .right{display:flex;align-items:center;gap:28px}
 header.top nav{display:flex;gap:26px;font-size:14px}
 header.top .team{display:flex;gap:10px;font-size:13px}
-header.top .team a{text-decoration:none;border:1px solid var(--ln);border-radius:999px;padding:6px 14px;letter-spacing:.04em}
+header.top .team a{display:inline-flex;align-items:center;min-height:44px;text-decoration:none;border:1px solid var(--ln);border-radius:999px;padding:0 16px;letter-spacing:.04em}
 header.top .team a:hover,header.top .team a:focus-visible{background:var(--black);color:#fbf8f2;border-color:var(--black)}
 @media(max-width:700px){header.top nav{display:none}}
-header.top nav a{text-decoration:none;padding:6px 0;border-bottom:1px solid transparent}
+header.top nav a{display:inline-flex;align-items:center;min-height:44px;text-decoration:none;padding:0;border-bottom:1px solid transparent}
 header.top nav a:hover,header.top nav a:focus-visible{border-color:var(--black)}
 .hero{padding-top:clamp(72px,15vw,150px);padding-bottom:clamp(64px,12vw,120px)}
 .eyebrow{font-weight:400;font-size:13px;letter-spacing:.18em;text-transform:uppercase;display:flex;align-items:center;gap:14px;margin:0 0 28px}
@@ -76,12 +89,12 @@ footer{padding:36px 0 44px;font-size:14px;border-top:1px solid var(--ln)}
 footer .row{display:flex;flex-wrap:wrap;gap:12px 28px;align-items:center;justify-content:space-between}
 footer .team{display:flex;gap:18px;align-items:center;font-size:13px}
 footer .team span{letter-spacing:.14em;text-transform:uppercase}
-footer a{text-decoration:none;border-bottom:1px solid var(--lnsoft)}
-footer a:hover,footer a:focus-visible{border-color:var(--red)}
+footer a{display:inline-flex;align-items:center;min-height:44px;padding:0 4px;text-decoration:underline;text-decoration-color:var(--lnsoft);text-underline-offset:5px}
+footer a:hover,footer a:focus-visible{text-decoration-color:var(--red)}
 footer .grp{margin-top:28px;padding-top:20px;border-top:1px solid var(--lnsoft);font-size:16px}
 footer .grp b{font-weight:800}
 a:focus-visible{outline:2px solid currentColor;outline-offset:4px}
-@media(max-width:560px){header.top nav{gap:16px}.wrap{padding:0 20px}.band .go{padding:8px 14px}}
+@media(max-width:560px){header.top nav{gap:16px}.wrap{padding-left:20px;padding-right:20px}.band .go{padding:8px 14px}}
 @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
 .pil .pd{display:block;margin-top:8px;font-size:15px;line-height:1.45;color:#4a3f3f}
 .rs{list-style:none;margin:34px 0 0;padding:0;border-top:1px solid var(--lnsoft)}.rs li{border-bottom:1px solid var(--lnsoft)}.rs a{display:flex;align-items:center;gap:12px;padding:14px 0;text-decoration:none;color:inherit;border:0;border-radius:0;letter-spacing:0;min-height:44px}.rs a span{font-size:17px}.rs a small{margin-left:auto;font-size:14px;color:#4a3f3f;text-align:right}.rs a:hover span,.rs a:focus-visible span{color:var(--red)}.rs svg{flex:none}
@@ -91,18 +104,15 @@ a:focus-visible{outline:2px solid currentColor;outline-offset:4px}
 
 <header class="top on-amber">
   <div class="wrap">
-    <div class="right">
-      <nav aria-label="Secciones">
-        <a href="#negocios">Negocios</a>
-        <a href="#nosotros">Nosotros</a>
-        <a href="#contacto">Contacto</a>
-      </nav>
-      <div class="team" aria-label="Acceso del equipo">
-        <a href="/facturacion/">Facturación</a>
-        <a href="https://panel.dmalabomba.com">Panel</a>
-        <a href="https://outlook.office.com/mail/">Correo</a>
-      </div>
+    <div class="team" aria-label="Acceso del equipo">
+      <a href="https://facturacion.dmalabomba.com/">Facturación</a>
+      <a href="https://panel.dmalabomba.com">Panel</a>
     </div>
+    <nav aria-label="Secciones">
+      <a href="#negocios">Negocios</a>
+      <a href="#nosotros">Nosotros</a>
+      <a href="#contacto">Contacto</a>
+    </nav>
   </div>
 </header>
 
@@ -116,7 +126,7 @@ a:focus-visible{outline:2px solid currentColor;outline-offset:4px}
   <section id="negocios" class="on-amber">
     <div class="wrap sec">
       <div class="lbcol"><div class="lab"><span>01</span>Nuestros negocios</div>
-        <div class="logos"><img src="logo-soda.svg" alt="Soda La Bomba" width="264" height="278"><img src="logo-pollos.svg" alt="Pollos La Bomba" width="264" height="264"></div></div>
+        <div class="logos"><img src="/logo-soda.svg" alt="Soda La Bomba" width="264" height="278"><img src="/logo-pollos.svg" alt="Pollos La Bomba" width="264" height="264"></div></div>
       <div class="bands">
         <div class="band on-red"><a href="https://www.sodalabomba.com">
           <h3>Soda La Bomba</h3><span class="go">Visitar</span>
