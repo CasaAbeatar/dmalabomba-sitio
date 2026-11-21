@@ -29,6 +29,11 @@ jobs:
           Copy-Item ../facturacion ./facturacion -Recurse
           node prueba.mjs
         continue-on-error: true
+      - name: Probar «Ver factura (PDF)» y «Consultar con Claude» en Chrome
+        shell: pwsh
+        working-directory: pruebas windows
+        run: node "prueba ayuda.mjs"
+        continue-on-error: true
       - name: Guardar resultados en la rama resultados-windows
         shell: pwsh
         run: |

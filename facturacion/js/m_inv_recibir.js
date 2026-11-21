@@ -11,6 +11,7 @@ import { inv, cant, dinero } from './api_inventarios.js';
 import { cargarCssPantallas } from './inv_pantallas_css.js';
 import { debeGuardarAlias } from './invclave.js';
 import { revisarConversion, unidadReal } from './inv_sentido.js';
+import { ayudaLinea } from './m_inv_recibir_ayuda.js';
 const uFac = (l) => unidadReal(l.cantidad, l.unidad).unidad; // «Unid» con decimales es peso: se muestra y se usa como kg
 import {
   ventana, dialogo, cargando, falla, vacio, aviso, cantTxt, costoTxt, unidadTxt, dma, diaTxt, plural, empresaChip, numFactura, proveedorTxt, tipoDocTxt,
@@ -845,7 +846,7 @@ export async function abrirFactura(ctx, clave, { previa = null, recibirSugeridas
     const artFila = h('div.inv-campo-art.rc-f-art', h('span.etq', 'Artículo del inventario'), h('div.inv-art-fila', nombreArt, btnArt));
     const campoConv = h('label.etq.inv-c-conv.rc-f-conv', h('span', 'Presentación y conversión de unidades'), h('span.inv-con-unidad', h('span.inv-pre', 'Cada «' + (uFac(l) || 'unidad') + '» de la factura trae'), factor, h('span.inv-unidad.inv-u-art')), factorEco, avisoConv);
     const costoFila = h('div.inv-costo-fila.rc-costo', h('span.inv-costo-et', 'Costo sin IVA:'), costoTxtEl); // el costo sale de la factura: no se corrige a mano (si no cuadra, lo que se corrige es la conversión)
-    const mas = h('details.inv-detalles.rc-mas-campos', h('summary', 'Cantidad, dónde se guarda y costo'),
+    const mas = h('details.inv-detalles.rc-mas-campos', { open: true }, h('summary', 'Cantidad, dónde se guarda y costo'),
       h('div.inv-linea-campos', cantidad.el, h('label.etq.inv-c-ubic', 'Dónde se guarda', ubic),
         h('div.etq.inv-c-vence', h('span', 'Vence'), vence, venceEco, h('label.inv-casilla.chica', noVence, h('span', 'No vence'))), costoDet));
     const sugTxt = sugerenciaTxt(sug);
@@ -949,10 +950,20 @@ export async function abrirFactura(ctx, clave, { previa = null, recibirSugeridas
         return h('div.rc-sigla', h('span.rc-sigla-txt', h('strong', s.sigla), ' = ', s.significado), h('span.rc-sigla-bot', bConf, bCorr, bNo), editor, msg);
       }));
     };
+    // Orden de Emil (21 nov 2026): ver el PDF original y consultar con Claude (que también busca en internet) dentro de la misma línea. Solo administración.
+    const aplicarPropuesta = (p) => {
+      const u = Number(p && p.unidades_por_unidad_factura);
+      if (!(Number.isFinite(u) && u > 0)) throw new Error('La propuesta no trae una conversión para cargar.');
+      if (enColones()) return 'Este artículo se controla por su valor en colones, así que la conversión no cambia. Si prefiere contarlo por unidades, escoja un artículo por unidad.';
+      factor.value = String(u).replace('.', ','); factor.dispatchEvent(new Event('input', { bubbles: true }));
+      abierta = true; tocada = true; pintarSem();
+      return 'Se cargó la conversión: cada «' + (uFac(l) || 'unidad') + '» trae ' + num(u, 6) + '. Revise y reciba la línea.';
+    };
+    const ayuda = ctx.esAdmin ? ayudaLinea({ clave, linea: l.linea, aplicar: aplicarPropuesta }) : null;
     const panel = h('div.rc-panel', { hidden: true },
       h('div.rc-razon-fila', razonL, verMas), masEl, siglaEl,
       h('div.rc-campos', campoRubro, campoCat, artFila, campoConv, costoFila, filaNombre, filaProd, errorRubro),
-      costoAviso, relEl, mas, panelAcc, zona);
+      costoAviso, relEl, mas, ayuda, panelAcc, zona);
     let abierta = null, tocada = Boolean(memoria.get(l.linea)?.tocada2); // abierta: se abre sola si hay algo que revisar, salvo que la persona la haya abierto o cerrado
     if (memoria.has(l.linea) && memoria.get(l.linea).abierta != null) abierta = memoria.get(l.linea).abierta;
     function pintarSem() {
@@ -1204,6 +1215,8 @@ export async function abrirFactura(ctx, clave, { previa = null, recibirSugeridas
       costoDet.open = previo.costoAbierto; costoInput.value = previo.costo;
       pintarFactor(); pintarCosto(); pintarVence();
     }
+    // Sin artículo escogido y sin conversión sugerida, el campo no se deja vacío: si el texto no trae presentación, cada unidad de la factura es una unidad del artículo (1)
+    if (!art && !String(factor.value).trim()) { factor.value = String(sug.factor_sugerido != null ? sug.factor_sugerido : 1).replace('.', ','); pintarFactor(); pintarCosto(); }
     pintarSem();
     el.addEventListener('change', () => setTimeout(pintarBotones, 0));
     el.addEventListener('input', guardarEstado); el.addEventListener('change', guardarEstado); costoDet.addEventListener('toggle', guardarEstado);

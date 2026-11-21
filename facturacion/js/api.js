@@ -279,7 +279,7 @@ export const api = {
 // esperando para siempre con el botón apagado. Pasado el tiempo sale un error de clase 'tiempo' y NO se repite sola: la función pudo haber hecho su trabajo (mandar un correo,
 // responder a Hacienda), así que el texto pide revisar antes de volver a intentarlo. Las consultas puras (la cédula) usan el texto de lectura.
 const TOPE_FUNCION = 60000;
-const TOPE_FUNCION_DE = { 'facturador-cedula': 20000, 'facturas-recibidas': 120000 }; // la cédula espera lo que tarda Hacienda; revisar el correo puede traer muchas facturas
+const TOPE_FUNCION_DE = { 'facturador-cedula': 20000, 'facturas-recibidas': 120000, 'claude-asistente': 115000, 'factura-pdf': 45000 }; // la cédula espera lo que tarda Hacienda; revisar el correo puede traer muchas facturas
 const FUNCION_DE_LECTURA = new Set(['facturador-cedula']);
 async function pedirFuncion(nombre, cuerpo, opciones, token) {
   const ctrl = new AbortController();
