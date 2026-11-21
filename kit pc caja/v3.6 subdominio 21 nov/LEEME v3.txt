@@ -1,4 +1,15 @@
-﻿KIT v3.5 (19 nov 2026, probado en Windows real por GitHub Actions; falta confirmar en la PC de Pollos)
+﻿KIT v3.6 (21 nov 2026, probado en Windows real por GitHub Actions; falta confirmar en la PC de Pollos)
+
+CAMBIOS DE LA v3.6 (21 nov, por orden de Emil): LA CAJA PASA A LA DIRECCION NUEVA
+- El facturador ahora vive en https://facturacion.dmalabomba.com y la pantalla del cliente en https://facturacion.dmalabomba.com/cliente/. El kit abre esas direcciones (antes abria dmalabomba.com/facturacion, que pasaba por www.dmalabomba.com).
+- Los permisos del navegador (manejo de ventanas para la pantalla del cliente, ventanas emergentes, pantalla completa y lectura de la publicidad del servidor local) se conceden a la direccion nueva y tambien a www.dmalabomba.com durante la transicion. Las listas de config.ps1 ($Sitios) se escriben completas cada vez que se instala.
+- El servidor local de la publicidad acepta las dos direcciones y sigue rechazando cualquier otra pagina de internet.
+- La ventana de la pantalla del cliente se reconoce tambien mientras carga con la direccion nueva (antes el kit podia confundirla con la caja durante esos segundos).
+- Los sitios que no cuentan como salir del sistema ya cubrian facturacion.dmalabomba.com (cubren cualquier subdominio de dmalabomba.com); se comprobo.
+
+AVISO IMPORTANTE PARA LA CAJERA: la primera vez que se abre la caja con la direccion nueva, la cajera tiene que volver a entrar con su usuario y su clave. El navegador guarda la sesion y los ajustes de cada direccion por separado; al cambiar de direccion la caja empieza "limpia". Ese primer ingreso puede tardar un poco mas de lo normal, porque el navegador todavia no reconoce la computadora. Tambien hay que revisar la impresora de la caja (elegirla de nuevo y hacer una impresion de prueba) y la forma de impresion que se haya dejado guardada. Los datos del negocio (ventas, clientes, inventario) no se pierden: estan en la base, no en la computadora.
+
+COMO ACTUALIZAR UNA CAJA QUE YA TIENE LA v3.5: extraiga el zip completo y haga doble clic en INSTALAR TODO.bat (encima de lo que ya hay). El instalador cierra la caja, copia los archivos nuevos, reescribe los permisos del navegador y vuelve a abrir la caja en la direccion nueva. No crea cuentas de Windows. Mientras una caja no se actualice, sigue abriendo la direccion anterior.
 
 CAMBIOS DE LA v3.5 (19 nov, por orden de Emil)
 - Control remoto: en Chrome queda permitida la extension Chrome Remote Desktop (ID inomeogfingihgjfjlpeplalcfajhgai), por la lista de permitidas de Chrome (ExtensionInstallAllowlist). Todas las demas extensiones de Chrome siguen bloqueadas y Edge sigue con bloqueo total. Se aplica con el paso 16 al instalar el kit encima (INSTALAR TODO.bat); REPARAR no lo repite.

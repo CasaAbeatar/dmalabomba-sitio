@@ -65,8 +65,8 @@ try {
 } catch { $sal.Add("No se pudo leer el hardware: $($_.Exception.Message)") }
 $sal.Add("--- Publicidad de la pantalla del cliente ---")
 try {
-  $r = Invoke-WebRequest -UseBasicParsing -Uri "http://127.0.0.1:$PuertoPublicidad/salud" -Headers @{ Origin = $Sitio } -TimeoutSec 3
-  $sal.Add("Servidor local: funcionando (puerto $PuertoPublicidad)")
+  $r = Invoke-WebRequest -UseBasicParsing -Uri "http://127.0.0.1:$PuertoPublicidad/salud" -Headers @{ Origin = @($Sitios)[0] } -TimeoutSec 3   # v3.6: se prueba con el primer origen de la lista
+  $sal.Add("Servidor local: funcionando (puerto $PuertoPublicidad), probado con el origen " + @($Sitios)[0])
 } catch { $sal.Add("Servidor local: NO responde ($($_.Exception.Message)). Use REPARAR.") }
 $sal.Add("Carpeta: $CarpetaPublicidad")
 $n = @(Get-ChildItem -LiteralPath $CarpetaPublicidad -File -Recurse -Depth 4 -ErrorAction SilentlyContinue | Where-Object { $_.Extension.ToLower() -in ".jpg", ".jpeg", ".png", ".webp", ".gif", ".mp4", ".webm" }).Count

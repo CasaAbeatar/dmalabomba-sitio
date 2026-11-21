@@ -2,8 +2,10 @@ name: Prueba del kit de caja en Windows
 on:
   workflow_dispatch:
   push:
-    branches: [kit-v3-18nov]
+    branches: [kit-v3-18nov, kit-v3-6-21nov]
     paths: ['kit pc caja/**', 'pruebas windows/probar kit v3.ps1', '.github/workflows/prueba-kit-caja.yml']
+permissions:
+  contents: write
 jobs:
   kit:
     runs-on: windows-latest
@@ -19,3 +21,20 @@ jobs:
         with:
           name: resultados-kit
           path: pruebas windows/resultados
+      - name: Guardar el resultado en la rama resultados-kit-v3-6 (para leerlo sin la API)
+        if: always()
+        shell: pwsh
+        run: |
+          $carpeta = "${{ runner.temp }}/res"
+          New-Item -ItemType Directory -Force $carpeta | Out-Null
+          Copy-Item "pruebas windows/resultados/*" $carpeta -Recurse -ErrorAction SilentlyContinue
+          Set-Content "$carpeta/commit.txt" "${{ github.sha }} rama ${{ github.ref_name }} resultado del paso de prueba: ${{ job.status }}"
+          git config user.name "prueba-windows"
+          git config user.email "prueba-windows@users.noreply.github.com"
+          git fetch origin resultados-kit-v3-6 2>$null
+          if ($LASTEXITCODE -eq 0) { git checkout -f resultados-kit-v3-6 } else { git checkout --orphan resultados-kit-v3-6; git rm -rf . | Out-Null }
+          if (Test-Path ultima) { Remove-Item ultima -Recurse -Force }
+          Copy-Item $carpeta ultima -Recurse
+          git add ultima
+          git commit -m "Resultado de la prueba del kit v3.6 de ${{ github.sha }}" 2>$null
+          git push origin resultados-kit-v3-6

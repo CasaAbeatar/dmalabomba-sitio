@@ -17,10 +17,11 @@ $log = "$Datos\registro.txt"
 function Anotar($t) { try { Add-Content -Path $log -Value ("{0:yyyy-MM-dd HH:mm:ss}  [publicidad] {1}" -f (Get-Date), $t) } catch { $null = 1 } }
 $tipos = @{ ".jpg" = "image/jpeg"; ".jpeg" = "image/jpeg"; ".png" = "image/png"; ".webp" = "image/webp"; ".gif" = "image/gif"; ".mp4" = "video/mp4"; ".webm" = "video/webm" }
 $MaxTrozo = 4MB   # cada respuesta de un video es de hasta 4 MB (el navegador pide el resto); asi una peticion nunca deja esperando a otra
+$script:OrigenCors = $Sitio   # v3.6: origen que se devuelve en Access-Control-Allow-Origin; por peticion pasa a ser el Origin recibido si esta en la lista $Sitios
 function Json-Texto($t) { return '"' + ($t -replace '\\', '\\' -replace '"', '\"') + '"' }
 function Responder($flujo, [int]$codigo, $estado, $tipo, [byte[]]$cuerpo, $extra) {
   $h = "HTTP/1.1 $codigo $estado`r`nContent-Type: $tipo`r`nContent-Length: $($cuerpo.Length)`r`nConnection: close`r`n" +
-       "Access-Control-Allow-Origin: $Sitio`r`nVary: Origin`r`nAccess-Control-Allow-Private-Network: true`r`nAccess-Control-Allow-Methods: GET, OPTIONS`r`nAccess-Control-Allow-Headers: Range`r`nAccess-Control-Expose-Headers: Content-Range, Content-Length, Accept-Ranges`r`n" +
+       "Access-Control-Allow-Origin: $($script:OrigenCors)`r`nVary: Origin`r`nAccess-Control-Allow-Private-Network: true`r`nAccess-Control-Allow-Methods: GET, OPTIONS`r`nAccess-Control-Allow-Headers: Range`r`nAccess-Control-Expose-Headers: Content-Range, Content-Length, Accept-Ranges`r`n" +
        "X-Content-Type-Options: nosniff`r`nCache-Control: no-cache`r`n$extra`r`n"
   $b = [Text.Encoding]::ASCII.GetBytes($h)
   $flujo.Write($b, 0, $b.Length)
@@ -71,7 +72,11 @@ function Atender($cliente) {
   # Seguridad: solo se acepta el nombre local (contra ataques de rebinding de DNS) y solo el origen de La Bomba
   $host_ = $cab["host"]
   if ($host_ -ne "127.0.0.1:$PuertoPublicidad" -and $host_ -ne "localhost:$PuertoPublicidad") { Texto $flujo 403 "Forbidden" "Host no permitido"; return }
-  if ($cab.ContainsKey("origin") -and $cab["origin"] -ne $Sitio) { Texto $flujo 403 "Forbidden" "Origen no permitido"; return }
+  # v3.6: se aceptan los origenes de la lista $Sitios (subdominio nuevo y www durante la transicion); a cada uno se le devuelve su propio origen
+  $script:OrigenCors = $Sitio
+  if ($cab.ContainsKey("origin")) {
+    if (@($Sitios) -contains $cab["origin"]) { $script:OrigenCors = $cab["origin"] } else { Texto $flujo 403 "Forbidden" "Origen no permitido"; return }
+  }
   if ($metodo -eq "OPTIONS") { Responder $flujo 204 "No Content" "text/plain" ([byte[]]@()) ""; return }
   $partes = $ruta.Split("?", 2); $camino = $partes[0]; $consulta = if ($partes.Count -gt 1) { $partes[1] } else { "" }
   if ($camino -eq "/salud") { Texto $flujo 200 "OK" "ok"; return }

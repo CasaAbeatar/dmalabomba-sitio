@@ -242,7 +242,8 @@ function Abrir-Ventana($exe, $url, $perfil, $pantalla, $completa = $true) {
 }
 function Es-Titulo-Cliente($t) {
   # La ventana del cliente: por su titulo, o por la direccion que muestra Chrome mientras la pagina todavia carga (sin eso se confundia con la caja).
-  return (($t -like "*$TituloCliente*") -or ($t -like "*facturacion/cliente*"))
+  # v3.6: con el subdominio, mientras carga Chrome muestra "facturacion.dmalabomba.com/cliente/" (sin la ruta vieja "facturacion/cliente")
+  return (($t -like "*$TituloCliente*") -or ($t -like "*facturacion/cliente*") -or ($t -like "*facturacion.dmalabomba.com/cliente*"))
 }
 function Afinar-Ventanas($pantallas, $perfil, $procesos) {
   # Cada ventana nuestra (por el titulo) va a su monitor: el cliente en pantalla completa y la caja maximizada (o completa si $CajaPantallaCompleta). Otras ventanas del navegador no se tocan.
