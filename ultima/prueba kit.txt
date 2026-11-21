@@ -1,0 +1,159 @@
+21:14:58  Windows PowerShell 5.1.26100.33822 en Microsoft Windows NT 10.0.26100.0
+21:14:58  Usuario del ejecutor: runneradmin administrador: True
+21:14:58  1) Archivos con error de sintaxis en 5.1: 0
+21:14:58  2) net user: The command completed successfully. 
+21:14:58     existe: User name                    cajaprueba Full Name                     Comment                       User's comment      
+21:14:59     servicio Programador de tareas: Running; seclogon: Stopped
+21:15:00     paso1: Terminal predeterminada: fijada a la consola clasica
+21:15:01     paso1: Listo. Accesos creados en el escritorio y en el inicio de Windows (para todos los usuarios).
+21:15:01  3) Archivos copiados a C:\PantallaCliente: 34
+21:15:01     ACL de la raiz: C:\PantallaCliente BUILTIN\Users:(OI)(CI)(RX) |                    BUILTIN\Administrators:(OI)(CI)(F) |                    NT AUTHORITY\SYSTEM:(OI)(CI)(F) |  | Successfully processed 1 files; Failed processing 0 files
+21:15:01     ACL de datos:   C:\PantallaCliente\datos BUILTIN\Users:(OI)(CI)(M) |                          BUILTIN\Users:(I)(OI)(CI)(RX) |                          BUILTIN\Administrators:(I)(OI)(CI)(F) |                          NT AUTHORITY\SYSTEM:(I)(OI)(CI)(F) |  | Successfully processed 1 files; Failed processing 0 files
+21:15:01     ACL de 11 latido: C:\PantallaCliente\11 latido.ps1 BUILTIN\Users:(I)(RX) |                                  BUILTIN\Administrators:(I)(F) |                                  NT AUTHORITY\SYSTEM:(I)(F) |  | Successfully processed 1 files; Failed processing 0 files
+21:15:01  4) Cuenta normal: quien es, que puede leer y escribir
+21:15:17     [perm] terminado tras ~60 s
+21:15:17        C:\PantallaCliente\datos\prueba-normal.txt BUILTIN\Users:(I)(M)
+21:15:17                                                   BUILTIN\Administrators:(I)(F)
+21:15:17                                                   NT AUTHORITY\SYSTEM:(I)(F)
+21:15:17        
+21:15:17        Successfully processed 1 files; Failed processing 0 files
+21:15:17  5) Candado creado por administrador (estilo VIEJO Global con permisos por defecto) y abierto por la cuenta normal
+21:15:23     [mviejo] terminado tras ~60 s
+21:15:23        abrio: False
+21:15:23  5b) Candado NUEVO (Crear-Mutex de la v3.2c) creado por administrador y abierto por la cuenta normal
+21:15:32     [mnuevo] terminado tras ~60 s
+21:15:32        tengo=False motivo=otra copia ya esta corriendo
+21:15:32  6) 11 latido.ps1 como cuenta normal
+21:16:02     (sigue corriendo tras el tiempo; se cierra)
+21:16:02     [latido] terminado tras ~30 s
+21:16:02  --- arranque.txt (C:\PantallaCliente\datos\arranque.txt)
+21:16:02      2026-11-21 21:15:32  [latido pid 5904] inicio. usuario cajaprueba, con privilegios de administrador: False
+21:16:02      2026-11-21 21:15:32  [latido pid 5904] candado LatidoLB: obtenido. 
+21:16:02  --- latido.txt (C:\PantallaCliente\datos\latido.txt)
+21:16:02      2026-11-21 21:15:32  Latido iniciado. Kit 3.6 21nov
+21:16:02      2026-11-21 21:15:32  Esta computadora todavia no esta enlazada (falta ENLAZAR EQUIPO.bat o el icono Reparar). No se envia latido.
+21:16:02  7) 0 abrir caja y pantalla.ps1 como cuenta normal
+21:16:42     (sigue corriendo tras el tiempo; se cierra)
+21:16:42     [caja] terminado tras ~40 s
+21:16:42  --- arranque.txt (C:\PantallaCliente\datos\arranque.txt)
+21:16:42      2026-11-21 21:16:02  [abrir pid 2612] inicio. usuario cajaprueba, con privilegios de administrador: False
+21:16:42      2026-11-21 21:16:03  [abrir pid 2612] candado PantallaClienteLB: obtenido. 
+21:16:42      2026-11-21 21:16:03  [servidor pid 9016] inicio. usuario cajaprueba, con privilegios de administrador: False
+21:16:42      2026-11-21 21:16:03  [servidor pid 9016] candado ServidorPublicidadLB: obtenido. 
+21:16:42  --- registro.txt (C:\PantallaCliente\datos\registro.txt)
+21:16:42      2026-11-21 21:16:03  Identidad de la computadora: falta. Queda el recordatorio de enlazar.
+21:16:42      2026-11-21 21:16:03  [publicidad] Servidor de publicidad escuchando en 127.0.0.1:8766 (carpeta C:\Users\cajaprueba\Desktop\Publicidad).
+21:16:42  8) v3.3
+21:16:42     version del kit: 3.6 21nov
+21:16:42     terminal predeterminada: ya era la consola clasica | segunda vez: ya era la consola clasica
+21:16:42     conhost existe: True
+21:16:42     acceso Latido.lnk: C:\Windows\System32\conhost.exe --headless "C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "C:\PantallaCliente\11 latido.ps1"
+21:16:42     acceso Facturador.lnk: C:\Windows\System32\conhost.exe --headless "C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "C:\PantallaCliente\0 abrir caja y pantalla.ps1"
+21:16:43     Lanzar-Oculto: el script corrio = True (en 1 s)
+21:16:44     powershell oculto: pid 2816, ventana principal = 0, padre = conhost
+21:16:44     Ficha-Equipo:
+21:17:05     ficha lista en 20943 ms, 9845 bytes (limite de la base 32768)
+21:17:05       version_kit: 3.6 21nov
+21:17:05       hecha_en: 2026-11-21T21:16:44
+21:17:05       equipo: runnervmbpeip
+21:17:05       sistema: 10 datos, 0 vacios
+21:17:05       hardware: 13 datos, 0 vacios
+21:17:05       discos_fisicos: 2 elementos
+21:17:05       volumenes: 2 elementos
+21:17:05       pantallas_windows: 1 elementos
+21:17:05       monitores: 6 datos, 0 vacios
+21:17:05       tacto: VACIO
+21:17:05       impresoras: 6 datos, 0 vacios
+21:17:05       usb_conectados: VACIO
+21:17:05       dispositivos_con_problema: 
+21:17:05       software: 6 datos, 0 vacios
+21:17:05       eventos: 4 datos, 0 vacios
+21:17:05       encendidos_y_fallos: 3 datos, 0 vacios
+21:17:05       cola_impresion: 3 datos, 0 vacios
+21:17:05       servicios: 7 elementos
+21:17:05       arranque_de_windows: 2 elementos
+21:17:05       tareas_programadas_no_microsoft: 7 elementos
+21:17:05       energia: 2 datos, 0 vacios
+21:17:05       red: 4 datos, 1 vacios
+21:17:05       seguridad: 17 datos, 1 vacios
+21:17:05       kit: 10 datos, 2 vacios
+21:17:05       variables: 10 datos, 1 vacios
+21:17:05     Cliente-cerrado y cursor: el supervisor ya no mueve el mouse = True
+21:17:05     Supervisor reconoce cierre a mano = True
+21:17:05     v3.4: metricas por latido, version del facturador, ficha en proceso aparte
+21:17:07     Metricas-Rapidas (1667 ms): {"cpu_pct":3,"ram_libre_mb":13509,"encendida_min":5,"disco_libre_gb":25.8,"nav_procesos":0,"temperatura_c":null,"consolas_visibles":1}
+21:17:07     Version-Facturador: sw-v2 pag-dddb356a
+21:17:07     encendidos_y_fallos: {"historial_7d":["11-17 02:14 apagado pedido","11-17 02:14 apaga","11-17 02:40 enciende","11-17 03:11 apagado pedido","11-17 03:11 apaga","11-17 03:12 enciende","11-17 03:12 apagado pedido","11-17 03:12 apagado pedido","11-17 03:12 apaga","11-21 21:12 enciende"],"fallos_navegador_7d":0,"fallos_powershell_7d":0}
+21:17:07     cola_impresion: {"impresora":"Microsoft Print to PDF","trabajos":0,"con_error":0}
+21:17:07     servicios: ["Spooler=Running/Automatic","wuauserv=Running/Manual","WinDefend=Running/Automatic","W32Time=Running/Automatic","Schedule=Running/Automatic","Dnscache=Running/Automatic","BITS=Stopped/Manual"]
+21:17:07     arranque_de_windows: ["AzureArcSetup","SecurityHealth"]
+21:17:07     tareas_programadas_no_microsoft: ["HostedComputeAgent","MicrosoftEdgeUpdateBrowserReplacementTask","MicrosoftEdgeUpdateTaskMachineCore{DF8F3154-08CC-4","MicrosoftEdgeUpdateTaskMachineUA{8E9DA641-AD47-4A7","primer","GoogleUpdaterTaskSystem157.0.8089.0{23EE9A09-1F83-","Firefox Default Browser Agent 308046B0AF4A39CB"]
+21:17:07     energia: {"bateria_o_ups":false,"estados_de_suspension":"Standby (S1) | The system firmware does not support this standby state. | The hypervisor does not support this standby state. | Standby (S2)"}
+21:17:07     kit.integridad_archivos: 34 archivos con huella; servicios_del_kit: 
+21:17:07     variables.calidad_red: [{"destino":"dwlbcbtwdungyrykgahm.supabase.co","prom_ms":9,"max_ms":15,"perdidos_de_5":0},{"destino":"1.1.1.1","prom_ms":8,"max_ms":10,"perdidos_de_5":0},{"destino":"8.8.8.8","prom_ms":19,"max_ms":39,"perdidos_de_5":0}]
+21:17:08  --- ficha.txt (sin identidad, debe decirlo) (C:\PantallaCliente\datos\ficha.txt)
+21:17:08      2026-11-21 21:17:08  Sin identidad: no se envia la ficha.
+21:17:08     latido usa 18 enviar ficha en proceso aparte = True; manda version_facturador = True
+21:17:08     v3.4: navegacion (solo la prueba, con un historial de Chrome inventado)
+21:17:08     historiales leidos: 2; sitios: facebook.com=2 (FUERA), dmalabomba.com=1 (permitido), google.com=1 (permitido)
+21:17:08     visitas con detalle: 4 | https://www.google.com/search?q=pollos+baratos+heredia&hl=es [pollos baratos heredia - Google] busqueda='pollos baratos heredia' ; https://dmalabomba.com/facturacion/ [Facturador] busqueda='' ; https://www.facebook.com/marketplace?x=1 [Marketplace] busqueda='' ; https://www.facebook.com/marketplace?x=1 [Marketplace] busqueda=''
+21:17:09  --- navegacion.txt (sin identidad, debe decirlo) (C:\PantallaCliente\datos\navegacion.txt)
+21:17:09      2026-11-21 21:17:09  Sin identidad: no se envia la navegacion.
+21:17:09     latido lanza 19 navegacion = True
+21:17:09     v3.5: extensiones del navegador (paso 16 con el script REAL, dos veces para comprobar que es idempotente)
+21:17:09     16 (vuelta 1): Instalaciones bloqueadas para el usuario: Installer por usuario, extensiones del navegador (solo Chrome Remote Desktop permitida en Chrome) y Microsoft Store.
+21:17:09     16 (vuelta 2): Instalaciones bloqueadas para el usuario: Installer por usuario, extensiones del navegador (solo Chrome Remote Desktop permitida en Chrome) y Microsoft Store.
+21:17:09     Chrome Blocklist: 1=* | Chrome Allowlist: 1=inomeogfingihgjfjlpeplalcfajhgai
+21:17:09     Edge Blocklist: 1=* | Edge Allowlist: (no existe)
+21:17:09  16) Extensiones: OK (Chrome permite solo Chrome Remote Desktop y bloquea el resto; Edge bloqueo total)
+21:17:09  v3.6: el kit apunta al subdominio facturacion.dmalabomba.com (21 nov)
+21:17:09     OK     UrlCaja : https://facturacion.dmalabomba.com/
+21:17:09     OK     UrlCliente : https://facturacion.dmalabomba.com/cliente/
+21:17:09     OK     Sitios (dos origenes, subdominio primero) : https://facturacion.dmalabomba.com ; https://www.dmalabomba.com
+21:17:09     OK     Sitio es el primero de Sitios : https://facturacion.dmalabomba.com
+21:17:09     OK     VersionKit : 3.6 21nov
+21:17:09     OK     config.ps1 ya no nombra la direccion vieja dmalabomba.com/facturacion
+21:17:09     OK     LEEME dice v3.6, el subdominio y que la cajera vuelve a entrar
+21:17:09     OK     Ningun archivo del kit apunta a dmalabomba.com/facturacion
+21:17:09     OK     Es-Titulo-Cliente reconoce la direccion nueva mientras carga
+21:17:09     OK     Es-Titulo-Cliente NO toma la caja por cliente
+21:17:10     OK     SitiosPermitidos cubre facturacion.dmalabomba.com, www y el apex
+21:17:10     OK     SitiosPermitidos NO cubre sitios ajenos ni parecidos
+21:17:10     estado simulado de una caja con v3.5: Chrome WindowManagementAllowedForUrls = 1=https://dmalabomba.com, 3=https://sobrante.ejemplo.com
+21:17:11     5 (vuelta 1): Permisos concedidos a https://facturacion.dmalabomba.com y https://www.dmalabomba.com: manejo de ventanas, ventanas emergentes y pantalla completa sin gesto.
+21:17:11     5 (vuelta 1): Cierre Chrome por completo y abra chrome://policy: debe listar las tres directivas con 'Estado: OK'.
+21:17:11     5 (vuelta 1): Si no aparecen (equipo sin dominio), el kit sigue funcionando: acomoda y pone en pantalla completa las ventanas por su cuenta.
+21:17:11     5 (vuelta 1): 
+21:17:11     5 (vuelta 1): Pantallas detectadas:
+21:17:11     5 (vuelta 1): \\.\DISPLAY1  principal=True  1024x768  posicion 0,0
+21:17:12     5 (vuelta 2): Permisos concedidos a https://facturacion.dmalabomba.com y https://www.dmalabomba.com: manejo de ventanas, ventanas emergentes y pantalla completa sin gesto.
+21:17:12     5 (vuelta 2): Cierre Chrome por completo y abra chrome://policy: debe listar las tres directivas con 'Estado: OK'.
+21:17:12     5 (vuelta 2): Si no aparecen (equipo sin dominio), el kit sigue funcionando: acomoda y pone en pantalla completa las ventanas por su cuenta.
+21:17:12     5 (vuelta 2): 
+21:17:12     5 (vuelta 2): Pantallas detectadas:
+21:17:12     5 (vuelta 2): \\.\DISPLAY1  principal=True  1024x768  posicion 0,0
+21:17:12     OK     Directiva Google\Chrome\WindowManagementAllowedForUrls : 1=https://facturacion.dmalabomba.com, 2=https://www.dmalabomba.com
+21:17:12     OK     Directiva Google\Chrome\PopupsAllowedForUrls : 1=https://facturacion.dmalabomba.com, 2=https://www.dmalabomba.com
+21:17:12     OK     Directiva Google\Chrome\AutomaticFullscreenAllowedForUrls : 1=https://facturacion.dmalabomba.com, 2=https://www.dmalabomba.com
+21:17:12     OK     Directiva Google\Chrome\LocalNetworkAccessAllowedForUrls : 1=https://facturacion.dmalabomba.com, 2=https://www.dmalabomba.com
+21:17:12     OK     Directiva Microsoft\Edge\WindowManagementAllowedForUrls : 1=https://facturacion.dmalabomba.com, 2=https://www.dmalabomba.com
+21:17:12     OK     Directiva Microsoft\Edge\PopupsAllowedForUrls : 1=https://facturacion.dmalabomba.com, 2=https://www.dmalabomba.com
+21:17:12     OK     Directiva Microsoft\Edge\AutomaticFullscreenAllowedForUrls : 1=https://facturacion.dmalabomba.com, 2=https://www.dmalabomba.com
+21:17:12     OK     Directiva Microsoft\Edge\LocalNetworkAccessAllowedForUrls : 1=https://facturacion.dmalabomba.com, 2=https://www.dmalabomba.com
+21:17:12     OK     El paso 5 sigue dejando los ajustes de menos avisos de Chrome : TranslateEnabled=0, MetricsReportingEnabled=0
+21:17:15     OK     El servidor de publicidad abre el puerto 8766 : en 0 s
+21:17:15     OK     GET /salud con Origin del subdominio: 200 y CORS = ese origen : codigo 200, ACAO https://facturacion.dmalabomba.com, vary Origin
+21:17:15     OK     GET /salud con Origin www: 200 y CORS = ese origen : codigo 200, ACAO https://www.dmalabomba.com
+21:17:15     OK     GET /salud con Origin ajeno: 403 y sin CORS para ese origen : codigo 403, ACAO https://facturacion.dmalabomba.com
+21:17:15     OK     Origin con http (no https) del subdominio: 403 : codigo 403
+21:17:15     OK     Origin parecido (subdominio como prefijo de otro dominio): 403 : codigo 403
+21:17:15     OK     OPTIONS (preflight) desde el subdominio: 204 y CORS correcto : codigo 204, ACAO https://facturacion.dmalabomba.com, PNA true
+21:17:15     OK     OPTIONS (preflight) desde un origen ajeno: 403 : codigo 403
+21:17:15     OK     GET /lista desde el subdominio: 200, JSON con la imagen de prueba y CORS correcto : codigo 200, cuerpo {"anuncios":[{"carpeta":"Soda","nombre":"prueba-v36.png","tipo":"imagen","mod":639308926353832237,"tam":12}]}
+21:17:15     OK     GET /lista desde www: 200 y CORS = www : codigo 200
+21:17:15     OK     Host ajeno (rebinding de DNS): 403 : codigo 403
+21:17:15     OK     Sin cabecera Origin (imagen o video directo): 200 : codigo 200, ACAO https://facturacion.dmalabomba.com
+21:17:17     OK     10 diagnostico: servidor local funcionando, probado con el origen del subdominio : Servidor local: funcionando (puerto 8766), probado con el origen https://facturacion.dmalabomba.com
+21:17:17     OK     10 diagnostico muestra la version 3.6 21nov
+21:17:17  v3.6) Comprobaciones del subdominio: TODAS OK
+21:17:17  FIN
