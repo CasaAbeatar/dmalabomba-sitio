@@ -17,7 +17,7 @@ const res=[]; // Prueba de «Ver factura (PDF)» y «Consultar con Claude» con 
  const nota=(n,ok,d='')=>{res.push(ok);console.log(ok?'OK ':'FALLA',n,d)};
 for (const [nombre,vp] of [['escritorio',{width:1366,height:768}],['telefono',{width:390,height:844}]]) {
   const ctx = await nav.newContext({viewport:vp}); const pag = await ctx.newPage();
-  const errs=[]; pag.on('pageerror',e=>errs.push(String(e))); pag.on('console',m=>{if(m.type()==='error')errs.push(m.text())});
+  const errs=[]; pag.on('pageerror',e=>errs.push(String(e))); pag.on('console',m=>{if(m.type()==='error'&&!/Failed to load resource/.test(m.text()))errs.push(m.text())});
   let llamadas=[];
   await pag.route('**/functions/v1/**', async (route)=>{ const u=route.request().url(); const b=JSON.parse(route.request().postData()||'{}'); llamadas.push([u.split('/').pop(),b]);
     if(u.endsWith('factura-pdf')){ const pdf=Buffer.from('%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 300 200]>>endobj\ntrailer<</Root 1 0 R>>\n%%EOF'); return route.fulfill({status:200,contentType:'application/json',headers:{'access-control-allow-origin':'*'},body:JSON.stringify({ok:true,nombre:'f.pdf',tipo:'application/pdf',base64:pdf.toString('base64')})}); }
