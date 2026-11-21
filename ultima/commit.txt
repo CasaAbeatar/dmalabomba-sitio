@@ -1,1 +1,1 @@
-699b6368b35ae6cd07496b93ab39c223cb028c38 rama kit-v3-6-21nov resultado del paso de prueba: success
+4c3010f971ea946c705e6293c26b39384e27115c rama kit-v3-6-21nov resultado del paso de prueba: success

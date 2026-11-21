@@ -1,0 +1,8 @@
+21:21:45  Chrome 157.0.8103.79
+21:21:47     origen real de la pagina: https://facturacion.dmalabomba.com
+21:21:47  OK     fetch a la publicidad local desde https://facturacion.dmalabomba.com/cliente/ (debe poder): {"ok":true,"status":200,"acao":null,"texto":"{\"anuncios\":[{\"carpeta\":\"Soda\",\"nombre\":\"prueba-chrome.png\",\"tipo\":\"imagen\",\"mod\":63930892"}
+21:21:48     origen real de la pagina: https://www.dmalabomba.com
+21:21:48  OK     fetch a la publicidad local desde https://www.dmalabomba.com/ (debe poder): {"ok":true,"status":200,"acao":null,"texto":"{\"anuncios\":[{\"carpeta\":\"Soda\",\"nombre\":\"prueba-chrome.png\",\"tipo\":\"imagen\",\"mod\":63930892"}
+21:21:48     origen real de la pagina: https://example.com
+21:21:48  OK     fetch a la publicidad local desde https://example.com/ (debe NO poder): {"ok":false,"error":"TypeError: Failed to fetch"}
+21:21:48  Chrome real: TODAS OK
