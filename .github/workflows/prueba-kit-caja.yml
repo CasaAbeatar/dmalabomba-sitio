@@ -16,6 +16,22 @@ jobs:
         shell: powershell
         working-directory: pruebas windows
         run: ./"probar kit v3.ps1"
+      - name: Chrome real con las directivas del kit v3.6 lee la publicidad local desde el subdominio
+        if: always()
+        shell: pwsh
+        working-directory: pruebas windows
+        continue-on-error: true
+        run: |
+          Get-CimInstance Win32_Process -Filter "Name='powershell.exe'" | Where-Object { $_.CommandLine -like "*servidor publicidad*" } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+          . "C:\PantallaCliente\config.ps1"
+          New-Item -ItemType Directory -Force (Join-Path $CarpetaPublicidad "Soda") | Out-Null
+          [IO.File]::WriteAllBytes((Join-Path $CarpetaPublicidad "Soda\prueba-chrome.png"), [byte[]](0x89, 0x50, 0x4E, 0x47, 0, 0, 0, 0))
+          Start-Process powershell.exe -WindowStyle Hidden -ArgumentList '-NoProfile -ExecutionPolicy Bypass -File "C:\PantallaCliente\servidor publicidad.ps1"'
+          Start-Sleep -Seconds 6
+          Get-ItemProperty "HKLM:\SOFTWARE\Policies\Google\Chrome\LocalNetworkAccessAllowedForUrls" | Format-List | Out-String | Write-Host
+          npm init -y | Out-Null
+          npm i playwright@1.49.1 | Out-Null
+          node "prueba chrome subdominio.mjs"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
