@@ -121,7 +121,7 @@ export function campoCantidad({ valor = '', unidad = '', etiqueta = 'Cantidad', 
   pintar();
   return {
     el: h('label.etq.inv-campo-cant', etiqueta, h('span.inv-con-unidad', input, h('span.inv-unidad', unidadTxt(uni, 2))), eco),
-    input, leer, valido: () => { const v = leer(); return Number.isFinite(v) && (min0 ? v >= 0 : v > 0) && v <= 1000000; },
+    input, leer, valido: () => { const v = leer(); return Number.isFinite(v) && (min0 ? v >= 0 : v > 0) && v <= 100000000; },
     poner: (v) => { input.value = v == null || v === '' ? '' : String(Math.round(Number(v) * 1000) / 1000).replace('.', ','); pintar(); },
     unidad: (u) => { uni = u; input.parentElement.querySelector('.inv-unidad').textContent = unidadTxt(u, 2); pintar(); },
   };

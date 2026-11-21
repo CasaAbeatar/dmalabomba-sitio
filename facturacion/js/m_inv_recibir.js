@@ -1189,7 +1189,7 @@ export async function abrirFactura(ctx, clave, { previa = null, recibirSugeridas
     function problema() {
       if (!art) return 'Línea ' + l.linea + ': escoja el artículo.';
       const fv = leerFactor();
-      if (!Number.isFinite(fv) || fv <= 0 || fv > 100000) return 'Línea ' + l.linea + ': revise la conversión (mayor que cero y hasta 100 000).';
+      if (!Number.isFinite(fv) || fv <= 0 || fv > 99999999) return 'Línea ' + l.linea + ': revise la conversión (mayor que cero y hasta 99 999 999)' + (Number.isFinite(fv) ? '; ahora dice ' + num(fv, 6) : '; ahora está vacía o no es un número') + '.';
       if (!cantidad.valido()) return 'Línea ' + l.linea + ': revise la cantidad que entra.';
       if (!ubic.value) return 'Línea ' + l.linea + ': escoja dónde se guarda.';
       if (!noVence.checked) { if (!vence.value) return 'Línea ' + l.linea + ': escriba la fecha de vencimiento o marque «No vence».'; if (vence.value < ctx.hoy && venceEditada) return 'Línea ' + l.linea + ': la fecha de vencimiento no puede ser anterior a hoy.'; }
