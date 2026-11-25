@@ -1104,6 +1104,7 @@ export async function abrirFactura(ctx, clave, { previa = null, recibirSugeridas
       pintarSem();
     }
     function costoCalculado() {
+      if (enColones()) return 1; // 25 nov 2026: entra por su valor, el costo es ₡1 por colón; el factor de empaque del texto («paq 100 unds») no cuenta
       const fv = leerFactor();
       if (!Number.isFinite(fv) || fv <= 0) return null;
       const mismo = art && sug.articulo_id === art.id && sug.factor != null && Number(sug.factor) === fv && sug.costo_unitario != null;
@@ -1118,7 +1119,7 @@ export async function abrirFactura(ctx, clave, { previa = null, recibirSugeridas
     function revisarCosto(c) {
       costoAviso.hidden = true; costoAviso.textContent = '';
       relEl.hidden = true; relEl.textContent = '';
-      if (c == null || !art || !(c > 0)) return;
+      if (c == null || !art || !(c > 0) || enColones()) return;
       const id = art.id;
       if (!refCosto.has(id)) {
         refCosto.set(id, null);
@@ -1213,6 +1214,8 @@ export async function abrirFactura(ctx, clave, { previa = null, recibirSugeridas
       if (Number.isFinite(previo.cantidad)) cantidad.poner(previo.cantidad);
       ubic.value = previo.ubic; vence.value = ''; venceEditada = false; noVence.checked = true; vence.disabled = true;
       costoDet.open = previo.costoAbierto; costoInput.value = previo.costo;
+      // 25 nov 2026: lo guardado de antes no puede dejar un artículo en colones con un factor de empaque o una cantidad ajena al valor de la línea; si la persona no escribió la cantidad, vuelve al valor
+      if (enColones()) { const q0 = Number(l.cantidad) || 1; factor.value = String(Math.round((valorLinea() / q0) * 1e6) / 1e6).replace('.', ','); if (!cantidadTocada || !cantidad.valido()) { cantidad.poner(valorLinea()); cantidadTocada = false; } costoInput.value = '1'; costoDet.open = false; if (!ubic.value) ubic.value = (sug.articulo_id === art.id && sug.ubicacion_id) || ubicacionPorOmision(art) || ''; }
       pintarFactor(); pintarCosto(); pintarVence();
     }
     // Sin artículo escogido y sin conversión sugerida, el campo no se deja vacío: si el texto no trae presentación, cada unidad de la factura es una unidad del artículo (1)
