@@ -1,0 +1,20 @@
+name: Prueba del actualizador OTA del kit en Windows
+on:
+  workflow_dispatch:
+  push:
+    branches: [kit-ota-26nov]
+    paths: ['kit pc caja/v3.6*/**', 'ota-kit/**', '.github/workflows/prueba-ota-kit.yml']
+jobs:
+  ota:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Probar el actualizador con Windows PowerShell 5.1
+        shell: powershell
+        run: ./ota-kit/pruebas/probar-ota.ps1
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: resultados-ota
+          path: ota-kit/pruebas/resultados
