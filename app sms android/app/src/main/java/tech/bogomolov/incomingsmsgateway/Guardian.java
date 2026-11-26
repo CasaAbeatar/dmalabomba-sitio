@@ -315,16 +315,40 @@ public final class Guardian {
         }
     }
 
-    /** 2.11.0: igual para el acceso a notificaciones (GuardianListenerService). */
+    /**
+     * 2.11.0: igual para el acceso a notificaciones (GuardianListenerService). Android a veces desenlaza el servicio
+     * ANTES de quitarlo de la lista de Ajustes (visto en Android 13 y 15), así que si al desenlazarse todavía figura se
+     * vuelve a mirar a los 2 y 6 s: si por entonces sigue sin enlazarse y ya no figura, lo apagó la persona.
+     */
     static void alDesenlazarAncla(Context ctx) {
+        final Context app = ctx.getApplicationContext() != null ? ctx.getApplicationContext() : ctx;
+        if (marcarAnclaSiYaNoFigura(app)) return;
+        Thread t = new Thread(() -> {
+            for (long espera : new long[]{2_000L, 4_000L}) {
+                try {
+                    Thread.sleep(espera);
+                } catch (InterruptedException e) {
+                    return;
+                }
+                if (GuardianListenerService.conectado()) return;
+                if (marcarAnclaSiYaNoFigura(app)) return;
+            }
+        }, "AnclaRevision");
+        t.setDaemon(true);
+        t.start();
+    }
+
+    private static boolean marcarAnclaSiYaNoFigura(Context ctx) {
         try {
             String lista = Settings.Secure.getString(ctx.getContentResolver(), LISTENERS);
             if (!ListaServicios.contiene(lista, ctx.getPackageName(), GuardianListenerService.class.getName())) {
                 new GuardianState(ctx).marcarApagadoAMano(GuardianState.AJUSTE_ANCLA, true);
                 Log.i(TAG, "acceso a notificaciones apagado a mano: no se reactivara solo");
+                return true;
             }
         } catch (Throwable ignored) {
         }
+        return false;
     }
 
     // ------------------------------------------------------------------ 2.11.0: reactivar el acceso a notificaciones
