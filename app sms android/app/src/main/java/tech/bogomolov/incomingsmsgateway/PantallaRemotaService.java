@@ -120,7 +120,6 @@ public class PantallaRemotaService extends AccessibilityService {
         super.onServiceConnected();
         instancia = this;
         parar = false;
-        marcarComoHerramientaDeAccesibilidad();
         // 2.11.0: si está conectado es que alguien lo encendió (la persona, o el administrador desde Salud): se borra
         // la anotación de «apagado a mano».
         try {
@@ -503,23 +502,6 @@ public class PantallaRemotaService extends AccessibilityService {
      * solo pulsa un botón cuyo texto sea exactamente uno de Actualizador.TEXTOS_BOTON. No lee ni guarda nada más.
      * @return true si pulsó
      */
-    /**
-     * Android 14+ oculta a los servicios que no se declaran «herramienta de accesibilidad» el contenido de las vistas marcadas como
-     * sensibles (el diálogo del instalador puede serlo). compileSdk 33 no conoce el atributo, así que se activa por reflexión.
-     */
-    private void marcarComoHerramientaDeAccesibilidad() {
-        if (Build.VERSION.SDK_INT < 34) return;
-        try {
-            android.accessibilityservice.AccessibilityServiceInfo info = getServiceInfo();
-            if (info == null) return;
-            info.getClass().getMethod("setAccessibilityTool", boolean.class).invoke(info, true);
-            setServiceInfo(info);
-            Log.i(TAG, "servicio marcado como herramienta de accesibilidad");
-        } catch (Throwable e) {
-            Log.w(TAG, "no se pudo marcar como herramienta de accesibilidad: " + e);
-        }
-    }
-
     private int diagContador = 0;
 
     /** Diagnostico (solo depuracion): que ventanas ve el servicio y que hay en la del instalador. */
