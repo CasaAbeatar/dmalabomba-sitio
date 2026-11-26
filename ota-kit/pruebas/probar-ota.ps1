@@ -252,8 +252,8 @@ try {
   . "$kitReal\ota llave publica.ps1"
   $rsa = New-Object System.Security.Cryptography.RSACryptoServiceProvider; $rsa.FromXmlString($OtaLlavePublicaXml)
   Ok ($rsa.KeySize -eq 3072) "12a) la llave de produccion es RSA de 3072 bits (es: $($rsa.KeySize))"
-  $dat = [IO.File]::ReadAllBytes((Join-Path $aqui "muestra-firma-produccion.txt"))
-  $fir = [Convert]::FromBase64String((Get-Content (Join-Path $aqui "muestra-firma-produccion.txt.firma") -Raw).Trim())
+  $dat = [Text.Encoding]::ASCII.GetBytes("muestra de firma OTA de produccion")
+  $fir = [Convert]::FromBase64String((Get-Content (Join-Path $aqui "muestra-firma-produccion.firma") -Raw).Trim())
   Ok ($rsa.VerifyData($dat, "SHA256", $fir)) "12b) una firma hecha con la llave privada de produccion se verifica con la llave publica del kit"
   $dat2 = [byte[]]$dat.Clone(); $dat2[0] = $dat2[0] -bxor 1
   Ok (-not $rsa.VerifyData($dat2, "SHA256", $fir)) "12c) el mismo texto con un byte distinto NO se verifica"

@@ -1,1 +1,0 @@
-muestra para comprobar la llave publica de produccion del kit OTA
