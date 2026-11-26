@@ -1,0 +1,1 @@
+Sitio de pagos.dmalabomba.com (proyecto Pages sinpe-pagos). Los APK no se guardan aqui: se bajan del artifact apk-release de CI y se firman con la llave del Vault. Publicado el 25 nov 2026 19:45 CR; publicacion anterior buena 01d96281.

@@ -1,0 +1,16 @@
+/instalar/*
+  X-Robots-Tag: noindex
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+/instalar/reenviador-sms-la-bomba-2.9.0.apk
+  Content-Type: application/vnd.android.package-archive
+  Content-Disposition: attachment; filename="reenviador-sms-la-bomba-2.9.0.apk"
+  Cache-Control: no-store
+/instalar/reenviador-sms-la-bomba-2.8.0.apk
+  Content-Type: application/vnd.android.package-archive
+  Content-Disposition: attachment; filename="reenviador-sms-la-bomba-2.8.0.apk"
+  Cache-Control: no-store
+/instalar/reenviador-sms-la-bomba-2.7.1.apk
+  Content-Type: application/vnd.android.package-archive
+  Content-Disposition: attachment; filename="reenviador-sms-la-bomba-2.7.1.apk"
+  Cache-Control: no-store

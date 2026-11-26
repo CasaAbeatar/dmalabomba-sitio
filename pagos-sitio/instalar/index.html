@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Instalar el reenviador de SMS</title>
+<style>
+:root{--crema:#faf3e3;--tarjeta:#fffaf0;--texto:#3b2a22;--suave:#7a6558;--rojo:#b3261e;--rojo2:#8f1d17;--ambar:#e0a030;--linea:#e6d8bb}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--crema);color:var(--texto);font-family:"Helvetica Neue",Helvetica,Arial,sans-serif;font-weight:400;line-height:1.5;text-align:center;-webkit-text-size-adjust:100%}
+main{max-width:34rem;margin:0 auto;padding:2.5rem 16px 3rem}
+.marca{font-size:.8rem;letter-spacing:.18em;text-transform:uppercase;color:var(--suave)}
+h1{font-weight:300;font-size:1.9rem;line-height:1.2;margin:.6rem 0 .5rem}
+.raya{width:3.5rem;height:2px;background:var(--ambar);margin:1rem auto 1.2rem}
+p{margin:.4rem 0;color:var(--suave)}
+.boton{display:block;width:100%;max-width:22rem;margin:1.6rem auto .6rem;padding:1.1rem 1rem;background:var(--rojo);color:#fff;text-decoration:none;font-size:1.25rem;font-weight:400;border-radius:2px;border-bottom:3px solid var(--rojo2)}
+.boton:active{background:var(--rojo2)}
+.chico{font-size:.85rem}
+.hash{margin:1.2rem auto 0;max-width:30rem;padding:.9rem;background:var(--tarjeta);border:1px solid var(--linea)}
+.hash b{display:block;font-weight:400;font-size:.8rem;letter-spacing:.1em;text-transform:uppercase;color:var(--suave);margin-bottom:.3rem}
+code{display:block;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.78rem;word-break:break-all;color:var(--texto)}
+h2{font-weight:300;font-size:1.4rem;margin:2.4rem 0 1rem}
+ol{list-style:none;margin:0;padding:0}
+li{background:var(--tarjeta);border:1px solid var(--linea);border-top:2px solid var(--ambar);padding:1rem;margin:0 0 .8rem}
+li span{display:block;font-size:.8rem;letter-spacing:.12em;text-transform:uppercase;color:var(--rojo);margin-bottom:.2rem}
+li strong{display:block;font-weight:400;font-size:1.05rem;color:var(--texto)}
+li em{display:block;font-style:normal;color:var(--suave);font-size:.95rem;margin-top:.2rem}
+.dos{margin:1.4rem auto 0;padding:1rem;background:var(--tarjeta);border:1px solid var(--linea);border-left:4px solid var(--rojo);text-align:left}
+.dos strong{display:block;font-weight:400;font-size:1.05rem;color:var(--texto);margin-bottom:.3rem}
+.dos code{margin-top:.5rem;padding:.5rem;background:var(--crema);border:1px solid var(--linea)}
+.pie{margin-top:2rem;font-size:.85rem;color:var(--suave)}
+</style>
+</head>
+<body>
+<main>
+<div class="marca">Grupo DMA La Bomba</div>
+<h1>Instalar el reenviador de SMS</h1>
+<div class="raya"></div>
+<p>Esta app avisa al sistema cuando llega un SINPE Móvil. Instálela desde el navegador de un teléfono Android.</p>
+<div class="dos"><strong>Son DOS teléfonos: uno de Soda La Bomba y uno de Pollos La Bomba</strong>
+Hay que instalar la app en cada uno, y cada teléfono lleva su propia empresa en la plantilla (paso 6). Si se pone la empresa equivocada o se deja vacía, el aviso no aparece en la caja correcta.
+<code>Teléfono de la Soda: "empresa":"soda"</code>
+<code>Teléfono de Pollos: "empresa":"pollos"</code></div>
+<a class="boton" href="reenviador-sms-la-bomba-2.9.0.apk" download>Descargar la app</a>
+<p class="chico">Versión 2.9.0 (Guardián) para Android · 2,6 MB · instala encima de la 2.6.0, 2.7.0, 2.7.1 o 2.8.0 y conserva los ajustes</p><p class="chico">¿Problemas? <a href="reenviador-sms-la-bomba-2.8.0.apk" download>Versión anterior 2.8.0</a></p>
+<div class="hash"><b>Huella de seguridad (SHA-256)</b><code>b0447985f893d3e0963e8dc8c6dff2e87c1e011e23de1ac15875bd60de408ed4</code></div>
+<h2>Siete pasos</h2>
+<ol>
+<li><span>Paso 1</span><strong>Descargue la app</strong><em>Toque el botón rojo de arriba.</em></li>
+<li><span>Paso 2</span><strong>Permita instalar desde este navegador</strong><em>Si el teléfono lo pide, toque Configuración y active el permiso.</em></li>
+<li><span>Paso 3</span><strong>Instale</strong><em>Abra el archivo descargado y toque Instalar.</em></li>
+<li><span>Paso 4</span><strong>Abra la app</strong><em>Búsquela como SMS Reenviador La Bomba.</em></li>
+<li><span>Paso 5</span><strong>Dé los permisos de SMS</strong><em>Toque Permitir cuando la app pida leer los mensajes.</em></li>
+<li><span>Paso 6</span><strong>Cargue la configuración con la empresa de ESTE teléfono</strong><em>Escriba la clave a mano y pegue la plantilla de la Soda o de Pollos, según el teléfono. Está en la guía que le dio Emil.</em></li>
+<li><span>Paso 7</span><strong>Encienda el latido</strong><em>En la app, tres puntos, Settings: encienda Enable heartbeat, escriba https://pagos.dmalabomba.com/latido, intervalo 15 y toque Save. Así el sistema sabe que el teléfono está vivo.</em></li>
+</ol>
+<p class="pie">Después de instalar, abra la app y toque el botón grande de «Salud del teléfono» y luego «Arreglar todo»: lo recorre paso a paso (batería, inicio automático, permisos y el acceso a notificaciones que mantiene el app abierto).</p><p class="pie">Para comprobar: haga un SINPE Móvil pequeño a la empresa de ese teléfono. Debe aparecer en la lista de la caja de esa empresa y no en la otra.</p>
+<p class="pie">Si algo no sale como aquí se explica, no siga: avise a Emil.</p>
+</main>
+</body>
+</html>
