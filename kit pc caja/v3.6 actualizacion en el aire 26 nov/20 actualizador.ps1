@@ -34,6 +34,7 @@ $TareaPath       = "\La Bomba\"
 $Datos = Join-Path $Raiz "datos"
 $Ota   = Join-Path $Raiz "ota"
 $script:Fuera = $false
+$script:UltimoRelanzar = ""
 
 function Ahora-Utc {
   if ($Prueba -and $AhoraUtc) { return [DateTime]::Parse($AhoraUtc, [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::AdjustToUniversal -bor [Globalization.DateTimeStyles]::AssumeUniversal) }
@@ -173,8 +174,12 @@ function Relanzar {
     return "directo (pruebas)"
   }
   if (-not (Hay-Sesion)) { return "sin sesion abierta: el kit arrancara al iniciar sesion" }
-  try { Start-ScheduledTask -TaskName $TareaRelanzar -TaskPath $TareaPath -ErrorAction Stop; return "tarea de relanzar iniciada" }
-  catch { return ("no se pudo iniciar la tarea de relanzar: " + $_.Exception.Message) }
+  try { Start-ScheduledTask -TaskName $TareaRelanzar -TaskPath $TareaPath -ErrorAction Stop; $script:UltimoRelanzar = "tarea de relanzar iniciada"; return $script:UltimoRelanzar }
+  catch {
+    $m1 = $_.Exception.Message
+    try { $o = (& schtasks.exe /Run /TN ($TareaPath + $TareaRelanzar) 2>&1 | Out-String).Trim(); $script:UltimoRelanzar = "Start-ScheduledTask fallo (" + $m1 + "); schtasks dijo: " + $o } catch { $script:UltimoRelanzar = "no se pudo iniciar la tarea de relanzar: " + $m1 }
+    return $script:UltimoRelanzar
+  }
 }
 function Procesos-Vivos {
   $lat = $false; $sup = $false
@@ -460,7 +465,7 @@ try {
     [void](Registrar-Fallo $e ([int]$lanz.serie) $msg)
     if ($revertido) {
       Guardar-Estado $e "revertida" ("Fallo " + $lanz.version + " (" + $msg + "); se volvio a " + $act.version)
-      Evento "otro" ("OTA kit: fallo la actualizacion a " + $lanz.version + " (" + $msg + "); se volvio a la version " + $act.version)
+      Evento "otro" ("OTA kit: fallo la actualizacion a " + $lanz.version + " (" + $msg + "); se volvio a la version " + $act.version + ". Relanzar: " + $script:UltimoRelanzar)
     } else {
       Guardar-Estado $e "fallo_sin_revertir" ("Fallo " + $lanz.version + " y no se pudo revertir solo: " + $msg)
       Evento "otro" ("OTA kit: fallo la actualizacion a " + $lanz.version + " y NO se pudo volver atras solo (" + $msg + "); hay que reinstalar el kit")
