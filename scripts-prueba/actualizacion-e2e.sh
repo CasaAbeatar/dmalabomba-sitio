@@ -3,9 +3,10 @@
 #   - latido con la salud ampliada, autochequeo «recibe pero no reenvia» y su recuperacion con reenviar_historial
 #   - ordenes abrir_adb / cerrar_adb
 #   - actualizacion automatica REAL (PackageInstaller): rechazos (firma de la oferta mala, sha256 malo, APK de otro certificado)
-#     y dos instalaciones buenas: sin confirmacion y, forzando la confirmacion, con el boton pulsado por accesibilidad.
+#     dos instalaciones buenas: sin confirmacion y, forzando la confirmacion, con el boton pulsado por accesibilidad;
+#     y forzando la confirmacion SIN accesibilidad: fallo «requiere_confirmacion» y ningun reintento en bucle.
 # Necesita en act-apks/: apk-22.apk (esta version), apk-23.apk (vc 23, 2.12.1), apk-24-otra.apk (vc 24, 2.12.2, OTRO certificado),
-# apk-27.apk (vc 27, 2.12.3), todos del mismo certificado de depuracion salvo el de «otra».
+# apk-27.apk (vc 27, 2.12.3), apk-28.apk (vc 28, 2.12.4), todos del mismo certificado de depuracion salvo el de «otra».
 P=tech.bogomolov.incomingsmsgateway
 D=$(pwd)
 SCRIPTS="$D/../scripts-prueba"
@@ -161,11 +162,29 @@ if esperar_val 240 '"firma_distinta"' detalle actualizacion_detalle; then bien "
 [ "$(vc_instalado)" = "22" ] && bien "sigue la vc 22 con el certificado ajeno" || mal "se instalo un APK de otro certificado"
 
 nota "7. actualizacion buena SIN confirmacion (vc 23)"
+L7=$(wc -l < act-logcat-vivo.txt)
 modo '{"actualizacion":{"v":"2.12.1","vc":23,"archivo":"apk-23.apk"}}'
 if esperar_vc 330 23; then bien "la app se actualizo sola a la vc 23"; else mal "no se actualizo a la vc 23 (vc instalada $(vc_instalado), estado $(consulta detalle actualizacion_estado) / $(consulta detalle actualizacion_detalle))"; fi
 if esperar_val 240 '"2.12.1"' detalle app; then bien "la app nueva arranco sola y manda latidos (app=2.12.1)"; else mal "la app nueva no mando latidos"; fi
 if esperar_val 120 '"ninguna"' detalle actualizacion_estado; then bien "la app nueva reporta actualizacion_estado=ninguna"; else mal "estado tras actualizar: $(consulta detalle actualizacion_estado)"; fi
 adb shell dumpsys package $P | grep -m1 installerPackageName | sed 's/^ */instalador: /'
+# Android 12+ con UPDATE_PACKAGES_WITHOUT_USER_ACTION declarado y targetSdk suficiente: sin dialogo (status -1 = pide confirmar)
+if tail -n +$L7 act-logcat-vivo.txt | grep -q "resultado del instalador: status=-1"; then mal "Android pidio confirmacion en la actualizacion sin confirmacion forzada"; else bien "Android no pidio confirmacion (instalacion silenciosa real)"; fi
+
+nota "7b. Android pide confirmacion y el servicio de accesibilidad esta APAGADO (vc 28): fallo claro y sin bucle"
+adb shell run-as $P touch files/prueba_confirmacion
+adb shell settings put secure enabled_accessibility_services null 2>/dev/null
+adb shell settings delete secure enabled_accessibility_services 2>/dev/null
+D28=$(grep -c "apk-28.apk" act-descargas.log 2>/dev/null)
+modo '{"actualizacion":{"v":"2.12.4","vc":28,"archivo":"apk-28.apk"}}'
+if esperar_val 240 '"requiere_confirmacion"' detalle actualizacion_detalle; then bien "fallo reportado: requiere_confirmacion"; else mal "no se reporto requiere_confirmacion (estado $(consulta detalle actualizacion_estado) / $(consulta detalle actualizacion_detalle))"; fi
+[ "$(consulta detalle actualizacion_estado)" = '"fallo"' ] && bien "actualizacion_estado=fallo sin accesibilidad" || mal "estado sin accesibilidad: $(consulta detalle actualizacion_estado)"
+pasar_latidos 3
+N28=$(( $(grep -c "apk-28.apk" act-descargas.log 2>/dev/null) - D28 ))
+[ "$N28" = "1" ] && bien "una sola descarga de la vc 28 en 3 latidos mas (espera 1 h antes de reintentar, sin bucle)" || mal "la vc 28 se descargo $N28 veces (bucle)"
+[ "$(consulta detalle actualizacion_detalle)" = '"requiere_confirmacion"' ] && bien "el fallo se mantiene reportado" || mal "detalle tras esperar: $(consulta detalle actualizacion_detalle)"
+[ "$(vc_instalado)" = "23" ] && bien "sigue la vc 23" || mal "cambio la version sin confirmacion: $(vc_instalado)"
+adb shell dumpsys window | grep -m1 -E "mCurrentFocus" | sed 's/^ */foco: /'
 
 fi
 nota "8. actualizacion buena CON confirmacion forzada (vc 27): el pulsador de accesibilidad"

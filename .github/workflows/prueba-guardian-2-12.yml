@@ -43,11 +43,15 @@ jobs:
           gradle assembleDebug -p .
           cp app/build/outputs/apk/debug/app-debug.apk ../../viejo-2.6.0.apk
           grep -E 'versionCode|versionName' app/build.gradle
+          cd "$GITHUB_WORKSPACE/app sms android"
+          sha256sum app/build/outputs/apk/debug/app-debug.apk | tee apk-2-12-0.sha256
       - uses: actions/upload-artifact@v4
         if: matrix.api == 33
         with:
           name: apk-2-12-0
-          path: app sms android/app/build/outputs/apk/debug/app-debug.apk
+          path: |
+            app sms android/app/build/outputs/apk/debug/app-debug.apk
+            app sms android/apk-2-12-0.sha256
       - name: Activar KVM
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
@@ -65,7 +69,10 @@ jobs:
             mkdir -p e2e-resultados
             for f in guardian-*.png guardian-*.txt guardian-*.xml guardian-recibidos.jsonl; do [ -f "$f" ] && cp "$f" e2e-resultados/; done
             adb uninstall tech.bogomolov.incomingsmsgateway
+            adb shell settings put global hide_error_dialogs 1
+            adb shell input keyevent KEYCODE_WAKEUP; adb shell wm dismiss-keyguard; adb shell am broadcast -a android.intent.action.CLOSE_SYSTEM_DIALOGS >/dev/null; adb shell input keyevent KEYCODE_HOME
             gradle connectedDebugAndroidTest
+            exit $(cat guardian-rc.txt 2>/dev/null || echo 1)
       - name: Emulador limpio (modo telefono dedicado, Device Owner, reinicio remoto)
         if: always() && matrix.api == 33
         uses: reactivecircus/android-emulator-runner@v2
@@ -124,6 +131,8 @@ jobs:
           cp app/build/outputs/apk/debug/app-debug.apk act-apks/apk-24.apk
           gradle assembleDebug -PvcPrueba=27 -PvnPrueba=2.12.3
           cp app/build/outputs/apk/debug/app-debug.apk act-apks/apk-27.apk
+          gradle assembleDebug -PvcPrueba=28 -PvnPrueba=2.12.4
+          cp app/build/outputs/apk/debug/app-debug.apk act-apks/apk-28.apk
           keytool -genkeypair -keystore otra.jks -alias otra -keyalg RSA -keysize 2048 -validity 3650 -storepass pruebaprueba -keypass pruebaprueba -dname "CN=Otro Certificado"
           APKSIGNER=$(ls $ANDROID_HOME/build-tools/*/apksigner | tail -1)
           $APKSIGNER sign --ks otra.jks --ks-pass pass:pruebaprueba --key-pass pass:pruebaprueba --out act-apks/apk-24-otra.apk act-apks/apk-24.apk
@@ -143,6 +152,7 @@ jobs:
           target: google_apis
           working-directory: app sms android
           script: |
+            adb shell settings put global hide_error_dialogs 1
             SOLO_PULSADOR='${{ inputs.solo_pulsador }}' bash ../scripts-prueba/actualizacion-e2e.sh
       - uses: actions/upload-artifact@v4
         if: always()
