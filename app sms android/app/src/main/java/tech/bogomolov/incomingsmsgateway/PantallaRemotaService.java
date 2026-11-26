@@ -120,6 +120,7 @@ public class PantallaRemotaService extends AccessibilityService {
         super.onServiceConnected();
         instancia = this;
         parar = false;
+        marcarComoHerramientaDeAccesibilidad();
         // 2.11.0: si está conectado es que alguien lo encendió (la persona, o el administrador desde Salud): se borra
         // la anotación de «apagado a mano».
         try {
@@ -502,7 +503,52 @@ public class PantallaRemotaService extends AccessibilityService {
      * solo pulsa un botón cuyo texto sea exactamente uno de Actualizador.TEXTOS_BOTON. No lee ni guarda nada más.
      * @return true si pulsó
      */
+    /**
+     * Android 14+ oculta a los servicios que no se declaran «herramienta de accesibilidad» el contenido de las vistas marcadas como
+     * sensibles (el diálogo del instalador puede serlo). compileSdk 33 no conoce el atributo, así que se activa por reflexión.
+     */
+    private void marcarComoHerramientaDeAccesibilidad() {
+        if (Build.VERSION.SDK_INT < 34) return;
+        try {
+            android.accessibilityservice.AccessibilityServiceInfo info = getServiceInfo();
+            if (info == null) return;
+            info.getClass().getMethod("setAccessibilityTool", boolean.class).invoke(info, true);
+            setServiceInfo(info);
+            Log.i(TAG, "servicio marcado como herramienta de accesibilidad");
+        } catch (Throwable e) {
+            Log.w(TAG, "no se pudo marcar como herramienta de accesibilidad: " + e);
+        }
+    }
+
+    private int diagContador = 0;
+
+    /** Diagnostico (solo depuracion): que ventanas ve el servicio y que hay en la del instalador. */
+    private void diagnosticarInstalador(String paquete) {
+        if (!BuildConfig.DEBUG || diagContador++ % 5 != 0 || diagContador > 60) return;
+        try {
+            AccessibilityNodeInfo a = getRootInActiveWindow();
+            StringBuilder sb = new StringBuilder("diag instalador: activa=").append(a == null ? "null" : a.getPackageName());
+            List<AccessibilityWindowInfo> vs = getWindows();
+            sb.append(" ventanas=").append(vs == null ? "null" : String.valueOf(vs.size()));
+            if (vs != null) for (AccessibilityWindowInfo w : vs) {
+                AccessibilityNodeInfo r = w.getRoot();
+                sb.append(" [").append(w.getType()).append(":").append(r == null ? "sinraiz" : r.getPackageName() + "/hijos=" + r.getChildCount()).append("]");
+                if (r != null && paquete.contentEquals(String.valueOf(r.getPackageName()))) volcar(r, sb, 0);
+            }
+            Log.i(TAG, sb.toString());
+        } catch (Throwable e) {
+            Log.w(TAG, "diag instalador: " + e);
+        }
+    }
+
+    private void volcar(AccessibilityNodeInfo n, StringBuilder sb, int nivel) {
+        if (n == null || nivel > 8) return;
+        sb.append(" {").append(n.getClassName()).append(" t=").append(n.getText()).append(" c=").append(n.isClickable()).append("}");
+        for (int i = 0; i < n.getChildCount(); i++) volcar(n.getChild(i), sb, nivel + 1);
+    }
+
     boolean pulsarBotonInstalador(String paqueteInstalador) {
+        diagnosticarInstalador(paqueteInstalador);
         try {
             // La ventana activa puede ser otra (p. ej. un aviso del sistema encima): se buscan todas las ventanas
             // interactivas y se actua solo sobre la que es del instalador del sistema.

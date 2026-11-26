@@ -178,7 +178,7 @@ modo '{"actualizacion":{"v":"2.12.3","vc":27,"archivo":"apk-27.apk"}}'
 if esperar_vc 360 27; then bien "con confirmacion forzada la app se actualizo a la vc 27 (pulsador de accesibilidad)"; else mal "no se actualizo a la vc 27 (vc instalada $(vc_instalado), estado $(consulta detalle actualizacion_estado) / $(consulta detalle actualizacion_detalle))"; fi
 adb exec-out screencap -p > act-final.png
 adb logcat -d > act-logcat.txt
-grep -E "Actualizador|boton del instalador" act-logcat.txt | tail -40 > act-logcat-actualizador.txt
+grep -E "Actualizador|boton del instalador|diag instalador|PantallaRemota" act-logcat.txt | tail -80 > act-logcat-actualizador.txt
 grep -q "boton del instalador pulsado" act-logcat.txt && bien "el log confirma «boton del instalador pulsado»" || mal "el log no muestra que el pulsador actuara"
 if esperar_val 240 '"2.12.3"' detalle app; then bien "la app 2.12.3 manda latidos"; else mal "no hay latidos de la 2.12.3"; fi
 
