@@ -48,10 +48,41 @@ footer{border-top:1px solid var(--ln);padding:24px 0 40px;font-size:14px}
 <p class="lead">Deja la computadora de caja lista para el facturador: dos pantallas, accesos, arranque automático, enlace con el panel y reparación. Sirve para Soda y para Pollos, y se puede instalar encima de cualquier versión anterior.</p>
 
 <div class="card">
-  <a class="dl" href="/kit-caja/kit-pc-de-caja-v3.5.zip" download>Descargar kit v3.5</a>
-  <p class="meta"><b>Versión:</b> 3.5 · 19 nov 2026 · <b>Tamaño:</b> 75 KB · 35 archivos<br>
-  <b>SHA-256:</b> b8e02ce2f3bf5d6eed1df0c8e3f59703f14876c644f426b7047c1361a04de3bd</p>
+  <a class="dl" href="/kit-caja/kit-pc-de-caja-v3.7.zip" download>Descargar kit v3.7</a>
+  <p class="meta"><b>Versión:</b> 3.7 · 26 nov 2026 · <b>Tamaño:</b> 90 KB · 39 archivos<br>
+  <b>SHA-256:</b> 20d08097e8979789ffe72b2cee99ace33834e44d5615704afb696931cb142ad6</p>
 </div>
+
+<section>
+<h2>Qué cambia en la v3.7: se actualiza sola</h2>
+<div class="est">
+<p>Desde la v3.7 la PC de caja se actualiza sola, por el aire. Una tarea programada de Windows revisa cada 30 minutos <b>entre las 03:00 y las 05:00, hora de Costa Rica</b>, con el local cerrado. Si hay una versión nueva para esa caja, la baja, comprueba que viene firmada por el sistema de La Bomba, guarda un respaldo de la versión anterior, la instala y vuelve a abrir el latido y el facturador. Fuera de ese horario no hace nada.</p>
+<p>Si la versión nueva no arranca bien, o si se va la luz a mitad de la actualización, la PC vuelve sola a la versión anterior y el panel recibe un aviso. Un paquete alterado, más viejo que el instalado o que no venga de www.dmalabomba.com se rechaza.</p>
+<p>Las actualizaciones van por etapas: cada una dice para qué caja es. <b>Primero solo la caja de Pollos</b>; Soda recibe las versiones nuevas después.</p>
+<p>La v3.7 conserva todo lo de la v3.6 del 21 nov: la caja sigue en facturacion.dmalabomba.com y los permisos del navegador siguen para la dirección nueva y para www.dmalabomba.com.</p>
+</div>
+</section>
+
+<section>
+<h2>Primera instalación: una sola vez y a mano, Pollos primero</h2>
+<ol>
+<li>Empiece por la <b>PC de caja de Pollos</b>, con la caja sin ventas en curso. Soda puede esperar a que Pollos funcione bien unos días.</li>
+<li>Descargue el zip v3.7 en esa PC, clic derecho y <b>Extraer todo</b>, y haga doble clic en <span class="k">INSTALAR TODO.bat</span> encima de lo que ya hay, como en versiones anteriores (pasos completos abajo, en Cómo instalar).</li>
+<li>En el resumen final debe aparecer el paso <b>20 Actualizaciones en el aire</b> como instalado. Ese paso crea las dos tareas programadas: La Bomba Kit - Actualizador y La Bomba Kit - Relanzar.</li>
+<li>Desde ahí no hace falta volver a instalar a mano: las versiones siguientes llegan solas de noche. Solo se repite INSTALAR TODO.bat si alguna versión futura lo pide en su nota (por ejemplo, si cambia los iconos del Escritorio).</li>
+</ol>
+<p>Para ver cómo le fue a la última actualización: el panel lo muestra con la señal de vida de cada caja, y en la PC queda en <span class="k">C:\PantallaCliente\datos\ota estado.json</span>.</p>
+</section>
+
+<section>
+<h2>Lo que trajo la v3.6 (21 nov) y sigue igual</h2>
+<div class="est">
+<p>La caja pasa a la dirección nueva del facturador: <b>facturacion.dmalabomba.com</b> (la pantalla del cliente, en facturacion.dmalabomba.com/cliente/). Los permisos del navegador para la pantalla del cliente y la lectura de la publicidad del servidor local se conceden a la dirección nueva y, durante la transición, también a www.dmalabomba.com. Cualquier otra página de internet sigue sin poder leer la publicidad.</p>
+<p><b>Aviso para la cajera:</b> la primera vez que se abra la caja con la dirección nueva, la cajera tiene que volver a entrar con su usuario y su clave, y ese primer ingreso puede tardar un poco más. El navegador guarda la sesión y los ajustes de cada dirección por separado, así que la caja empieza limpia. Después de actualizar hay que revisar la impresora (elegirla de nuevo y hacer una impresión de prueba). Las ventas, clientes e inventario no se pierden: están en la base, no en la computadora.</p>
+<p><b>Para actualizar una caja que tiene la v3.6, la v3.5 o una anterior:</b> extraer el zip v3.7 completo y hacer doble clic en INSTALAR TODO.bat, encima de lo que ya hay. Conviene hacerlo con la caja sin ventas en curso: el instalador cierra la caja y la vuelve a abrir en la dirección nueva.</p>
+<p>Versiones anteriores: <a href="/kit-caja/kit-pc-de-caja-v3.6.zip" download>v3.6</a> (SHA-256 f5bf29ddfa56d4ce6fc4c9582a89a664e656acc99a0d6ec8089a38767e9db77b), <a href="/kit-caja/kit-pc-de-caja-v3.5.zip" download>v3.5</a> (SHA-256 b8e02ce2f3bf5d6eed1df0c8e3f59703f14876c644f426b7047c1361a04de3bd) y <a href="/kit-caja/kit-pc-de-caja-v3.4.zip" download>v3.4</a>.</p>
+</div>
+</section>
 
 <section>
 <h2>Cómo instalar</h2>
@@ -72,8 +103,10 @@ footer{border-top:1px solid var(--ln);padding:24px 0 40px;font-size:14px}
 <h2>Qué queda en la PC</h2>
 <ul>
 <li>Una sola ventana de caja y una sola ventana del cliente, sin duplicados.</li>
+<li>La caja se abre en facturacion.dmalabomba.com y la pantalla del cliente en facturacion.dmalabomba.com/cliente/.</li>
 <li>En el Escritorio solo tres accesos: Facturador, Reparar y Control remoto.</li>
-<li>Arranque automático del facturador y señal de vida al panel cada minuto, sin ventanas de consola a la vista.</li>
+<li>Arranque automático del facturador y señal de vida al panel cada minuto, sin ventanas de consola a la vista. La señal de vida incluye la versión del kit y cómo le fue a la última actualización en el aire.</li>
+<li>Actualizaciones en el aire firmadas, entre las 03:00 y las 05:00 (hora de Costa Rica), con respaldo y vuelta atrás automática.</li>
 <li>Pantalla del cliente: el mouse puede pasar a ella. Al moverlo aparece el botón Cerrar pantalla; una vez cerrada no se reabre sola hasta que se use el icono Facturador, el reinicio diario o se cambien las pantallas.</li>
 <li>Ficha completa de la computadora (equipo, discos, monitores, impresoras, USB, red, seguridad, servicios, arranque, energía, integridad de los archivos del kit y errores recientes) que viaja al panel al arrancar y cada 6 horas, y métricas en vivo (CPU, memoria, disco, consolas visibles) con cada señal de vida.</li>
 <li>Sitios visitados: cada 30 minutos el kit lee el historial de Chrome y Edge de las últimas 24 horas y manda al panel la dirección completa, el título y lo que se buscó, y marca lo que está fuera de la lista de sitios permitidos del sistema. Se conserva 90 días. No lee archivos ni toma capturas de pantalla. El aviso previo a las empleadas lo hace la administración por escrito, aparte del kit.</li>
@@ -86,7 +119,8 @@ footer{border-top:1px solid var(--ln);padding:24px 0 40px;font-size:14px}
 <section>
 <h2>Estado de la prueba</h2>
 <div class="est">
-<p>Los scripts se probaron con PowerShell 5.1 en Windows real mediante GitHub Actions (rama kit-v3-18nov, 19 nov): sintaxis, instalación, permisos, accesos sin consola, arranque sin ventana, lectura de la ficha y lectura del historial de navegación (con un historial inventado) y las reglas de extensiones de Chrome y Edge. GitHub no tiene el Windows Terminal de la caja ni las pantallas físicas, así que <b>falta confirmar en la PC de Pollos</b> que ya no se vean Latido y Facturador y que el mouse pase a la pantalla del cliente. La PC de Pollos hoy reporta con la v3.2c. Instale la v3.4 encima y revise el resumen final.</p>
+<p>La v3.7 se probó con PowerShell 5.1 en Windows real mediante GitHub Actions (rama kit-ota-v37, 26 nov, corrida 45912708303: 98 de 98 comprobaciones del actualizador, más la prueba completa del kit y la de Chrome real). Del actualizador en el aire: actualización correcta, manifiesto alterado, firma de otra llave, paquete alterado, versión que no arranca (vuelve sola a la anterior), corte a mitad de la actualización, actualización para otra caja (no se instala en una caja que no es de Pollos), fecha futura, fuera del horario de 03:00 a 05:00, versión más vieja que la instalada, zip con rutas peligrosas, corrida como SYSTEM y conservación de la identidad y los datos de la PC. También se probó pasar de la v3.6 publicada el 21 nov a la v3.7, a mano y por el aire: la caja sigue en facturacion.dmalabomba.com y los permisos del navegador quedan igual. Todo lo de la v3.6 se volvió a comprobar en la v3.7.</p>
+<p>GitHub no tiene las pantallas físicas ni la sesión de la cajera, así que <b>falta confirmar en la PC de Pollos</b> la instalación manual de la v3.7, que la cajera vuelva a entrar sin problema, que la impresora quede bien y la primera actualización nocturna real.</p>
 <p>El kit no lleva claves privadas. Solo trae la clave pública del panel. La clave propia de cada PC se guarda al enlazar.</p>
 </div>
 </section>

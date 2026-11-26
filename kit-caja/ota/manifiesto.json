@@ -1,0 +1,20 @@
+{
+  "formato": 1,
+  "emitido": "2026-11-26T23:34:17Z",
+  "caduca": "2026-12-26T23:34:17Z",
+  "lanzamientos": [
+    {
+      "version": "3.7 ota 26nov",
+      "serie": 37,
+      "estaciones": [
+        "caja-pollos"
+      ],
+      "desde": "2026-11-26T23:30:00Z",
+      "url": "https://www.dmalabomba.com/kit-caja/ota/paquetes/kit-37.zip",
+      "sha256": "a81b0fda199c8646bbacf818b173c8bb60c65295656442c4e900456f79f32d46",
+      "bytes": 85202,
+      "minimo_actualizador": 1,
+      "notas": "v3.7: actualizador en el aire sobre la v3.6 del 21 nov (subdominio facturacion.dmalabomba.com). Primera instalacion manual; primero solo la caja de Pollos"
+    }
+  ]
+}
