@@ -6,10 +6,11 @@ android {
 
     defaultConfig {
         applicationId "tech.bogomolov.incomingsmsgateway"
-        minSdkVersion 14
+        // 2.11.0: firebase-messaging 23.x pide minSdk 19 (Android 4.4); el teléfono de la Soda y todo lo que se usa es muy posterior.
+        minSdkVersion 19
         targetSdkVersion 33
-        versionCode 20
-        versionName "2.10.0"
+        versionCode 21
+        versionName "2.11.0"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
 
@@ -52,6 +53,8 @@ dependencies {
     implementation 'androidx.navigation:navigation-ui:2.0.0'
     implementation "androidx.work:work-runtime:$work_version"
     implementation 'org.apache.commons:commons-text:1.9'
+    // La Bomba 2.11.0: despertar por FCM. SIN el plugin google-services: FirebaseApp se inicia a mano (FcmInicio).
+    implementation 'com.google.firebase:firebase-messaging:23.4.1'
 
     testImplementation 'junit:junit:4.12'
     testImplementation 'org.mockito:mockito-core:3.7.0'

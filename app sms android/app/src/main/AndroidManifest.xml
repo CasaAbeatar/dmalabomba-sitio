@@ -48,7 +48,12 @@
          de accesibilidad de pantalla remota (Guardian.autoActivarPantalla). Sin el, no pasa nada: se activa a mano en Ajustes. -->
     <uses-permission android:name="android.permission.WRITE_SECURE_SETTINGS" tools:ignore="ProtectedPermissions" />
 
+    <!-- La Bomba 2.11.0. USE_EXACT_ALARM ya está declarada arriba (alarma exacta del vigilante, concedida al instalar en Android 13+;
+         el app va por instalación directa, no por Play). El despertar por FCM no pide permisos propios: firebase-messaging
+         aporta WAKE_LOCK y el permiso de C2DM, y INTERNET ya está. -->
+
     <application
+        android:name=".LaBombaApp"
         android:allowBackup="false"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
@@ -56,6 +61,15 @@
         android:supportsRtl="true"
         android:theme="@style/AppTheme"
         android:usesCleartextTraffic="true">
+        <!-- 2.11.0: despertar por FCM (mensaje solo de datos, prioridad alta). No exportado: solo lo llama Firebase. -->
+        <service
+            android:name=".DespertarFcmService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
+
         <service
             android:name=".SmsReceiverService"
             android:enabled="true"

@@ -25,6 +25,17 @@ public class GuardianState {
     private static final String K_EJECUCIONES = "ejecuciones";
     private static final String K_CONFIRMA_PREFIX = "confirma_";
     private static final int MAX_EJECUCIONES = 50;
+    // 2.11.0
+    private static final String K_FCM_TOKEN = "fcm_token";
+    private static final String K_SMS_CONTADOR = "sms_despertar_contador";
+    private static final String K_SMS_LOG = "sms_despertar_log";
+    private static final String K_DESPERTAR_ID = "despertar_id_ultimo";
+    private static final String K_DESPERTAR_TS = "despertar_ts_ultimo";
+    private static final String K_APAGADO_PREFIX = "apagado_a_mano_";
+    private static final int MAX_SMS_LOG = 20;
+    /** Claves de «apagado a mano» (ver apagadoAMano). */
+    public static final String AJUSTE_PANTALLA = "pantalla";
+    public static final String AJUSTE_ANCLA = "ancla";
 
     private final SharedPreferences pref;
 
@@ -48,6 +59,70 @@ public class GuardianState {
     /** 2.8.0: cuántas veces arrancó el servicio desde la instalación. */
     public int getReiniciosServicio() { return pref.getInt(K_REINICIOS, 0); }
     public void contarReinicioServicio() { pref.edit().putInt(K_REINICIOS, getReiniciosServicio() + 1).apply(); }
+
+    // ---- 2.11.0: token de FCM ----
+
+    public String getFcmToken() { return pref.getString(K_FCM_TOKEN, ""); }
+
+    /** @return true si el token cambió (hay que avisarle al servidor con un latido). */
+    public boolean guardarFcmToken(String token) {
+        String nuevo = token == null ? "" : token;
+        if (nuevo.equals(getFcmToken())) return false;
+        pref.edit().putString(K_FCM_TOKEN, nuevo).commit();
+        return true;
+    }
+
+    // ---- 2.11.0: despertar por FCM (último atendido, contra entregas repetidas) ----
+
+    public long getDespertarIdUltimo() { return pref.getLong(K_DESPERTAR_ID, 0); }
+    public long getDespertarTsUltimo() { return pref.getLong(K_DESPERTAR_TS, 0); }
+    public void marcarDespertar(long id, long ahora) {
+        pref.edit().putLong(K_DESPERTAR_ID, id).putLong(K_DESPERTAR_TS, ahora).commit();
+    }
+
+    // ---- 2.11.0: SMS de despertar ----
+
+    public long getSmsContador() { return pref.getLong(K_SMS_CONTADOR, 0); }
+
+    /**
+     * Guarda (con commit y de forma atómica) el contador de un SMS de despertar ya validado, ANTES de ejecutar la orden.
+     * @return false si el contador ya no es mayor que el guardado (otro SMS lo ganó): no se ejecuta.
+     */
+    public synchronized boolean aceptarContadorSms(long contador) {
+        if (contador <= getSmsContador()) return false;
+        return pref.edit().putLong(K_SMS_CONTADOR, contador).commit();
+    }
+
+    /** Anota el resultado de un SMS de despertar (acotado a los últimos MAX_SMS_LOG). Nunca guarda la firma ni la clave. */
+    public synchronized void registrarSmsDespertar(long ahora, String cmd, long contador, String resultado) {
+        String l = pref.getString(K_SMS_LOG, "");
+        l = (l.isEmpty() ? "" : l + "\n") + ahora + "|" + (cmd == null ? "-" : cmd.replaceAll("[^a-z_]", "")) + "|" + contador + "|"
+                + (resultado == null ? "-" : resultado.replaceAll("[^A-Za-z0-9_]", ""));
+        String[] lineas = l.split("\n");
+        if (lineas.length > MAX_SMS_LOG) {
+            StringBuilder b = new StringBuilder();
+            for (int i = lineas.length - MAX_SMS_LOG; i < lineas.length; i++) {
+                if (b.length() > 0) b.append('\n');
+                b.append(lineas[i]);
+            }
+            l = b.toString();
+        }
+        pref.edit().putString(K_SMS_LOG, l).commit();
+    }
+
+    public String getSmsLog() { return pref.getString(K_SMS_LOG, ""); }
+
+    // ---- 2.11.0: respetar el apagado a mano de un servicio de Ajustes seguros ----
+
+    /**
+     * true si la persona apagó este servicio (accesibilidad de pantalla remota o acceso a notificaciones) a mano en
+     * Ajustes. Mientras esté, la reactivación automática NO lo vuelve a encender. Se borra cuando se vuelve a conectar
+     * (alguien lo encendió) o cuando el administrador lo reactiva a propósito desde «Salud del teléfono».
+     */
+    public boolean apagadoAMano(String ajuste) { return pref.getBoolean(K_APAGADO_PREFIX + ajuste, false); }
+    public void marcarApagadoAMano(String ajuste, boolean valor) {
+        pref.edit().putBoolean(K_APAGADO_PREFIX + ajuste, valor).commit();
+    }
 
     // ---- órdenes remotas ----
 

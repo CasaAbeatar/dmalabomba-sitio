@@ -211,4 +211,16 @@
     <string name="h_screen_bad_33">Permite ver y manejar este teléfono desde lejos. En la lista que se abre busque «Sms Forwarder» y actívelo. Si Android dice «Ajuste restringido», vaya a Información de la app, toque los tres puntos de arriba y elija «Permitir ajustes restringidos»; luego vuelva a activarlo.</string>
     <string name="h_screen_btn">Abrir los ajustes de accesibilidad</string>
     <string name="pantalla_servicio_descripcion">Permite ver y manejar este teléfono desde el visor web de La Bomba, solo mientras hay una sesión abierta. No lee ni guarda lo que hay en pantalla.</string>
+
+    <!-- 2.11.0: despertar por FCM / SMS, control remoto y reactivación automática -->
+    <string name="wake_channel">Reconexión del teléfono</string>
+    <string name="wake_notification">Reconectando...</string>
+    <string name="remote_channel">Control remoto</string>
+    <string name="remote_notification">Control remoto activo</string>
+    <string name="remote_notification_text">Alguien está viendo y manejando este teléfono desde el visor web.</string>
+    <string name="h_secure_title">Reactivación automática de permisos</string>
+    <string name="h_secure_ok">El app tiene el permiso de Ajustes seguros: si Android apaga el acceso a notificaciones o la pantalla remota, los vuelve a encender sola (salvo que usted los apague a propósito).</string>
+    <string name="h_secure_bad">Sin este permiso, si Android apaga el acceso a notificaciones o la pantalla remota hay que volver a encenderlos a mano. Se concede una sola vez por adb: «pm grant tech.bogomolov.incomingsmsgateway android.permission.WRITE_SECURE_SETTINGS».</string>
+    <string name="h_screen_off_by_you">Usted lo apagó en Ajustes y el app respeta eso: no lo vuelve a encender sola. Para reactivarlo toque el botón.</string>
+    <string name="h_anchor_off_by_you">Usted lo apagó en Ajustes y el app respeta eso: no lo vuelve a encender solo. Para reactivarlo toque el botón.</string>
 </resources>

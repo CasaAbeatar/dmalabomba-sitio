@@ -46,6 +46,13 @@ public class SmsBroadcastReceiver extends BroadcastReceiver {
             content.append(messages[i].getDisplayMessageBody());
         }
 
+        // La Bomba 2.11.0: el SMS de despertar «LB1 orden contador firma» se consume ANTES de cualquier regla de reenvío:
+        // válido o no, NUNCA se reenvía como aviso de pago. El remitente no se mira (puede falsificarse): solo vale la firma.
+        if (SmsDespertar.esLB1(content.toString())) {
+            manejarDespertar(context, content.toString());
+            return;
+        }
+
         ArrayList<ForwardingConfig> configs = ForwardingConfig.getAll(context);
         String asterisk = context.getString(R.string.asterisk);
 
@@ -87,6 +94,53 @@ public class SmsBroadcastReceiver extends BroadcastReceiver {
                 // la memoria del Guardian nunca debe frenar el reenvio
             }
             this.callWebHook(config, sender, slotName, content.toString(), messages[0].getTimestampMillis());
+        }
+    }
+
+    /** Tope de lo que se tarda dentro de goAsync() (Android da ~10 s a un receptor de SMS). */
+    static final long ASYNC_MAX_MS = 8_000L;
+
+    /**
+     * Valida y ejecuta el SMS de despertar fuera del hilo principal, con goAsync(): el receptor se da por terminado en
+     * cuanto acaba el trabajo o, como mucho, a los ASYNC_MAX_MS (el trabajo puede seguir un poco más: el proceso lo
+     * mantiene vivo el servicio que la orden levanta). Con goAsync() nulo (receptor llamado a mano, en pruebas) igual
+     * se procesa. Se pide abortar el broadcast para que otros receptores de SMS_RECEIVED de menor prioridad no lo vean;
+     * la app de mensajes por defecto lo recibe por otro camino (SMS_DELIVER) y no se puede evitar.
+     */
+    private void manejarDespertar(final Context contexto, final String cuerpo) {
+        final PendingResult pr = goAsync();
+        final java.util.concurrent.atomic.AtomicBoolean terminado = new java.util.concurrent.atomic.AtomicBoolean(false);
+        final Runnable terminar = () -> {
+            if (terminado.compareAndSet(false, true) && pr != null) {
+                try {
+                    pr.abortBroadcast();
+                } catch (Throwable ignored) {
+                }
+                try {
+                    pr.finish();
+                } catch (Throwable ignored) {
+                }
+            }
+        };
+        final Thread trabajo = new Thread(() -> {
+            try {
+                SmsDespertarEjecutor.procesar(contexto, cuerpo);
+            } catch (Throwable e) {
+                Log.e("SmsBroadcastReceiver", "sms despertar: " + e);
+            } finally {
+                terminar.run();
+            }
+        }, "SmsDespertar");
+        trabajo.start();
+        if (pr != null) {
+            new Thread(() -> {
+                try {
+                    trabajo.join(ASYNC_MAX_MS);
+                } catch (InterruptedException ignored) {
+                    Thread.currentThread().interrupt();
+                }
+                terminar.run();
+            }, "SmsDespertarTope").start();
         }
     }
 
