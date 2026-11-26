@@ -420,8 +420,12 @@ if ($env:OTA_EN_VIVO -eq "1") {
       Copy-Item -LiteralPath (Join-Path $kitReal "20 actualizador.ps1") -Destination $real -Force
       Copy-Item -LiteralPath (Join-Path $kitReal "ota llave publica.ps1") -Destination $real -Force
       Set-Content -LiteralPath "$real\datos\equipo.json" -Value ('{"estacion":"' + $caso.est + '","token":"x","pc":"' + $env:COMPUTERNAME + '"}') -Encoding UTF8
+      # como deja la PC el INSTALAR TODO de la v3.7: tareas programadas reales (actualizador como SYSTEM y relanzar con el grupo Usuarios)
+      $rt = & powershell.exe -NoProfile -ExecutionPolicy Bypass -EncodedCommand (Ps-Codificado ('Set-Location "' + $kitReal + '"; . ".\config.ps1"; . ".\funciones.ps1"; . ".\funciones v3.ps1"; Registrar-Tareas-OTA')) 2>&1 | Out-String
+      Dice ("   tareas: " + ($rt -replace "\s+", " ") + "; sesion de Windows (explorer): " + (@(Get-Process explorer -ErrorAction SilentlyContinue).Count))
       $o = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$real\20 actualizador.ps1" -Ahora 2>&1 | Out-String
-      Dice ("   " + $caso.est + " log: " + ((@(Get-Content "$real\ota\actualizador.log" -Tail 6 -ErrorAction SilentlyContinue)) -join " | "))
+      Dice ("   " + $caso.est + " log: " + ((@(Get-Content "$real\ota\actualizador.log" -Tail 14 -ErrorAction SilentlyContinue)) -join " | "))
+      Dice ("   arranque.txt: " + ((@(Get-Content "$real\datos\arranque.txt" -Tail 8 -ErrorAction SilentlyContinue)) -join " | "))
       $cv = Cfg-De $real
       Ok ($cv.version -eq $caso.espera) ("16) " + $caso.est + ": queda " + $caso.espera + " (es: " + $cv.version + "; estado " + (Estado-De $real).ultimo_resultado + ")")
       if ($caso.est -eq "caja-pollos") { Ok ($cv.caja -eq "https://facturacion.dmalabomba.com/") "16b) caja-pollos en vivo: el subdominio se conserva" }
