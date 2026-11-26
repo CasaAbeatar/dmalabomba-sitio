@@ -1,3 +1,17 @@
+/remoto
+  X-Robots-Tag: noindex, nofollow
+  Cache-Control: no-store
+  Content-Security-Policy: default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'
+  X-Frame-Options: DENY
+  Referrer-Policy: no-referrer
+  X-Content-Type-Options: nosniff
+/remoto/*
+  X-Robots-Tag: noindex, nofollow
+  Cache-Control: no-store
+  Content-Security-Policy: default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'
+  X-Frame-Options: DENY
+  Referrer-Policy: no-referrer
+  X-Content-Type-Options: nosniff
 /instalar/*
   X-Robots-Tag: noindex
   X-Content-Type-Options: nosniff
