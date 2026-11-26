@@ -20,6 +20,8 @@ public final class HeartbeatBody {
     public static final class Detalle {
         public String app = "";
         public boolean cargando;
+        /** 2.12.0: ac | usb | inalambrico | ninguno (BatteryManager.EXTRA_PLUGGED; ver enchufe()). */
+        public String enchufe = "ninguno";
         public boolean ahorroBateria;
         public boolean sinRestriccionBateria;
         public boolean redValidada;
@@ -107,6 +109,7 @@ public final class HeartbeatBody {
             b.append(",\"detalle\":{")
                     .append("\"app\":\"").append(esc(d.app)).append('"')
                     .append(",\"cargando\":").append(d.cargando)
+                    .append(",\"enchufe\":\"").append(enchufeValido(d.enchufe)).append('"')
                     .append(",\"ahorro_bateria\":").append(d.ahorroBateria)
                     .append(",\"sin_restriccion_bateria\":").append(d.sinRestriccionBateria)
                     .append(",\"red_validada\":").append(d.redValidada)
@@ -175,6 +178,19 @@ public final class HeartbeatBody {
         }
         b.append('}');
         return b.toString();
+    }
+
+    /** 2.12.0: BatteryManager.EXTRA_PLUGGED (1 AC, 2 USB, 4 inalámbrico, 8 base) → texto que acepta el servidor. */
+    static String enchufe(int plugged) {
+        if ((plugged & 4) != 0) return "inalambrico";
+        if ((plugged & 2) != 0) return "usb";
+        if ((plugged & (1 | 8)) != 0) return "ac";   // la base de carga va a la corriente
+        return "ninguno";
+    }
+
+    static String enchufeValido(String e) {
+        if ("ac".equals(e) || "usb".equals(e) || "inalambrico".equals(e)) return e;
+        return "ninguno";
     }
 
     /** Estados que acepta el servidor; cualquier otro se manda como «ninguna». */

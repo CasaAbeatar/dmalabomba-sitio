@@ -99,6 +99,21 @@ public class HeartbeatBody212Test {
     }
 
     @Test
+    public void enchufeSeMandaPlanoYSoloConLosValoresDelServidor() throws Exception {
+        assertEquals("ninguno", HeartbeatBody.enchufe(0));
+        assertEquals("ac", HeartbeatBody.enchufe(1));
+        assertEquals("usb", HeartbeatBody.enchufe(2));
+        assertEquals("inalambrico", HeartbeatBody.enchufe(4));
+        assertEquals("ac", HeartbeatBody.enchufe(8));
+        HeartbeatBody.Detalle d = base();
+        assertEquals("ninguno", detalle(d).getString("enchufe"));
+        d.enchufe = "usb";
+        assertEquals("usb", detalle(d).getString("enchufe"));
+        d.enchufe = "\"otro\"";
+        assertEquals("ninguno", detalle(d).getString("enchufe"));
+    }
+
+    @Test
     public void laFirmaCubreElTextoExactoConLoNuevo() throws Exception {
         HeartbeatBody.Detalle d = base();
         d.smsSinReenviar = 2;

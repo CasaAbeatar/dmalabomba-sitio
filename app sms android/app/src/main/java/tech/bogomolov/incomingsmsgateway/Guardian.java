@@ -137,6 +137,7 @@ public final class Guardian {
         HeartbeatBody.Detalle d = new HeartbeatBody.Detalle();
         d.app = BuildConfig.VERSION_NAME;
         d.cargando = estaCargando(ctx);
+        d.enchufe = enchufe(ctx);
         d.ahorroBateria = ahorroBateriaActivo(ctx);
         d.sinRestriccionBateria = sinRestriccionBateria(ctx);
         boolean[] red = red(ctx);   // {validada, wifi, datos}
@@ -554,6 +555,16 @@ public final class Guardian {
                     || status == BatteryManager.BATTERY_STATUS_FULL;
         } catch (Exception e) {
             return false;
+        }
+    }
+
+    /** 2.12.0: tipo de enchufe (ac | usb | inalambrico | ninguno). */
+    static String enchufe(Context ctx) {
+        try {
+            Intent b = ctx.registerReceiver(null, new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
+            return HeartbeatBody.enchufe(b == null ? 0 : b.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0));
+        } catch (Exception e) {
+            return "ninguno";
         }
     }
 
