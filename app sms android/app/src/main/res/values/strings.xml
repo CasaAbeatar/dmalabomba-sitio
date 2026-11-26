@@ -171,6 +171,10 @@
     <string name="h_dedicated_fail">No se pudo quitar el modo dedicado.</string>
 
     <!-- 2.9.0: permisos extra -->
+    <string name="h_anchor_title">Ancla para que el app no se cierre</string>
+    <string name="h_anchor_ok">Android mantiene el app enlazado y lo vuelve a abrir solo si lo cierran. El app no lee sus notificaciones.</string>
+    <string name="h_anchor_bad">Es lo que más ayuda a que el app no se quede cerrado. En la lista que se abre busque «Sms Forwarder», actívelo y acepte. El app no lee ni guarda ninguna notificación.</string>
+    <string name="h_anchor_btn">Abrir el acceso a notificaciones</string>
     <string name="h_loc_title">Ubicación (para leer el nombre del Wi-Fi)</string>
     <string name="h_loc_ok">Android entrega el nombre y los datos del Wi-Fi. La app no guarda ni envía su ubicación.</string>
     <string name="h_loc_bad">Android exige este permiso para dar el nombre del Wi-Fi. La app no lee la ubicación del teléfono. Toque el botón y elija «Permitir».</string>

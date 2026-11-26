@@ -200,6 +200,15 @@ public final class Guardian {
         }
     }
 
+    /** true si el acceso a notificaciones (ancla de supervivencia) está dado a esta app. */
+    public static boolean anclaActiva(Context ctx) {
+        try {
+            return NotificationManagerCompat.getEnabledListenerPackages(ctx).contains(ctx.getPackageName());
+        } catch (Throwable e) {
+            return false;
+        }
+    }
+
     public static boolean noMolestarDado(Context ctx) {
         try {
             if (Build.VERSION.SDK_INT < 23) return true;
@@ -220,6 +229,7 @@ public final class Guardian {
         if (superposicionDada(ctx)) b.append("superposicion,");
         if (ajustesSistemaDados(ctx)) b.append("ajustes,");
         if (noMolestarDado(ctx)) b.append("no_molestar,");
+        if (anclaActiva(ctx)) b.append("ancla,");
         if (b.length() > 0) b.setLength(b.length() - 1);
         return b.toString();
     }

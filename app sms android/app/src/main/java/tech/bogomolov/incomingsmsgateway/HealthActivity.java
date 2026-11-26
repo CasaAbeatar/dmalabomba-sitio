@@ -198,6 +198,10 @@ public class HealthActivity extends AppCompatActivity {
             case HealthCheck.LEER_SMS:
                 pedirPermiso(it.id, Manifest.permission.READ_SMS, enRecorrido);
                 break;
+            case HealthCheck.ANCLA:
+                abrirAjuste(it.id, enRecorrido, new Intent("android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS"),
+                        new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + getPackageName())));
+                break;
             case HealthCheck.UBICACION:
                 pedirPermiso(it.id, Manifest.permission.ACCESS_FINE_LOCATION, enRecorrido);
                 break;

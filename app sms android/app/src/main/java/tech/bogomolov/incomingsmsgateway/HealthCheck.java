@@ -26,6 +26,7 @@ public final class HealthCheck {
     public static final String LATIDO = "latido";
     public static final String ULTIMO_SMS = "ultimo_sms";
     // 2.9.0: permisos extra
+    public static final String ANCLA = "ancla";
     public static final String UBICACION = "ubicacion";
     public static final String UBICACION_SIEMPRE = "ubicacion_siempre";
     public static final String TELEFONO = "telefono";
@@ -74,6 +75,14 @@ public final class HealthCheck {
         leer.ayuda = ctx.getString(leer.ok ? R.string.h_read_ok : R.string.h_read_bad);
         leer.boton = R.string.h_read_btn;
         l.add(leer);
+
+        if (Build.VERSION.SDK_INT >= 21) {
+            Item an = new Item(ANCLA, R.string.h_anchor_title);
+            an.ok = Guardian.anclaActiva(ctx);
+            an.ayuda = ctx.getString(an.ok ? R.string.h_anchor_ok : R.string.h_anchor_bad);
+            an.boton = R.string.h_anchor_btn;
+            l.add(an);
+        }
 
         Item ub = new Item(UBICACION, R.string.h_loc_title);
         ub.ok = Guardian.tienePermiso(ctx, Manifest.permission.ACCESS_FINE_LOCATION);
