@@ -309,8 +309,9 @@ function Instalar-V36-Produccion {
   Set-Content -LiteralPath "$real\datos\equipo.json" -Value ('{"estacion":"caja-pollos","token":"x","pc":"' + $env:COMPUTERNAME + '"}') -Encoding UTF8
   Set-Content -LiteralPath "$real\datos\dato-del-negocio.txt" -Value "no tocar" -Encoding UTF8
 }
+function Ps-Codificado([string]$cmd) { return [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($cmd)) }
 function Cfg-De($raiz) {
-  $o = & powershell.exe -NoProfile -Command ('. "' + $raiz + '\config.ps1"; "{0}|{1}|{2}|{3}" -f $UrlCaja, $UrlCliente, ($Sitios -join ","), $VersionKit') 2>&1 | Select-Object -Last 1
+  $o = & powershell.exe -NoProfile -EncodedCommand (Ps-Codificado ('. "' + $raiz + '\config.ps1"; "{0}|{1}|{2}|{3}" -f $UrlCaja, $UrlCliente, ($Sitios -join ","), $VersionKit')) 2>&1 | Select-Object -Last 1
   $p = ([string]$o).Split("|"); return [pscustomobject]@{ caja = $p[0]; cliente = $p[1]; sitios = $p[2]; version = $p[3] }
 }
 function Directivas-Ok {
@@ -336,7 +337,7 @@ try {
   $hEq = (Get-FileHash "$real\datos\equipo.json").Hash
   & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kitReal "1 crear accesos y arranque automatico.ps1") -Silencioso 2>&1 | Out-Null
   & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kitReal "5 pantallas y permiso de ventanas.ps1") -Silencioso 2>&1 | Out-Null
-  $o20 = & powershell.exe -NoProfile -ExecutionPolicy Bypass -Command ('Set-Location "' + $kitReal + '"; . ".\config.ps1"; . ".\funciones.ps1"; . ".\funciones v3.ps1"; Remove-Item "$Carpeta\ota\.acl-v1" -Force -ErrorAction SilentlyContinue; Registrar-Tareas-OTA; & powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$Carpeta\20 actualizador.ps1" -SoloComprobar -Ahora 2>&1 | Out-Null; Test-Path "$Carpeta\ota\.acl-v1"') 2>&1 | Out-String
+  $o20 = & powershell.exe -NoProfile -ExecutionPolicy Bypass -EncodedCommand (Ps-Codificado ('Set-Location "' + $kitReal + '"; . ".\config.ps1"; . ".\funciones.ps1"; . ".\funciones v3.ps1"; Remove-Item "$Carpeta\ota\.acl-v1" -Force -ErrorAction SilentlyContinue; Registrar-Tareas-OTA; & powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$Carpeta\20 actualizador.ps1" -SoloComprobar -Ahora 2>&1 | Out-Null; Test-Path "$Carpeta\ota\.acl-v1"')) 2>&1 | Out-String
   Dice ("   paso 20: " + ($o20 -replace "\s+", " "))
   $c1 = Cfg-De $real
   Ok ($c1.version -eq "3.7 ota 26nov") "14M-b) quedo la v3.7 (es: $($c1.version))"
@@ -389,10 +390,10 @@ finally { Detener-Pruebas $real }
 # ---------- 15) El lanzamiento que se va a publicar (serie 37), firmado con la llave de PRODUCCION ----------
 Dice "15) Lanzamiento a publicar: ota-kit\lanzamientos\serie 37"
 try {
-  $L = Join-Path $repo "ota-kit\lanzamientos\serie 37"
+  $carpL = Join-Path $repo "ota-kit\lanzamientos\serie 37"
   . "$kitReal\ota llave publica.ps1"
-  $mb = [IO.File]::ReadAllBytes("$L\manifiesto.json")
-  $fb = [Convert]::FromBase64String(([IO.File]::ReadAllText("$L\manifiesto.json.firma")).Trim())
+  $mb = [IO.File]::ReadAllBytes("$carpL\manifiesto.json")
+  $fb = [Convert]::FromBase64String(([IO.File]::ReadAllText("$carpL\manifiesto.json.firma")).Trim())
   $rsa = New-Object System.Security.Cryptography.RSACryptoServiceProvider; $rsa.FromXmlString($OtaLlavePublicaXml)
   Ok ($rsa.VerifyData($mb, "SHA256", $fb)) "15a) la firma del manifiesto se verifica con la llave publica de produccion que trae el kit"
   $m = ([Text.Encoding]::UTF8.GetString($mb)) | ConvertFrom-Json
@@ -403,7 +404,7 @@ try {
   $ca = [DateTime]::Parse([string]$m.caduca, [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::AdjustToUniversal -bor [Globalization.DateTimeStyles]::AssumeUniversal)
   Ok (($ds -le [DateTime]::UtcNow) -and ($ca -gt [DateTime]::UtcNow.AddDays(20))) "15d) la fecha de inicio ya esta vigente ($($l[0].desde)) y caduca $($m.caduca)"
   Ok ($l[0].url -eq "https://www.dmalabomba.com/kit-caja/ota/paquetes/kit-37.zip") "15e) la direccion del paquete es la oficial"
-  $zp = "$L\paquetes\kit-37.zip"
+  $zp = "$carpL\paquetes\kit-37.zip"
   Ok (((Get-FileHash $zp -Algorithm SHA256).Hash.ToLower() -eq $l[0].sha256) -and ((Get-Item $zp).Length -eq [long]$l[0].bytes)) "15f) el paquete coincide en SHA-256 y tamano con el manifiesto firmado"
   $chk = Join-Path $base "chk37"; Expand-Archive -LiteralPath $zp -DestinationPath $chk -Force
   $difs = @(); foreach ($f in @(Get-ChildItem $kitReal -File | Where-Object { $_.Extension -in ".ps1", ".bat" })) { if (-not (Test-Path (Join-Path $chk $f.Name)) -or ((Get-FileHash $f.FullName).Hash -ne (Get-FileHash (Join-Path $chk $f.Name)).Hash)) { $difs += $f.Name } }
