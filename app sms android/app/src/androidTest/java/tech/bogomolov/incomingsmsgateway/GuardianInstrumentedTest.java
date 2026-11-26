@@ -137,7 +137,16 @@ public class GuardianInstrumentedTest {
             assertTrue("falta detalle." + k, d.has(k));
         }
         assertEquals(BuildConfig.VERSION_NAME, d.getString("app"));
-        assertEquals("2.11.0", d.getString("app"));
+        assertEquals("2.12.0", d.getString("app"));
+        // 2.12.0: salud ampliada (llaves planas)
+        for (String k : new String[]{"sms_inbox_ultimo_ms", "sms_sin_reenviar", "adb_activo", "adb_puerto", "actualizacion_estado"}) {
+            assertTrue("falta detalle." + k, d.has(k));
+        }
+        assertEquals("ninguna", d.getString("actualizacion_estado"));
+        // con READ_SMS el autochequeo da un conteo 0..999 (el emulador puede traer SMS de otros pasos de la prueba)
+        assertTrue(d.getInt("sms_sin_reenviar") >= 0 && d.getInt("sms_sin_reenviar") <= 999);
+        assertTrue(d.getLong("sms_inbox_ultimo_ms") >= 0);
+        assertEquals(AdbInalambrico.activo(ctx), d.getBoolean("adb_activo"));
         for (String k : new String[]{"senal_nivel", "operador", "sim_estado", "modo_avion", "memoria_libre_mb", "arranque_ts",
                 "bucket_standby", "doze", "latido_retraso_ms", "reinicios_servicio"}) {
             assertTrue("falta detalle." + k, d.has(k));
@@ -323,6 +332,30 @@ public class GuardianInstrumentedTest {
         assertFalse(new JSONObject(l.get(3).cuerpo).getJSONObject("detalle").has("comandos_hechos"));
         // todas las firmas salientes son válidas
         for (Peticion p : l) assertEquals(Request.computeHmacSha256Hex(SECRETO, p.cuerpo), p.cabecera("x-signature"));
+    }
+
+    /** 2.12.0: abrir_adb / cerrar_adb se confirman aunque no haya WRITE_SECURE_SETTINGS (resultado claro) y se ejecutan una sola vez. */
+    @Test
+    public void ordenesDeDepuracionInalambricaSeConfirmanConResultadoClaro() throws Exception {
+        server.respuestaLatido = "{\"comandos\":[{\"id\":51,\"cmd\":\"abrir_adb\"},{\"id\":52,\"cmd\":\"cerrar_adb\"}]}";
+        server.firmarRespuesta = true;
+        Guardian.sendHeartbeat(ctx, urlLatido(), true, 0);   // A: trae las órdenes y deja el seguimiento B con las confirmaciones
+        GuardianState st = new GuardianState(ctx);
+        assertEquals(1, st.vecesEjecutada(51));
+        assertEquals(1, st.vecesEjecutada(52));
+        String esperadoAbrir = !AdbInalambrico.soportado() ? "comando_no_soportado"
+                : (AdbInalambrico.tienePermiso(ctx) ? "ok" : "falta_permiso_ajustes");
+        String esperadoCerrar = AdbInalambrico.tienePermiso(ctx) ? "ok" : "falta_permiso_ajustes";
+        JSONObject b = new JSONObject(server.latidos().get(1).cuerpo).getJSONObject("detalle");
+        assertEquals(esperadoAbrir, b.getJSONObject("comandos_resultado").getString("51"));
+        assertEquals(esperadoCerrar, b.getJSONObject("comandos_resultado").getString("52"));
+        // sin permiso nada se enciende: el latido reporta adb_activo=false
+        if (!AdbInalambrico.tienePermiso(ctx)) assertFalse(b.getBoolean("adb_activo"));
+        Guardian.sendHeartbeat(ctx, urlLatido(), true, 0);   // el servidor repite las mismas órdenes: no se vuelven a ejecutar
+        assertEquals(1, st.vecesEjecutada(51));
+        assertEquals(1, st.vecesEjecutada(52));
+        // sin permiso la app no anota ninguna hora de cierre (no encendió nada)
+        if (!AdbInalambrico.tienePermiso(ctx)) assertEquals(0, st.getAdbCierraTs());
     }
 
     @Test

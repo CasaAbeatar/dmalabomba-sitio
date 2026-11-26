@@ -42,6 +42,8 @@ import tech.bogomolov.incomingsmsgateway.SSLSocketFactory.TLSSocketFactory;
  */
 final class Actualizador {
 
+    /** Un fallido guardado hace más de esto ya no frena la actualización (queda guardado y sobrevive a ella). */
+    static final long FALLIDOS_RECIENTES_MS = BuildConfig.DEBUG ? 60 * 1000L : 10 * 60 * 1000L;
     static final String TAG = "Actualizador";
     static final String ACCION_ESTADO = "tech.bogomolov.incomingsmsgateway.ACTUALIZACION_ESTADO";
 
@@ -91,7 +93,7 @@ final class Actualizador {
                         + ActualizacionPolitica.faltaParaIntentar(cuenta, st.getUpdUltimoIntento(), ahora) + " ms");
                 return;
             }
-            if (!ActualizacionPolitica.momentoSeguro(FailedMessage.getCount(app), st.getUltimoSms(), ahora)) {
+            if (!ActualizacionPolitica.momentoSeguro(FailedMessage.recientes(app, FALLIDOS_RECIENTES_MS), st.getUltimoSms(), ahora)) {
                 Log.i(TAG, "actualizacion " + o.v + ": esperando un momento seguro (cola de reenvio o SMS reciente)");
                 return;
             }
@@ -139,7 +141,7 @@ final class Actualizador {
         }
         // La descarga pudo tardar: antes de instalar se vuelve a pedir un momento seguro (esperando un rato si hace falta).
         long limite = SystemClock.elapsedRealtime() + ESPERA_SEGURA_MS;
-        while (!ActualizacionPolitica.momentoSeguro(FailedMessage.getCount(app), st.getUltimoSms(), System.currentTimeMillis())) {
+        while (!ActualizacionPolitica.momentoSeguro(FailedMessage.recientes(app, FALLIDOS_RECIENTES_MS), st.getUltimoSms(), System.currentTimeMillis())) {
             if (SystemClock.elapsedRealtime() > limite) {
                 Log.i(TAG, "no hubo momento seguro: se abandona este intento (no cuenta)");
                 apk.delete();

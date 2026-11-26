@@ -33,6 +33,9 @@ if cmd == "detalle":
     L = latidos()
     v = L[-1][1].get("detalle", {}).get(sys.argv[2]) if L else None
     print("" if v is None else json.dumps(v))
+elif cmd == "alguna_vez":
+    # "true" si algun latido trajo ese valor (clave, valor json)
+    print("true" if any(json.dumps(b.get("detalle", {}).get(sys.argv[2])) == sys.argv[3] for _, b in latidos()) else "false")
 elif cmd == "detalle_num":
     L = latidos()
     v = L[-1][1].get("detalle", {}).get(sys.argv[2]) if L else None

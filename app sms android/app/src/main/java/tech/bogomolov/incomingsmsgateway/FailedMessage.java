@@ -50,6 +50,24 @@ public class FailedMessage {
         return getPreference(context).getAll().size();
     }
 
+    /**
+     * Cuenta los fallidos guardados dentro de la ventana (la clave empieza con el instante de guardado).
+     * Los antiguos no cuentan: siguen guardados tras una actualización y solo se reenvían a mano desde la pantalla.
+     */
+    public static int recientes(Context context, long ventanaMs) {
+        long ahora = System.currentTimeMillis();
+        int n = 0;
+        for (String clave : getPreference(context).getAll().keySet()) {
+            try {
+                long ts = Long.parseLong(clave.substring(0, clave.indexOf('_')));
+                if (ahora - ts < ventanaMs) n++;
+            } catch (Exception e) {
+                n++;   // clave rara: se cuenta, por prudencia
+            }
+        }
+        return n;
+    }
+
     public static List<Data> getAll(Context context) {
         List<Data> messages = new ArrayList<>();
         for (Object value : getPreference(context).getAll().values()) {
