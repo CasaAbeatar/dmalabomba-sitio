@@ -1,8 +1,6 @@
 name: Prueba del Guardian 2.11.0 (app de SMS, con despertar FCM/SMS) en Android
 on:
   workflow_dispatch:
-  push:
-    branches: [prueba-guardian-27]
 jobs:
   android:
     name: Android API ${{ matrix.api }}

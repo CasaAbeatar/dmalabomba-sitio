@@ -268,7 +268,10 @@ final class Actualizador {
             PackageInstaller.SessionParams p = new PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL);
             p.setAppPackageName(ctx.getPackageName());
             p.setSize(apk.length());
-            if (Build.VERSION.SDK_INT >= 31) {
+            // Solo en compilaciones de depuración (pruebas): un archivo marcador obliga a pasar por la confirmación del instalador,
+            // para probar el pulsador de accesibilidad. En produccion BuildConfig.DEBUG es false y esto no existe.
+            boolean forzarConfirmacion = BuildConfig.DEBUG && new File(ctx.getFilesDir(), "prueba_confirmacion").exists();
+            if (Build.VERSION.SDK_INT >= 31 && !forzarConfirmacion) {
                 // Sin pantalla de confirmación cuando Android lo permite (la app se actualiza a sí misma y tiene REQUEST_INSTALL_PACKAGES).
                 p.setRequireUserAction(PackageInstaller.SessionParams.USER_ACTION_NOT_REQUIRED);
             }

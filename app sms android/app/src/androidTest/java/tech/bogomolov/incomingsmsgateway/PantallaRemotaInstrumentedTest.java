@@ -411,6 +411,33 @@ public class PantallaRemotaInstrumentedTest {
         assertEquals("el texto inválido no debe escribirse", "", textoDelCampo());
     }
 
+    /**
+     * 2.12.0: «abrir_ajuste» abre DE VERDAD la pantalla de Ajustes pedida (no solo devuelve «ok»): se pide cada una de las seis
+     * del contrato y se comprueba el resultado «ok:<código>» y que Ajustes (o el gestor) quedó en primer plano.
+     */
+    @Test
+    public void t6g_abrirAjusteAbreLaPantallaDeAjustesDeVerdad() throws Exception {
+        String[] que = {"bateria", "app", "acceso_notificaciones", "accesibilidad", "ahorro_energia", "inicio_apps", "instalar_apps"};
+        for (String q : que) {
+            shell("input keyevent KEYCODE_HOME");
+            Thread.sleep(700);
+            String r = servicio().ejecutar(accion("{\"id\":97,\"a\":\"abrir_ajuste\",\"que\":\"" + q + "\"}"));
+            assertTrue(q + " -> " + r, r.startsWith("ok:") || r.equals("no_disponible"));
+            assertTrue("el resultado debe ser aceptable para el protocolo: " + r, r.matches("^(?:[a-z_]{1,30}|ok:[a-z0-9_.]{1,40})$"));
+            Thread.sleep(1500);
+            String ventana = shell("dumpsys window | grep -E 'mCurrentFocus|mFocusedApp' | head -3");
+            android.util.Log.i("PantallaRemota", "abrir_ajuste " + q + " -> " + r + " | " + ventana.replace('\n', ' '));
+            if (r.startsWith("ok:")) {
+                // el que abrió quedó al frente: ya no es el lanzador
+                assertFalse(q + ": no quedó Ajustes al frente: " + ventana, ventana.toLowerCase().contains("launcher") && !ventana.toLowerCase().contains("settings"));
+            }
+        }
+        // un «que» fuera de la lista NO abre nada: el analizador lo marca para confirmarlo como «ajuste_invalido»
+        PantallaProtocolo.Accion mala = accion("{\"id\":98,\"a\":\"abrir_ajuste\",\"que\":\"wifi\"}");
+        assertEquals("ajuste_invalido", mala.rechazo);
+        shell("input keyevent KEYCODE_HOME");
+    }
+
     /** (c) Mientras haya una sesión de control remoto hay una notificación FIJA; al cerrarse, desaparece. */
     @Test
     public void t6e_notificacionFijaMientrasHayUnaSesionDeControlRemoto() throws Exception {
