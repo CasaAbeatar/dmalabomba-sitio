@@ -8,8 +8,10 @@ function Correr([string[]]$args2, [string]$falla = '') {
   $env:ADB_FALSO_LOG = Join-Path $aqui 'adb-falso.log'; Remove-Item -LiteralPath $env:ADB_FALSO_LOG -ErrorAction SilentlyContinue
   $env:ADB_FALSO_FALLA = $falla
   $reg = Join-Path $aqui 'ayudante-prueba.log'; Remove-Item -LiteralPath $reg -ErrorAction SilentlyContinue
+  $viejo = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
   $salida = & $pw -NoProfile -File (Join-Path $aqui 'ayudante-adb.ps1') -AdbPath (Join-Path $aqui 'adb-falso.ps1') -Registro $reg -Si @args2 2>&1 | Out-String
-  return @{ Codigo = $LASTEXITCODE; Salida = $salida; Registro = $(if (Test-Path $reg) { Get-Content -Raw $reg } else { '' }); Adb = $(if (Test-Path $env:ADB_FALSO_LOG) { Get-Content -Raw $env:ADB_FALSO_LOG } else { '' }) }
+  $codigo = $LASTEXITCODE; $ErrorActionPreference = $viejo
+  return @{ Codigo = $codigo; Salida = $salida; Registro = $(if (Test-Path $reg) { Get-Content -Raw $reg } else { '' }); Adb = $(if (Test-Path $env:ADB_FALSO_LOG) { Get-Content -Raw $env:ADB_FALSO_LOG } else { '' }) }
 }
 # 1. camino feliz
 $r = Correr @('-Emparejar', '192.168.1.50:37001', '-Codigo', '123456', '-Conectar', '192.168.1.50:41234')
