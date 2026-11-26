@@ -1,0 +1,35 @@
+name: Actualizacion real 2.9.0 a 2.11.0 con los APK firmados (prueba)
+on:
+  workflow_dispatch:
+  push:
+    branches: [prueba-actualizacion-211]
+jobs:
+  android:
+    name: Android API ${{ matrix.api }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        api: [33, 35]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Huellas de los APK firmados
+        run: sha256sum apk-firmados/*.apk
+      - name: Activar KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Emulador
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: ${{ matrix.api }}
+          arch: x86_64
+          target: google_apis
+          script: bash scripts-prueba/actualizacion-firmada.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: resultados-actualizacion-api${{ matrix.api }}
+          path: act-resultados
