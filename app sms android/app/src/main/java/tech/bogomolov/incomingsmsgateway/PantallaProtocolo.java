@@ -42,9 +42,11 @@ public final class PantallaProtocolo {
     public static final String TEXTO = "texto";
     public static final String BORRAR = "borrar";
     public static final String ENCENDER = "encender";
+    /** 2.12.0: abre una pantalla de Ajustes del sistema de una lista cerrada (ver AjustesRemotos). */
+    public static final String ABRIR_AJUSTE = "abrir_ajuste";
 
     public static final Set<String> ACCIONES = Collections.unmodifiableSet(new LinkedHashSet<>(Arrays.asList(
-            TOQUE, LARGO, DESLIZAR, ATRAS, INICIO, RECIENTES, NOTIFICACIONES, TEXTO, BORRAR, ENCENDER)));
+            TOQUE, LARGO, DESLIZAR, ATRAS, INICIO, RECIENTES, NOTIFICACIONES, TEXTO, BORRAR, ENCENDER, ABRIR_AJUSTE)));
 
     /** Tope de acciones que se leen de una sola respuesta. */
     public static final int MAX_ACCIONES = 5;
@@ -63,7 +65,8 @@ public final class PantallaProtocolo {
     public static final int MAX_RECORDADOS = 200;
 
     private static final Pattern SID = Pattern.compile("^[0-9A-Za-z-]{1,64}$");
-    private static final Pattern RESULTADO = Pattern.compile("^[a-z_]{1,30}$");
+    /** «ok», «fallo»... ([a-z_]{1,30}) y, desde 2.12.0, «ok:<código del intent usado>» ([a-z0-9_.]{1,40}) de abrir_ajuste. */
+    private static final Pattern RESULTADO = Pattern.compile("^(?:[a-z_]{1,30}|ok:[a-z0-9_.]{1,40})$");
 
     private PantallaProtocolo() {
     }
@@ -182,6 +185,8 @@ public final class PantallaProtocolo {
         public long cuadroSeq = SIN_CUADRO_SEQ;
         /** Motivo si la acción es válida en su id pero hay que confirmarla SIN ejecutar (p. ej. «texto_invalido»); null si no. */
         public String rechazo = null;
+        /** 2.12.0: qué ajuste abre «abrir_ajuste» (uno de AjustesRemotos.QUE); null en las demás acciones. */
+        public String que = null;
 
         Accion(long id, String a, double x, double y, double x1, double y1, double x2, double y2, int ms, String t, int n) {
             this.id = id;
@@ -333,6 +338,17 @@ public final class PantallaProtocolo {
                     n = (int) d;
                 }
                 return new Accion(id, a, 0, 0, 0, 0, 0, 0, 0, null, n);
+            }
+            case ABRIR_AJUSTE: {
+                Object q = o.opt("que");
+                // Lista cerrada: un «que» que no esté se confirma sin abrir nada (como el texto inválido).
+                Accion aj = new Accion(id, a, 0, 0, 0, 0, 0, 0, 0, null, 0);
+                if (q instanceof String && AjustesRemotos.QUE.contains(q)) {
+                    aj.que = (String) q;
+                } else {
+                    aj.rechazo = "ajuste_invalido";
+                }
+                return aj;
             }
             default:   // atras, inicio, recientes, notificaciones, encender: sin parámetros
                 return new Accion(id, a, 0, 0, 0, 0, 0, 0, 0, null, 0);

@@ -70,6 +70,21 @@ public final class HeartbeatBody {
         public String fcmToken = "";
         /** Id del despertar (FCM o SMS) que este latido confirma; 0 = no responde a ningún despertar y no se manda el campo. */
         public long despertarId;
+        // ---- 2.12.0: más salud del teléfono (llaves PLANAS; el servidor las valida una por una) ----
+        /** Fecha (ms) del SMS más nuevo de la bandeja del teléfono; 0 = no hay o no hay permiso READ_SMS. */
+        public long smsInboxUltimoMs;
+        /** Autochequeo «recibe pero no reenvía» (ver AutoChequeoSms); 0..999, o -1 si falta READ_SMS o no se pudo medir. */
+        public int smsSinReenviar = -1;
+        /** true si la depuración inalámbrica está encendida ahora (Settings.Global adb_wifi_enabled). */
+        public boolean adbActivo;
+        /** Puerto de la depuración inalámbrica; 0 = no se pudo leer o apagada. */
+        public int adbPuerto;
+        /** ninguna | descargando | instalando | fallo (actualización automática de la app). */
+        public String actualizacionEstado = "ninguna";
+        /** Código corto [a-z0-9_]{1,30} del motivo (p. ej. sha256_distinto); vacío = no se manda. */
+        public String actualizacionDetalle = "";
+        /** Versión que se está instalando o falló, «x.y.z»; vacío = no se manda. */
+        public String actualizacionObjetivo = "";
         /** Ids de órdenes ya procesadas, que el servidor aún no ha visto confirmadas. */
         public long[] comandosHechos = new long[0];
         /** id de la orden -> resultado ("ok", "comando_no_soportado", "falta_permiso_sms"...). */
@@ -119,6 +134,18 @@ public final class HeartbeatBody {
                     .append(",\"wifi_mhz\":").append(d.wifiMhz)
                     .append(",\"wifi_nombre\":\"").append(esc(d.wifiNombre)).append('"')
                     .append(",\"permisos_extra\":\"").append(esc(d.permisosExtra)).append('"');
+            // 2.12.0: salud ampliada. Cada valor se acota aquí para que el servidor nunca rechace todo el latido por un campo.
+            b.append(",\"sms_inbox_ultimo_ms\":").append(Math.max(0L, d.smsInboxUltimoMs))
+                    .append(",\"sms_sin_reenviar\":").append(d.smsSinReenviar < 0 ? -1 : Math.min(999, d.smsSinReenviar))
+                    .append(",\"adb_activo\":").append(d.adbActivo)
+                    .append(",\"adb_puerto\":").append(d.adbPuerto >= 0 && d.adbPuerto <= 65535 ? d.adbPuerto : 0)
+                    .append(",\"actualizacion_estado\":\"").append(estadoActualizacion(d.actualizacionEstado)).append('"');
+            if (codigoCorto(d.actualizacionDetalle)) {
+                b.append(",\"actualizacion_detalle\":\"").append(d.actualizacionDetalle).append('"');
+            }
+            if (versionValida(d.actualizacionObjetivo)) {
+                b.append(",\"actualizacion_objetivo\":\"").append(d.actualizacionObjetivo).append('"');
+            }
             // 2.11.0: el token solo viaja si tiene la forma que exige el servidor (si no, el servidor rechazaría todo el latido).
             if (DespertarFcm.tokenValido(d.fcmToken)) {
                 b.append(",\"fcm_token\":\"").append(d.fcmToken).append('"');
@@ -148,6 +175,27 @@ public final class HeartbeatBody {
         }
         b.append('}');
         return b.toString();
+    }
+
+    /** Estados que acepta el servidor; cualquier otro se manda como «ninguna». */
+    static String estadoActualizacion(String e) {
+        if ("descargando".equals(e) || "instalando".equals(e) || "fallo".equals(e)) return e;
+        return "ninguna";
+    }
+
+    /** [a-z0-9_]{1,30} */
+    static boolean codigoCorto(String s) {
+        if (s == null || s.isEmpty() || s.length() > 30) return false;
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            if (!((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_')) return false;
+        }
+        return true;
+    }
+
+    /** «x.y.z» con números de 1 a 3 cifras. */
+    static boolean versionValida(String s) {
+        return s != null && s.matches("^\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}$");
     }
 
     /** Escapa lo mínimo que exige JSON para texto entre comillas. */

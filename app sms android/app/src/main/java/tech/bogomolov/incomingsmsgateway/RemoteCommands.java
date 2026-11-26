@@ -29,9 +29,12 @@ public final class RemoteCommands {
     public static final String LATIDO_YA = "latido_ya";
     public static final String REENVIAR_HISTORIAL = "reenviar_historial";
     public static final String REINICIAR_TELEFONO = "reiniciar_telefono";
+    /** 2.12.0: encender / apagar la depuración inalámbrica (necesita WRITE_SECURE_SETTINGS; se apaga sola a los 30 min). */
+    public static final String ABRIR_ADB = "abrir_adb";
+    public static final String CERRAR_ADB = "cerrar_adb";
 
     public static final Set<String> PERMITIDOS = Collections.unmodifiableSet(new LinkedHashSet<>(
-            Arrays.asList(REINICIAR_SERVICIO, LATIDO_YA, REENVIAR_HISTORIAL, REINICIAR_TELEFONO)));
+            Arrays.asList(REINICIAR_SERVICIO, LATIDO_YA, REENVIAR_HISTORIAL, REINICIAR_TELEFONO, ABRIR_ADB, CERRAR_ADB)));
 
     /** Tope de órdenes que se leen de una sola respuesta. */
     public static final int MAX_POR_RESPUESTA = 5;
