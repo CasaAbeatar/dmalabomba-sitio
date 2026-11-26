@@ -73,6 +73,13 @@ public class PantallaRemotaService extends AccessibilityService {
         final List<Long> confirmadas = new ArrayList<>();
         final Map<Long, String> resultados = new LinkedHashMap<>();
         final PantallaProtocolo.IdsHechos hechas = new PantallaProtocolo.IdsHechos();
+        /** Resultado de las acciones ya ejecutadas (acotado), para volver a confirmarlas si el servidor las reentrega. */
+        final Map<Long, String> resultadoHechas = new LinkedHashMap<Long, String>() {
+            @Override
+            protected boolean removeEldestEntry(Map.Entry<Long, String> eldest) {
+                return size() > PantallaProtocolo.MAX_RECORDADOS;
+            }
+        };
     }
 
     private Sesion sesion;
@@ -194,9 +201,10 @@ public class PantallaRemotaService extends AccessibilityService {
         if (regla == null) return;
         String url = PantallaProtocolo.urlPantalla(regla.url);
         if (url == null) return;
-        String cuerpo = PantallaProtocolo.escucha(System.currentTimeMillis(), regla.empresa,
+        long ts = System.currentTimeMillis();
+        String cuerpo = PantallaProtocolo.escucha(ts, regla.empresa,
                 BuildConfig.VERSION_NAME, pantallaEncendida(), pantallaBloqueada());
-        PantallaProtocolo.Respuesta r = enviar(regla, url, cuerpo);
+        PantallaProtocolo.Respuesta r = enviar(regla, url, cuerpo, ts);
         if (r == null || !r.sesion || r.restaS <= 0) return;
         iniciarSesion(r);
         procesarAcciones(r);
@@ -225,7 +233,8 @@ public class PantallaRemotaService extends AccessibilityService {
             SigningRule regla = SigningRule.find(getApplicationContext());
             String url = regla == null ? null : PantallaProtocolo.urlPantalla(regla.url);
             if (regla == null || url == null) return;
-            enviar(regla, url, PantallaProtocolo.fin(System.currentTimeMillis(), regla.empresa, s.sid));
+            long ts = System.currentTimeMillis();
+            enviar(regla, url, PantallaProtocolo.fin(ts, regla.empresa, s.sid), ts);
         } catch (Throwable ignored) {
         }
     }
@@ -276,9 +285,10 @@ public class PantallaRemotaService extends AccessibilityService {
         long[] conf = new long[s.confirmadas.size()];
         for (int i = 0; i < conf.length; i++) conf[i] = s.confirmadas.get(i);
         Map<Long, String> res = new LinkedHashMap<>(s.resultados);
-        String cuerpo = PantallaProtocolo.cuadro(System.currentTimeMillis(), regla.empresa, s.sid, ++s.seq,
+        long ts = System.currentTimeMillis();
+        String cuerpo = PantallaProtocolo.cuadro(ts, regla.empresa, s.sid, ++s.seq,
                 s.w, s.h, jpg, sinCambio, encendida, bloqueada, error, conf, res);
-        PantallaProtocolo.Respuesta r = enviar(regla, url, cuerpo);
+        PantallaProtocolo.Respuesta r = enviar(regla, url, cuerpo, ts);
         if (r == null) {
             if (++s.errores >= 5) {
                 cerrarSesion();
@@ -312,8 +322,17 @@ public class PantallaRemotaService extends AccessibilityService {
         if (s == null) return false;
         boolean alguna = false;
         for (PantallaProtocolo.Accion a : r.acciones) {
-            if (!s.hechas.registrar(a.id)) continue;   // ya ejecutada
+            if (!s.hechas.registrar(a.id)) {
+                // ya ejecutada: NO se repite. Si el servidor la reentrega es que no recibió la confirmación: se reenvía.
+                String antes = s.resultadoHechas.get(a.id);
+                if (antes != null && !s.confirmadas.contains(a.id)) {
+                    s.confirmadas.add(a.id);
+                    s.resultados.put(a.id, antes);
+                }
+                continue;
+            }
             String resultado = ejecutar(a);
+            s.resultadoHechas.put(a.id, resultado);
             s.confirmadas.add(a.id);
             s.resultados.put(a.id, resultado);
             Log.i(TAG, "accion " + a.id + " " + a.a + " -> " + resultado);
@@ -324,9 +343,9 @@ public class PantallaRemotaService extends AccessibilityService {
 
     /**
      * Manda un cuerpo firmado y devuelve la respuesta ya leída, o null si no hubo respuesta, no fue 2xx o la
-     * firma de la respuesta no es válida (en ese caso NUNCA se ejecuta nada).
+     * firma de la respuesta no es válida o su «eco» no es el ts enviado (en ese caso NUNCA se ejecuta nada).
      */
-    private PantallaProtocolo.Respuesta enviar(SigningRule regla, String url, String cuerpo) {
+    private PantallaProtocolo.Respuesta enviar(SigningRule regla, String url, String cuerpo, long ts) {
         try {
             Request req = new Request(url, cuerpo);
             req.setUseChunkedMode(false);
@@ -340,6 +359,10 @@ public class PantallaRemotaService extends AccessibilityService {
                 return null;
             }
             PantallaProtocolo.Respuesta r = PantallaProtocolo.parsear(req.getResponseBody());
+            if (!r.ecoCoincide(ts)) {
+                Log.e(TAG, "respuesta con eco distinto al ts enviado: se ignora");
+                return null;
+            }
             return r.ok ? r : null;
         } catch (Throwable e) {
             Log.e(TAG, "enviar: " + e);
@@ -445,6 +468,9 @@ public class PantallaRemotaService extends AccessibilityService {
         try {
             campo = raiz.findFocus(AccessibilityNodeInfo.FOCUS_INPUT);
             if (campo == null || !campo.isEditable()) return "fallo";
+            // Android guarda en caché lo que ya vio del campo y este servicio no pide eventos de texto:
+            // se refresca para leer lo que hay AHORA (si no, «agregar» pisaría lo escrito antes).
+            campo.refresh();
             CharSequence actual = campo.getText();
             String base = (actual == null || (Build.VERSION.SDK_INT >= 26 && campo.isShowingHintText())) ? "" : actual.toString();
             String nuevo;

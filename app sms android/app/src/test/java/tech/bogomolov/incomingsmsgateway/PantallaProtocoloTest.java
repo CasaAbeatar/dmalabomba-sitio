@@ -332,4 +332,35 @@ public class PantallaProtocoloTest {
         assertFalse(h.contiene(1));
         assertTrue(h.contiene(PantallaProtocolo.MAX_RECORDADOS + 50));
     }
+
+    // ------------------------------------------------------------------ eco y ts del servidor
+
+    @Test
+    public void ecoCoincideSoloConElTsEnviado() {
+        PantallaProtocolo.Respuesta r = PantallaProtocolo.parsear("{\"ok\":true,\"sesion\":false,\"eco\":1764000000123,\"ts\":1764000000500}");
+        assertTrue(r.ok);
+        assertEquals(1764000000123L, r.eco);
+        assertEquals(1764000000500L, r.tsServidor);
+        assertTrue(r.ecoCoincide(1764000000123L));
+        assertFalse(r.ecoCoincide(1764000000124L));
+    }
+
+    @Test
+    public void sinEcoOEcoMalformadoNuncaCoincide() {
+        assertFalse(PantallaProtocolo.parsear("{\"ok\":true,\"sesion\":false}").ecoCoincide(0));
+        assertFalse(PantallaProtocolo.parsear("{\"ok\":true,\"sesion\":false}").ecoCoincide(-1));
+        assertFalse(PantallaProtocolo.parsear("{\"ok\":true,\"eco\":\"123\"}").ecoCoincide(123));
+        assertFalse(PantallaProtocolo.parsear("{\"ok\":true,\"eco\":12.5}").ecoCoincide(12));
+        assertFalse(PantallaProtocolo.parsear("{\"ok\":true,\"eco\":-5}").ecoCoincide(-5));
+        assertFalse(PantallaProtocolo.parsear("no es json").ecoCoincide(1));
+    }
+
+    @Test
+    public void ecoSeLeeAunqueLaSesionEsteCerradaOHayaAcciones() {
+        PantallaProtocolo.Respuesta r = PantallaProtocolo.parsear(
+                "{\"ok\":true,\"sesion\":true,\"sid\":\"s1\",\"resta_s\":60,\"eco\":42,\"ts\":43,\"acciones\":[{\"id\":9,\"a\":\"atras\"}]}");
+        assertTrue(r.sesion);
+        assertEquals(1, r.acciones.size());
+        assertTrue(r.ecoCoincide(42));
+    }
 }

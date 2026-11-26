@@ -173,6 +173,15 @@ public final class PantallaProtocolo {
         /** Segundos que le quedan a la sesión (0..MAX_RESTA_S). */
         public int restaS;
         public List<Accion> acciones = new ArrayList<>();
+        /** «eco» del servidor: el ts de la petición a la que responde; -1 si falta o no es un entero. */
+        public long eco = -1;
+        /** Hora del servidor en ms (informativa); -1 si falta. */
+        public long tsServidor = -1;
+
+        /** ¿Es la respuesta a ESTA petición (y no una repetida o vieja)? */
+        public boolean ecoCoincide(long tsEnviado) {
+            return eco >= 0 && eco == tsEnviado;
+        }
     }
 
     /** ¿Se puede confiar en esta respuesta? Exige firma y que coincida; sin firma NUNCA (ni siquiera con https). */
@@ -197,6 +206,8 @@ public final class PantallaProtocolo {
         try {
             JSONObject root = new JSONObject(body);
             r.ok = root.optBoolean("ok", false);
+            r.eco = entero(root.opt("eco"));
+            r.tsServidor = entero(root.opt("ts"));
             r.sesion = r.ok && root.optBoolean("sesion", false);
             if (!r.sesion) return r;
             String sid = root.optString("sid", "");
@@ -225,6 +236,14 @@ public final class PantallaProtocolo {
             r.acciones.clear();
         }
         return r;
+    }
+
+    /** Entero >= 0 y exacto (sin decimales ni desbordes); -1 si no lo es. */
+    private static long entero(Object v) {
+        if (!(v instanceof Number)) return -1;
+        double d = ((Number) v).doubleValue();
+        if (Double.isNaN(d) || d < 0 || d >= 9_000_000_000_000_000.0 || d != Math.rint(d)) return -1;
+        return (long) d;
     }
 
     private static Accion leerAccion(JSONObject o) {

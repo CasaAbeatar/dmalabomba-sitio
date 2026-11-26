@@ -210,11 +210,11 @@ public class PantallaRemotaInstrumentedTest {
         escena.onActivity(a -> a.campo.requestFocus());
         assertTrue(esperar(() -> campoFocoTexto() != null, 5000));
         assertEquals("ok", servicio().ejecutar(accion("{\"id\":4,\"a\":\"texto\",\"t\":\"hola\"}")));
-        assertTrue("texto: " + textoDelCampo(), esperar(() -> "hola".equals(textoDelCampo()), 5000));
+        assertTrue("texto no es hola: " + textoDelCampo(), esperar(() -> "hola".equals(textoDelCampo()), 5000));
         assertEquals("ok", servicio().ejecutar(accion("{\"id\":5,\"a\":\"texto\",\"t\":\" mundo\"}")));
         assertTrue("texto: " + textoDelCampo(), esperar(() -> "hola mundo".equals(textoDelCampo()), 5000));
         assertEquals("ok", servicio().ejecutar(accion("{\"id\":6,\"a\":\"borrar\",\"n\":6}")));
-        assertTrue("texto: " + textoDelCampo(), esperar(() -> "hola".equals(textoDelCampo()), 5000));
+        assertTrue("texto no es hola: " + textoDelCampo(), esperar(() -> "hola".equals(textoDelCampo()), 5000));
     }
 
     /** «inicio» saca la app del frente y «atrás» cierra la pantalla de prueba. */
@@ -319,6 +319,22 @@ public class PantallaRemotaInstrumentedTest {
         Thread.sleep(1500);
         assertEquals("se ejecutó una acción con firma falsa", 0, PantallaPruebaActivity.toques);
         assertEquals("abrió sesión con firma falsa", 0, server.cuerpos("cuadro").size());
+    }
+
+    /** Firma válida pero «eco» distinto del ts enviado (respuesta repetida/vieja): tampoco ejecuta nada. */
+    @Test
+    public void t8b_respuestaConEcoDistintoNoEjecutaNada() throws Exception {
+        abrirPantallaDePrueba();
+        double[] p = centroDelBoton();
+        server.ecoDistinto = true;
+        server.abrirSesion = true;
+        server.accionesFijas.add("{\"id\":92,\"a\":\"toque\",\"x\":" + p[0] + ",\"y\":" + p[1] + "}");
+        PantallaRemotaService.escuchaMs = 400;
+        PantallaRemotaService.despertarYa();
+        assertTrue(esperar(() -> server.cuerpos("escucha").size() >= 3, 15000));
+        Thread.sleep(1500);
+        assertEquals("se ejecutó una acción con eco distinto", 0, PantallaPruebaActivity.toques);
+        assertEquals("abrió sesión con eco distinto", 0, server.cuerpos("cuadro").size());
     }
 
     /**
@@ -504,6 +520,8 @@ public class PantallaRemotaInstrumentedTest {
         int port;
         volatile boolean abrirSesion = false;
         volatile int firma = FIRMA_BUENA;
+        /** true: el «eco» de la respuesta no es el ts de la petición (respuesta repetida o vieja). */
+        volatile boolean ecoDistinto = false;
         /** Acciones (JSON) que se mandan en CADA respuesta de sesión, para probar que no se repiten al ejecutar. */
         final List<String> accionesFijas = new CopyOnWriteArrayList<>();
         private ServerSocket ss;
@@ -546,10 +564,17 @@ public class PantallaRemotaInstrumentedTest {
         }
 
         private String respuesta(String cuerpo) {
+            long tsPeticion = 0;
+            try {
+                tsPeticion = new JSONObject(cuerpo).getLong("ts");
+            } catch (Exception ignored) {
+            }
+            // como el servidor real: «eco» = ts de la petición y «ts» = hora del servidor
+            String cola = ",\"eco\":" + (ecoDistinto ? tsPeticion + 1 : tsPeticion) + ",\"ts\":" + System.currentTimeMillis();
             boolean fin = cuerpo.contains("\"fase\":\"fin\"");
-            if (fin) return "{\"ok\":true}";
-            if (!abrirSesion) return "{\"ok\":true,\"sesion\":false}";
-            StringBuilder b = new StringBuilder("{\"ok\":true,\"sesion\":true,\"sid\":\"s1\",\"resta_s\":120,\"acciones\":[");
+            if (fin) return "{\"ok\":true" + cola + "}";
+            if (!abrirSesion) return "{\"ok\":true,\"sesion\":false" + cola + "}";
+            StringBuilder b = new StringBuilder("{\"ok\":true,\"sesion\":true,\"sid\":\"s1\",\"resta_s\":120" + cola + ",\"acciones\":[");
             boolean primero = true;
             for (String a : accionesFijas) {
                 if (!primero) b.append(',');
