@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- La Bomba 2.10.0: configuracion del servicio de accesibilidad de pantalla remota.
+     canTakeScreenshot (Android 11+), canPerformGestures (Android 7+) y canRetrieveWindowContent (solo para encontrar el campo con foco
+     al escribir texto; el servicio no lee ni guarda lo que hay en las ventanas). -->
+<accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
+    android:accessibilityEventTypes="typeWindowStateChanged"
+    android:accessibilityFeedbackType="feedbackGeneric"
+    android:accessibilityFlags="flagDefault"
+    android:canPerformGestures="true"
+    android:canRetrieveWindowContent="true"
+    android:canTakeScreenshot="true"
+    android:description="@string/pantalla_servicio_descripcion"
+    android:notificationTimeout="500" />

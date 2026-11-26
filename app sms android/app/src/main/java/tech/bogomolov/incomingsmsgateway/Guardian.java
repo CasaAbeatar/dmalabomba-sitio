@@ -209,6 +209,57 @@ public final class Guardian {
         }
     }
 
+    // ------------------------------------------------------------------ 2.10.0: pantalla remota (accesibilidad)
+
+    /** true si el servicio de pantalla remota está conectado o activado en Ajustes de accesibilidad. */
+    public static boolean pantallaActiva(Context ctx) {
+        try {
+            if (PantallaRemotaService.conectado()) return true;
+            if (Build.VERSION.SDK_INT < 24) return false;
+            if (Settings.Secure.getInt(ctx.getContentResolver(), Settings.Secure.ACCESSIBILITY_ENABLED, 0) != 1) return false;
+            String lista = Settings.Secure.getString(ctx.getContentResolver(), Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
+            return servicioEnLista(lista, new ComponentName(ctx, PantallaRemotaService.class));
+        } catch (Throwable e) {
+            return false;
+        }
+    }
+
+    /** ¿Está este servicio en la lista «a:b:c» de servicios de accesibilidad activados? */
+    static boolean servicioEnLista(String lista, ComponentName c) {
+        if (lista == null || lista.isEmpty() || c == null) return false;
+        for (String p : lista.split(":")) {
+            ComponentName otro = ComponentName.unflattenFromString(p.trim());
+            if (c.equals(otro)) return true;
+        }
+        return false;
+    }
+
+    /**
+     * Activa solo el servicio de pantalla remota, sin tocar la pantalla del teléfono, si la app tiene el permiso
+     * WRITE_SECURE_SETTINGS. Ese permiso se concede UNA vez por adb (no lo da ningún botón de Android):
+     * adb shell pm grant tech.bogomolov.incomingsmsgateway android.permission.WRITE_SECURE_SETTINGS
+     *
+     * @return true si el servicio queda activado (ya lo estaba o se activó ahora)
+     */
+    public static boolean autoActivarPantalla(Context ctx) {
+        if (Build.VERSION.SDK_INT < 24) return false;
+        try {
+            if (pantallaActiva(ctx)) return true;
+            if (!tienePermiso(ctx, Manifest.permission.WRITE_SECURE_SETTINGS)) return false;
+            ComponentName c = new ComponentName(ctx, PantallaRemotaService.class);
+            String lista = Settings.Secure.getString(ctx.getContentResolver(), Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
+            if (!servicioEnLista(lista, c)) {
+                String nueva = (lista == null || lista.isEmpty() ? "" : lista + ":") + c.flattenToString();
+                Settings.Secure.putString(ctx.getContentResolver(), Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES, nueva);
+            }
+            Settings.Secure.putInt(ctx.getContentResolver(), Settings.Secure.ACCESSIBILITY_ENABLED, 1);
+            return true;
+        } catch (Throwable e) {
+            Log.e(TAG, "autoactivar pantalla: " + e);
+            return false;
+        }
+    }
+
     public static boolean noMolestarDado(Context ctx) {
         try {
             if (Build.VERSION.SDK_INT < 23) return true;
@@ -230,6 +281,7 @@ public final class Guardian {
         if (ajustesSistemaDados(ctx)) b.append("ajustes,");
         if (noMolestarDado(ctx)) b.append("no_molestar,");
         if (anclaActiva(ctx)) b.append("ancla,");
+        if (pantallaActiva(ctx)) b.append("pantalla,");
         if (b.length() > 0) b.setLength(b.length() - 1);
         return b.toString();
     }
@@ -512,6 +564,8 @@ public final class Guardian {
             extra.add(Manifest.permission.ACCESS_FINE_LOCATION);
             extra.add(Manifest.permission.ACCESS_COARSE_LOCATION);
             if (Build.VERSION.SDK_INT >= 29) extra.add(Manifest.permission.ACCESS_BACKGROUND_LOCATION);
+            // 2.10.0: si Android lo permite así, el dueño se da WRITE_SECURE_SETTINGS y activa solo la pantalla remota.
+            extra.add(Manifest.permission.WRITE_SECURE_SETTINGS);
             for (String p : extra) {
                 try {
                     dpm.setPermissionGrantState(admin, ctx.getPackageName(), p, DevicePolicyManager.PERMISSION_GRANT_STATE_GRANTED);
@@ -552,6 +606,9 @@ public final class Guardian {
                     + " levantar=" + d.levantarServicio + " latido=" + d.mandarLatido);
             if (d.levantarServicio) startServiceSafely(app);
             if (d.mandarLatido) sendHeartbeat(app, hs.getUrl(), false, 0);
+            // 2.10.0: si la app tiene WRITE_SECURE_SETTINGS, deja activa la pantalla remota; y le avisa al bucle que escuche ya.
+            autoActivarPantalla(app);
+            PantallaRemotaService.despertarYa();
         } catch (Exception e) {
             Log.e(TAG, "vigilante error: " + e);
         }

@@ -203,4 +203,12 @@
     <string name="h_dnd_ok">La app puede leer y cambiar el modo No molestar.</string>
     <string name="h_dnd_bad">En la lista que se abre busque «Sms Forwarder» y permita el acceso.</string>
     <string name="h_dnd_btn">Abrir el acceso a «No molestar»</string>
+
+    <!-- 2.10.0: pantalla remota (accesibilidad) -->
+    <string name="h_screen_title">Pantalla remota (accesibilidad)</string>
+    <string name="h_screen_ok">Activada. Cuando usted abre una sesión en el visor web, el app muestra la pantalla del teléfono y obedece sus toques. Sin sesión abierta no envía nada.</string>
+    <string name="h_screen_bad">Permite ver y manejar este teléfono desde lejos. En la lista que se abre busque «Sms Forwarder», actívelo y acepte. El app no lee ni guarda lo que hay en pantalla.</string>
+    <string name="h_screen_bad_33">Permite ver y manejar este teléfono desde lejos. En la lista que se abre busque «Sms Forwarder» y actívelo. Si Android dice «Ajuste restringido», vaya a Información de la app, toque los tres puntos de arriba y elija «Permitir ajustes restringidos»; luego vuelva a activarlo.</string>
+    <string name="h_screen_btn">Abrir los ajustes de accesibilidad</string>
+    <string name="pantalla_servicio_descripcion">Permite ver y manejar este teléfono desde el visor web de La Bomba, solo mientras hay una sesión abierta. No lee ni guarda lo que hay en pantalla.</string>
 </resources>

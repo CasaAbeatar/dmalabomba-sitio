@@ -202,6 +202,11 @@ public class HealthActivity extends AppCompatActivity {
                 abrirAjuste(it.id, enRecorrido, new Intent("android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS"),
                         new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + getPackageName())));
                 break;
+            case HealthCheck.PANTALLA:
+                // Ajustes de accesibilidad; en Android 13+ puede pedir primero «Permitir ajustes restringidos» (info de la app).
+                abrirAjuste(it.id, enRecorrido, new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS),
+                        new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + getPackageName())));
+                break;
             case HealthCheck.UBICACION:
                 pedirPermiso(it.id, Manifest.permission.ACCESS_FINE_LOCATION, enRecorrido);
                 break;

@@ -34,6 +34,8 @@ public final class HealthCheck {
     public static final String SUPERPOSICION = "superposicion";
     public static final String AJUSTES = "ajustes";
     public static final String NO_MOLESTAR = "no_molestar";
+    // 2.10.0: pantalla remota (servicio de accesibilidad)
+    public static final String PANTALLA = "pantalla";
 
     private HealthCheck() {
     }
@@ -82,6 +84,16 @@ public final class HealthCheck {
             an.ayuda = ctx.getString(an.ok ? R.string.h_anchor_ok : R.string.h_anchor_bad);
             an.boton = R.string.h_anchor_btn;
             l.add(an);
+        }
+
+        // 2.10.0: la captura de pantalla necesita Android 11 (API 30) o más.
+        if (Build.VERSION.SDK_INT >= 30) {
+            Item pa = new Item(PANTALLA, R.string.h_screen_title);
+            pa.ok = Guardian.pantallaActiva(ctx);
+            pa.ayuda = ctx.getString(pa.ok ? R.string.h_screen_ok
+                    : (Build.VERSION.SDK_INT >= 33 ? R.string.h_screen_bad_33 : R.string.h_screen_bad));
+            pa.boton = R.string.h_screen_btn;
+            l.add(pa);
         }
 
         Item ub = new Item(UBICACION, R.string.h_loc_title);
