@@ -506,6 +506,19 @@ public final class Guardian {
             for (String p : permisos) {
                 dpm.setPermissionGrantState(admin, ctx.getPackageName(), p, DevicePolicyManager.PERMISSION_GRANT_STATE_GRANTED);
             }
+            // 2.9.0: el dueño del teléfono dedicado concede solo, sin tocar la pantalla, los permisos extra.
+            java.util.List<String> extra = new java.util.ArrayList<>();
+            extra.add(Manifest.permission.READ_PHONE_STATE);
+            extra.add(Manifest.permission.ACCESS_FINE_LOCATION);
+            extra.add(Manifest.permission.ACCESS_COARSE_LOCATION);
+            if (Build.VERSION.SDK_INT >= 29) extra.add(Manifest.permission.ACCESS_BACKGROUND_LOCATION);
+            for (String p : extra) {
+                try {
+                    dpm.setPermissionGrantState(admin, ctx.getPackageName(), p, DevicePolicyManager.PERMISSION_GRANT_STATE_GRANTED);
+                } catch (Exception ignored) {
+                    // un permiso que Android no deja conceder así no impide los demás
+                }
+            }
         } catch (Exception e) {
             Log.e(TAG, "politicas dedicado: " + e);
         }
