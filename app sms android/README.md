@@ -174,6 +174,27 @@ and new ones are added, so re-importing the same file doesn't create duplicates.
 contains your webhook URLs, custom headers and HMAC secrets in plain text — store it accordingly.**
 Heartbeat settings and stored failed messages are not part of the backup.
 
+#### Remote screen (La Bomba 2.10.0, accessibility service)
+
+La Bomba's own remote-screen feature: while a session is open in the web viewer, the phone sends its screen
+(JPEG, max 540 px wide, about 1 frame per second) and obeys taps, swipes, text and the Back/Home/Recents buttons.
+Without an open session it only asks the server once a minute ("is anyone watching?") and sends nothing else.
+The phone only obeys server responses that carry a valid `X-Signature` (HMAC-SHA-256 of the response body).
+
+Android needs the accessibility service turned on once, and that cannot be done silently:
+
+- **By hand (once):** Settings → Accessibility → "Sms Forwarder" → on. On Android 13+ with a sideloaded APK, first open
+  App info → ⋮ → "Allow restricted settings".
+- **By adb (once, then the app turns itself on and re-enables itself if Android drops it):**
+
+  ```bash
+  adb shell pm grant tech.bogomolov.incomingsmsgateway android.permission.WRITE_SECURE_SETTINGS
+  ```
+
+Real limits: with the screen off or on a window marked `FLAG_SECURE` (banking apps, some password fields) the capture is
+black or fails; a lock screen with PIN/pattern cannot be bypassed from the app (the "wake" action only turns the screen on);
+`takeScreenshot` needs Android 11+ and gestures Android 7+ (on older versions the app keeps working without that part).
+
 ### Request info
 HTTP method: POST  
 Content-type: application/json; charset=utf-8  

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- La Bomba 2.10.0: la pantalla de prueba de la pantalla remota solo existe en la variante debug (nunca en la
+     app firmada). No es exportada: la abre la prueba instrumentada desde el propio proceso de la app. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application>
+        <activity
+            android:name=".PantallaPruebaActivity"
+            android:exported="false"
+            android:theme="@android:style/Theme.Holo.Light.NoActionBar"
+            android:windowSoftInputMode="stateHidden|adjustPan" />
+    </application>
+</manifest>
