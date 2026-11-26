@@ -496,12 +496,6 @@ public class PantallaRemotaService extends AccessibilityService {
         return AjustesRemotos.NO_DISPONIBLE;
     }
 
-    /**
-     * 2.12.0 (actualización automática): si Android pidió confirmar la instalación, pulsa «Instalar»/«Actualizar» del diálogo del
-     * instalador del sistema. Solo actúa si la ventana activa es del paquete del instalador que Android dio para NUESTRA sesión, y
-     * solo pulsa un botón cuyo texto sea exactamente uno de Actualizador.TEXTOS_BOTON. No lee ni guarda nada más.
-     * @return true si pulsó
-     */
     private int diagContador = 0;
 
     /** Diagnostico (solo depuracion): que ventanas ve el servicio y que hay en la del instalador. */
@@ -529,6 +523,14 @@ public class PantallaRemotaService extends AccessibilityService {
         for (int i = 0; i < n.getChildCount(); i++) volcar(n.getChild(i), sb, nivel + 1);
     }
 
+    /**
+     * 2.12.0 (actualización automática): si Android pidió confirmar la instalación, pulsa «Instalar»/«Actualizar» del diálogo del
+     * instalador del sistema. Solo actúa sobre una ventana (la activa o cualquiera de las interactivas) del paquete del instalador que Android dio para NUESTRA sesión, y
+     * solo pulsa un botón cuyo texto sea exactamente uno de Actualizador.TEXTOS_BOTON. No lee ni guarda nada más.
+     * Android 14+ oculta a los servicios que no se declaran herramienta de accesibilidad (isAccessibilityTool en
+     * pantalla_remota_config.xml) las vistas marcadas como sensibles, y el boton del instalador lo es: sin esa marca no se ve.
+     * @return true si pulsó
+     */
     boolean pulsarBotonInstalador(String paqueteInstalador) {
         diagnosticarInstalador(paqueteInstalador);
         try {

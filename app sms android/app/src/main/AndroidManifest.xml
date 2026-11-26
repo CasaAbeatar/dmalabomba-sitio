@@ -56,6 +56,10 @@
          sin el; ademas, para actualizarse sin pantalla de confirmacion (Android 12+, USER_ACTION_NOT_REQUIRED) hace falta que «Instalar apps
          desconocidas» este permitido para esta app (appops REQUEST_INSTALL_PACKAGES allow, una vez por adb, o el interruptor en Ajustes). -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <!-- Sin este permiso (normal, se concede solo al instalar) Android 12+ IGNORA USER_ACTION_NOT_REQUIRED y siempre pide confirmar
+         (PackageInstallerSession.computeUserActionRequirement exige isUpdateWithoutUserActionPermissionGranted). Ademas la app
+         instalada debe apuntar a targetSdk >= 30 en Android 13, >= 31 en 14, >= 33 en 15 y >= 34 en 16. -->
+    <uses-permission android:name="android.permission.UPDATE_PACKAGES_WITHOUT_USER_ACTION" />
 
     <!-- Visibilidad de paquetes (Android 11+): saber que existe el instalador del sistema al que apunta el intent de confirmacion. -->
     <queries>

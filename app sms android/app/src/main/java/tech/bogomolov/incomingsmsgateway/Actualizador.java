@@ -320,7 +320,15 @@ final class Actualizador {
                     Intent confirmar = intent.getParcelableExtra(Intent.EXTRA_INTENT);
                     String paquete = paqueteInstalador(app, confirmar);
                     if (paquete == null) {
+                        abandonarSesiones(app);
                         fallo(st, vc, version, "confirmacion_no_valida");
+                        return;
+                    }
+                    // Android pide confirmar y no hay quien pulse: no se abre un dialogo que nadie atendera; se reporta y
+                    // se espera al siguiente intento (1 h, 6 h, 24 h; maximo 3 por version), sin bucle.
+                    if (PantallaRemotaService.instancia() == null) {
+                        abandonarSesiones(app);
+                        fallo(st, vc, version, "requiere_confirmacion");
                         return;
                     }
                     st.setUpdEstado("instalando", "esperando_confirmar", version, System.currentTimeMillis());
@@ -335,7 +343,7 @@ final class Actualizador {
                         fallo(st, vc, version, "no_abre_instalador");
                         return;
                     }
-                    iniciarPulsador();
+                    iniciarPulsador(app, st, vc, version);
                     break;
                 }
                 case PackageInstaller.STATUS_SUCCESS:
@@ -378,7 +386,7 @@ final class Actualizador {
     }
 
     /** Mientras el diálogo del instalador esté en pantalla, pide al servicio de accesibilidad que pulse el botón (una sola vez). */
-    private static void iniciarPulsador() {
+    private static void iniciarPulsador(final Context app, final GuardianState st, final int vc, final String version) {
         Thread t = new Thread(() -> {
             while (SystemClock.elapsedRealtime() < pulsarHastaMs && instaladorEsperado != null) {
                 try {
@@ -394,7 +402,12 @@ final class Actualizador {
                     return;
                 }
             }
-            instaladorEsperado = null;
+            if (instaladorEsperado != null) {
+                // Nadie pulso en la ventana (el servicio no ve o no alcanza el boton): fallo claro, sin esperar los 15 min.
+                instaladorEsperado = null;
+                abandonarSesiones(app);
+                fallo(st, vc, version, "boton_no_pulsado");
+            }
         }, "ActualizacionBoton");
         t.setDaemon(true);
         t.start();
@@ -421,11 +434,7 @@ final class Actualizador {
             if (("descargando".equals(estado) || "instalando".equals(estado))
                     && ahora - st.getUpdEstadoTs() > ESTADO_MAX_MS && !EN_CURSO.get()) {
                 fallo(st, vc, st.getUpdVersion(), "sin_resultado");
-                try {
-                    PackageInstaller pi = ctx.getPackageManager().getPackageInstaller();
-                    for (PackageInstaller.SessionInfo si : pi.getMySessions()) pi.abandonSession(si.getSessionId());
-                } catch (Throwable ignored) {
-                }
+                abandonarSesiones(ctx);
             }
         } catch (Throwable e) {
             Log.w(TAG, "revisarPendiente: " + e);
@@ -438,6 +447,20 @@ final class Actualizador {
         d.actualizacionEstado = st.getUpdEstado();
         d.actualizacionDetalle = st.getUpdDetalle();
         d.actualizacionObjetivo = st.getUpdVersion();
+    }
+
+    /** Abandona las sesiones de instalacion de esta app que hayan quedado abiertas o esperando confirmacion. */
+    static void abandonarSesiones(Context ctx) {
+        try {
+            PackageInstaller pi = ctx.getPackageManager().getPackageInstaller();
+            for (PackageInstaller.SessionInfo si : pi.getMySessions()) {
+                try {
+                    pi.abandonSession(si.getSessionId());
+                } catch (Throwable ignored) {
+                }
+            }
+        } catch (Throwable ignored) {
+        }
     }
 
     private static void limpiarCarpeta(File dir) {
