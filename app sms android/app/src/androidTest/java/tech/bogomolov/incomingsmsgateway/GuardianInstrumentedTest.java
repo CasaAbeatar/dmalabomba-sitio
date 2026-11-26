@@ -135,9 +135,12 @@ public class GuardianInstrumentedTest {
             assertTrue("falta detalle." + k, d.has(k));
         }
         assertEquals(BuildConfig.VERSION_NAME, d.getString("app"));
-        assertEquals("2.8.0", d.getString("app"));
+        assertEquals("2.9.0", d.getString("app"));
         for (String k : new String[]{"senal_nivel", "operador", "sim_estado", "modo_avion", "memoria_libre_mb", "arranque_ts",
                 "bucket_standby", "doze", "latido_retraso_ms", "reinicios_servicio"}) {
+            assertTrue("falta detalle." + k, d.has(k));
+        }
+        for (String k : new String[]{"wifi_encendido", "wifi_rssi", "wifi_mbps", "wifi_mhz", "wifi_nombre", "permisos_extra"}) {
             assertTrue("falta detalle." + k, d.has(k));
         }
         assertTrue("la memoria libre se midio", d.getInt("memoria_libre_mb") > 0);
