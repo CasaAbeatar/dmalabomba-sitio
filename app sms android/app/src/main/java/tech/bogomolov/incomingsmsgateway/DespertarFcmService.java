@@ -32,7 +32,7 @@ public class DespertarFcmService extends FirebaseMessagingService {
     @Override
     public void onNewToken(String token) {
         super.onNewToken(token);
-        FcmInicio.alNuevoToken(getApplicationContext(), token);
+        FcmInicio.alTokenDeFirebase(getApplicationContext(), token);
     }
 
     @Override

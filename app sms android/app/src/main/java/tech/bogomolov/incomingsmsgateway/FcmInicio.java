@@ -51,7 +51,7 @@ final class FcmInicio {
             FirebaseMessaging.getInstance().getToken().addOnCompleteListener(tarea -> {
                 try {
                     if (tarea.isSuccessful() && tarea.getResult() != null) {
-                        alNuevoToken(fin, tarea.getResult());
+                        alTokenDeFirebase(fin, tarea.getResult());
                     } else {
                         Log.w(Guardian.TAG, "FCM: sin token (¿sin Google Play Services?): " + tarea.getException());
                     }
@@ -62,6 +62,19 @@ final class FcmInicio {
         } catch (Throwable e) {
             Log.w(Guardian.TAG, "FCM no disponible: " + e);
         }
+    }
+
+    /**
+     * Solo para las pruebas instrumentadas: Firebase entrega el token REAL en cualquier momento y eso manda un latido
+     * forzado que ensuciaría el conteo de latidos del servidor falso. Con true se ignora el token que llega de Firebase
+     * (alNuevoToken, llamado a mano por la prueba, sigue funcionando). En producción nunca se activa.
+     */
+    static volatile boolean ignorarTokenDeFirebase = false;
+
+    /** Punto de entrada de los tokens que entrega Firebase (getToken y onNewToken). */
+    static void alTokenDeFirebase(Context ctx, String token) {
+        if (ignorarTokenDeFirebase) return;
+        alNuevoToken(ctx, token);
     }
 
     /** Guarda el token y, si cambió, fuerza un latido para que el servidor lo conozca de inmediato. */

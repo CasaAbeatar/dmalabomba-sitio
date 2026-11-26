@@ -3,6 +3,7 @@ package tech.bogomolov.incomingsmsgateway;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assume.assumeTrue;
 
@@ -58,6 +59,7 @@ public class FcmDespertarInstrumentedTest {
     public void preparar() throws Exception {
         limpiar();
         Guardian.reiniciarFreno();
+        FcmInicio.ignorarTokenDeFirebase = true;   // el token real de Firebase mandaría latidos que ensucian el conteo
         ctx.stopService(new Intent(ctx, SmsReceiverService.class));
         server = new GuardianInstrumentedTest.MiniServer();
         server.start();
@@ -98,12 +100,12 @@ public class FcmDespertarInstrumentedTest {
         long ahora = System.currentTimeMillis();
         assertEquals(DespertarFcmService.Resultado.ATENDIDO, DespertarFcmService.atender(ctx, datos("despertar", "41", ahora), true, ahora));
 
-        assertTrue("el latido del despertar no llegó", esperar(() -> server.latidos().size() >= 1, 20_000));
-        JSONObject o = new JSONObject(server.latidos().get(0).cuerpo);
-        JSONObject d = o.getJSONObject("detalle");
+        assertTrue("el latido del despertar no llegó", esperar(() -> latidoConDespertar(41) != null, 20_000));
+        GuardianInstrumentedTest.Peticion lat = latidoConDespertar(41);
+        JSONObject d = new JSONObject(lat.cuerpo).getJSONObject("detalle");
         assertTrue("despertar_id debe ser un número", d.get("despertar_id") instanceof Number);
         assertEquals(41, d.getLong("despertar_id"));
-        assertEquals(Request.computeHmacSha256Hex(SECRETO, server.latidos().get(0).cuerpo), server.latidos().get(0).cabecera("x-signature"));
+        assertEquals(Request.computeHmacSha256Hex(SECRETO, lat.cuerpo), lat.cabecera("x-signature"));
         assertTrue("el servicio debe quedar corriendo", esperar(SmsReceiverService::isRunning, 15_000));
         assertEquals("«Reconectando...» debe retirarse al terminar", 0, notificacionesPropias(Notificaciones.ID_DESPERTAR));
         assertEquals(41, new GuardianState(ctx).getDespertarIdUltimo());
@@ -155,8 +157,7 @@ public class FcmDespertarInstrumentedTest {
         assertEquals(DespertarFcmService.Resultado.IGNORADO, DespertarFcmService.atender(ctx, idRaro, true, ahora));
         assertEquals(DespertarFcmService.Resultado.IGNORADO, DespertarFcmService.atender(ctx, new HashMap<String, String>(), true, ahora));
         Thread.sleep(1500);
-        assertEquals("nada de lo ignorado debe mandar latido", 0, server.latidos().size());
-        assertFalse(SmsReceiverService.isRunning());
+        for (long id = 50; id <= 54; id++) assertNull("lo ignorado no debe confirmarse con despertar_id " + id, latidoConDespertar(id));
         assertEquals(0, new GuardianState(ctx).getDespertarIdUltimo());
     }
 
@@ -165,7 +166,7 @@ public class FcmDespertarInstrumentedTest {
         long ahora = System.currentTimeMillis();
         assertEquals(DespertarFcmService.Resultado.ATENDIDO, DespertarFcmService.atender(ctx, datos("despertar", "60", ahora), true, ahora));
         assertEquals(DespertarFcmService.Resultado.REPETIDO, DespertarFcmService.atender(ctx, datos("despertar", "60", ahora), true, ahora + 2_000));
-        assertTrue(esperar(() -> server.latidos().size() >= 1, 20_000));
+        assertTrue(esperar(() -> latidoConDespertar(60) != null, 20_000));
         Thread.sleep(1500);
         int con60 = 0;
         for (GuardianInstrumentedTest.Peticion p : server.latidos()) {
@@ -182,8 +183,7 @@ public class FcmDespertarInstrumentedTest {
         long ahora = System.currentTimeMillis();
         assertEquals(DespertarFcmService.Resultado.ATENDIDO_SIN_SERVICIO,
                 DespertarFcmService.atender(ctx, datos("despertar", "70", ahora), false, ahora));
-        assertTrue("el latido igual debe salir", esperar(() -> server.latidos().size() >= 1, 20_000));
-        assertEquals(70, new JSONObject(server.latidos().get(0).cuerpo).getJSONObject("detalle").getLong("despertar_id"));
+        assertTrue("el latido igual debe salir", esperar(() -> latidoConDespertar(70) != null, 20_000));
         Thread.sleep(1500);
         assertFalse("con prioridad degradada no se debe arrancar el servicio", SmsReceiverService.isRunning());
         assertEquals(0, notificacionesPropias(Notificaciones.ID_DESPERTAR));
@@ -197,7 +197,7 @@ public class FcmDespertarInstrumentedTest {
         int creaciones = SmsReceiverService.getCreaciones();
         assertEquals(DespertarFcmService.Resultado.ATENDIDO, DespertarFcmService.atender(ctx, datos("despertar", "80", ahora), true, ahora));
         assertEquals("el servicio ya corría: no se recrea", creaciones, SmsReceiverService.getCreaciones());
-        assertTrue(esperar(() -> server.latidos().size() >= 1, 20_000));
+        assertTrue(esperar(() -> latidoConDespertar(80) != null, 20_000));
     }
 
     // ------------------------------------------------------------------ el token
@@ -205,11 +205,14 @@ public class FcmDespertarInstrumentedTest {
     @Test
     public void unTokenNuevoSeGuardaYSeMandaEnUnLatidoForzado() throws Exception {
         FcmInicio.alNuevoToken(ctx, TOKEN);
-        assertTrue("no salió el latido del token nuevo", esperar(() -> server.latidos().size() >= 1, 20_000));
         assertEquals(TOKEN, new GuardianState(ctx).getFcmToken());
-        JSONObject d = new JSONObject(server.latidos().get(0).cuerpo).getJSONObject("detalle");
-        assertEquals(TOKEN, d.getString("fcm_token"));
-        assertFalse("un token nuevo no es un despertar", d.has("despertar_id"));
+        assertTrue("no salió un latido con el token nuevo", esperar(() -> {
+            for (GuardianInstrumentedTest.Peticion p : server.latidos()) {
+                JSONObject d = new JSONObject(p.cuerpo).getJSONObject("detalle");
+                if (TOKEN.equals(d.optString("fcm_token", "")) && !d.has("despertar_id")) return true;
+            }
+            return false;
+        }, 20_000));
     }
 
     @Test
@@ -242,6 +245,18 @@ public class FcmDespertarInstrumentedTest {
         m.put("titulo", "Reconectando...");
         m.put("ts", String.valueOf(ts));
         return m;
+    }
+
+    /** El latido que confirma un despertar (los demás latidos del servicio no llevan despertar_id); null si aún no llegó. */
+    private GuardianInstrumentedTest.Peticion latidoConDespertar(long id) {
+        for (GuardianInstrumentedTest.Peticion p : server.latidos()) {
+            try {
+                JSONObject d = new JSONObject(p.cuerpo).getJSONObject("detalle");
+                if (d.has("despertar_id") && d.getLong("despertar_id") == id) return p;
+            } catch (Exception ignored) {
+            }
+        }
+        return null;
     }
 
     private int notificacionesPropias(int id) {

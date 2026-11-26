@@ -80,6 +80,7 @@ public class GuardianInstrumentedTest {
     public void preparar() throws Exception {
         limpiar();
         Guardian.reiniciarFreno();   // 2.11.0: el freno central es estado del proceso; cada prueba empieza sin historial
+        FcmInicio.ignorarTokenDeFirebase = true;   // 2.11.0: el token real de Firebase mandaría latidos que ensucian el conteo
         server = new MiniServer();
         server.start();
         ForwardingConfig c = new ForwardingConfig(ctx);

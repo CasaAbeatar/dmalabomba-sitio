@@ -357,10 +357,27 @@ public final class Guardian {
             ultimoIntentoAncla = ahora;
             Settings.Secure.putString(ctx.getContentResolver(), LISTENERS,
                     ListaServicios.agregar(lista, ctx.getPackageName(), GuardianListenerService.class.getName()));
+            empujarReenlaceAncla(ctx);
             return true;
         } catch (Throwable e) {
             Log.e(TAG, "autoactivar acceso a notificaciones: " + e);
             return false;
+        }
+    }
+
+    /**
+     * Escribir la lista no siempre basta para que Android enlace el servicio (versiones recientes lo reconstruyen desde
+     * su propio registro). Apagar y volver a poner el estado por defecto del componente hace que Android reevalúe los
+     * servicios de la app y enlace el que ya está en la lista (truco conocido; no mata el proceso: DONT_KILL_APP).
+     */
+    private static void empujarReenlaceAncla(Context ctx) {
+        try {
+            ComponentName c = new ComponentName(ctx, GuardianListenerService.class);
+            PackageManager pm = ctx.getPackageManager();
+            pm.setComponentEnabledSetting(c, PackageManager.COMPONENT_ENABLED_STATE_DISABLED, PackageManager.DONT_KILL_APP);
+            pm.setComponentEnabledSetting(c, PackageManager.COMPONENT_ENABLED_STATE_DEFAULT, PackageManager.DONT_KILL_APP);
+        } catch (Throwable e) {
+            Log.w(TAG, "empujar reenlace del acceso a notificaciones: " + e);
         }
     }
 

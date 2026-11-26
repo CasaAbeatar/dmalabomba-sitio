@@ -53,6 +53,7 @@ public class SmsDespertarInstrumentedTest {
     public void preparar() throws Exception {
         limpiar();
         Guardian.reiniciarFreno();
+        FcmInicio.ignorarTokenDeFirebase = true;   // el token real de Firebase mandaría latidos que ensucian el conteo
         server = new GuardianInstrumentedTest.MiniServer();
         server.start();
         // regla con comodín: un SMS normal SÍ se reenviaría; así se prueba que el de despertar no.
@@ -111,9 +112,8 @@ public class SmsDespertarInstrumentedTest {
         receiver.onReceive(ctx, intent(texto));   // el mismo SMS otra vez (replay)
         assertTrue(esperar(() -> lineasLog() >= 2, 10_000));
         assertEquals("CONTADOR_REPETIDO", ultimoResultado());
-        int latidos = server.latidos().size();
         Thread.sleep(1500);
-        assertEquals("el replay no debe mandar otro latido", latidos, server.latidos().size());
+        assertEquals("el replay no debe ejecutarse otra vez: solo una orden OK en la bitácora", 1, contarResultado("OK"));
         assertEquals(5, new GuardianState(ctx).getSmsContador());
 
         receiver.onReceive(ctx, intent(sms(SmsDespertar.CMD_LATIDO_YA, 4)));   // contador menor: tampoco
@@ -131,7 +131,7 @@ public class SmsDespertarInstrumentedTest {
         assertTrue(esperar(() -> lineasLog() >= 1, 10_000));
         assertEquals("FIRMA_MALA", ultimoResultado());
         Thread.sleep(1500);
-        assertEquals(0, server.latidos().size());
+        assertEquals(0, contarResultado("OK"));
         assertEquals("el contador no avanza con una firma mala", 0, new GuardianState(ctx).getSmsContador());
         noSeReenvio(receiver);
 
@@ -140,7 +140,7 @@ public class SmsDespertarInstrumentedTest {
         receiver.onReceive(ctx, intent("LB1 latido_ya 9 " + ajena));
         assertTrue(esperar(() -> lineasLog() >= 2, 10_000));
         assertEquals("FIRMA_MALA", ultimoResultado());
-        assertEquals(0, server.latidos().size());
+        assertEquals(0, contarResultado("OK"));
         noSeReenvio(receiver);
     }
 
@@ -162,7 +162,7 @@ public class SmsDespertarInstrumentedTest {
         receiver.onReceive(ctx, intent("LB1 borrar_todo 3 " + firma));
         assertTrue(esperar(() -> lineasLog() >= 1, 10_000));
         assertEquals("ORDEN_DESCONOCIDA", ultimoResultado());
-        assertEquals(0, server.latidos().size());
+        assertEquals(0, contarResultado("OK"));
         assertEquals(0, new GuardianState(ctx).getSmsContador());
         noSeReenvio(receiver);
     }
@@ -224,7 +224,8 @@ public class SmsDespertarInstrumentedTest {
         receiver.onReceive(ctx, intent("LB1 latido_ya 1 xyz"));                 // firma corta y no hex
         assertTrue(esperar(() -> lineasLog() >= 3, 10_000));
         noSeReenvio(receiver);
-        assertEquals(0, server.latidos().size());
+        assertEquals(0, contarResultado("OK"));
+        assertEquals("FORMATO", ultimoResultado());
     }
 
     // ------------------------------------------------------------------ ayudas
@@ -237,6 +238,17 @@ public class SmsDespertarInstrumentedTest {
     private int lineasLog() {
         String l = new GuardianState(ctx).getSmsLog();
         return l.isEmpty() ? 0 : l.split("\n").length;
+    }
+
+    private int contarResultado(String resultado) {
+        String l = new GuardianState(ctx).getSmsLog();
+        int n = 0;
+        if (l.isEmpty()) return 0;
+        for (String linea : l.split("\n")) {
+            String[] c = linea.split("\\|");
+            if (c.length >= 4 && c[3].equals(resultado)) n++;
+        }
+        return n;
     }
 
     private String ultimoResultado() {
