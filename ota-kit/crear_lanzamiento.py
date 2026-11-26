@@ -37,7 +37,7 @@ def main():
         if a.extra_entrada:
             zi = zipfile.ZipInfo(a.extra_entrada, date_time=(2026, 1, 1, 0, 0, 0)); z.writestr(zi, b"x")
     sha = hashlib.sha256(open(zpath, "rb").read()).hexdigest()
-    ahora = dt.datetime.utcnow().replace(microsecond=0)
+    ahora = dt.datetime.now(dt.timezone.utc).replace(tzinfo=None).replace(microsecond=0)
     iso = lambda d: d.strftime("%Y-%m-%dT%H:%M:%SZ")
     mpath = os.path.join(a.salida, "manifiesto.json")
     lanz = []
