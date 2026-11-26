@@ -1,0 +1,24 @@
+-- REVERTIR las correcciones ADITIVAS de la auditoria de la pantalla remota (fork E, 25 nov 2026). NO se ejecuto; requiere aprobacion de Emil (usa DROP/DELETE).
+-- No se reemplazo ninguna funcion existente: las funciones viejas (sinpe_pantalla_accion/guardar/prorrogar/purgar/..., fact.sinpe_pantalla_entregar, fact.sinpe_secreto) siguen intactas.
+-- Orden: 1) volver a desplegar las edge functions viejas (abajo), 2) ejecutar este SQL.
+--   - sinpe-recibir: servidor-correcciones/sinpe-recibir.v5.index.ts (verify_jwt=false)
+--   - sinpe-pantalla v1 y sinpe-pantalla-visor v1: rama pantalla-servidor del repo CasaAbeatar/dmalabomba-sitio (respaldo hecho antes de esta correccion)
+--   - Pages: quitar VISOR_WORKER_SECRETO del entorno preview y volver a publicar la rama vista-pantalla con servidor-correcciones/_worker.js.antes, visor.js.antes, index.html.antes
+begin;
+drop function if exists public.sinpe_pantalla_accion_v2(uuid, uuid, text, jsonb, integer);
+drop function if exists public.sinpe_pantalla_prorrogar_v2(uuid, uuid);
+drop function if exists public.sinpe_pantalla_guardar_v2(text, uuid, integer, integer, integer, text, boolean, boolean, boolean, bigint[], jsonb);
+drop function if exists public.sinpe_pantalla_purgar_v2();
+drop function if exists fact.sinpe_pantalla_entregar_v2(uuid);
+drop function if exists public.sinpe_pantalla_visor_estado(text, text);
+drop function if exists public.sinpe_pantalla_visor_fallo(text, text);
+drop function if exists public.sinpe_pantalla_reloj(text, bigint);
+drop function if exists public.sinpe_pantalla_worker_secreto();
+drop function if exists public.sinpe_secreto_empresa(text);
+drop function if exists fact.sinpe_exige_servicio();
+drop table if exists fact.sinpe_pantalla_reloj, fact.sinpe_pantalla_visor_fallos, fact.sinpe_pantalla_visor_bloqueos;
+alter table fact.sinpe_pantalla_entrada drop column if exists cuadro_seq;
+alter table fact.sinpe_pantalla_sesion drop column if exists ultimo_seq;
+delete from fact.alertas_hacienda_tipos where tipo = 'sinpe_visor_bloqueo';
+delete from vault.secrets where name in ('sinpe_hmac_secreto_pollos', 'pantalla_visor_worker_secreto');
+commit;

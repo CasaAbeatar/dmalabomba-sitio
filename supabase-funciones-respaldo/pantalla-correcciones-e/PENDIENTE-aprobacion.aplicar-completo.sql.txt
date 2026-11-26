@@ -1,0 +1,349 @@
+-- Correcciones de la auditoria de la pantalla remota (fork E, 25 nov 2026). Todo en una sola transaccion.
+-- Reversa: REVERTIR.sql (usa las definiciones guardadas en fact.sinpe_respaldo_funciones con motivo 'antes de correcciones de la auditoria de pantalla').
+begin;
+
+-- 0) respaldo de las definiciones actuales
+insert into fact.sinpe_respaldo_funciones (nombre, definicion, motivo)
+select n.nspname || '.' || p.proname || '(' || pg_get_function_identity_arguments(p.oid) || ')', pg_get_functiondef(p.oid), 'antes de correcciones de la auditoria de pantalla (fork E, 25 nov 2026)'
+  from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+ where (n.nspname = 'public' and p.proname in ('sinpe_pantalla_accion', 'sinpe_pantalla_cerrar', 'sinpe_pantalla_fin', 'sinpe_pantalla_guardar', 'sinpe_pantalla_leer', 'sinpe_pantalla_purgar', 'sinpe_pantalla_prorrogar'))
+    or (n.nspname = 'fact' and p.proname in ('sinpe_pantalla_entregar', 'sinpe_pantalla_limpiar_sesiones', 'respaldo_expr'));
+
+-- 1) las capturas y el texto de las ordenes salen de los esquemas que se copian (fact, public, dixi): ya no viajan a Neon, GitLab ni respaldos
+create schema if not exists pantalla_priv;
+revoke all on schema pantalla_priv from public;
+grant usage on schema pantalla_priv to service_role;
+alter table fact.sinpe_pantalla_cuadro set schema pantalla_priv;
+alter table fact.sinpe_pantalla_entrada set schema pantalla_priv;
+revoke all on all tables in schema pantalla_priv from respaldo_neon;
+alter table pantalla_priv.sinpe_pantalla_entrada add column if not exists cuadro_seq integer;
+alter table fact.sinpe_pantalla_sesion add column if not exists ultimo_seq integer not null default -1;
+
+-- 2) tablas nuevas: reloj anti repeticion del telefono, fallos y bloqueos del visor
+create table if not exists fact.sinpe_pantalla_reloj (
+  empresa text primary key check (empresa in ('soda', 'pollos')),
+  ultimo_ts_ms bigint not null default 0);
+alter table fact.sinpe_pantalla_reloj enable row level security;
+insert into fact.sinpe_pantalla_reloj (empresa) values ('soda'), ('pollos') on conflict do nothing;
+create table if not exists fact.sinpe_pantalla_visor_fallos (
+  id bigint generated always as identity primary key, en timestamptz not null default now(), usuario text not null, ip text);
+create index if not exists sinpe_pantalla_visor_fallos_u on fact.sinpe_pantalla_visor_fallos (usuario, en);
+create index if not exists sinpe_pantalla_visor_fallos_i on fact.sinpe_pantalla_visor_fallos (ip, en);
+alter table fact.sinpe_pantalla_visor_fallos enable row level security;
+create table if not exists fact.sinpe_pantalla_visor_bloqueos (
+  clave text primary key, hasta timestamptz not null, creado_en timestamptz not null default now());
+alter table fact.sinpe_pantalla_visor_bloqueos enable row level security;
+insert into fact.alertas_hacienda_tipos (tipo, nombre, severidad, titulo_n, cuerpo_n, que_hacer)
+values ('sinpe_visor_bloqueo', 'Bloqueo del visor de pantalla remota', 'importante', 'Se bloqueo el acceso al visor de la pantalla remota por intentos fallidos',
+        'Hubo muchos intentos fallidos de entrar al visor del telefono de {empresa} y el sistema bloqueo ese usuario o esa direccion por 30 minutos.',
+        'Si fue usted, espere 30 minutos. Si no, alguien esta probando claves: el visor sigue cerrado para esa persona y el telefono no se ve afectado.')
+on conflict (tipo) do nothing;
+
+-- 3) secretos nuevos (valores aleatorios; solo se leen con fact.boveda_leer)
+do $$ begin
+  if not exists (select 1 from vault.secrets where name = 'sinpe_hmac_secreto_pollos') then
+    perform vault.create_secret(encode(extensions.gen_random_bytes(32), 'hex'), 'sinpe_hmac_secreto_pollos',
+      'HMAC-SHA256 propio del telefono de Pollos (reenviador de SMS y pantalla remota). Creado 25 nov 2026 por la auditoria: el telefono de Soda, con la clave maestra, ya no puede hablar como Pollos. Todavia no hay telefono de Pollos: ponerla en su app al instalarlo.');
+  end if;
+  if not exists (select 1 from vault.secrets where name = 'pantalla_visor_worker_secreto') then
+    perform vault.create_secret(encode(extensions.gen_random_bytes(32), 'hex'), 'pantalla_visor_worker_secreto',
+      'Cabecera x-visor-worker que el worker de pagos.dmalabomba.com manda a sinpe-pantalla-visor; sin ella la funcion rechaza la llamada (25 nov 2026). Copia en el secreto VISOR_WORKER_SECRETO de Cloudflare Pages.');
+  end if;
+end $$;
+
+create or replace function fact.sinpe_secreto_empresa(p_empresa text) returns text language sql security definer set search_path to 'vault', 'pg_temp' as $$
+  select coalesce(
+    (select decrypted_secret from vault.decrypted_secrets where name = 'sinpe_hmac_secreto_' || lower(btrim(coalesce(p_empresa, ''))) limit 1),
+    (select decrypted_secret from vault.decrypted_secrets where name = 'sinpe_hmac_secreto' limit 1)) $$;
+create or replace function public.sinpe_secreto_empresa(p_empresa text) returns text language sql security definer set search_path to '' as $$ select fact.sinpe_secreto_empresa(p_empresa) $$;
+create or replace function public.sinpe_pantalla_worker_secreto() returns text language sql security definer set search_path to 'vault', 'pg_temp' as $$
+  select decrypted_secret from vault.decrypted_secrets where name = 'pantalla_visor_worker_secreto' $$;
+
+-- 4) reloj anti repeticion: el ts del telefono debe ser mayor que el ultimo aceptado
+create or replace function public.sinpe_pantalla_reloj(p_empresa text, p_ts bigint) returns boolean language plpgsql security definer set search_path to '' as $$
+declare v boolean;
+begin
+  if p_empresa not in ('soda', 'pollos') or p_ts is null then return false; end if;
+  update fact.sinpe_pantalla_reloj set ultimo_ts_ms = p_ts where empresa = p_empresa and ultimo_ts_ms < p_ts returning true into v;
+  return coalesce(v, false);
+end $$;
+
+-- 5) bloqueo del visor: 8 fallos por usuario en 15 min o 20 por direccion bloquean 30 min (respuesta generica, exista o no el usuario)
+create or replace function public.sinpe_pantalla_visor_estado(p_usuario text, p_ip text) returns jsonb language sql security definer set search_path to '' as $$
+  select jsonb_build_object('bloqueado', coalesce(max(b.hasta) > now(), false), 'espera_s', coalesce(greatest(0, ceil(extract(epoch from max(b.hasta) - now()))::int), 0))
+    from fact.sinpe_pantalla_visor_bloqueos b
+   where b.hasta > now() and b.clave in ('u:' || left(lower(coalesce(p_usuario, '')), 40), 'i:' || left(coalesce(p_ip, ''), 64)) $$;
+create or replace function public.sinpe_pantalla_visor_fallo(p_usuario text, p_ip text) returns jsonb language plpgsql security definer set search_path to '' as $$
+declare u text := left(lower(coalesce(p_usuario, '')), 40); i text := left(coalesce(p_ip, ''), 64); nu int; ni int := 0; nuevo_u boolean; nuevo_i boolean; v_ref text := to_char(now(), 'YYYYMMDDHH24MISS');
+begin
+  insert into fact.sinpe_pantalla_visor_fallos (usuario, ip) values (u, nullif(i, ''));
+  select count(*) into nu from fact.sinpe_pantalla_visor_fallos where usuario = u and en > now() - interval '15 minutes';
+  if i <> '' then select count(*) into ni from fact.sinpe_pantalla_visor_fallos where ip = i and en > now() - interval '15 minutes'; end if;
+  if nu >= 8 then
+    insert into fact.sinpe_pantalla_visor_bloqueos (clave, hasta) values ('u:' || u, now() + interval '30 minutes')
+    on conflict (clave) do update set hasta = excluded.hasta, creado_en = now() where fact.sinpe_pantalla_visor_bloqueos.hasta <= now() returning true into nuevo_u;
+  end if;
+  if ni >= 20 then
+    insert into fact.sinpe_pantalla_visor_bloqueos (clave, hasta) values ('i:' || i, now() + interval '30 minutes')
+    on conflict (clave) do update set hasta = excluded.hasta, creado_en = now() where fact.sinpe_pantalla_visor_bloqueos.hasta <= now() returning true into nuevo_i;
+  end if;
+  if coalesce(nuevo_u, false) or coalesce(nuevo_i, false) then
+    perform public.sinpe_alerta('sinpe_visor_bloqueo', 'soda', 'visor-' || v_ref, 'Se bloqueo el acceso al visor de la pantalla remota',
+      'Hubo ' || greatest(nu, ni) || ' intentos fallidos en 15 minutos para el usuario "' || left(u, 20) || '"' || case when i <> '' then ' desde la direccion ' || i else '' end || '. Se bloqueo por 30 minutos. El telefono no se ve afectado.',
+      jsonb_build_object('usuario', left(u, 20), 'ip', i, 'fallos_usuario', nu, 'fallos_ip', ni), false);
+  end if;
+  return jsonb_build_object('ok', true);
+end $$;
+
+-- 6) purga (cada minuto y en cada llamada): acciones que no se entregaron en 15 s vencen; bitacora del visor a 1 dia
+create or replace function public.sinpe_pantalla_purgar() returns void language plpgsql security definer set search_path to '' as $$
+declare v_ids uuid[];
+begin
+  with c as (
+    update fact.sinpe_pantalla_sesion set cerrada_en = now(), motivo_cierre = 'vencida'
+     where cerrada_en is null and vence_en <= now() returning id)
+  select coalesce(array_agg(id), '{}') into v_ids from c;
+  if cardinality(v_ids) > 0 then perform fact.sinpe_pantalla_limpiar_sesiones(v_ids); end if;
+  update pantalla_priv.sinpe_pantalla_entrada set resultado = 'sin_respuesta',
+         params = case when params ? 't' then jsonb_build_object('largo', coalesce(length(params->>'t'), 0)) else params end
+   where confirmada_en is null and resultado is null and entregas >= 3 and entregada_en < now() - interval '6 seconds';
+  update pantalla_priv.sinpe_pantalla_entrada set resultado = 'vencida',
+         params = case when params ? 't' then jsonb_build_object('largo', coalesce(length(params->>'t'), 0)) else params end
+   where confirmada_en is null and resultado is null and entregas < 3 and creada_en < now() - interval '15 seconds';
+  delete from pantalla_priv.sinpe_pantalla_cuadro c
+   where c.ts < now() - interval '2 minutes'
+      or not exists (select 1 from fact.sinpe_pantalla_sesion s where s.id = c.sid and s.cerrada_en is null);
+  update pantalla_priv.sinpe_pantalla_entrada set params = jsonb_build_object('largo', coalesce(length(params->>'t'), 0))
+   where params ? 't' and (confirmada_en is not null or resultado is not null);
+  delete from fact.sinpe_pantalla_visor_fallos where en < now() - interval '1 day';
+  delete from fact.sinpe_pantalla_visor_bloqueos where hasta < now() - interval '1 day';
+end $$;
+
+create or replace function fact.sinpe_pantalla_limpiar_sesiones(p_ids uuid[]) returns void language sql security definer set search_path to '' as $$
+  update pantalla_priv.sinpe_pantalla_entrada e
+     set resultado = coalesce(e.resultado, case when e.confirmada_en is null then 'cancelada' end),
+         params = case when e.params ? 't' then jsonb_build_object('largo', coalesce(length(e.params->>'t'), 0)) else e.params end
+   where e.sid = any(p_ids) and (e.confirmada_en is null or e.params ? 't') $$;
+
+-- 7) entrega al telefono: acciones de hasta 15 s, con el cuadro_seq que vio el administrador
+create or replace function fact.sinpe_pantalla_entregar(p_sid uuid) returns jsonb language sql security definer set search_path to '' as $$
+  with sel as (
+    select id from pantalla_priv.sinpe_pantalla_entrada
+     where sid = p_sid and confirmada_en is null and resultado is null and entregas < 3
+       and creada_en > now() - interval '15 seconds'
+       and (entregada_en is null or entregada_en < now() - interval '6 seconds')
+     order by id limit 5 for update skip locked),
+  upd as (
+    update pantalla_priv.sinpe_pantalla_entrada e set entregada_en = now(), entregas = e.entregas + 1
+     where e.id in (select id from sel) returning e.id, e.a, e.params, e.cuadro_seq)
+  select coalesce(jsonb_agg(jsonb_build_object('id', id, 'a', a) || params || case when cuadro_seq is null then '{}'::jsonb else jsonb_build_object('cuadro_seq', cuadro_seq) end order by id), '[]'::jsonb) from upd $$;
+
+-- 8) cerrar / fin del telefono
+create or replace function public.sinpe_pantalla_cerrar(p_usuario uuid, p_sid uuid, p_motivo text default 'visor') returns jsonb language plpgsql security definer set search_path to '' as $$
+declare s fact.sinpe_pantalla_sesion;
+begin
+  if not fact.sinpe_pantalla_es_admin(p_usuario) then return jsonb_build_object('ok', false, 'error', 'no autorizado'); end if;
+  update fact.sinpe_pantalla_sesion set cerrada_en = now(), motivo_cierre = left(coalesce(p_motivo, 'visor'), 30)
+   where id = p_sid and cerrada_en is null returning * into s;
+  if found then
+    delete from pantalla_priv.sinpe_pantalla_cuadro where empresa = s.empresa;
+    perform fact.sinpe_pantalla_limpiar_sesiones(array[s.id]);
+  end if;
+  return jsonb_build_object('ok', true, 'cerrada', found);
+end $$;
+create or replace function public.sinpe_pantalla_fin(p_empresa text, p_sid uuid) returns jsonb language plpgsql security definer set search_path to '' as $$
+declare s fact.sinpe_pantalla_sesion;
+begin
+  update fact.sinpe_pantalla_sesion set cerrada_en = now(), motivo_cierre = 'telefono'
+   where id = p_sid and empresa = lower(btrim(coalesce(p_empresa, ''))) and cerrada_en is null returning * into s;
+  if found then
+    delete from pantalla_priv.sinpe_pantalla_cuadro where empresa = s.empresa;
+    perform fact.sinpe_pantalla_limpiar_sesiones(array[s.id]);
+  end if;
+  return jsonb_build_object('ok', true, 'sesion', false);
+end $$;
+
+-- 9) prorrogar: tope de 15 minutos desde que se abrio (igual que la app y la ficha del visor)
+create or replace function public.sinpe_pantalla_prorrogar(p_usuario uuid, p_sid uuid) returns jsonb language plpgsql security definer set search_path to '' as $$
+declare s fact.sinpe_pantalla_sesion; v_nuevo timestamptz;
+begin
+  if not fact.sinpe_pantalla_es_admin(p_usuario) then return jsonb_build_object('ok', false, 'error', 'no autorizado'); end if;
+  perform public.sinpe_pantalla_purgar();
+  select * into s from fact.sinpe_pantalla_sesion where id = p_sid and cerrada_en is null and vence_en > now();
+  if not found then return jsonb_build_object('ok', false, 'error', 'sesion cerrada'); end if;
+  v_nuevo := least(now() + interval '10 minutes', s.abierta_en + interval '15 minutes');
+  if v_nuevo > s.vence_en then
+    update fact.sinpe_pantalla_sesion set vence_en = v_nuevo, prorrogas = prorrogas + 1 where id = s.id returning * into s;
+  end if;
+  return jsonb_build_object('ok', true, 'resta_s', greatest(0, extract(epoch from s.vence_en - now())::int), 'tope_15min', s.vence_en >= s.abierta_en + interval '15 minutes');
+end $$;
+
+-- 10) guardar cuadro: seq creciente (se admite reinicio de la app con seq bajo; la repeticion de una peticion vieja ya la frena el reloj por ts)
+create or replace function public.sinpe_pantalla_guardar(p_empresa text, p_sid uuid, p_seq integer, p_w integer, p_h integer, p_jpg text, p_sin_cambio boolean, p_encendida boolean, p_bloqueada boolean, p_conf bigint[], p_res jsonb)
+returns jsonb language plpgsql security definer set search_path to '' as $$
+declare s fact.sinpe_pantalla_sesion; v_emp text := lower(btrim(coalesce(p_empresa, '')));
+begin
+  if v_emp not in ('soda', 'pollos') then return jsonb_build_object('ok', false, 'error', 'empresa invalida'); end if;
+  perform public.sinpe_pantalla_purgar();
+  select * into s from fact.sinpe_pantalla_sesion where id = p_sid and empresa = v_emp and cerrada_en is null and vence_en > now();
+  if not found then return jsonb_build_object('ok', true, 'sesion', false); end if;
+  if coalesce(p_seq, 0) <= s.ultimo_seq and coalesce(p_seq, 0) > 3 then
+    return jsonb_build_object('ok', false, 'error', 'seq repetido');
+  end if;
+  if p_conf is not null and cardinality(p_conf) > 0 then
+    update pantalla_priv.sinpe_pantalla_entrada e
+       set confirmada_en = now(), resultado = left(coalesce(nullif(btrim(p_res ->> e.id::text), ''), 'ok'), 40),
+           params = case when e.params ? 't' then jsonb_build_object('largo', coalesce(length(e.params->>'t'), 0)) else e.params end
+     where e.sid = s.id and e.id = any(p_conf[1:20]) and e.confirmada_en is null;
+  end if;
+  if coalesce(p_sin_cambio, false) then
+    update pantalla_priv.sinpe_pantalla_cuadro set ts = now(), pantalla_encendida = p_encendida, bloqueada = p_bloqueada where empresa = v_emp and sid = s.id;
+  elsif p_jpg is not null and length(p_jpg) > 0 then
+    insert into pantalla_priv.sinpe_pantalla_cuadro (empresa, sid, seq, ts, ancho, alto, jpg, pantalla_encendida, bloqueada)
+    values (v_emp, s.id, coalesce(p_seq, 0), now(), p_w, p_h, p_jpg, p_encendida, p_bloqueada)
+    on conflict (empresa) do update set sid = excluded.sid, seq = excluded.seq, ts = now(), ancho = excluded.ancho, alto = excluded.alto,
+         jpg = excluded.jpg, pantalla_encendida = excluded.pantalla_encendida, bloqueada = excluded.bloqueada;
+    update fact.sinpe_pantalla_sesion set cuadros = cuadros + 1 where id = s.id;
+  end if;
+  update fact.sinpe_pantalla_sesion set telefono_visto_en = now(), ultimo_seq = coalesce(p_seq, 0) where id = s.id;
+  return jsonb_build_object('ok', true, 'sesion', true, 'resta_s', greatest(0, extract(epoch from s.vence_en - now())::int), 'acciones', fact.sinpe_pantalla_entregar(s.id));
+end $$;
+
+-- 11) leer (visor)
+create or replace function public.sinpe_pantalla_leer(p_usuario uuid, p_sid uuid, p_desde integer default -1) returns jsonb language plpgsql security definer set search_path to '' as $$
+declare s fact.sinpe_pantalla_sesion; c pantalla_priv.sinpe_pantalla_cuadro; v_viva boolean; v_cuadro jsonb := null; v_res jsonb;
+begin
+  if not fact.sinpe_pantalla_es_admin(p_usuario) then return jsonb_build_object('ok', false, 'error', 'no autorizado'); end if;
+  perform public.sinpe_pantalla_purgar();
+  select * into s from fact.sinpe_pantalla_sesion where id = p_sid;
+  if not found then return jsonb_build_object('ok', false, 'error', 'sesion desconocida'); end if;
+  v_viva := s.cerrada_en is null and s.vence_en > now();
+  if v_viva then
+    select * into c from pantalla_priv.sinpe_pantalla_cuadro where empresa = s.empresa and sid = s.id;
+    if found then
+      v_cuadro := jsonb_build_object('seq', c.seq, 'w', c.ancho, 'h', c.alto, 'edad_s', extract(epoch from now() - c.ts)::int,
+                    'encendida', c.pantalla_encendida, 'bloqueada', c.bloqueada)
+                  || case when c.seq <> p_desde then jsonb_build_object('jpg', c.jpg) else '{}'::jsonb end;
+    end if;
+  end if;
+  select coalesce(jsonb_agg(jsonb_build_object('id', id, 'a', a, 'resultado', resultado) order by id), '[]'::jsonb) into v_res
+    from (select id, a, resultado from pantalla_priv.sinpe_pantalla_entrada where sid = s.id and resultado is not null order by id desc limit 5) r;
+  return jsonb_build_object('ok', true, 'viva', v_viva, 'empresa', s.empresa,
+    'resta_s', case when v_viva then greatest(0, extract(epoch from s.vence_en - now())::int) else 0 end,
+    'abierta_s', extract(epoch from now() - s.abierta_en)::int,
+    'telefono_visto_s', case when s.telefono_visto_en is null then null else extract(epoch from now() - s.telefono_visto_en)::int end,
+    'cuadro', v_cuadro,
+    'pendientes', (select count(*) from pantalla_priv.sinpe_pantalla_entrada where sid = s.id and confirmada_en is null and resultado is null),
+    'ultimas', v_res, 'motivo_cierre', s.motivo_cierre);
+end $$;
+
+-- 12) accion: atada al cuadro que vio el administrador; texto en UTF-16 (como la app), admite saltos de linea
+drop function if exists public.sinpe_pantalla_accion(uuid, uuid, text, jsonb);
+create or replace function public.sinpe_pantalla_accion(p_usuario uuid, p_sid uuid, p_a text, p_params jsonb default '{}'::jsonb, p_cuadro_seq integer default null)
+returns jsonb language plpgsql security definer set search_path to '' as $$
+declare s fact.sinpe_pantalla_sesion; v_a text := lower(btrim(coalesce(p_a, ''))); p jsonb := coalesce(p_params, '{}'::jsonb); v jsonb; v_t text; v_id bigint; k text; v_seq int; v_u16 int;
+begin
+  if not fact.sinpe_pantalla_es_admin(p_usuario) then return jsonb_build_object('ok', false, 'error', 'no autorizado'); end if;
+  if jsonb_typeof(p) <> 'object' then return jsonb_build_object('ok', false, 'error', 'parametros invalidos'); end if;
+  perform public.sinpe_pantalla_purgar();
+  select * into s from fact.sinpe_pantalla_sesion where id = p_sid and cerrada_en is null and vence_en > now();
+  if not found then return jsonb_build_object('ok', false, 'error', 'sesion cerrada'); end if;
+  if (select count(*) from pantalla_priv.sinpe_pantalla_entrada where sid = s.id and confirmada_en is null and resultado is null) >= 15 then
+    return jsonb_build_object('ok', false, 'error', 'demasiadas acciones pendientes');
+  end if;
+  if p_cuadro_seq is not null and v_a <> 'encender' then
+    select seq into v_seq from pantalla_priv.sinpe_pantalla_cuadro where empresa = s.empresa and sid = s.id;
+    if not found then return jsonb_build_object('ok', false, 'error', 'sin imagen todavia'); end if;
+    if p_cuadro_seq < 0 or p_cuadro_seq > v_seq then return jsonb_build_object('ok', false, 'error', 'cuadro invalido'); end if;
+  end if;
+  if v_a in ('toque', 'largo') then
+    foreach k in array array['x', 'y'] loop
+      if jsonb_typeof(p -> k) is distinct from 'number' or (p ->> k)::numeric < 0 or (p ->> k)::numeric > 1 then return jsonb_build_object('ok', false, 'error', 'coordenada fuera de rango'); end if;
+    end loop;
+    v := jsonb_build_object('x', round((p ->> 'x')::numeric, 4), 'y', round((p ->> 'y')::numeric, 4));
+    if v_a = 'largo' then
+      v := v || jsonb_build_object('ms', least(greatest(coalesce(case when jsonb_typeof(p -> 'ms') = 'number' then (p ->> 'ms')::numeric::int end, 800), 300), 1500));
+    end if;
+  elsif v_a = 'deslizar' then
+    foreach k in array array['x1', 'y1', 'x2', 'y2'] loop
+      if jsonb_typeof(p -> k) is distinct from 'number' or (p ->> k)::numeric < 0 or (p ->> k)::numeric > 1 then return jsonb_build_object('ok', false, 'error', 'coordenada fuera de rango'); end if;
+    end loop;
+    v := jsonb_build_object('x1', round((p ->> 'x1')::numeric, 4), 'y1', round((p ->> 'y1')::numeric, 4), 'x2', round((p ->> 'x2')::numeric, 4), 'y2', round((p ->> 'y2')::numeric, 4),
+           'ms', least(greatest(coalesce(case when jsonb_typeof(p -> 'ms') = 'number' then (p ->> 'ms')::numeric::int end, 300), 100), 1500));
+  elsif v_a in ('atras', 'inicio', 'recientes', 'notificaciones', 'encender') then
+    v := '{}'::jsonb;
+  elsif v_a = 'texto' then
+    if jsonb_typeof(p -> 't') is distinct from 'string' then return jsonb_build_object('ok', false, 'error', 'texto invalido'); end if;
+    v_t := regexp_replace(p ->> 't', '[\u0001-\u0009\u000b-\u001f\u007f]', '', 'g');
+    if length(v_t) < 1 or length(v_t) > 200 then return jsonb_build_object('ok', false, 'error', 'texto de 1 a 200 caracteres'); end if;
+    v_u16 := length(v_t) + (select count(*)::int from regexp_split_to_table(v_t, '') ch where ascii(ch) > 65535);
+    if v_u16 > 200 then return jsonb_build_object('ok', false, 'error', 'texto de 1 a 200 caracteres'); end if;
+    v := jsonb_build_object('t', v_t);
+  elsif v_a = 'borrar' then
+    v := jsonb_build_object('n', least(greatest(coalesce(case when jsonb_typeof(p -> 'n') = 'number' then (p ->> 'n')::numeric::int end, 1), 1), 200));
+  else
+    return jsonb_build_object('ok', false, 'error', 'accion no permitida');
+  end if;
+  insert into pantalla_priv.sinpe_pantalla_entrada (sid, empresa, a, params, cuadro_seq) values (s.id, s.empresa, v_a, v, case when v_a = 'encender' then null else p_cuadro_seq end) returning id into v_id;
+  update fact.sinpe_pantalla_sesion set acciones = acciones + 1 where id = s.id;
+  return jsonb_build_object('ok', true, 'id', v_id);
+end $$;
+
+-- 13) respaldo del OneDrive/otros que usan respaldo_expr: sin imagen ni texto aunque algun dia se muevan las tablas
+create or replace function fact.respaldo_expr(p_esq text, p_tabla text, OUT fila text, OUT filtro text) returns record language plpgsql stable security definer set search_path to '' as $f$
+declare lista text;
+begin
+  fila := 'to_jsonb(x)'; filtro := 'true';
+  if p_esq = 'fact' and p_tabla = 'config' then
+    filtro := 'x.clave not ilike ''secreto%''';
+  elsif p_esq = 'fact' and p_tabla = 'usuarios' then
+    fila := 'to_jsonb(x) - ''pin_hash''';
+  elsif p_esq = 'pantalla_priv' and p_tabla = 'sinpe_pantalla_cuadro' then
+    fila := 'to_jsonb(x) - ''jpg''';
+  elsif p_esq = 'pantalla_priv' and p_tabla = 'sinpe_pantalla_entrada' then
+    fila := 'to_jsonb(x) - ''params''';
+  elsif p_esq = 'fact' and p_tabla = 'comprobantes' then
+    select string_agg(format('x.%I', a.attname), ', ' order by a.attnum) into lista
+      from pg_catalog.pg_attribute a
+     where a.attrelid = 'fact.comprobantes'::regclass and a.attnum > 0 and a.atttypid <> 0
+       and a.attname not in ('xml', 'xml_firmado', 'respuesta_xml');
+    fila := format($e$(select to_jsonb(r) from (select %s) r) || (
+      select jsonb_build_object(
+        'xml', case when x.xml_firmado is null then x.xml end,
+        'xml_firmado', case when h.f_ok then null else x.xml_firmado end,
+        'respuesta_xml', case when h.r_ok then null else x.respuesta_xml end,
+        '_respaldo', jsonb_build_object(
+          'xml_firmado_sha256', h.fs, 'respuesta_xml_sha256', h.rs,
+          'xml_firmado_en_bucket', h.f_ok, 'respuesta_xml_en_bucket', h.r_ok,
+          'xml_sin_firma_omitido', x.xml_firmado is not null,
+          'donde', 'lo que está en el bucket: respaldo-xml, emitidos/<ambiente>/<mes>/<clave>.xml y <clave>-respuesta-hacienda.xml'))
+        from (select h1.fs, h1.rs,
+                     exists (select 1 from fact.respaldo_xml q where q.origen = 'comprobante' and q.registro = x.id::text and q.tipo = 'firmado' and q.sha256 = h1.fs) f_ok,
+                     exists (select 1 from fact.respaldo_xml q where q.origen = 'comprobante' and q.registro = x.id::text and q.tipo = 'respuesta' and q.sha256 = h1.rs) r_ok
+                from (select encode(sha256(convert_to(x.xml_firmado, 'UTF8')), 'hex') fs, encode(sha256(convert_to(x.respuesta_xml, 'UTF8')), 'hex') rs) h1) h)$e$, lista);
+  elsif p_esq = 'public' and p_tabla = 'mensajes_hacienda' then
+    select string_agg(format('x.%I', a.attname), ', ' order by a.attnum) into lista
+      from pg_catalog.pg_attribute a
+     where a.attrelid = 'public.mensajes_hacienda'::regclass and a.attnum > 0 and a.atttypid <> 0
+       and a.attname <> 'xml_enviado';
+    fila := format($e$(select to_jsonb(r) from (select %s) r) || (
+      select jsonb_build_object(
+        'xml_enviado', case when h.ok then null else x.xml_enviado end,
+        '_respaldo', jsonb_build_object('xml_enviado_sha256', h.s, 'xml_enviado_en_bucket', h.ok,
+          'donde', 'lo que está en el bucket: respaldo-xml, emitidos/<ambiente>/<mes>/<clave>-mensaje-receptor.xml'))
+        from (select h1.s, exists (select 1 from fact.respaldo_xml q where q.origen = 'receptor' and q.registro = x.clave and q.tipo = 'receptor' and q.sha256 = h1.s) ok
+                from (select encode(sha256(convert_to(x.xml_enviado, 'UTF8')), 'hex') s) h1) h)$e$, lista);
+  end if;
+end $f$;
+
+-- 14) permisos: solo postgres y service_role ejecutan las funciones nuevas; nada de anon/authenticated/PUBLIC
+do $$ declare r record; begin
+  for r in select p.oid::regprocedure as f from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+            where (n.nspname = 'public' and p.proname in ('sinpe_secreto_empresa', 'sinpe_pantalla_worker_secreto', 'sinpe_pantalla_reloj', 'sinpe_pantalla_visor_estado', 'sinpe_pantalla_visor_fallo', 'sinpe_pantalla_accion'))
+               or (n.nspname = 'fact' and p.proname = 'sinpe_secreto_empresa') loop
+    execute format('revoke all on function %s from public, anon, authenticated', r.f);
+    execute format('grant execute on function %s to service_role', r.f);
+  end loop;
+end $$;
+revoke all on fact.sinpe_pantalla_reloj, fact.sinpe_pantalla_visor_fallos, fact.sinpe_pantalla_visor_bloqueos from anon, authenticated;
+commit;

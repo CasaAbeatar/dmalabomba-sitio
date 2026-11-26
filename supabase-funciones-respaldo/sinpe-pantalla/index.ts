@@ -1,4 +1,5 @@
-// sinpe-pantalla v1 (25 nov 2026): pantalla remota del telefono de SINPE (app 2.10.0). Protocolo en PROTOCOLO.md.
+// sinpe-pantalla v2 (25 nov 2026, auditoria): clave por empresa (el telefono de Soda no puede hablar como Pollos), reloj anti repeticion (ts creciente), seq creciente, cuadro_seq. Ver PROTOCOLO.md.
+// v1 (25 nov 2026): pantalla remota del telefono de SINPE (app 2.10.0). Protocolo en PROTOCOLO.md.
 // Autenticacion propia (verify_jwt=false): X-Signature = HMAC-SHA256 del cuerpo (hex), con el secreto de fact.sinpe_secreto, igual que sinpe-recibir.
 // ts dentro del cuerpo firmado y a menos de 300 s. Cuerpo maximo 256 KB. TODA respuesta posterior a la firma va firmada (X-Signature = HMAC del cuerpo de respuesta)
 // y trae eco = ts de la peticion, para que el telefono ate la respuesta a su peticion y no acepte una respuesta vieja repetida.
@@ -10,12 +11,14 @@ const MAX_BYTES = 256 * 1024;
 const MAX_JPG = 240 * 1024;
 const db = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!, { auth: { persistSession: false } });
 
-let cache: { v: string; exp: number } | null = null;
-async function secreto(): Promise<string | null> {
-  if (cache && cache.exp > Date.now()) return cache.v;
-  const { data, error } = await db.rpc('sinpe_secreto');
+// Clave por empresa: sinpe_hmac_secreto_<empresa> del Vault si existe; si no, la maestra (sinpe_hmac_secreto). Hoy Soda usa la maestra y Pollos la suya.
+const cache: Record<string, { v: string; exp: number }> = {};
+async function secreto(emp: 'soda' | 'pollos'): Promise<string | null> {
+  const c = cache[emp];
+  if (c && c.exp > Date.now()) return c.v;
+  const { data, error } = await db.rpc('sinpe_secreto_empresa', { p_empresa: emp });
   if (error || typeof data !== 'string' || !data) return null;
-  cache = { v: data, exp: Date.now() + 5 * 60_000 };
+  cache[emp] = { v: data, exp: Date.now() + 5 * 60_000 };
   return data;
 }
 
@@ -56,19 +59,29 @@ Deno.serve(async (req) => {
   let firma = (req.headers.get('x-signature') ?? '').trim();
   if (!firma) return await fallo('sin_firma', crudo.length);
   firma = firma.replace(/^sha256=/i, '');
-  const sec = await secreto();
-  if (!sec) return new Response(JSON.stringify({ ok: false, error: 'servicio no disponible' }), { status: 503, headers: { 'Content-Type': 'application/json' } });
-  const esperado = hex(await hmac(sec, crudo));
-  if (!iguales(firma.toLowerCase(), esperado)) return await fallo('firma_invalida', crudo.length);
+  const kS = await secreto('soda'), kP = await secreto('pollos');
+  if (!kS || !kP) return new Response(JSON.stringify({ ok: false, error: 'servicio no disponible' }), { status: 503, headers: { 'Content-Type': 'application/json' } });
+  const f = firma.toLowerCase();
+  const okS = iguales(f, hex(await hmac(kS, crudo)));
+  const okP = kP === kS ? okS : iguales(f, hex(await hmac(kP, crudo)));
+  if (!okS && !okP) return await fallo('firma_invalida', crudo.length);
+  const sec0 = okS ? kS : kP;
 
   let c: Record<string, unknown>;
-  try { c = JSON.parse(new TextDecoder().decode(crudo)); } catch { return await firmada(sec, null, { ok: false, error: 'json invalido' }, 400); }
+  try { c = JSON.parse(new TextDecoder().decode(crudo)); } catch { return await firmada(sec0, null, { ok: false, error: 'json invalido' }, 400); }
   const ts = aMs(c.ts);
-  if (ts === null) return await firmada(sec, null, { ok: false, error: 'sin ts' }, 400);
-  if (Math.abs(Date.now() - ts) > 300_000) return await firmada(sec, ts, { ok: false, error: 'fuera de tiempo' }, 409);
-  if (c.tipo !== 'pantalla') return await firmada(sec, ts, { ok: false, error: 'tipo invalido' }, 400);
+  if (ts === null) return await firmada(sec0, null, { ok: false, error: 'sin ts' }, 400);
+  if (Math.abs(Date.now() - ts) > 300_000) return await firmada(sec0, ts, { ok: false, error: 'fuera de tiempo' }, 409);
+  if (c.tipo !== 'pantalla') return await firmada(sec0, ts, { ok: false, error: 'tipo invalido' }, 400);
   const empresa = (typeof c.empresa === 'string' ? c.empresa : '').slice(0, 10).toLowerCase();
-  if (empresa !== 'soda' && empresa !== 'pollos') return await firmada(sec, ts, { ok: false, error: 'empresa invalida' }, 400);
+  if (empresa !== 'soda' && empresa !== 'pollos') return await firmada(sec0, ts, { ok: false, error: 'empresa invalida' }, 400);
+  // La clave con la que se firmo debe ser la de la empresa declarada: con la de Soda no se habla como Pollos ni al reves.
+  if (empresa === 'soda' ? !okS : !okP) return await fallo('empresa_no_corresponde', crudo.length);
+  const sec = empresa === 'soda' ? kS : kP;
+  // Anti repeticion: el ts firmado debe ser mayor que el ultimo aceptado de esa empresa.
+  const rl = await db.rpc('sinpe_pantalla_reloj', { p_empresa: empresa, p_ts: ts });
+  if (rl.error) { console.error(JSON.stringify({ ev: 'sinpe_pantalla', fase: 'reloj', detalle: String(rl.error.message).slice(0, 120) })); return await firmada(sec, ts, { ok: false, error: 'no se pudo procesar' }, 500); }
+  if (rl.data !== true) { try { await db.rpc('sinpe_firma_fallo', { p_motivo: 'pantalla_repetida', p_bytes: crudo.length }); } catch (_e) { /* no frena */ } return await firmada(sec, ts, { ok: false, error: 'repetida' }, 409); }
   const bool = (v: unknown) => (typeof v === 'boolean' ? v : null);
   const fase = c.fase;
 
@@ -97,11 +110,12 @@ Deno.serve(async (req) => {
           if (/^[0-9]{1,15}$/.test(k) && typeof v === 'string') res[k] = v.slice(0, 40);
         }
       }
-      const { data, error } = await db.rpc('sinpe_pantalla_guardar', {
+      const { data, error } = await db.rpc('sinpe_pantalla_guardar_v2', {
         p_empresa: empresa, p_sid: c.sid, p_seq: seq, p_w: w || null, p_h: h || null, p_jpg: jpg, p_sin_cambio: sinCambio,
         p_encendida: bool(c.pantalla_encendida), p_bloqueada: bool(c.bloqueada), p_conf: conf, p_res: res,
       });
       if (error || !data) throw new Error(error?.message ?? 'sin datos');
+      if ((data as Record<string, unknown>).ok === false && (data as Record<string, unknown>).error === 'seq repetido') return await firmada(sec, ts, data as Record<string, unknown>, 409);
       return await firmada(sec, ts, data as Record<string, unknown>);
     }
     if (fase === 'fin') {

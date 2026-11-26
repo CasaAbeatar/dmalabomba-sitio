@@ -95,7 +95,7 @@
 
   <!-- 2. Antes de abrir la sesión -->
   <section id="vInicio" class="inicio oculto">
-    <p>Al abrir la sesión, el teléfono empieza a enviar su pantalla. Revisa cada minuto si alguien la pidió, así que la primera imagen puede tardar hasta 1 minuto. La sesión dura 10 minutos y se puede alargar.</p>
+    <p>Al abrir la sesión, el teléfono empieza a enviar su pantalla. Revisa cada minuto si alguien la pidió, así que la primera imagen puede tardar hasta 1 minuto. La sesión dura 10 minutos y se puede alargar, con un máximo de 15 minutos desde que se abre. Tu ingreso también dura 15 minutos.</p>
     <button class="principal" id="bAbrir" type="button">Ver y controlar el teléfono</button>
     <p class="mensaje" id="mInicio" role="status" aria-live="polite"></p>
   </section>
@@ -105,6 +105,7 @@
     <div class="estado" role="status" aria-live="polite">
       <div class="texto"><span class="punto" id="punto"></span><span id="estadoTexto">Abriendo la sesión…</span></div>
       <div class="cuenta" id="cuenta"></div>
+      <button type="button" class="peligro" id="bTerminar">Terminar sesión</button>
     </div>
     <div class="rejilla">
       <div class="telefono">
@@ -144,9 +145,8 @@
         <div class="grupo">
           <h2>Sesión</h2>
           <div class="dos">
-            <button type="button" id="bProrrogar">Dar 10 minutos más</button>
-            <button type="button" class="peligro" id="bTerminar">Terminar sesión</button>
-          </div>
+            <button type="button" id="bProrrogar">Alargar la sesión (máx. 15 min)</button>
+                      </div>
         </div>
         <div class="grupo">
           <h2>Últimas órdenes</h2>
