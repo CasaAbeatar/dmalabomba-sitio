@@ -80,3 +80,26 @@ Valen para la app 2.11.0 en adelante; la 2.10.0 sigue funcionando (ver «Compati
 
 ### Lo que le toca a la app (no es del servidor)
 - Solo https (rechazar http://). Respetar el apagado manual. Notificación persistente mientras la accesibilidad esté activa. Sin acciones «a ciegas» al arrancar la sesión (esperar la primera imagen).
+
+## Adiciones app 2.12.0 / servidor (fork H, 26 nov 2026)
+Contrato completo y fe de erratas: `CONTRATO-2.12.md`. Reversa y notas del servidor: `servidor-212/`.
+
+### Acción nueva `abrir_ajuste` (pantalla remota)
+- Visor → servidor: `accion` con `a:"abrir_ajuste"`, `params:{"que":"<valor>"}` y `cuadro_seq` como cualquier acción atada al imagen. `que` EXACTO en {`bateria`,`app`,`acceso_notificaciones`,`accesibilidad`,`inicio_apps`,`ahorro_energia`}; otro valor → `{"ok":false,"error":"ajuste no permitido"}` y no se encola.
+- Servidor → teléfono (en `acciones` de la respuesta del cuadro): `{"id":n,"a":"abrir_ajuste","que":"bateria","cuadro_seq":42}`. Misma regla que las demás: se ejecuta una sola vez por id, se descarta con `obsoleta` si `cuadro_seq` no es el de la última imagen, vence a los 15 s sin llegar.
+- Teléfono → servidor (en `resultados` del cuadro siguiente): `"ok:<texto corto [a-z0-9_.]>"` (qué intent se usó) o `"no_disponible"`. El servidor guarda hasta 40 caracteres; el visor muestra `hecho` si empieza con `ok`.
+- Intents sugeridos: bateria → ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS; app → ACTION_APPLICATION_DETAILS_SETTINGS; acceso_notificaciones → ACTION_NOTIFICATION_LISTENER_SETTINGS; accesibilidad → ACTION_ACCESSIBILITY_SETTINGS; ahorro_energia → ACTION_BATTERY_SAVER_SETTINGS; inicio_apps → lista de actividades de HONOR/Huawei (com.hihonor.systemmanager, com.huawei.systemmanager StartupNormalAppListActivity y similares) con respaldo a los detalles de la app.
+
+### Visor `/remoto`
+- Botones nuevos «Abrir batería», «Abrir inicio de aplicaciones», «Abrir acceso a notificaciones», «Abrir accesibilidad», «Abrir ajustes de la app», «Abrir ahorro de energía».
+- Sección «Salud del teléfono» (carga, red, ahorro, restricción de batería, SMS sin reenviar, último SMS y reenvío, última señal, versión de la app, actualización, depuración inalámbrica y los riesgos activos). Se actualiza cada 15 s. Ops nuevas del visor: `salud` {empresa} y `adb` {empresa, telefono, cmd:"abrir"|"cerrar"}; ambas exigen la ficha de administrador general.
+
+### Latido (detalle plano; lo nuevo es opcional)
+`sms_inbox_ultimo_ms`, `sms_sin_reenviar` (0..999, -1 sin permiso), `enchufe` (ac|usb|inalambrico|ninguno), `adb_activo`, `adb_puerto`, `actualizacion_estado` (ninguna|descargando|instalando|fallo), `actualizacion_detalle` ([a-z0-9_]{1,30}), `actualizacion_objetivo` (x.y.z). El servidor también acepta la forma anidada del contrato (carga/red/ahorro/sms/adb/actualizacion) y la convierte; la plana manda.
+- Órdenes nuevas en `comandos`: `abrir_adb`, `cerrar_adb` (solo para teléfonos con app >= 2.12.0 y pedidas por el administrador general o service_role). Se confirman en `comandos_hechos` como las demás.
+- Alertas del servidor (sistema existente `sinpe_telefono_riesgo`, dedupe diario, cierre automático): `sms_sin_reenviar` (bandeja sin reenviar >= 5 min + 10 min sostenido; además el servidor manda `reiniciar_servicio` y `reenviar_historial` como máximo una vez por hora), `sin_cargador` (sin cargar y batería < 40 % durante ~60 min), `sin_red` (3 latidos seguidos con tipo_red = ninguna), `actualizacion_fallida`.
+
+### Actualización automática (la app decide, el servidor ofrece)
+- Respuesta del latido: `{"ok":true,...,"eco":<ts del latido>,"actualizacion":{"v":"2.12.0","vc":22,"url":"https://pagos.dmalabomba.com/instalar/<archivo>.apk","sha256":"<64 hex>","ts":<ms servidor>,"firma":"<hex>"}}`, solo si hay una fila ACTIVA en `fact.sinpe_actualizaciones` y la versión del latido (`detalle.app`) es menor que `v`.
+- `firma` = HMAC-SHA256 hex minúsculas, con la clave de la regla de la app (la de su empresa), sobre el texto exacto `ACT1|<v>|<vc>|<url>|<sha256>|<ts>|<eco>`. La app verifica en tiempo constante y que `eco` sea el `ts` que ella mandó, más todas las reglas del contrato (host exacto, https, vc mayor, sha256 del archivo, mismo certificado, ts <= 24 h, reintentos 1 h/6 h/24 h, no instalar con cola de reenvío ni SMS < 60 s).
+- Nada se activa solo: `sinpe-actualizacion` (secreto `sinpe_actualizacion_secreto` en la bóveda, cabecera `x-actualizacion-secreto`) con ops `registrar` {empresa, telefono?, v, vc, url, sha256}, `verificar` {id}, `activar` {id} (descarga la URL, compara el sha256 y solo si coincide activa), `desactivar` {id?}. Parada de emergencia: `select public.sinpe_actualizacion_desactivar();`.

@@ -7,8 +7,8 @@
   var $ = function (id) { return document.getElementById(id); };
   var token = null, tokExp = 0, sid = null, ultimoSeq = -1, temporizador = null, cuentaT = null, vence = 0, abiertoEn = 0;
   var hayImagen = false, cargando = false, parado = false;
-  var NOMBRES = { toque: 'Toque', largo: 'Toque largo', deslizar: 'Deslizar', atras: 'Atrás', inicio: 'Inicio', recientes: 'Apps recientes', notificaciones: 'Notificaciones', texto: 'Escribir texto', borrar: 'Borrar', encender: 'Encender pantalla' };
-  var RESULTADOS = { cancelada: 'cancelada', sin_respuesta: 'sin respuesta', obsoleta: 'la pantalla cambió, no se hizo', vencida: 'venció sin llegar al teléfono' };
+  var NOMBRES = { toque: 'Toque', largo: 'Toque largo', deslizar: 'Deslizar', atras: 'Atrás', inicio: 'Inicio', recientes: 'Apps recientes', notificaciones: 'Notificaciones', texto: 'Escribir texto', borrar: 'Borrar', encender: 'Encender pantalla', abrir_ajuste: 'Abrir ajustes' };
+  var RESULTADOS = { cancelada: 'cancelada', sin_respuesta: 'sin respuesta', obsoleta: 'la pantalla cambió, no se hizo', vencida: 'venció sin llegar al teléfono', no_disponible: 'no disponible en este teléfono' };
 
   try { token = sessionStorage.getItem('pv_t'); tokExp = Number(sessionStorage.getItem('pv_e')) || 0; } catch (e) { token = null; }
   if (token && tokExp && tokExp <= Date.now()) { token = null; tokExp = 0; try { sessionStorage.removeItem('pv_t'); sessionStorage.removeItem('pv_e'); } catch (e) {} }
@@ -19,7 +19,7 @@
   }
   function salirDeSesion(msg) {
     token = null; tokExp = 0; sid = null; try { sessionStorage.removeItem('pv_t'); sessionStorage.removeItem('pv_e'); } catch (e) {}
-    parar(); $('imagen').removeAttribute('src'); $('pin').value = ''; vista('vEntrar'); $('mEntrar').className = 'mensaje'; $('mEntrar').textContent = msg || '';
+    parar(); pararSalud(); $('salud').classList.add('oculto'); $('imagen').removeAttribute('src'); $('pin').value = ''; vista('vEntrar'); $('mEntrar').className = 'mensaje'; $('mEntrar').textContent = msg || '';
   }
   function parar() { parado = true; clearTimeout(temporizador); clearInterval(cuentaT); temporizador = null; cuentaT = null; }
 
@@ -41,7 +41,7 @@
       $('pin').value = '';
       if (r.j.ok && r.j.token) {
         token = r.j.token; tokExp = Date.now() + (Number(r.j.vence_s) || 900) * 1000; try { sessionStorage.setItem('pv_t', token); sessionStorage.setItem('pv_e', String(tokExp)); } catch (e) {}
-        m.textContent = ''; vista('vInicio'); $('mInicio').textContent = '';
+        m.textContent = ''; vista('vInicio'); $('mInicio').textContent = ''; iniciarSalud();
       } else {
         m.className = 'mensaje error'; m.textContent = r.status === 429 && r.j.bloqueado ? 'Demasiados intentos. Espera unos minutos antes de volver a intentar.' : (r.j.error || 'No se pudo entrar. Intenta de nuevo.');
       }
@@ -139,7 +139,7 @@
     var items = [];
     if (pendientes) items.push({ t: pendientes + ' orden' + (pendientes === 1 ? '' : 'es') + ' esperando al teléfono', r: '…' });
     lista.forEach(function (x) {
-      var ok = x.resultado === 'ok';
+      var ok = /^ok(:|$)/.test(String(x.resultado || ''));
       items.push({ t: NOMBRES[x.a] || String(x.a).slice(0, 20), r: ok ? 'hecho' : (RESULTADOS[x.resultado] || 'no se pudo'), c: ok ? 'ok' : 'fallo' });
     });
     pintarLista(items);
@@ -170,6 +170,7 @@
     var t = $('texto').value; if (!t) return;
     orden('texto', { t: t }); $('texto').value = '';
   });
+  document.querySelectorAll('button[data-ajuste]').forEach(function (b) { b.addEventListener('click', function () { orden('abrir_ajuste', { que: b.getAttribute('data-ajuste') }); }); });
   $('bBorrar').addEventListener('click', function () { orden('borrar', { n: 1 }); });
   $('bProrrogar').addEventListener('click', async function () {
     try { var r = await api('prorrogar', { sid: sid }); if (r.j.ok) { vence = Date.now() + r.j.resta_s * 1000; pintarCuenta(); if (r.j.tope_15min) ponerEstado('', 'La sesión llegó al máximo de 15 minutos desde que se abrió; después hay que abrir otra.'); } else ponerEstado('mal', r.j.error || 'No se pudo alargar.'); }
@@ -208,7 +209,98 @@
   pant.addEventListener('pointercancel', function () { p0 = null; });
   function round(v) { return Math.round(v * 10000) / 10000; }
 
+
+  // ---------- salud del teléfono (se actualiza cada 15 s mientras haya ingreso) ----------
+  var saludT = null, saludCargando = false;
+  var RIESGOS = {
+    sin_permiso_sms: 'La app no tiene permiso de SMS', reenvios_fallando: 'Hay reenvíos fallando', sms_sin_reenviar: 'Recibe SMS pero no los reenvía',
+    bateria_restringida: 'La batería restringe a la app', ahorro_bateria: 'Ahorro de batería encendido', bateria_baja: 'Batería baja y sin cargar',
+    sin_cargador: 'Mucho rato sin cargador', sin_internet: 'Sin internet validado', sin_red: 'Sin red, conexión intermitente',
+    sin_notificaciones: 'Notificaciones apagadas', actualizacion_fallida: 'Falló la actualización automática'
+  };
+  var TEXTO_ENCHUFE = { ac: 'corriente', usb: 'USB', inalambrico: 'inalámbrico', ninguno: 'sin enchufe' };
+  var BUCKET = { activo: 'activa', trabajando: 'en uso', frecuente: 'frecuente', raro: 'rara vez', restringido: 'restringida', desconocido: 'no se sabe' };
+  function haceTxt(s) {
+    if (s === null || s === undefined) return null; s = Math.max(0, Math.round(Number(s)));
+    if (s < 60) return 'hace ' + s + ' s'; if (s < 3600) return 'hace ' + Math.round(s / 60) + ' min';
+    if (s < 86400) return 'hace ' + Math.round(s / 3600) + ' h'; var d = Math.round(s / 86400); return 'hace ' + d + (d === 1 ? ' día' : ' días');
+  }
+  function versionNum(v) { var m = /^(\d+)\.(\d+)\.(\d+)/.exec(String(v || '')); return m ? (+m[1]) * 1e6 + (+m[2]) * 1e3 + (+m[3]) : 0; }
+  function fila(cont, nombre, valor, clase) {
+    var f = document.createElement('div'), n = document.createElement('span'), v = document.createElement('span');
+    f.className = 'fila'; n.className = 'n'; v.className = 'v' + (clase ? ' ' + clase : '');
+    n.textContent = nombre; v.textContent = valor; f.appendChild(n); f.appendChild(v); cont.appendChild(f);
+  }
+  function pintarTelefonoSalud(t) {
+    var caja = document.createElement('div'); caja.className = 'tel';
+    var tit = document.createElement('div'); tit.className = 'tit';
+    var a = document.createElement('div'); a.textContent = String(t.telefono || 'Teléfono').slice(0, 40);
+    var b = document.createElement('span'); b.textContent = t.marca_modelo ? String(t.marca_modelo).slice(0, 60) : '';
+    tit.appendChild(a); tit.appendChild(b); caja.appendChild(tit);
+    if (versionNum(t.app) < 2012000) { var av = document.createElement('p'); av.className = 'ayuda'; av.style.textAlign = 'left'; av.style.margin = '0 0 6px'; av.textContent = 'Este teléfono tiene una app anterior a 2.12: algunos datos no se reportan todavía.'; caja.appendChild(av); }
+    var d = document.createElement('div'); d.className = 'datos'; caja.appendChild(d);
+    var sinDato = 'sin dato';
+    var s = t.ultimo_latido_s;
+    fila(d, 'Última señal', haceTxt(s) || '—', s <= 600 ? 'ok' : (s <= 1800 ? 'alerta' : 'mal'));
+    var bat = t.bateria === null || t.bateria === undefined ? '—' : t.bateria + ' %';
+    fila(d, 'Batería', bat, t.bateria !== null && t.bateria !== undefined && t.bateria < 20 && t.cargando !== true ? 'mal' : '');
+    fila(d, 'Carga', t.cargando === true ? 'cargando' + (t.enchufe && TEXTO_ENCHUFE[t.enchufe] ? ' (' + TEXTO_ENCHUFE[t.enchufe] + ')' : '') : (t.cargando === false ? 'sin cargar' : sinDato), t.cargando === true ? 'ok' : (t.cargando === false ? 'alerta' : ''));
+    var red = t.tipo_red === 'wifi' ? 'Wi-Fi' : (t.tipo_red === 'datos' ? 'datos móviles' : (t.tipo_red === 'ninguna' ? 'sin red' : null));
+    var rtxt = red ? red + (t.red_validada === true ? ', con internet' : (t.red_validada === false ? ', sin internet validado' : '')) + (typeof t.senal_nivel === 'number' ? ' · señal ' + t.senal_nivel + '/4' : '') : sinDato;
+    fila(d, 'Red', rtxt, t.tipo_red === 'ninguna' || t.red_validada === false ? 'mal' : (red ? 'ok' : ''));
+    fila(d, 'Ahorro de batería', t.ahorro_bateria === true ? 'ENCENDIDO' : (t.ahorro_bateria === false ? 'apagado' : sinDato), t.ahorro_bateria === true ? 'mal' : (t.ahorro_bateria === false ? 'ok' : ''));
+    fila(d, 'Restricción de batería', t.sin_restriccion_bateria === true ? 'sin restricción' : (t.sin_restriccion_bateria === false ? 'CON restricción' : sinDato), t.sin_restriccion_bateria === true ? 'ok' : (t.sin_restriccion_bateria === false ? 'mal' : ''));
+    if (t.bucket_standby) fila(d, 'Prioridad de la app', BUCKET[t.bucket_standby] || String(t.bucket_standby).slice(0, 20), t.bucket_standby === 'restringido' || t.bucket_standby === 'raro' ? 'mal' : '');
+    var sr = t.sms_sin_reenviar;
+    fila(d, 'SMS sin reenviar', typeof sr !== 'number' ? sinDato : (sr === -1 ? 'no se sabe (falta permiso de SMS)' : (sr === 0 ? '0' : sr + ' en la bandeja')), typeof sr === 'number' ? (sr === 0 ? 'ok' : (sr > 0 ? 'mal' : 'alerta')) : '');
+    fila(d, 'Último SMS recibido', haceTxt(t.ultimo_sms_s) || '—', '');
+    fila(d, 'Último reenvío exitoso', haceTxt(t.ultimo_reenvio_s) || '—', '');
+    if (typeof t.fallidos_pendientes === 'number') fila(d, 'Reenvíos fallidos pendientes', String(t.fallidos_pendientes), t.fallidos_pendientes > 0 ? 'mal' : 'ok');
+    fila(d, 'Versión de la app', t.app ? String(t.app).slice(0, 20) : '—', '');
+    var ae = t.actualizacion_estado;
+    fila(d, 'Actualización automática', ae === 'fallo' ? 'falló' + (t.actualizacion_detalle ? ' (' + String(t.actualizacion_detalle).slice(0, 30) + ')' : '') : (ae === 'descargando' ? 'descargando' : (ae === 'instalando' ? 'instalando' : (ae === 'ninguna' ? 'al día' : sinDato))), ae === 'fallo' ? 'mal' : (ae === 'ninguna' ? 'ok' : ''));
+    if (typeof t.adb_activo === 'boolean') fila(d, 'Depuración inalámbrica', t.adb_activo ? 'ACTIVA' + (t.adb_puerto ? ' (puerto ' + t.adb_puerto + ')' : '') : 'apagada', t.adb_activo ? 'alerta' : '');
+    var r = Array.isArray(t.riesgos) ? t.riesgos : [];
+    var p = document.createElement('p'); p.className = 'riesgos';
+    if (r.length) { var bb = document.createElement('b'); bb.className = 'mal'; bb.textContent = 'Atención: '; p.appendChild(bb); p.appendChild(document.createTextNode(r.map(function (c) { return RIESGOS[c] || String(c).slice(0, 30); }).join('; ') + '.')); }
+    else { p.textContent = 'Sin problemas conocidos en este momento.'; }
+    caja.appendChild(p);
+    if (versionNum(t.app) >= 2012000) {
+      var ac = document.createElement('div'); ac.className = 'acciones';
+      var bo = document.createElement('button'); bo.type = 'button'; bo.textContent = 'Activar depuración inalámbrica (30 min)';
+      var bc = document.createElement('button'); bc.type = 'button'; bc.textContent = 'Cerrar la depuración inalámbrica'; bc.style.marginLeft = '8px';
+      bo.addEventListener('click', function () { pedirAdb(t.telefono, 'abrir', bo); }); bc.addEventListener('click', function () { pedirAdb(t.telefono, 'cerrar', bc); });
+      ac.appendChild(bo); ac.appendChild(bc);
+      var nt = document.createElement('p'); nt.className = 'nota'; nt.textContent = 'Solo para el ayudante de la caja: el teléfono la abre en su próximo latido (hasta 5 minutos) y la cierra solo a los 30 minutos.'; ac.appendChild(nt);
+      caja.appendChild(ac);
+    }
+    return caja;
+  }
+  async function pedirAdb(tel, cmd, boton) {
+    var m = $('mSalud'); boton.disabled = true; m.className = 'mensaje'; m.textContent = 'Enviando la orden…';
+    try {
+      var r = await api('adb', { empresa: EMPRESA, telefono: String(tel || ''), cmd: cmd });
+      if (r.j.ok) m.textContent = r.j.duplicado ? 'La orden ya estaba pendiente.' : 'Orden enviada. El teléfono la recibe en su próximo latido (hasta 5 minutos).';
+      else { m.className = 'mensaje error'; m.textContent = r.j.error ? 'No se envió: ' + String(r.j.error).slice(0, 120) + '.' : 'No se pudo enviar la orden.'; }
+    } catch (e) { if (e.message !== 'sin-ingreso') { m.className = 'mensaje error'; m.textContent = 'No se pudo enviar la orden. Revisa tu conexión.'; } }
+    finally { boton.disabled = false; }
+  }
+  async function cargarSalud() {
+    if (saludCargando || !token) return; saludCargando = true;
+    try {
+      var r = await api('salud', { empresa: EMPRESA }); var cuerpo = $('saludCuerpo');
+      if (!r.j.ok || !Array.isArray(r.j.telefonos)) { while (cuerpo.firstChild) cuerpo.removeChild(cuerpo.firstChild); var e = document.createElement('p'); e.className = 'ayuda'; e.style.textAlign = 'left'; e.textContent = 'No se pudo leer la salud del teléfono.'; cuerpo.appendChild(e); return; }
+      var tmp = document.createDocumentFragment();
+      if (!r.j.telefonos.length) { var vacio = document.createElement('p'); vacio.className = 'ayuda'; vacio.style.textAlign = 'left'; vacio.textContent = 'Todavía no hay ningún teléfono reportando para ' + NOMBRE_EMPRESA + '.'; tmp.appendChild(vacio); }
+      r.j.telefonos.forEach(function (t) { tmp.appendChild(pintarTelefonoSalud(t)); });
+      while (cuerpo.firstChild) cuerpo.removeChild(cuerpo.firstChild); cuerpo.appendChild(tmp);
+    } catch (e) { /* sin ingreso o sin conexión: se reintenta en 15 s */ }
+    finally { saludCargando = false; }
+  }
+  function iniciarSalud() { $('salud').classList.remove('oculto'); clearInterval(saludT); cargarSalud(); saludT = setInterval(cargarSalud, 15000); }
+  function pararSalud() { clearInterval(saludT); saludT = null; }
+
   // ---------- arranque ----------
-  window.addEventListener('pagehide', function () { parar(); });
-  if (token) vista('vInicio'); else vista('vEntrar');
+  window.addEventListener('pagehide', function () { parar(); pararSalud(); });
+  if (token) { vista('vInicio'); iniciarSalud(); } else vista('vEntrar');
 })();

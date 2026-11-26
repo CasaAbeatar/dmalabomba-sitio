@@ -71,6 +71,24 @@
   .ultimas{font-size:14px;color:var(--suave);line-height:1.6;margin:0;padding:0;list-style:none}
   .ultimas li{display:flex;justify-content:space-between;border-bottom:1px solid var(--linea);padding:4px 0}
   .ultimas .ok{color:var(--bosque)} .ultimas .fallo{color:var(--rojo)}
+  /* Salud del teléfono (app 2.12) */
+  .salud{margin-top:22px}
+  .tel{border-top:1px solid var(--linea);padding:14px 0 6px}
+  .tel:first-of-type{border-top:0;padding-top:4px}
+  .tel .tit{display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap;margin:0 0 8px;font-size:16px;font-weight:500}
+  .tel .tit span{font-size:13px;font-weight:400;color:var(--suave)}
+  .datos{display:grid;grid-template-columns:1fr 1fr;column-gap:26px}
+  @media (max-width:640px){.datos{grid-template-columns:1fr}}
+  .fila{display:flex;justify-content:space-between;gap:12px;border-bottom:1px solid var(--linea);padding:7px 0;font-size:14px;line-height:1.4}
+  .fila .n{color:var(--suave)}
+  .fila .v{text-align:right}
+  .fila .v.ok{color:var(--bosque)} .fila .v.alerta{color:#8a5a00} .fila .v.mal{color:var(--rojo)}
+  .riesgos{margin:10px 0 0;font-size:14px;line-height:1.5}
+  .riesgos b{font-weight:500}
+  .riesgos .mal{color:var(--rojo)}
+  .acciones{margin:10px 0 4px}
+  .acciones button{min-height:40px;font-size:14px}
+  .acciones .nota{font-size:13px;color:var(--suave);margin:6px 0 0;line-height:1.4}
   footer{margin-top:28px;font-size:13px;color:var(--suave);line-height:1.5}
 </style>
 </head>
@@ -143,6 +161,18 @@
           </div>
         </div>
         <div class="grupo">
+          <h2>Abrir ajustes del teléfono</h2>
+          <div class="dos">
+            <button type="button" data-ajuste="bateria">Abrir batería</button>
+            <button type="button" data-ajuste="inicio_apps">Abrir inicio de aplicaciones</button>
+            <button type="button" data-ajuste="acceso_notificaciones">Abrir acceso a notificaciones</button>
+            <button type="button" data-ajuste="accesibilidad">Abrir accesibilidad</button>
+            <button type="button" data-ajuste="app">Abrir ajustes de la app</button>
+            <button type="button" data-ajuste="ahorro_energia">Abrir ahorro de energía</button>
+          </div>
+          <p class="ayuda" style="text-align:left">Abre esa pantalla en el teléfono. Después míralo en la imagen y toca lo que haga falta.</p>
+        </div>
+        <div class="grupo">
           <h2>Sesión</h2>
           <div class="dos">
             <button type="button" id="bProrrogar">Alargar la sesión (máx. 15 min)</button>
@@ -160,6 +190,13 @@
   <section id="vFin" class="inicio oculto">
     <p id="finTexto">La sesión terminó.</p>
     <button class="principal" id="bOtra" type="button">Abrir otra sesión</button>
+  </section>
+
+  <!-- Salud del teléfono (sale solo con ingreso válido) -->
+  <section id="salud" class="tarjeta salud oculto">
+    <h2>Salud del teléfono</h2>
+    <div id="saludCuerpo"><p class="ayuda" style="text-align:left">Cargando…</p></div>
+    <p class="mensaje" id="mSalud" role="status" aria-live="polite"></p>
   </section>
 
   <footer>Esta página no guarda imágenes: el teléfono envía la pantalla solo mientras la sesión está abierta y se borra al terminar. Cada orden queda anotada en la bitácora del sistema.</footer>
