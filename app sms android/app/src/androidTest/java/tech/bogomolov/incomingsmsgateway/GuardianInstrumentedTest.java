@@ -79,6 +79,7 @@ public class GuardianInstrumentedTest {
     @Before
     public void preparar() throws Exception {
         limpiar();
+        Guardian.reiniciarFreno();   // 2.11.0: el freno central es estado del proceso; cada prueba empieza sin historial
         server = new MiniServer();
         server.start();
         ForwardingConfig c = new ForwardingConfig(ctx);
@@ -135,7 +136,7 @@ public class GuardianInstrumentedTest {
             assertTrue("falta detalle." + k, d.has(k));
         }
         assertEquals(BuildConfig.VERSION_NAME, d.getString("app"));
-        assertEquals("2.10.0", d.getString("app"));
+        assertEquals("2.11.0", d.getString("app"));
         for (String k : new String[]{"senal_nivel", "operador", "sim_estado", "modo_avion", "memoria_libre_mb", "arranque_ts",
                 "bucket_standby", "doze", "latido_retraso_ms", "reinicios_servicio"}) {
             assertTrue("falta detalle." + k, d.has(k));
@@ -224,6 +225,69 @@ public class GuardianInstrumentedTest {
         JSONObject d = new JSONObject(server.latidos().get(server.latidos().size() - 1).cuerpo).getJSONObject("detalle");
         assertTrue(d.getLong("latido_retraso_ms") >= 0);
         assertTrue(d.getInt("reinicios_servicio") >= 1);
+    }
+
+    // ------------------------------------------------------------------ 2.11.0: FCM en el latido y freno central
+
+    private static final String TOKEN = "dXJ0b2tlbjpBUEE5MWJF-_abc123:XYZ0987654321qwertyuiop";
+
+    @Test
+    public void elTokenDeFcmViajaEnCadaLatidoYElDespertarIdSoloEnElQueLoConfirma() throws Exception {
+        new GuardianState(ctx).guardarFcmToken(TOKEN);
+        assertEquals(Request.RESULT_SUCCESS, Guardian.sendHeartbeat(ctx, urlLatido(), true, 0, 731));
+        assertEquals(Request.RESULT_SUCCESS, Guardian.sendHeartbeat(ctx, urlLatido(), true, 0));
+        List<Peticion> l = server.latidos();
+        assertEquals(2, l.size());
+        JSONObject d0 = new JSONObject(l.get(0).cuerpo).getJSONObject("detalle");
+        JSONObject d1 = new JSONObject(l.get(1).cuerpo).getJSONObject("detalle");
+        assertEquals(TOKEN, d0.getString("fcm_token"));
+        assertEquals(TOKEN, d1.getString("fcm_token"));
+        assertTrue("despertar_id es un numero", d0.get("despertar_id") instanceof Number);
+        assertEquals(731, d0.getLong("despertar_id"));
+        assertFalse(d1.has("despertar_id"));
+        for (Peticion p : l) assertEquals(Request.computeHmacSha256Hex(SECRETO, p.cuerpo), p.cabecera("x-signature"));
+    }
+
+    @Test
+    public void sinTokenElLatidoNoLlevaElCampo() throws Exception {
+        Guardian.sendHeartbeat(ctx, urlLatido(), true, 0);
+        assertFalse(new JSONObject(server.latidos().get(0).cuerpo).getJSONObject("detalle").has("fcm_token"));
+    }
+
+    @Test
+    public void elFrenoCentralNoRelanzaElServicioDosVecesEnTreintaSegundosPeroLoPedidoAManoSiPasa() throws Exception {
+        ctx.stopService(new Intent(ctx, SmsReceiverService.class));
+        assertTrue(esperar(() -> !SmsReceiverService.isRunning(), 10_000));
+        Guardian.reiniciarFreno();
+        assertTrue("el primer arranque pasa", Guardian.startServiceSafely(ctx));
+        assertTrue(esperar(() -> SmsReceiverService.isRunning(), 15_000));
+        int creaciones = SmsReceiverService.getCreaciones();
+        assertTrue("con el servicio corriendo no hace nada y dice que corre", Guardian.startServiceSafely(ctx));
+
+        ctx.stopService(new Intent(ctx, SmsReceiverService.class));
+        assertTrue(esperar(() -> !SmsReceiverService.isRunning(), 10_000));
+        assertFalse("segundo arranque automatico dentro de 30 s: frenado", Guardian.startServiceSafely(ctx));
+        Thread.sleep(1500);
+        assertFalse("el servicio no se relanzo", SmsReceiverService.isRunning());
+        assertEquals(creaciones, SmsReceiverService.getCreaciones());
+
+        assertTrue("lo pedido a mano salta el freno", Guardian.startServiceSafely(ctx, true));
+        assertTrue(esperar(() -> SmsReceiverService.isRunning(), 15_000));
+        assertTrue(SmsReceiverService.getCreaciones() > creaciones);
+    }
+
+    @Test
+    public void elVigilantePorAlarmaNoRebotaElServicioSiAcabaDeLanzarse() throws Exception {
+        ctx.stopService(new Intent(ctx, SmsReceiverService.class));
+        assertTrue(esperar(() -> !SmsReceiverService.isRunning(), 10_000));
+        Guardian.reiniciarFreno();
+        Guardian.startServiceSafely(ctx);
+        assertTrue(esperar(() -> SmsReceiverService.isRunning(), 15_000));
+        int creaciones = SmsReceiverService.getCreaciones();
+        // diez vigilantes seguidos con el servicio vivo: ninguno lo relanza
+        for (int i = 0; i < 10; i++) Guardian.tick(ctx, "rafaga");
+        assertEquals(creaciones, SmsReceiverService.getCreaciones());
+        assertTrue(SmsReceiverService.isRunning());
     }
 
     // ------------------------------------------------------------------ órdenes remotas
@@ -339,6 +403,7 @@ public class GuardianInstrumentedTest {
                 "android.intent.action.QUICKBOOT_POWERON", Intent.ACTION_LOCKED_BOOT_COMPLETED}) {
             ctx.stopService(new Intent(ctx, SmsReceiverService.class));
             assertTrue(esperar(() -> !SmsReceiverService.isRunning(), 10_000));
+            Guardian.reiniciarFreno();   // 2.11.0: cuatro arranques seguidos serian frenados a proposito; cada uno cuenta como uno nuevo
             new BootCompletedReceiver().onReceive(ctx, new Intent(accion));
             assertTrue("tras " + accion, esperar(() -> SmsReceiverService.isRunning(), 15_000));
         }

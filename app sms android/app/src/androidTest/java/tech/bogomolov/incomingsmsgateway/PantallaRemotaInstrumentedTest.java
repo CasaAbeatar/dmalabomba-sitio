@@ -7,6 +7,8 @@ import static org.junit.Assert.assertTrue;
 import static org.junit.Assume.assumeTrue;
 
 import android.Manifest;
+import android.app.NotificationManager;
+import android.service.notification.StatusBarNotification;
 import android.app.Instrumentation;
 import android.app.UiAutomation;
 import android.content.Context;
@@ -38,11 +40,14 @@ import org.junit.runners.MethodSorters;
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.net.Inet4Address;
 import java.net.InetAddress;
+import java.net.NetworkInterface;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Enumeration;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -337,17 +342,134 @@ public class PantallaRemotaInstrumentedTest {
         assertEquals("abrió sesión con eco distinto", 0, server.cuerpos("cuadro").size());
     }
 
+    // ------------------------------------------------------------------ 2.11.0: acciones atadas al cuadro y auditoría de 2.10.0
+
+    /**
+     * (d) Una acción que llega en la respuesta de «escucha», antes de mandar el primer cuadro, es OBSOLETA: el
+     * administrador no pudo ver ninguna imagen de esta sesión. Se confirma «obsoleta» y NO se ejecuta.
+     */
+    @Test
+    public void t6b_accionEnLaRespuestaDeEscuchaEsObsoletaYNoSeEjecuta() throws Exception {
+        abrirPantallaDePrueba();
+        double[] p = centroDelBoton();
+        PantallaRemotaService.escuchaMs = 500;
+        PantallaRemotaService.cuadroMs = 400;
+        server.abrirSesion = true;
+        server.accionesFijas.add("{\"id\":95,\"a\":\"toque\",\"x\":" + p[0] + ",\"y\":" + p[1] + "}");
+        PantallaRemotaService.despertarYa();
+        assertTrue("el teléfono no confirmó «obsoleta»", esperar(() -> hayConfirmada(95, "obsoleta"), 25000));
+        Thread.sleep(1500);
+        assertEquals("una acción obsoleta NO se ejecuta", 0, PantallaPruebaActivity.toques);
+    }
+
+    /**
+     * (a) Pantalla ESTÁTICA: solo el primer cuadro trae imagen y los demás son «sin_cambio» (la seq del servidor solo
+     * cambia con imágenes). Una acción hecha sobre una seq vieja (un cuadro sin_cambio) es obsoleta; la hecha sobre la
+     * seq de la última imagen mostrada se ejecuta aunque lleguen muchos sin_cambio de por medio.
+     */
+    @Test
+    public void t6c_cuadroSeqEnPantallaEstaticaObsoletaSiEsVieja_EjecutaSiEsLaDeLaUltimaImagen() throws Exception {
+        assumeTrue("la imagen del cuadro necesita takeScreenshot (Android 11 o mayor)", Build.VERSION.SDK_INT >= 30);
+        abrirPantallaDePrueba();
+        double[] p = centroDelBoton();
+        PantallaRemotaService.escuchaMs = 500;
+        PantallaRemotaService.cuadroMs = 400;
+        server.abrirSesion = true;
+        PantallaRemotaService.despertarYa();
+        assertTrue("no llegaron suficientes cuadros", esperar(() -> server.cuerpos("cuadro").size() >= 6, 40000));
+        assertTrue("debía haber cuadros sin_cambio posteriores a la última imagen", esperar(() -> seqSinCambioPosterior() > 0, 20000));
+
+        long vieja = seqSinCambioPosterior();
+        long ultima = ultimaImagenSeq();
+        assertTrue(ultima > 0 && vieja > ultima);
+        server.accionesFijas.add("{\"id\":81,\"cuadro_seq\":" + vieja + ",\"a\":\"toque\",\"x\":" + p[0] + ",\"y\":" + p[1] + "}");
+        assertTrue("la acción sobre una seq vieja debía confirmarse obsoleta", esperar(() -> hayConfirmada(81, "obsoleta"), 20000));
+        assertEquals("la obsoleta no se ejecuta", 0, PantallaPruebaActivity.toques);
+
+        final long imagen = ultimaImagenSeq();
+        server.accionesFijas.add("{\"id\":80,\"cuadro_seq\":" + imagen + ",\"a\":\"toque\",\"x\":" + p[0] + ",\"y\":" + p[1] + "}");
+        assertTrue("la acción sobre la última imagen debía ejecutarse", esperar(() -> hayConfirmada(80, "ok"), 20000));
+        assertTrue(esperar(() -> PantallaPruebaActivity.toques >= 1, 10000));
+        assertEquals(1, PantallaPruebaActivity.toques);
+    }
+
+    /** (e) Un texto de más de 200 unidades UTF-16 se rechaza y se informa «texto_invalido»; uno dentro del límite sí pasa. */
+    @Test
+    public void t6d_textoMuyLargoSeConfirmaComoTextoInvalido() throws Exception {
+        abrirPantallaDePrueba();
+        escena.onActivity(a -> a.campo.requestFocus());
+        assertTrue(esperar(() -> campoFocoTexto() != null, 5000));
+        PantallaRemotaService.escuchaMs = 500;
+        PantallaRemotaService.cuadroMs = 400;
+        server.abrirSesion = true;
+        PantallaRemotaService.despertarYa();
+        assertTrue(esperar(() -> server.cuerpos("cuadro").size() >= 2, 30000));
+        StringBuilder largo = new StringBuilder();
+        for (int i = 0; i < 201; i++) largo.append('a');
+        server.accionesFijas.add("{\"id\":96,\"a\":\"texto\",\"t\":\"" + largo + "\"}");
+        assertTrue("debía confirmarse texto_invalido", esperar(() -> hayConfirmada(96, "texto_invalido"), 20000));
+        assertEquals("el texto inválido no debe escribirse", "", textoDelCampo());
+    }
+
+    /** (c) Mientras haya una sesión de control remoto hay una notificación FIJA; al cerrarse, desaparece. */
+    @Test
+    public void t6e_notificacionFijaMientrasHayUnaSesionDeControlRemoto() throws Exception {
+        assumeTrue("las notificaciones propias se listan desde Android 6", Build.VERSION.SDK_INT >= 23);
+        if (Build.VERSION.SDK_INT >= 33) shell("pm grant " + PAQUETE + " android.permission.POST_NOTIFICATIONS");
+        abrirPantallaDePrueba();
+        PantallaRemotaService.escuchaMs = 500;
+        PantallaRemotaService.cuadroMs = 400;
+        assertTrue("una sesión de la prueba anterior sigue abierta", esperar(() -> !notificacionControlActiva(), 30000));
+        server.abrirSesion = true;
+        PantallaRemotaService.despertarYa();
+        assertTrue("no apareció la notificación del control remoto", esperar(this::notificacionControlActiva, 30000));
+        StatusBarNotification n = notificacionControl();
+        assertTrue("debe ser fija", (n.getNotification().flags & android.app.Notification.FLAG_ONGOING_EVENT) != 0);
+        server.abrirSesion = false;
+        assertTrue("la notificación debe quitarse al cerrar la sesión", esperar(() -> !notificacionControlActiva(), 30000));
+    }
+
+    /**
+     * (b) /pantalla exige https: con una regla http hacia una dirección que NO es de la propia máquina no sale ni una
+     * petición de pantalla (ni siquiera la escucha), aunque el servidor responda. Con http hacia 127.0.0.1 (pruebas) sí.
+     */
+    @Test
+    public void t6f_httpHaciaUnaDireccionAjenaNoSeUsaParaLaPantalla() throws Exception {
+        String ip = ipLocalNoLoopback();
+        assumeTrue("el emulador no tiene una dirección de red no-loopback", ip != null);
+        PantallaServidor ajeno = new PantallaServidor();
+        ajeno.bindTodas = true;
+        ajeno.start();
+        try {
+            cambiarUrlDeLaRegla("http://" + ip + ":" + ajeno.port + "/sms");
+            PantallaRemotaService.escuchaMs = 300;
+            PantallaRemotaService.despertarYa();
+            Thread.sleep(4000);
+            assertEquals("http a una dirección ajena no debe usarse para /pantalla", 0, ajeno.cuerpos("escucha").size());
+            assertEquals(0, ajeno.cuerpos("cuadro").size());
+
+            // control: el mismo servicio con la regla en http://127.0.0.1 (solo pruebas) sí escucha
+            cambiarUrlDeLaRegla("http://127.0.0.1:" + server.port + "/sms");
+            PantallaRemotaService.despertarYa();
+            assertTrue("con la URL de pruebas debía escuchar", esperar(() -> server.cuerpos("escucha").size() >= 1, 20000));
+        } finally {
+            ajeno.stop();
+        }
+    }
+
     /**
      * Con el permiso WRITE_SECURE_SETTINGS (concedido una vez por adb) la app se activa sola, sin que nadie
      * toque Ajustes. Va la última (nombre t9) porque concede un permiso en pleno proceso.
      */
     @Test
     public void t9_autoActivacionConPermisoDeAjustesSeguros() throws Exception {
-        // se desactiva el servicio y se comprueba que la app lo vuelve a activar sola
+        // la persona apaga el servicio a mano en Ajustes (lista vacía): Android lo desconecta
         shell("settings delete secure enabled_accessibility_services");
         shell("settings put secure accessibility_enabled 0");
         assertTrue("el servicio no se desconectó", esperar(() -> !PantallaRemotaService.conectado(), 20000));
         assertFalse(Guardian.pantallaActiva(ctx));
+        // 2.11.0: al desenlazarse sin figurar en Ajustes, la app anota que lo apagó la persona
+        assertTrue("debía anotarse el apagado a mano", esperar(() -> new GuardianState(ctx).apagadoAMano(GuardianState.AJUSTE_PANTALLA), 10000));
 
         // sin el permiso, no puede
         if (ctx.checkSelfPermission(Manifest.permission.WRITE_SECURE_SETTINGS) != PackageManager.PERMISSION_GRANTED) {
@@ -357,10 +479,28 @@ public class PantallaRemotaInstrumentedTest {
         }
         assertEquals(PackageManager.PERMISSION_GRANTED, ctx.checkSelfPermission(Manifest.permission.WRITE_SECURE_SETTINGS));
 
-        assertTrue("autoActivarPantalla devolvió false", Guardian.autoActivarPantalla(ctx));
+        // con el permiso, pero apagado A MANO: ni la reactivación automática ni el vigilante lo vuelven a encender
+        assertFalse("no debe reactivarse solo tras apagarlo a mano", Guardian.autoActivarPantalla(ctx));
+        Guardian.tick(ctx, "prueba-pantalla");
+        Thread.sleep(1500);
+        assertFalse("el vigilante lo reactivó pese al apagado a mano", Guardian.pantallaActiva(ctx));
+        assertTrue("sigue anotado como apagado a mano", new GuardianState(ctx).apagadoAMano(GuardianState.AJUSTE_PANTALLA));
+
+        // orden EXPLÍCITA del administrador (botón de «Salud del teléfono»): borra la bandera y lo activa
+        assertTrue("reactivarPantallaExplicito devolvió false", Guardian.reactivarPantallaExplicito(ctx));
         assertTrue("Android no conectó el servicio", esperar(PantallaRemotaService::conectado, 30000));
         assertTrue(Guardian.pantallaActiva(ctx));
+        assertFalse("la orden explícita borra la bandera", new GuardianState(ctx).apagadoAMano(GuardianState.AJUSTE_PANTALLA));
         assertTrue("el latido debe declarar «pantalla»", Guardian.permisosExtraDados(ctx).contains("pantalla"));
+        assertTrue("el latido debe declarar «ajustes_seguros»", Guardian.permisosExtraDados(ctx).contains("ajustes_seguros"));
+
+        // y si se apaga por otra causa (la app NO lo apagó y sigue en la lista), la reactivación automática sigue valiendo:
+        // sin la bandera, autoActivarPantalla repone un servicio que falta
+        shell("settings delete secure enabled_accessibility_services");
+        assertTrue(esperar(() -> !PantallaRemotaService.conectado(), 20000));
+        new GuardianState(ctx).marcarApagadoAMano(GuardianState.AJUSTE_PANTALLA, false);
+        assertTrue("sin la bandera debe poder reactivarse sola", Guardian.autoActivarPantalla(ctx));
+        assertTrue("Android no volvió a conectar el servicio", esperar(PantallaRemotaService::conectado, 30000));
     }
 
     // ------------------------------------------------------------------ ayudas de las pruebas
@@ -482,6 +622,78 @@ public class PantallaRemotaInstrumentedTest {
         return false;
     }
 
+    /** Seq de la última imagen (cuadro con jpg) que el teléfono mandó; 0 si aún no hubo. */
+    private long ultimaImagenSeq() {
+        long ultima = 0;
+        for (Peticion p : server.cuerpos("cuadro")) {
+            try {
+                JSONObject o = new JSONObject(p.cuerpo);
+                if (!o.getBoolean("sin_cambio") && o.has("jpg")) ultima = Math.max(ultima, o.getLong("seq"));
+            } catch (Exception ignored) {
+            }
+        }
+        return ultima;
+    }
+
+    /** Seq de un cuadro «sin_cambio» posterior a la última imagen; 0 si no hay. */
+    private long seqSinCambioPosterior() {
+        long ultima = ultimaImagenSeq();
+        long mayor = 0;
+        for (Peticion p : server.cuerpos("cuadro")) {
+            try {
+                JSONObject o = new JSONObject(p.cuerpo);
+                if (o.getBoolean("sin_cambio") && o.getLong("seq") > ultima) mayor = Math.max(mayor, o.getLong("seq"));
+            } catch (Exception ignored) {
+            }
+        }
+        return mayor;
+    }
+
+    private StatusBarNotification notificacionControl() {
+        NotificationManager nm = (NotificationManager) ctx.getSystemService(Context.NOTIFICATION_SERVICE);
+        for (StatusBarNotification n : nm.getActiveNotifications()) {
+            if (n.getId() == Notificaciones.ID_CONTROL && ctx.getPackageName().equals(n.getPackageName())) return n;
+        }
+        return null;
+    }
+
+    private boolean notificacionControlActiva() {
+        return notificacionControl() != null;
+    }
+
+    private static String ipLocalNoLoopback() {
+        try {
+            Enumeration<NetworkInterface> ifs = NetworkInterface.getNetworkInterfaces();
+            while (ifs != null && ifs.hasMoreElements()) {
+                NetworkInterface ni = ifs.nextElement();
+                if (!ni.isUp() || ni.isLoopback()) continue;
+                Enumeration<InetAddress> as = ni.getInetAddresses();
+                while (as.hasMoreElements()) {
+                    InetAddress a = as.nextElement();
+                    if (a instanceof Inet4Address && !a.isLoopbackAddress()) return a.getHostAddress();
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        return null;
+    }
+
+    /** Cambia la URL de la regla firmada (la de /sms; /pantalla cuelga de ella). */
+    private void cambiarUrlDeLaRegla(String url) {
+        ForwardingConfig c = new ForwardingConfig(ctx);
+        c.setKey("pantalla-test");
+        c.setSender("4066");
+        c.setSmsFilter("");
+        c.setUrl(url);
+        c.setTemplate("{\"from\":\"%from%\",\"text\":\"%text%\",\"sentStamp\":\"%sentStamp%\",\"empresa\":\"soda\"}");
+        c.setHeaders("{}");
+        c.setRetriesNumber(1);
+        c.setSignHmacSha256(true);
+        c.setSignHmacSha256Secret(SECRETO);
+        c.setLocalMode(true);
+        c.save();
+    }
+
     private boolean hayConfirmada(long id, String resultado) {
         for (Peticion p : server.cuerpos("cuadro")) {
             try {
@@ -522,6 +734,8 @@ public class PantallaRemotaInstrumentedTest {
         volatile int firma = FIRMA_BUENA;
         /** true: el «eco» de la respuesta no es el ts de la petición (respuesta repetida o vieja). */
         volatile boolean ecoDistinto = false;
+        /** true: escucha en todas las interfaces (para probar una URL http hacia la IP de la propia red, no loopback). */
+        volatile boolean bindTodas = false;
         /** Acciones (JSON) que se mandan en CADA respuesta de sesión, para probar que no se repiten al ejecutar. */
         final List<String> accionesFijas = new CopyOnWriteArrayList<>();
         private ServerSocket ss;
@@ -529,7 +743,7 @@ public class PantallaRemotaInstrumentedTest {
         private final List<Peticion> recibidas = new CopyOnWriteArrayList<>();
 
         void start() throws Exception {
-            ss = new ServerSocket(0, 50, InetAddress.getByName("127.0.0.1"));
+            ss = bindTodas ? new ServerSocket(0, 50) : new ServerSocket(0, 50, InetAddress.getByName("127.0.0.1"));
             port = ss.getLocalPort();
             Thread t = new Thread(() -> {
                 while (activo) {
