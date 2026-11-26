@@ -1,6 +1,11 @@
 name: Prueba de la app Sinpe 2.12.0 (salud ampliada, ADB a pedido, actualizacion automatica, abrir_ajuste) en Android
 on:
   workflow_dispatch:
+    inputs:
+      solo_pulsador:
+        description: 'Poner 1 para repetir solo el paso 8 (confirmacion forzada + pulsador de accesibilidad)'
+        required: false
+        default: ''
   push:
     branches: [prueba-guardian-27]
 jobs:
@@ -138,7 +143,7 @@ jobs:
           target: google_apis
           working-directory: app sms android
           script: |
-            bash ../scripts-prueba/actualizacion-e2e.sh
+            SOLO_PULSADOR='${{ inputs.solo_pulsador }}' bash ../scripts-prueba/actualizacion-e2e.sh
       - uses: actions/upload-artifact@v4
         if: always()
         with:

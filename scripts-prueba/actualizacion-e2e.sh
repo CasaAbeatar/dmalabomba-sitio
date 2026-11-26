@@ -91,6 +91,8 @@ adb shell run-as $P mkdir -p shared_prefs
 adb shell "run-as $P cp /data/local/tmp/act-prefs.xml shared_prefs/$PREF.xml"
 adb shell "run-as $P cp /data/local/tmp/act-hb.xml shared_prefs/heartbeat.xml"
 adb logcat -c
+adb logcat -v threadtime > act-logcat-vivo.txt 2>&1 &
+LOGCAT_PID=$!
 adb shell am start -n $P/.MainActivity >/dev/null
 
 nota "1. salud ampliada en el latido"
@@ -102,6 +104,7 @@ done
 [ "$(consulta detalle actualizacion_estado)" = '"ninguna"' ] && bien "actualizacion_estado=ninguna al inicio" || mal "actualizacion_estado inicial: $(consulta detalle actualizacion_estado)"
 [ "$(consulta firmas_malas)" = "0" ] && bien "todos los latidos llegaron con firma valida" || mal "hubo latidos con firma invalida"
 
+if [ -z "$SOLO_PULSADOR" ]; then   # SOLO_PULSADOR=1: salta los pasos 2 a 7 (para repetir rapido solo el paso 8)
 nota "2. autochequeo: el servidor se cae, entra un SMS, y la app avisa sms_sin_reenviar >= 1"
 touch act-sms-falla
 adb emu sms send 4066 "Recibiste un SINPE Movil por 7000 colones de PRUEBA AUTOCHEQUEO. Comprobante 901"
@@ -164,6 +167,7 @@ if esperar_val 240 '"2.12.1"' detalle app; then bien "la app nueva arranco sola 
 if esperar_val 120 '"ninguna"' detalle actualizacion_estado; then bien "la app nueva reporta actualizacion_estado=ninguna"; else mal "estado tras actualizar: $(consulta detalle actualizacion_estado)"; fi
 adb shell dumpsys package $P | grep -m1 installerPackageName | sed 's/^ */instalador: /'
 
+fi
 nota "8. actualizacion buena CON confirmacion forzada (vc 27): el pulsador de accesibilidad"
 modo '{}'
 adb shell run-as $P touch files/prueba_confirmacion
@@ -177,7 +181,9 @@ sleep 10
 modo '{"actualizacion":{"v":"2.12.3","vc":27,"archivo":"apk-27.apk"}}'
 if esperar_vc 360 27; then bien "con confirmacion forzada la app se actualizo a la vc 27 (pulsador de accesibilidad)"; else mal "no se actualizo a la vc 27 (vc instalada $(vc_instalado), estado $(consulta detalle actualizacion_estado) / $(consulta detalle actualizacion_detalle))"; fi
 adb exec-out screencap -p > act-final.png
-adb logcat -d > act-logcat.txt
+adb logcat -d > act-logcat.txt 2>/dev/null
+sleep 2; kill $LOGCAT_PID 2>/dev/null
+[ -s act-logcat.txt ] || cp act-logcat-vivo.txt act-logcat.txt
 grep -E "Actualizador|boton del instalador|diag instalador|PantallaRemota" act-logcat.txt | tail -80 > act-logcat-actualizador.txt
 grep -q "boton del instalador pulsado" act-logcat.txt && bien "el log confirma «boton del instalador pulsado»" || mal "el log no muestra que el pulsador actuara"
 if esperar_val 240 '"2.12.3"' detalle app; then bien "la app 2.12.3 manda latidos"; else mal "no hay latidos de la 2.12.3"; fi
