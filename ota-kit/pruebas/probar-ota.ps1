@@ -246,6 +246,46 @@ try {
 } catch { Ok $false ("11) tareas reales: " + $_.Exception.Message) }
 finally { Unregister-ScheduledTask -TaskName "La Bomba Kit - Actualizador" -TaskPath "\La Bomba\" -Confirm:$false -ErrorAction SilentlyContinue; Unregister-ScheduledTask -TaskName "La Bomba Kit - Relanzar" -TaskPath "\La Bomba\" -Confirm:$false -ErrorAction SilentlyContinue }
 
+# ---------- 12) la llave publica de PRODUCCION que viaja en el kit verifica una firma hecha con la llave privada de produccion ----------
+Dice "12) Llave publica de produccion"
+try {
+  . "$kitReal\ota llave publica.ps1"
+  $rsa = New-Object System.Security.Cryptography.RSACryptoServiceProvider; $rsa.FromXmlString($OtaLlavePublicaXml)
+  Ok ($rsa.KeySize -eq 3072) "12a) la llave de produccion es RSA de 3072 bits (es: $($rsa.KeySize))"
+  $dat = [IO.File]::ReadAllBytes((Join-Path $aqui "muestra-firma-produccion.txt"))
+  $fir = [Convert]::FromBase64String((Get-Content (Join-Path $aqui "muestra-firma-produccion.txt.firma") -Raw).Trim())
+  Ok ($rsa.VerifyData($dat, "SHA256", $fir)) "12b) una firma hecha con la llave privada de produccion se verifica con la llave publica del kit"
+  $dat2 = [byte[]]$dat.Clone(); $dat2[0] = $dat2[0] -bxor 1
+  Ok (-not $rsa.VerifyData($dat2, "SHA256", $fir)) "12c) el mismo texto con un byte distinto NO se verifica"
+} catch { Ok $false ("12) llave de produccion: " + $_.Exception.Message) }
+
+# ---------- 13) direcciones permitidas y camino de produccion sin manifiesto publicado ----------
+Dice "13) Direcciones permitidas"
+try {
+  $txtAct = Get-Content (Join-Path $kitReal "20 actualizador.ps1") -Raw
+  $HostsPermitidos = @("www.dmalabomba.com", "dmalabomba.com"); $RutaPermitida = "/kit-caja/ota/"
+  $fn = [regex]::Match($txtAct, '(?s)function Url-Permitida.*?\r?\n\}').Value
+  Invoke-Expression $fn
+  Ok (Url-Permitida "https://www.dmalabomba.com/kit-caja/ota/manifiesto.json") "13a) la direccion oficial se permite"
+  Ok (-not (Url-Permitida "http://www.dmalabomba.com/kit-caja/ota/manifiesto.json")) "13b) http sin cifrar NO"
+  Ok (-not (Url-Permitida "https://evil.com/kit-caja/ota/manifiesto.json")) "13c) otro dominio NO"
+  Ok (-not (Url-Permitida "https://www.dmalabomba.com.evil.com/kit-caja/ota/x.zip")) "13d) dominio que solo empieza igual NO"
+  Ok (-not (Url-Permitida "https://www.dmalabomba.com/otra-ruta/x.zip")) "13e) otra ruta del mismo sitio NO"
+  Ok (-not (Url-Permitida "https://www.dmalabomba.com/kit-caja/ota/../x.zip")) "13f) ruta con .. NO"
+  Ok (-not (Url-Permitida "https://usuario@www.dmalabomba.com/kit-caja/ota/x.zip")) "13g) direccion con usuario NO"
+  Ok (-not (Url-Permitida "https://www.dmalabomba.com:8443/kit-caja/ota/x.zip")) "13h) otro puerto NO"
+} catch { Ok $false ("13) direcciones: " + $_.Exception.Message) }
+Dice "13') Produccion (sin -Prueba) mientras el manifiesto no esta publicado: no debe fallar ni alarmar"
+$raiz = Join-Path $base "pc9"; Instalar-Raiz $raiz "T-100" 100
+Set-Content -LiteralPath "$raiz\datos\equipo.json" -Value ('{"estacion":"caja-pollos","token":"x","pc":"' + $env:COMPUTERNAME + '"}') -Encoding UTF8
+$o = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$raiz\20 actualizador.ps1" -Raiz $raiz -Ahora 2>&1 | Out-String
+Dice ("   salida: " + ($o -replace "\s+", " "))
+Ok ($LASTEXITCODE -eq 0) "13'a) termina sin error (codigo $LASTEXITCODE)"
+Ok ((Version-De $raiz) -eq "T-100") "13'b) no cambia nada"
+Ok ((@(Eventos-De $raiz) -join "`n") -notmatch "OTA kit") "13'c) no genera ningun aviso para Emil"
+Dice ("   log: " + ((@(Get-Content "$raiz\ota\actualizador.log" -Tail 3 -ErrorAction SilentlyContinue)) -join " | "))
+Detener-Pruebas $raiz
+
 Dice ("RESULTADO: " + ($script:Pasos - $script:Fallos) + " de " + $script:Pasos + " comprobaciones correctas; fallos: " + $script:Fallos)
 Get-ChildItem $base -Recurse -Filter "actualizador.log" -ErrorAction SilentlyContinue | ForEach-Object { Copy-Item $_.FullName (Join-Path $res ("actualizador-" + $_.Directory.Parent.Name + ".log")) -ErrorAction SilentlyContinue }
 if ($script:Fallos -gt 0) { exit 1 }

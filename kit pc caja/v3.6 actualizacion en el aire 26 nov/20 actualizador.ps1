@@ -377,6 +377,7 @@ try {
     else { Bajar $UrlManifiesto $fm (1MB) ""; Bajar ($UrlManifiesto + ".firma") $ff (64KB) "" }
   } catch { Log ("No se pudo bajar el manifiesto (sin internet o sin publicar): " + $_.Exception.Message); $e["ultima_comprobacion"] = Iso (Ahora-Utc); Guardar-Estado $e "" ""; exit 0 }
   $bytesM = [IO.File]::ReadAllBytes($fm)
+  if (($bytesM.Length -eq 0) -or ($bytesM[0] -eq 60)) { Log "El manifiesto todavia no esta publicado (el sitio devolvio una pagina web): no hay nada que instalar"; $e["ultima_comprobacion"] = Iso (Ahora-Utc); Guardar-Estado $e "" ""; exit 0 }
   $firma = $null; try { $firma = [Convert]::FromBase64String(((Leer-Texto $ff).Trim())) } catch { $firma = $null }
   $valida = $false; if ($firma) { try { $valida = Firma-Valida $bytesM $firma $llave } catch { Log ("Error al verificar la firma: " + $_.Exception.Message) } }
   if (-not $valida) {
