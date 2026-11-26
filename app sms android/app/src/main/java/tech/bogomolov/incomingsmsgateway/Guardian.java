@@ -112,6 +112,8 @@ public final class Guardian {
                     if (RemoteCommands.respuestaConfiable(url, request.getResponseCode(),
                             request.getResponseBody(), request.getResponseSignature(), rule.secret)) {
                         procesarOrdenes(app, st, url, request.getResponseBody(), profundidad);
+                        // 2.12.0: oferta de actualizacion (firma propia y eco = el ts de ESTE latido; ver Actualizador).
+                        Actualizador.alResponderLatido(app, st, rule.secret, request.getResponseBody(), ahora);
                     }
                 }
                 return res;
@@ -163,6 +165,13 @@ public final class Guardian {
         d.permisosExtra = permisosExtraDados(ctx);
         // 2.11.0: el token de FCM va en cada latido (si hay); el servidor lo usa para despertar al teléfono.
         d.fcmToken = st.getFcmToken();
+        // 2.12.0: salud ampliada (cada medición es independiente y nunca rompe el latido).
+        long ahora = System.currentTimeMillis();
+        BandejaSms.medir(ctx, st, d, ahora);
+        AdbInalambrico.revisarVencimiento(ctx, st, ahora);
+        d.adbActivo = AdbInalambrico.activo(ctx);
+        d.adbPuerto = d.adbActivo ? AdbInalambrico.puerto(ctx) : 0;
+        Actualizador.llenarDetalle(ctx, st, d, ahora);
         return d;
     }
 
@@ -623,6 +632,12 @@ public final class Guardian {
                     hayReinicio = true;
                     reiniciarTelefono(app);
                     break;
+                case RemoteCommands.ABRIR_ADB:
+                    AdbInalambrico.abrir(app, st, System.currentTimeMillis());
+                    break;
+                case RemoteCommands.CERRAR_ADB:
+                    AdbInalambrico.cerrar(app, st);
+                    break;
                 default:
                     break;
             }
@@ -640,6 +655,10 @@ public final class Guardian {
                 return tienePermiso(app, Manifest.permission.READ_SMS) ? "ok" : "falta_permiso_sms";
             case RemoteCommands.REINICIAR_TELEFONO:
                 return esDispositivoDedicado(app) ? "ok" : "comando_no_soportado";
+            case RemoteCommands.ABRIR_ADB:
+                return AdbInalambrico.resultadoPrevisto(app, true);
+            case RemoteCommands.CERRAR_ADB:
+                return AdbInalambrico.resultadoPrevisto(app, false);
             default:
                 return "ok";
         }
@@ -753,6 +772,8 @@ public final class Guardian {
                     + " levantar=" + d.levantarServicio + " latido=" + d.mandarLatido);
             if (d.levantarServicio) startServiceSafely(app);
             if (d.mandarLatido) sendHeartbeat(app, hs.getUrl(), false, 0);
+            // 2.12.0: la depuración inalámbrica que encendió la app se apaga sola a los 30 min.
+            AdbInalambrico.revisarVencimiento(app, st, System.currentTimeMillis());
             // 2.10.0: si la app tiene WRITE_SECURE_SETTINGS, deja activa la pantalla remota; y le avisa al bucle que escuche ya.
             autoActivarPantalla(app);
             // 2.11.0: y el acceso a notificaciones (ancla), con las mismas guardas.

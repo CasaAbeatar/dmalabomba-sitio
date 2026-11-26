@@ -136,6 +136,13 @@ public class HistoryForwarder {
                 }
             }
             r.cancelado = cancelar;
+            // 2.12.0: un historial completo y sin fallos deja la bandeja al día: el autochequeo «recibe pero no reenvía» lo cuenta.
+            if (!cancelar && r.fallidos == 0 && r.error == null) {
+                try {
+                    new GuardianState(ctx).marcarHistorialOk(System.currentTimeMillis());
+                } catch (Exception ignored) {
+                }
+            }
         } catch (SecurityException e) {
             r.error = ctx.getString(R.string.history_need_permission);
         } catch (Exception e) {

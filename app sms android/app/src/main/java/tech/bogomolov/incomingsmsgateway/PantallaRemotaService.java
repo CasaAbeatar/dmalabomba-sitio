@@ -459,6 +459,8 @@ public class PantallaRemotaService extends AccessibilityService {
                     return escribir(null, a.n);
                 case PantallaProtocolo.ENCENDER:
                     return encender();
+                case PantallaProtocolo.ABRIR_AJUSTE:
+                    return abrirAjuste(a.que);
                 default:
                     return "no_soportado";
             }
@@ -466,6 +468,60 @@ public class PantallaRemotaService extends AccessibilityService {
             Log.e(TAG, "ejecutar " + a.a + ": " + e);
             return "fallo";
         }
+    }
+
+    /**
+     * 2.12.0: abre una pantalla de Ajustes de la lista cerrada (AjustesRemotos) por intent; solo la ABRE (no cambia nada).
+     * Prueba los candidatos en orden y confirma «ok:<código del que abrió>», o «no_disponible» si ninguno abrió.
+     */
+    private String abrirAjuste(String que) {
+        for (AjustesRemotos.Candidato c : AjustesRemotos.candidatos(que)) {
+            try {
+                android.content.Intent i;
+                if (c.accion != null) {
+                    i = new android.content.Intent(c.accion);
+                    if (c.conPaqueteDeLaApp) i.setData(android.net.Uri.fromParts("package", getPackageName(), null));
+                } else {
+                    i = new android.content.Intent();
+                    i.setComponent(new android.content.ComponentName(c.paquete, c.clase));
+                }
+                i.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK);
+                startActivity(i);
+                return AjustesRemotos.resultadoOk(c.codigo);
+            } catch (Throwable e) {
+                Log.i(TAG, "abrir_ajuste " + que + ": " + c.codigo + " no abrio (" + e.getClass().getSimpleName() + ")");
+            }
+        }
+        return AjustesRemotos.NO_DISPONIBLE;
+    }
+
+    /**
+     * 2.12.0 (actualización automática): si Android pidió confirmar la instalación, pulsa «Instalar»/«Actualizar» del diálogo del
+     * instalador del sistema. Solo actúa si la ventana activa es del paquete del instalador que Android dio para NUESTRA sesión, y
+     * solo pulsa un botón cuyo texto sea exactamente uno de Actualizador.TEXTOS_BOTON. No lee ni guarda nada más.
+     * @return true si pulsó
+     */
+    boolean pulsarBotonInstalador(String paqueteInstalador) {
+        AccessibilityNodeInfo raiz = null;
+        try {
+            raiz = getRootInActiveWindow();
+            if (raiz == null || raiz.getPackageName() == null || !paqueteInstalador.contentEquals(raiz.getPackageName())) return false;
+            for (String texto : Actualizador.TEXTOS_BOTON) {
+                List<AccessibilityNodeInfo> nodos = raiz.findAccessibilityNodeInfosByText(texto);
+                if (nodos == null) continue;
+                for (AccessibilityNodeInfo n : nodos) {
+                    CharSequence t = n.getText();
+                    if (t == null || !t.toString().trim().equalsIgnoreCase(texto) || !n.isEnabled()) continue;
+                    if (n.getPackageName() == null || !paqueteInstalador.contentEquals(n.getPackageName())) continue;
+                    AccessibilityNodeInfo clic = n;
+                    for (int i = 0; i < 3 && clic != null && !clic.isClickable(); i++) clic = clic.getParent();
+                    if (clic != null && clic.isClickable() && clic.performAction(AccessibilityNodeInfo.ACTION_CLICK)) return true;
+                }
+            }
+        } catch (Throwable e) {
+            Log.w(TAG, "pulsar boton del instalador: " + e);
+        }
+        return false;
     }
 
     private String gesto(double x1, double y1, double x2, double y2, int ms) {

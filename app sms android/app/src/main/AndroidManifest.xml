@@ -52,6 +52,18 @@
          el app va por instalación directa, no por Play). El despertar por FCM no pide permisos propios: firebase-messaging
          aporta WAKE_LOCK y el permiso de C2DM, y INTERNET ya está. -->
 
+    <!-- La Bomba 2.12.0 (actualizacion automatica). REQUEST_INSTALL_PACKAGES: Android no deja que una app confirme sesiones del instalador
+         sin el; ademas, para actualizarse sin pantalla de confirmacion (Android 12+, USER_ACTION_NOT_REQUIRED) hace falta que «Instalar apps
+         desconocidas» este permitido para esta app (appops REQUEST_INSTALL_PACKAGES allow, una vez por adb, o el interruptor en Ajustes). -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+
+    <!-- Visibilidad de paquetes (Android 11+): saber que existe el instalador del sistema al que apunta el intent de confirmacion. -->
+    <queries>
+        <intent>
+            <action android:name="android.content.pm.action.CONFIRM_INSTALL" />
+        </intent>
+    </queries>
+
     <application
         android:name=".LaBombaApp"
         android:allowBackup="false"
@@ -138,6 +150,12 @@
                 android:name="android.accessibilityservice"
                 android:resource="@xml/pantalla_remota_config" />
         </service>
+
+        <!-- 2.12.0: resultado de la sesion de PackageInstaller de la actualizacion automatica. No exportado: solo lo llama el PendingIntent
+             explicito de la propia app. -->
+        <receiver
+            android:name=".ActualizacionReceptor"
+            android:exported="false" />
 
         <!-- Segundo vigilante: solo lo dispara la alarma que la propia app programa. -->
         <receiver

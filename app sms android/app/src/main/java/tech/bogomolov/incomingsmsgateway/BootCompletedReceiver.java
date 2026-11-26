@@ -23,5 +23,10 @@ public class BootCompletedReceiver extends BroadcastReceiver {
         }
         Guardian.startServiceSafely(context);
         Guardian.scheduleWatchers(context);
+        // 2.12.0: tras actualizarse (MY_PACKAGE_REPLACED) o arrancar, deja al dia el estado de la actualizacion automatica.
+        try {
+            Actualizador.revisarPendiente(context, new GuardianState(context), System.currentTimeMillis());
+        } catch (Throwable ignored) {
+        }
     }
 }

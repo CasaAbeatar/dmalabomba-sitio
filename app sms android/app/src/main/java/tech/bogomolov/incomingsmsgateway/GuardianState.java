@@ -124,6 +124,64 @@ public class GuardianState {
         pref.edit().putBoolean(K_APAGADO_PREFIX + ajuste, valor).commit();
     }
 
+    // ---- 2.12.0: actualización automática de la app (ver Actualizador) ----
+
+    private static final String K_UPD_ESTADO = "upd_estado";
+    private static final String K_UPD_DETALLE = "upd_detalle";
+    private static final String K_UPD_VERSION = "upd_version";
+    private static final String K_UPD_TS = "upd_estado_ts";
+    private static final String K_UPD_VC = "upd_vc";
+    private static final String K_UPD_CUENTA = "upd_cuenta";
+    private static final String K_UPD_ULTIMO = "upd_ultimo_ts";
+
+    /** ninguna | descargando | instalando | fallo */
+    public String getUpdEstado() { return pref.getString(K_UPD_ESTADO, "ninguna"); }
+    public String getUpdDetalle() { return pref.getString(K_UPD_DETALLE, ""); }
+    public String getUpdVersion() { return pref.getString(K_UPD_VERSION, ""); }
+    public long getUpdEstadoTs() { return pref.getLong(K_UPD_TS, 0); }
+    public int getUpdVc() { return pref.getInt(K_UPD_VC, 0); }
+    public int getUpdCuenta() { return pref.getInt(K_UPD_CUENTA, 0); }
+    public long getUpdUltimoIntento() { return pref.getLong(K_UPD_ULTIMO, 0); }
+
+    public synchronized void setUpdEstado(String estado, String detalle, String version, long ahora) {
+        pref.edit().putString(K_UPD_ESTADO, estado).putString(K_UPD_DETALLE, detalle == null ? "" : detalle)
+                .putString(K_UPD_VERSION, version == null ? "" : version).putLong(K_UPD_TS, ahora).commit();
+    }
+
+    /** Anota un intento nuevo de instalar la versión {@code vc} (si es otra versión, la cuenta empieza de cero). @return intentos hechos de esa versión. */
+    public synchronized int contarIntentoUpd(int vc, long ahora) {
+        int cuenta = (getUpdVc() == vc ? getUpdCuenta() : 0) + 1;
+        pref.edit().putInt(K_UPD_VC, vc).putInt(K_UPD_CUENTA, cuenta).putLong(K_UPD_ULTIMO, ahora).commit();
+        return cuenta;
+    }
+
+    /** Intentos ya hechos de la versión {@code vc} (0 si es otra). */
+    public int intentosUpd(int vc) { return getUpdVc() == vc ? getUpdCuenta() : 0; }
+
+    /** Devuelve el intento (se abandonó antes de instalar por no ser momento seguro: no cuenta contra los 3). */
+    public synchronized void devolverIntentoUpd(int vc) {
+        if (getUpdVc() != vc) return;
+        pref.edit().putInt(K_UPD_CUENTA, Math.max(0, getUpdCuenta() - 1)).commit();
+    }
+
+    public synchronized void limpiarIntentosUpd() {
+        pref.edit().remove(K_UPD_VC).remove(K_UPD_CUENTA).remove(K_UPD_ULTIMO).commit();
+    }
+
+    // ---- 2.12.0: «reenviar historial» terminado sin fallos (cuenta como reenvío para el autochequeo de la bandeja) ----
+
+    private static final String K_HISTORIAL_OK = "historial_ok_ts";
+    public long getHistorialOkTs() { return pref.getLong(K_HISTORIAL_OK, 0); }
+    public void marcarHistorialOk(long ahora) { pref.edit().putLong(K_HISTORIAL_OK, ahora).commit(); }
+
+    // ---- 2.12.0: depuración inalámbrica a pedido (ver AdbInalambrico) ----
+
+    private static final String K_ADB_CIERRA = "adb_cierra_ts";
+
+    /** Hora (ms) en que la app debe apagar la depuración inalámbrica que ella encendió; 0 = no la encendió la app. */
+    public long getAdbCierraTs() { return pref.getLong(K_ADB_CIERRA, 0); }
+    public void setAdbCierraTs(long ts) { pref.edit().putLong(K_ADB_CIERRA, ts).commit(); }
+
     // ---- órdenes remotas ----
 
     public synchronized RemoteCommands.CommandLog getCommandLog() {
