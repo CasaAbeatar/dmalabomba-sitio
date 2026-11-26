@@ -1,0 +1,27 @@
+-- REVERTIR el movimiento de las tablas de la pantalla remota a pantalla_priv (aprobado por Emil el 26 nov 2026 06:40 CR).
+-- Deja todo como estaba antes: tablas en fact, respaldo_neon con SELECT, funciones con sus definiciones previas
+-- (guardadas en fact.sinpe_respaldo_funciones con el motivo de abajo), cron 170 con su comando anterior.
+-- Recrea tambien las funciones viejas (v1) si se retiraron. Todo en una transaccion.
+begin;
+-- 1) tablas de vuelta a fact y permisos de antes
+alter table pantalla_priv.sinpe_pantalla_cuadro set schema fact;
+alter table pantalla_priv.sinpe_pantalla_entrada set schema fact;
+grant select on fact.sinpe_pantalla_cuadro, fact.sinpe_pantalla_entrada to respaldo_neon;
+grant all on fact.sinpe_pantalla_cuadro, fact.sinpe_pantalla_entrada to service_role;
+-- 2) funciones: la ultima definicion guardada antes del cambio (primero las que no dependen de otras; el orden no importa porque
+--    plpgsql no valida llamadas al crear y las sql solo tocan tablas que ya volvieron a fact)
+do $$ declare r record; begin
+  for r in select distinct on (nombre) nombre, definicion from fact.sinpe_respaldo_funciones
+            where motivo = 'antes de mover tablas de pantalla a pantalla_priv (aprobado Emil 26 nov 2026)' and nombre not like 'cron.%'
+            order by nombre, id desc loop
+    execute r.definicion;
+  end loop;
+end $$;
+-- 3) cron 170 con el comando que tenia
+select cron.alter_job(170, command := (select definicion from fact.sinpe_respaldo_funciones
+  where motivo = 'antes de mover tablas de pantalla a pantalla_priv (aprobado Emil 26 nov 2026)' and nombre = 'cron.job 170' order by id desc limit 1));
+-- 4) el esquema vacio se puede quitar
+drop schema if exists pantalla_priv;
+commit;
+-- Nota: los permisos de todas estas funciones eran {postgres=X, service_role=X}, que es el permiso por defecto de postgres en public y fact;
+-- por eso las que se vuelvan a crear quedan con el mismo permiso que tenian.
