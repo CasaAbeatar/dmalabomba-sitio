@@ -36,6 +36,8 @@ public final class HealthCheck {
     public static final String NO_MOLESTAR = "no_molestar";
     // 2.10.0: pantalla remota (servicio de accesibilidad)
     public static final String PANTALLA = "pantalla";
+    // 2.11.0: reactivación automática (WRITE_SECURE_SETTINGS)
+    public static final String AJUSTES_SEGUROS = "ajustes_seguros";
 
     private HealthCheck() {
     }
@@ -81,7 +83,8 @@ public final class HealthCheck {
         if (Build.VERSION.SDK_INT >= 21) {
             Item an = new Item(ANCLA, R.string.h_anchor_title);
             an.ok = Guardian.anclaActiva(ctx);
-            an.ayuda = ctx.getString(an.ok ? R.string.h_anchor_ok : R.string.h_anchor_bad);
+            an.ayuda = ctx.getString(an.ok ? R.string.h_anchor_ok
+                    : (st.apagadoAMano(GuardianState.AJUSTE_ANCLA) ? R.string.h_anchor_off_by_you : R.string.h_anchor_bad));
             an.boton = R.string.h_anchor_btn;
             l.add(an);
         }
@@ -91,9 +94,19 @@ public final class HealthCheck {
             Item pa = new Item(PANTALLA, R.string.h_screen_title);
             pa.ok = Guardian.pantallaActiva(ctx);
             pa.ayuda = ctx.getString(pa.ok ? R.string.h_screen_ok
+                    : st.apagadoAMano(GuardianState.AJUSTE_PANTALLA) ? R.string.h_screen_off_by_you
                     : (Build.VERSION.SDK_INT >= 33 ? R.string.h_screen_bad_33 : R.string.h_screen_bad));
             pa.boton = R.string.h_screen_btn;
             l.add(pa);
+        }
+
+        // 2.11.0: ¿tiene el app el permiso para reactivar sola el acceso a notificaciones y la accesibilidad? Solo informa.
+        if (Build.VERSION.SDK_INT >= 24) {
+            Item se = new Item(AJUSTES_SEGUROS, R.string.h_secure_title);
+            se.ok = Guardian.tienePermiso(ctx, Manifest.permission.WRITE_SECURE_SETTINGS);
+            se.informativo = true;
+            se.ayuda = ctx.getString(se.ok ? R.string.h_secure_ok : R.string.h_secure_bad);
+            l.add(se);
         }
 
         Item ub = new Item(UBICACION, R.string.h_loc_title);

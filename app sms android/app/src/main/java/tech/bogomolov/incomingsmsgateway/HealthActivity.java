@@ -199,10 +199,25 @@ public class HealthActivity extends AppCompatActivity {
                 pedirPermiso(it.id, Manifest.permission.READ_SMS, enRecorrido);
                 break;
             case HealthCheck.ANCLA:
+                // 2.11.0: orden explícita del administrador: con WRITE_SECURE_SETTINGS se reactiva ya (y se borra el «apagado a mano»).
+                if (Guardian.reactivarAnclaExplicito(this)) {
+                    lista.postDelayed(() -> {
+                        refrescar();
+                        if (enRecorrido) siguiente();
+                    }, 1200);
+                    break;
+                }
                 abrirAjuste(it.id, enRecorrido, new Intent("android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS"),
                         new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + getPackageName())));
                 break;
             case HealthCheck.PANTALLA:
+                if (Guardian.reactivarPantallaExplicito(this)) {   // 2.11.0: ver ANCLA
+                    lista.postDelayed(() -> {
+                        refrescar();
+                        if (enRecorrido) siguiente();
+                    }, 1200);
+                    break;
+                }
                 // Ajustes de accesibilidad; en Android 13+ puede pedir primero «Permitir ajustes restringidos» (info de la app).
                 abrirAjuste(it.id, enRecorrido, new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS),
                         new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + getPackageName())));
@@ -249,7 +264,7 @@ public class HealthActivity extends AppCompatActivity {
                         new Intent(Build.VERSION.SDK_INT >= 22 ? Settings.ACTION_BATTERY_SAVER_SETTINGS : Settings.ACTION_SETTINGS));
                 break;
             case HealthCheck.SERVICIO:
-                Guardian.startServiceSafely(this);
+                Guardian.startServiceSafely(this, true);   // lo pidió la persona: salta el freno
                 lista.postDelayed(() -> {
                     refrescar();
                     if (enRecorrido) siguiente();

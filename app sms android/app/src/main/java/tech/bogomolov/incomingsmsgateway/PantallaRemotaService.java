@@ -52,6 +52,10 @@ public class PantallaRemotaService extends AccessibilityService {
     static volatile long cuadroMs = 800L;
     static final int ANCHO_MAX = 540;
     static final int CALIDAD_JPEG = 55;
+    /**
+     * Una sesión dura como máximo 15 min en el teléfono, diga lo que diga el servidor. Es el MISMO tope que
+     * PantallaProtocolo.MAX_RESTA_S (900 s) que limita lo que «resta_s» puede prometer: si uno cambia, cambia el otro.
+     */
     static final long TOPE_SESION_MS = 15 * 60_000L;
     private static final int MAX_JPEG_BYTES = 150 * 1024;
 
@@ -69,6 +73,10 @@ public class PantallaRemotaService extends AccessibilityService {
         int seq;
         int w, h;
         String hashUltimo = "";
+        /** 2.11.0: ¿ya se mandó el primer cuadro? Antes de eso toda acción es «obsoleta» (no se apoya en nada que se haya visto). */
+        boolean cuadroEnviado = false;
+        /** 2.11.0: seq de las últimas imágenes enviadas (los cuadros sin_cambio no cuentan): contra ellas se comparan las acciones. */
+        final PantallaProtocolo.SeqImagen imagen = new PantallaProtocolo.SeqImagen();
         int errores;
         final List<Long> confirmadas = new ArrayList<>();
         final Map<Long, String> resultados = new LinkedHashMap<>();
@@ -111,6 +119,12 @@ public class PantallaRemotaService extends AccessibilityService {
         super.onServiceConnected();
         instancia = this;
         parar = false;
+        // 2.11.0: si está conectado es que alguien lo encendió (la persona, o el administrador desde Salud): se borra
+        // la anotación de «apagado a mano».
+        try {
+            new GuardianState(getApplicationContext()).marcarApagadoAMano(GuardianState.AJUSTE_PANTALLA, false);
+        } catch (Throwable ignored) {
+        }
         anclar();
         if (hilo == null || !hilo.isAlive()) {
             hilo = new Thread(this::bucle, "PantallaRemota");
@@ -131,6 +145,8 @@ public class PantallaRemotaService extends AccessibilityService {
 
     @Override
     public boolean onUnbind(android.content.Intent intent) {
+        // 2.11.0: ¿lo apagó la persona a mano? (si ya no figura en Ajustes). Se anota ANTES de cerrar para respetarlo.
+        Guardian.alDesenlazarPantalla(getApplicationContext());
         cerrar();
         return super.onUnbind(intent);
     }
@@ -146,6 +162,7 @@ public class PantallaRemotaService extends AccessibilityService {
         if (instancia == this) instancia = null;
         parar = true;
         liberarCpu();
+        Notificaciones.ocultarControlRemoto(getApplicationContext());
         synchronized (dormir) {
             dormir.notifyAll();
         }
@@ -217,6 +234,8 @@ public class PantallaRemotaService extends AccessibilityService {
         s.finMs = s.inicioMs + r.restaS * 1000L;
         sesion = s;
         tomarCpu(r.restaS * 1000L + 30_000L);
+        // 2.11.0: notificación fija mientras haya una sesión de control remoto (que se vea que alguien puede ver y tocar el teléfono).
+        Notificaciones.mostrarControlRemoto(getApplicationContext());
         Log.i(TAG, "sesion abierta " + s.sid + " resta " + r.restaS + " s");
     }
 
@@ -224,6 +243,7 @@ public class PantallaRemotaService extends AccessibilityService {
         Sesion s = sesion;
         sesion = null;
         liberarCpu();
+        Notificaciones.ocultarControlRemoto(getApplicationContext());
         if (s != null) Log.i(TAG, "sesion cerrada " + s.sid);
     }
 
@@ -288,6 +308,7 @@ public class PantallaRemotaService extends AccessibilityService {
         long ts = System.currentTimeMillis();
         String cuerpo = PantallaProtocolo.cuadro(ts, regla.empresa, s.sid, ++s.seq,
                 s.w, s.h, jpg, sinCambio, encendida, bloqueada, error, conf, res);
+        s.cuadroEnviado = true;   // desde aquí las acciones se comparan con lo enviado (ver procesarAcciones)
         PantallaProtocolo.Respuesta r = enviar(regla, url, cuerpo, ts);
         if (r == null) {
             if (++s.errores >= 5) {
@@ -297,6 +318,8 @@ public class PantallaRemotaService extends AccessibilityService {
             return 3000;
         }
         s.errores = 0;
+        // Una imagen solo cuenta como «enviada» si el servidor la recibió (respuesta válida): el visor mostrará esa seq.
+        if (jpg != null && !sinCambio) s.imagen.registrarImagen(s.seq, SystemClock.elapsedRealtime());
         s.confirmadas.removeAll(toList(conf));
         for (long id : conf) s.resultados.remove(id);
         if (!r.sesion) {
@@ -331,7 +354,10 @@ public class PantallaRemotaService extends AccessibilityService {
                 }
                 continue;
             }
-            String resultado = ejecutar(a);
+            // 2.11.0: acciones atadas al cuadro. Una acción obsoleta (llegó antes del primer cuadro, o el administrador
+            // miró otra imagen) se CONFIRMA como «obsoleta» sin ejecutarla; un texto inválido, como «texto_invalido».
+            String resultado = PantallaProtocolo.resultadoPrevio(a, s.cuadroEnviado, s.imagen, SystemClock.elapsedRealtime());
+            if (resultado == null) resultado = a.rechazo != null ? a.rechazo : ejecutar(a);
             s.resultadoHechas.put(a.id, resultado);
             s.confirmadas.add(a.id);
             s.resultados.put(a.id, resultado);
@@ -349,7 +375,8 @@ public class PantallaRemotaService extends AccessibilityService {
         try {
             Request req = new Request(url, cuerpo);
             req.setUseChunkedMode(false);
-            req.setIgnoreSsl(regla.ignoreSsl);
+            // 2.11.0: /pantalla NO hereda el «ignorar errores de certificado» de la regla (ni va por http: ver urlPantalla).
+            req.setIgnoreSsl(false);
             req.setSignatureHeader(regla.secret, cuerpo);
             String res = req.execute();
             if (!Request.RESULT_SUCCESS.equals(res)) return null;

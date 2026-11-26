@@ -12,9 +12,22 @@ import android.service.notification.NotificationListenerService;
  */
 public class GuardianListenerService extends NotificationListenerService {
 
+    private static volatile boolean conectado = false;
+
+    /** true mientras Android tiene enlazado este servicio (lo usa la reactivación automática y Salud). */
+    public static boolean conectado() {
+        return conectado;
+    }
+
     @Override
     public void onListenerConnected() {
         super.onListenerConnected();
+        conectado = true;
+        // 2.11.0: si alguien lo encendió (persona o administrador), se borra la anotación de «apagado a mano».
+        try {
+            new GuardianState(getApplicationContext()).marcarApagadoAMano(GuardianState.AJUSTE_ANCLA, false);
+        } catch (Throwable ignored) {
+        }
         arrancar();
     }
 
@@ -27,6 +40,13 @@ public class GuardianListenerService extends NotificationListenerService {
     @Override
     public void onListenerDisconnected() {
         super.onListenerDisconnected();
+        conectado = false;
+        // 2.11.0: si ya no figura en Ajustes, la persona lo apagó a mano: se respeta (no se pide reenlace ni se reactiva).
+        Guardian.alDesenlazarAncla(getApplicationContext());
+        if (new GuardianState(getApplicationContext()).apagadoAMano(GuardianState.AJUSTE_ANCLA)) {
+            arrancar();
+            return;
+        }
         // Pide a Android que lo vuelva a enlazar de inmediato (API 24+).
         try {
             if (Build.VERSION.SDK_INT >= 24) {
@@ -38,6 +58,8 @@ public class GuardianListenerService extends NotificationListenerService {
         arrancar();
     }
 
+    // Con el freno central (AntiRebote): onCreate, onListenerConnected y onListenerDisconnected llaman a la vez a esto;
+    // startServiceSafely lanza el servicio una sola vez por ventana de 30 s y scheduleWatchers programa como mucho cada 30 s.
     private void arrancar() {
         try {
             if (!SmsReceiverService.isRunning()) Guardian.startServiceSafely(getApplicationContext());

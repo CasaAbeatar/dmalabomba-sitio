@@ -20,6 +20,7 @@ import android.os.Build;
 import android.os.PowerManager;
 import android.os.SystemClock;
 import android.provider.Settings;
+import android.service.notification.NotificationListenerService;
 import android.telephony.TelephonyManager;
 import android.util.Log;
 
@@ -65,6 +66,14 @@ public final class Guardian {
      * y si la respuesta es de confianza ejecuta las órdenes nuevas. Se puede llamar desde cualquier hilo de fondo.
      */
     public static String sendHeartbeat(Context ctx, String url, boolean forzar, int profundidad) {
+        return sendHeartbeat(ctx, url, forzar, profundidad, 0);
+    }
+
+    /**
+     * 2.11.0: igual, y si {@code despertarId} > 0 el latido lleva detalle.despertar_id (la confirmación de un despertar
+     * por FCM o por SMS). Un despertar siempre sale forzado: es una orden del servidor y espera esta respuesta.
+     */
+    public static String sendHeartbeat(Context ctx, String url, boolean forzar, int profundidad, long despertarId) {
         final Context app = ctx.getApplicationContext();
         synchronized (LOCK) {
             try {
@@ -81,6 +90,7 @@ public final class Guardian {
                     return "no signing rule";
                 }
                 HeartbeatBody.Detalle d = snapshot(app);
+                d.despertarId = despertarId;
                 d.comandosHechos = new long[acks.size()];
                 int i = 0;
                 for (Long id : acks.keySet()) d.comandosHechos[i++] = id;
@@ -110,6 +120,13 @@ public final class Guardian {
                 return Request.RESULT_ERROR;
             }
         }
+    }
+
+    /** 2.11.0: latido forzado con los ajustes guardados que confirma un despertar. @return resultado de Request o "heartbeat off". */
+    public static String sendHeartbeatDespertar(Context ctx, long despertarId) {
+        HeartbeatSettings hs = HeartbeatSettings.load(ctx);
+        if (!hs.isEnabled() || hs.getUrl().isEmpty()) return "heartbeat off";
+        return sendHeartbeat(ctx, hs.getUrl(), true, 0, despertarId);
     }
 
     /** Estado del teléfono para "detalle" (sin las órdenes pendientes de confirmar). */
@@ -144,6 +161,8 @@ public final class Guardian {
         // 2.9.0: Wi-Fi y permisos extra. Cada medición es independiente y nunca rompe el latido.
         medirWifi(ctx, d);
         d.permisosExtra = permisosExtraDados(ctx);
+        // 2.11.0: el token de FCM va en cada latido (si hay); el servidor lo usa para despertar al teléfono.
+        d.fcmToken = st.getFcmToken();
         return d;
     }
 
@@ -246,6 +265,8 @@ public final class Guardian {
         try {
             if (pantallaActiva(ctx)) return true;
             if (!tienePermiso(ctx, Manifest.permission.WRITE_SECURE_SETTINGS)) return false;
+            // 2.11.0 (auditoría de 2.10.0): si la persona lo apagó a mano en Ajustes, NO se vuelve a encender solo.
+            if (new GuardianState(ctx).apagadoAMano(GuardianState.AJUSTE_PANTALLA)) return false;
             ComponentName c = new ComponentName(ctx, PantallaRemotaService.class);
             String lista = Settings.Secure.getString(ctx.getContentResolver(), Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
             if (!servicioEnLista(lista, c)) {
@@ -256,6 +277,89 @@ public final class Guardian {
             return true;
         } catch (Throwable e) {
             Log.e(TAG, "autoactivar pantalla: " + e);
+            return false;
+        }
+    }
+
+    /**
+     * 2.11.0: orden EXPLÍCITA del administrador (botón de «Salud del teléfono»): borra la bandera de «apagado a mano» y,
+     * si la app tiene WRITE_SECURE_SETTINGS, enciende la pantalla remota ya. @return true si queda activada.
+     */
+    public static boolean reactivarPantallaExplicito(Context ctx) {
+        new GuardianState(ctx).marcarApagadoAMano(GuardianState.AJUSTE_PANTALLA, false);
+        return autoActivarPantalla(ctx);
+    }
+
+    /** Igual para el acceso a notificaciones (ancla). */
+    public static boolean reactivarAnclaExplicito(Context ctx) {
+        new GuardianState(ctx).marcarApagadoAMano(GuardianState.AJUSTE_ANCLA, false);
+        ultimoIntentoAncla = 0;   // una orden explícita no espera la ventana de un minuto de la reactivación automática
+        return autoActivarAncla(ctx);
+    }
+
+    /**
+     * 2.11.0: el servicio de accesibilidad se desenlazó. Si ya NO figura en la lista de Ajustes (nadie de la app lo
+     * apagó: la app nunca lo apaga), la persona lo apagó a mano: se anota para respetarlo. Si todavía figura, fue el
+     * sistema (memoria, actualización...) y la reactivación automática sigue siendo válida.
+     */
+    static void alDesenlazarPantalla(Context ctx) {
+        try {
+            String lista = Settings.Secure.getString(ctx.getContentResolver(), Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
+            boolean accesibilidadOn = Settings.Secure.getInt(ctx.getContentResolver(), Settings.Secure.ACCESSIBILITY_ENABLED, 1) == 1;
+            if (!accesibilidadOn || !ListaServicios.contiene(lista, ctx.getPackageName(), PantallaRemotaService.class.getName())) {
+                new GuardianState(ctx).marcarApagadoAMano(GuardianState.AJUSTE_PANTALLA, true);
+                Log.i(TAG, "pantalla remota apagada a mano: no se reactivara sola");
+            }
+        } catch (Throwable ignored) {
+            // sin dato: no se asume nada
+        }
+    }
+
+    /** 2.11.0: igual para el acceso a notificaciones (GuardianListenerService). */
+    static void alDesenlazarAncla(Context ctx) {
+        try {
+            String lista = Settings.Secure.getString(ctx.getContentResolver(), LISTENERS);
+            if (!ListaServicios.contiene(lista, ctx.getPackageName(), GuardianListenerService.class.getName())) {
+                new GuardianState(ctx).marcarApagadoAMano(GuardianState.AJUSTE_ANCLA, true);
+                Log.i(TAG, "acceso a notificaciones apagado a mano: no se reactivara solo");
+            }
+        } catch (Throwable ignored) {
+        }
+    }
+
+    // ------------------------------------------------------------------ 2.11.0: reactivar el acceso a notificaciones
+
+    private static final String LISTENERS = "enabled_notification_listeners";
+    private static volatile long ultimoIntentoAncla = 0;
+
+    /**
+     * Con WRITE_SECURE_SETTINGS deja activado el acceso a notificaciones (ancla de supervivencia), con las mismas guardas
+     * que la pantalla remota: solo si falta, solo con el permiso, no si la persona lo apagó a mano, y como mucho una vez
+     * por minuto (AntiRebote.puedeReactivar). Si ya figura en la lista pero Android no lo tiene enlazado, pide el reenlace.
+     * @return true si queda activado (ya lo estaba o se activó ahora)
+     */
+    public static boolean autoActivarAncla(Context ctx) {
+        if (Build.VERSION.SDK_INT < 24) return false;
+        try {
+            String lista = Settings.Secure.getString(ctx.getContentResolver(), LISTENERS);
+            boolean enLista = ListaServicios.contiene(lista, ctx.getPackageName(), GuardianListenerService.class.getName());
+            long ahora = System.currentTimeMillis();
+            if (enLista) {
+                if (!GuardianListenerService.conectado() && AntiRebote.puedeReactivar(ahora, ultimoIntentoAncla)) {
+                    ultimoIntentoAncla = ahora;
+                    NotificationListenerService.requestRebind(new ComponentName(ctx, GuardianListenerService.class));
+                }
+                return true;
+            }
+            if (!tienePermiso(ctx, Manifest.permission.WRITE_SECURE_SETTINGS)) return false;
+            if (new GuardianState(ctx).apagadoAMano(GuardianState.AJUSTE_ANCLA)) return false;
+            if (!AntiRebote.puedeReactivar(ahora, ultimoIntentoAncla)) return false;
+            ultimoIntentoAncla = ahora;
+            Settings.Secure.putString(ctx.getContentResolver(), LISTENERS,
+                    ListaServicios.agregar(lista, ctx.getPackageName(), GuardianListenerService.class.getName()));
+            return true;
+        } catch (Throwable e) {
+            Log.e(TAG, "autoactivar acceso a notificaciones: " + e);
             return false;
         }
     }
@@ -282,6 +386,8 @@ public final class Guardian {
         if (noMolestarDado(ctx)) b.append("no_molestar,");
         if (anclaActiva(ctx)) b.append("ancla,");
         if (pantallaActiva(ctx)) b.append("pantalla,");
+        // 2.11.0: con WRITE_SECURE_SETTINGS (concedido una vez por adb) la app reactiva sola la accesibilidad y el acceso a notificaciones.
+        if (tienePermiso(ctx, Manifest.permission.WRITE_SECURE_SETTINGS)) b.append("ajustes_seguros,");
         if (b.length() > 0) b.setLength(b.length() - 1);
         return b.toString();
     }
@@ -504,10 +610,10 @@ public final class Guardian {
         } catch (Exception e) {
             Log.e(TAG, "stopService: " + e);
         }
-        startServiceSafely(app);
+        startServiceSafely(app, true);   // orden explícita: salta el freno
     }
 
-    private static void reenviarHistorial(final Context app) {
+    static void reenviarHistorial(final Context app) {
         new Thread(() -> new HistoryForwarder().run(app, new HistoryForwarder.Listener() {
             @Override
             public void onProgress(String texto) {
@@ -608,14 +714,64 @@ public final class Guardian {
             if (d.mandarLatido) sendHeartbeat(app, hs.getUrl(), false, 0);
             // 2.10.0: si la app tiene WRITE_SECURE_SETTINGS, deja activa la pantalla remota; y le avisa al bucle que escuche ya.
             autoActivarPantalla(app);
+            // 2.11.0: y el acceso a notificaciones (ancla), con las mismas guardas.
+            autoActivarAncla(app);
             PantallaRemotaService.despertarYa();
         } catch (Exception e) {
             Log.e(TAG, "vigilante error: " + e);
         }
     }
 
-    /** Arranca el servicio sin lanzar si Android lo prohíbe desde segundo plano (Android 12+). */
+    // Freno central contra el rebote (criterio completo en AntiRebote): un arranque del servicio por ventana de 30 s,
+    // una sola alarma pendiente (gana la más próxima) y vigilantes programados como mucho cada 30 s.
+    private static final Object FRENO = new Object();
+    private static long ultimoLanzamientoMs = 0;
+    private static long alarmaPendienteMs = 0;
+    private static long ultimaProgramacionMs = 0;
+
+    /** Solo para las pruebas: olvida el estado del freno (en producción solo lo reinicia la muerte del proceso). */
+    static void reiniciarFreno() {
+        synchronized (FRENO) {
+            ultimoLanzamientoMs = 0;
+            alarmaPendienteMs = 0;
+            ultimaProgramacionMs = 0;
+        }
+        ultimoIntentoAncla = 0;
+    }
+
+    /**
+     * Arranca el servicio con el freno central: no hace nada si ya corre, y si se intentó hace menos de 30 s no lo
+     * relanza (deja UNA alarma para reintentar al cumplirse la ventana). No lanza si Android lo prohíbe desde
+     * segundo plano (Android 12+). @return true si el servicio corre o se lanzó; false si se frenó o falló.
+     */
     public static boolean startServiceSafely(Context ctx) {
+        return startServiceSafely(ctx, false);
+    }
+
+    /** {@code forzar}: lo pidió una persona o el servidor a propósito (botón de Salud, orden remota): salta el freno. */
+    public static boolean startServiceSafely(Context ctx, boolean forzar) {
+        long ahora = System.currentTimeMillis();
+        if (!forzar) {
+            if (SmsReceiverService.isRunning()) return true;
+            long falta;
+            synchronized (FRENO) {
+                if (AntiRebote.puedeLanzar(ahora, ultimoLanzamientoMs)) {
+                    ultimoLanzamientoMs = ahora;
+                    falta = 0;
+                } else {
+                    falta = AntiRebote.faltaParaLanzar(ahora, ultimoLanzamientoMs);
+                }
+            }
+            if (falta > 0) {
+                Log.i(TAG, "freno: el servicio se lanzo hace menos de 30 s; reintento en " + falta + " ms");
+                scheduleAlarm(ctx, falta);
+                return false;
+            }
+        } else {
+            synchronized (FRENO) {
+                ultimoLanzamientoMs = ahora;
+            }
+        }
         try {
             Intent i = new Intent(ctx, SmsReceiverService.class);
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -625,14 +781,21 @@ public final class Guardian {
             }
             return true;
         } catch (Exception e) {
+            // Incluye ForegroundServiceStartNotAllowedException (Android 12+): sin permiso para arrancar un servicio en
+            // primer plano desde segundo plano. No es un error de la app: la alarma o el siguiente vigilante lo reintentan.
             Log.e(TAG, "no se pudo arrancar el servicio: " + e);
             return false;
         }
     }
 
-    /** WorkManager cada 15 min (el mínimo que permite Android) y la primera alarma. Seguro de repetir. */
+    /** WorkManager cada 15 min (el mínimo que permite Android) y la primera alarma. Seguro de repetir y con freno (cada 30 s como mucho). */
     public static void scheduleWatchers(Context ctx) {
         Context app = ctx.getApplicationContext();
+        long ahora = System.currentTimeMillis();
+        synchronized (FRENO) {
+            if (!AntiRebote.puedeProgramar(ahora, ultimaProgramacionMs)) return;
+            ultimaProgramacionMs = ahora;
+        }
         try {
             PeriodicWorkRequest req = new PeriodicWorkRequest.Builder(GuardianWorker.class, 15, TimeUnit.MINUTES).build();
             WorkManager.getInstance(app).enqueueUniquePeriodicWork(WORK_NAME, ExistingPeriodicWorkPolicy.KEEP, req);
@@ -642,16 +805,26 @@ public final class Guardian {
         scheduleAlarm(app, Watchdog.ALARMA_MS);
     }
 
-    /** Alarma exacta (si hay permiso) que vuelve a despertar al vigilante; si no, alarma no exacta; el WorkManager queda de respaldo. */
+    /**
+     * ÚNICA alarma del Guardián (un solo PendingIntent): exacta si hay permiso (USE_EXACT_ALARM o SCHEDULE_EXACT_ALARM);
+     * si no, no exacta; el WorkManager queda de respaldo. Si ya hay una pendiente igual o más próxima, esa se queda:
+     * así la alarma corta de 10 s de onDestroy() no la pisa un «scheduleWatchers» que pide 5 min.
+     */
     public static void scheduleAlarm(Context ctx, long delayMs) {
         try {
             AlarmManager am = (AlarmManager) ctx.getSystemService(Context.ALARM_SERVICE);
             if (am == null) return;
+            long ahora = System.currentTimeMillis();
+            long en;
+            synchronized (FRENO) {
+                en = AntiRebote.alarmaEfectiva(ahora, alarmaPendienteMs, ahora + Math.max(0, delayMs));
+                if (en == alarmaPendienteMs && alarmaPendienteMs > ahora) return;   // ya hay una igual o más próxima
+                alarmaPendienteMs = en;
+            }
             Intent i = new Intent(ctx, GuardianAlarmReceiver.class);
             int flags = PendingIntent.FLAG_UPDATE_CURRENT;
             if (Build.VERSION.SDK_INT >= 23) flags |= PendingIntent.FLAG_IMMUTABLE;
             PendingIntent pi = PendingIntent.getBroadcast(ctx, 7001, i, flags);
-            long en = System.currentTimeMillis() + delayMs;
             if (Build.VERSION.SDK_INT >= 31 && !am.canScheduleExactAlarms()) {
                 am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, en, pi);
             } else if (Build.VERSION.SDK_INT >= 23) {
