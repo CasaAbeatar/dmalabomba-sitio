@@ -24,7 +24,11 @@ import java.util.regex.Pattern;
  *    respuesta con la clave de la regla). Aquí NO basta con https, a diferencia de las órdenes del latido.
  *  - Lista CERRADA de acciones; cualquier otra se ignora. Tope de 5 por respuesta.
  *  - Cada id se ejecuta una sola vez por sesión (IdsHechos).
- *  - Coordenadas normalizadas 0..1, duraciones y largo del texto con límites; lo que se sale se descarta.
+ *  - Coordenadas normalizadas 0..1, duraciones y largo del texto con límites; lo que se sale se descarta
+ *    (el texto inválido se confirma como «texto_invalido»).
+ *  - 2.11.0: solo https (ver urlPantalla); acciones atadas al cuadro (cuadro_seq, ver resultadoPrevio).
+ *  - Una sesión dura como máximo MAX_RESTA_S = 900 s (15 min) en el protocolo, y el teléfono además la corta a los
+ *    15 min con PantallaRemotaService.TOPE_SESION_MS, diga lo que diga el servidor: los dos topes deben ser el mismo.
  */
 public final class PantallaProtocolo {
 
@@ -51,6 +55,10 @@ public final class PantallaProtocolo {
     public static final int MS_LARGO_POR_DEFECTO = 800;
     /** Una sesión nunca dura más que esto en el teléfono, diga lo que diga el servidor. */
     public static final int MAX_RESTA_S = 900;
+    public static final long SIN_CUADRO_SEQ = -1;
+    public static final long CUADRO_SEQ_INVALIDO = -2;
+    public static final String OBSOLETA = "obsoleta";
+    public static final String TEXTO_INVALIDO = "texto_invalido";
     /** Cuántos ids ejecutados se recuerdan. */
     public static final int MAX_RECORDADOS = 200;
 
@@ -62,18 +70,35 @@ public final class PantallaProtocolo {
 
     // ------------------------------------------------------------------ dirección
 
-    /** La dirección de pantalla es la de la regla de reenvío con la ruta cambiada a /pantalla; null si no es una URL. */
+    /**
+     * La dirección de pantalla es la de la regla de reenvío con la ruta cambiada a /pantalla; null si no es una URL.
+     *
+     * 2.11.0 (auditoría de 2.10.0): /pantalla SOLO por https. Una captura de pantalla (y el teclado remoto) por http
+     * viajaría en claro y, además, un http permitiría a un intermediario ver el cuadro aunque no pudiera firmar la
+     * respuesta. Se rechaza todo http, salvo el bucle local del propio teléfono (127.0.0.1, localhost, [::1]),
+     * cuyo tráfico nunca sale del aparato y que usan las pruebas instrumentadas con un servidor falso. Tampoco se
+     * aplica a /pantalla el «ignorar errores de certificado» de la regla (ver PantallaRemotaService.enviar).
+     */
     public static String urlPantalla(String urlRegla) {
         if (urlRegla == null || urlRegla.trim().isEmpty()) return null;
         try {
             URL u = new URL(urlRegla.trim());
             String p = u.getProtocol();
             if (!"http".equals(p) && !"https".equals(p)) return null;
-            if (u.getHost() == null || u.getHost().isEmpty()) return null;
-            return p + "://" + u.getHost() + (u.getPort() >= 0 ? ":" + u.getPort() : "") + "/pantalla";
+            String host = u.getHost();
+            if (host == null || host.isEmpty()) return null;
+            if ("http".equals(p) && !esBucleLocal(host)) return null;
+            return p + "://" + host + (u.getPort() >= 0 ? ":" + u.getPort() : "") + "/pantalla";
         } catch (Exception e) {
             return null;
         }
+    }
+
+    /** 127.0.0.1, localhost o ::1: el tráfico no sale del teléfono. */
+    static boolean esBucleLocal(String host) {
+        if (host == null) return false;
+        String h = host.toLowerCase();
+        return h.equals("127.0.0.1") || h.equals("localhost") || h.equals("[::1]") || h.equals("::1");
     }
 
     // ------------------------------------------------------------------ cuerpos que manda el teléfono
@@ -149,6 +174,14 @@ public final class PantallaProtocolo {
         public final int ms;
         public final String t;
         public final int n;
+        /**
+         * 2.11.0: seq del cuadro que vio el administrador al mandar la acción. SIN_CUADRO_SEQ (-1) si la respuesta no lo
+         * trae (servidor viejo: se ejecuta como antes); CUADRO_SEQ_INVALIDO (-2) si viene pero no es un entero válido
+         * (se trata como obsoleta: presente y distinto del último enviado).
+         */
+        public long cuadroSeq = SIN_CUADRO_SEQ;
+        /** Motivo si la acción es válida en su id pero hay que confirmarla SIN ejecutar (p. ej. «texto_invalido»); null si no. */
+        public String rechazo = null;
 
         Accion(long id, String a, double x, double y, double x1, double y1, double x2, double y2, int ms, String t, int n) {
             this.id = id;
@@ -227,6 +260,10 @@ public final class PantallaProtocolo {
                 if (o == null) continue;
                 Accion a = leerAccion(o);
                 if (a == null) continue;
+                if (o.has("cuadro_seq")) {
+                    long cs = entero(o.opt("cuadro_seq"));
+                    a.cuadroSeq = cs >= 0 ? cs : CUADRO_SEQ_INVALIDO;
+                }
                 if (!vistos.add(a.id)) continue;
                 r.acciones.add(a);
             }
@@ -278,14 +315,13 @@ public final class PantallaProtocolo {
             }
             case TEXTO: {
                 Object t = o.opt("t");
-                if (!(t instanceof String)) return null;
-                String s = (String) t;
-                if (s.isEmpty() || s.length() > MAX_TEXTO) return null;
-                for (int i = 0; i < s.length(); i++) {
-                    char c = s.charAt(i);
-                    if (c < 0x20 && c != '\n') return null;   // nada de caracteres de control
+                if (t instanceof String && textoValido((String) t)) {
+                    return new Accion(id, a, 0, 0, 0, 0, 0, 0, 0, (String) t, 0);
                 }
-                return new Accion(id, a, 0, 0, 0, 0, 0, 0, 0, s, 0);
+                // 2.11.0: un texto que no cumple NO se deja sin respuesta: se confirma con «texto_invalido» sin escribir nada.
+                Accion mala = new Accion(id, a, 0, 0, 0, 0, 0, 0, 0, null, 0);
+                mala.rechazo = TEXTO_INVALIDO;
+                return mala;
             }
             case BORRAR: {
                 Object nRaw = o.opt("n");
@@ -301,6 +337,72 @@ public final class PantallaProtocolo {
             default:   // atras, inicio, recientes, notificaciones, encender: sin parámetros
                 return new Accion(id, a, 0, 0, 0, 0, 0, 0, 0, null, 0);
         }
+    }
+
+    /**
+     * Texto permitido: de 1 a MAX_TEXTO (200) UNIDADES UTF-16 (el largo de String.length(), no los puntos de código:
+     * un emoji cuenta 2), con saltos de línea (\n) pero sin otros caracteres de control, y sin sustitutos (surrogates)
+     * sueltos que dejarían un texto mal formado.
+     */
+    public static boolean textoValido(String s) {
+        if (s == null || s.isEmpty() || s.length() > MAX_TEXTO) return false;
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            if (c < 0x20 && c != '\n') return false;
+            if (c == 0x7f) return false;
+            if (Character.isHighSurrogate(c)) {
+                if (i + 1 >= s.length() || !Character.isLowSurrogate(s.charAt(i + 1))) return false;
+                i++;
+            } else if (Character.isLowSurrogate(c)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /** Margen tras cambiar de imagen en el que todavía vale la acción hecha sobre la imagen anterior (pantallas con animación). */
+    public static final long MARGEN_IMAGEN_MS = 2000L;
+
+    /**
+     * 2.11.0: qué imágenes mandó la sesión. La «seq» que guarda el servidor SOLO cambia con cuadros que traen imagen
+     * (jpg); los cuadros «sin_cambio» no la cambian, y el visor manda como cuadro_seq la seq de la ÚLTIMA IMAGEN que
+     * mostró. Por eso aquí NO se compara con el último seq de cualquier cuadro (en una pantalla estática, donde casi
+     * todos los cuadros son sin_cambio, todas las acciones saldrían obsoletas).
+     */
+    public static final class SeqImagen {
+        /** seq del último cuadro enviado CON jpg; -1 si todavía no se envió ninguno. */
+        public long ultima = -1;
+        /** seq de la imagen anterior a la última; -1 si no hay. */
+        public long previa = -1;
+        /** Hora (ms, reloj monótono de quien llama) en que «ultima» reemplazó a «previa». */
+        public long cambioMs;
+
+        public void registrarImagen(long seq, long ahoraMs) {
+            previa = ultima;
+            ultima = seq;
+            cambioMs = ahoraMs;
+        }
+    }
+
+    /**
+     * 2.11.0: ¿hay que confirmar esta acción como «obsoleta» sin ejecutarla?
+     *  - Si todavía no se envió ningún cuadro de la sesión: sí, TODA acción (las que llegan en la respuesta de «escucha»
+     *    no se apoyan en nada que el administrador haya visto).
+     *  - «encender» queda exenta de la regla de la imagen (con la pantalla apagada puede no haber imagen).
+     *  - Sin cuadro_seq (servidor viejo): se ejecuta como antes.
+     *  - Con cuadro_seq: se ejecuta si es igual a la seq de la última imagen enviada; o si es igual a la de la imagen
+     *    anterior y la última cambió hace menos de MARGEN_IMAGEN_MS (margen de una imagen para pantallas animadas).
+     *    Cualquier otro valor (incluido uno mal formado, o uno cuando aún no hubo imagen) es obsoleta.
+     * @return "obsoleta" o null si se puede ejecutar.
+     */
+    public static String resultadoPrevio(Accion a, boolean cuadroEnviado, SeqImagen img, long ahoraMs) {
+        if (!cuadroEnviado) return OBSOLETA;
+        if (ENCENDER.equals(a.a)) return null;
+        if (a.cuadroSeq == SIN_CUADRO_SEQ) return null;
+        if (a.cuadroSeq < 0 || img == null || img.ultima < 0) return OBSOLETA;
+        if (a.cuadroSeq == img.ultima) return null;
+        if (img.previa >= 0 && a.cuadroSeq == img.previa && ahoraMs >= img.cambioMs && ahoraMs - img.cambioMs < MARGEN_IMAGEN_MS) return null;
+        return OBSOLETA;
     }
 
     /** Número entre 0 y 1; NaN si no lo es. */

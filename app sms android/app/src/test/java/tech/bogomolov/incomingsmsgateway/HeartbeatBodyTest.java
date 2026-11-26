@@ -179,4 +179,58 @@ public class HeartbeatBodyTest {
         String b = HeartbeatBody.build(5L, "soda", "X", 1, detalle());
         assertEquals(a, b);
     }
+
+    // ------------------------------------------------------------------ 2.11.0: fcm_token y despertar_id
+
+    private static final String TOKEN = "dXJ0b2tlbjpBUEE5MWJF-_abc123:XYZ0987654321qwertyuiop";
+
+    @Test
+    public void fcmTokenYDespertarIdViajanEnElDetalleConSuTipo() throws Exception {
+        HeartbeatBody.Detalle d = detalle();
+        d.fcmToken = TOKEN;
+        d.despertarId = 4321L;
+        JSONObject det = new JSONObject(HeartbeatBody.build(1L, "soda", "X", 5, d)).getJSONObject("detalle");
+        assertEquals(TOKEN, det.getString("fcm_token"));
+        assertTrue("despertar_id es un numero, no un texto", det.get("despertar_id") instanceof Number);
+        assertEquals(4321L, det.getLong("despertar_id"));
+        assertTrue("el token cumple el patron del servidor", TOKEN.matches("^[A-Za-z0-9:_-]{20,255}$"));
+    }
+
+    @Test
+    public void sinTokenOSinDespertarLosCamposNoSeMandan() throws Exception {
+        JSONObject det = new JSONObject(HeartbeatBody.build(1L, "soda", "X", 5, detalle())).getJSONObject("detalle");
+        assertFalse(det.has("fcm_token"));
+        assertFalse(det.has("despertar_id"));
+    }
+
+    @Test
+    public void unTokenConFormaInvalidaNuncaViaja() throws Exception {
+        for (String malo : new String[]{"corto", "a".repeat(19), "a".repeat(256), "token con espacios 12345678901234",
+                "tok\"en\\x12345678901234567890", "token/con/barras1234567890123", "\u00f1" + "a".repeat(30), "", null}) {
+            HeartbeatBody.Detalle d = detalle();
+            d.fcmToken = malo;
+            String body = HeartbeatBody.build(1L, "soda", "X", 5, d);
+            assertFalse("no debe viajar: " + malo, new JSONObject(body).getJSONObject("detalle").has("fcm_token"));
+        }
+        HeartbeatBody.Detalle ok = detalle();
+        ok.fcmToken = "a".repeat(255);
+        assertTrue(new JSONObject(HeartbeatBody.build(1L, "soda", "X", 5, ok)).getJSONObject("detalle").has("fcm_token"));
+        ok.fcmToken = "a".repeat(20);
+        assertTrue(new JSONObject(HeartbeatBody.build(1L, "soda", "X", 5, ok)).getJSONObject("detalle").has("fcm_token"));
+    }
+
+    @Test
+    public void elOrdenSigueFijoYLaFirmaCubreLosCamposNuevos() throws Exception {
+        HeartbeatBody.Detalle d = detalle();
+        d.fcmToken = TOKEN;
+        d.despertarId = 9;
+        d.comandosHechos = new long[]{1};
+        d.comandosResultado.put(1L, "ok");
+        String body = HeartbeatBody.build(1L, "soda", "X", 5, d);
+        int ext = body.indexOf("\"permisos_extra\""), tok = body.indexOf("\"fcm_token\""),
+                des = body.indexOf("\"despertar_id\""), hec = body.indexOf("\"comandos_hechos\"");
+        assertTrue(ext > 0 && ext < tok && tok < des && des < hec);
+        assertEquals(body, HeartbeatBody.build(1L, "soda", "X", 5, d));
+        assertNotEquals(Request.computeHmacSha256Hex("k", body), Request.computeHmacSha256Hex("k", body.replace("\"despertar_id\":9", "\"despertar_id\":8")));
+    }
 }

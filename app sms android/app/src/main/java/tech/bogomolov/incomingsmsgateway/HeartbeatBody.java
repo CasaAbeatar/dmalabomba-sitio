@@ -65,6 +65,11 @@ public final class HeartbeatBody {
         public String wifiNombre = "";
         /** Permisos extra de la 2.9.0 que están dados, separados por coma (ubicacion,telefono,uso,superposicion,ajustes,no_molestar). */
         public String permisosExtra = "";
+        // ---- 2.11.0: despertar por FCM ----
+        /** Token de FCM de este teléfono (^[A-Za-z0-9:_-]{20,255}$); vacío o inválido = no se manda el campo (sin Google Play Services, p. ej.). */
+        public String fcmToken = "";
+        /** Id del despertar (FCM o SMS) que este latido confirma; 0 = no responde a ningún despertar y no se manda el campo. */
+        public long despertarId;
         /** Ids de órdenes ya procesadas, que el servidor aún no ha visto confirmadas. */
         public long[] comandosHechos = new long[0];
         /** id de la orden -> resultado ("ok", "comando_no_soportado", "falta_permiso_sms"...). */
@@ -114,6 +119,13 @@ public final class HeartbeatBody {
                     .append(",\"wifi_mhz\":").append(d.wifiMhz)
                     .append(",\"wifi_nombre\":\"").append(esc(d.wifiNombre)).append('"')
                     .append(",\"permisos_extra\":\"").append(esc(d.permisosExtra)).append('"');
+            // 2.11.0: el token solo viaja si tiene la forma que exige el servidor (si no, el servidor rechazaría todo el latido).
+            if (DespertarFcm.tokenValido(d.fcmToken)) {
+                b.append(",\"fcm_token\":\"").append(d.fcmToken).append('"');
+            }
+            if (d.despertarId > 0) {
+                b.append(",\"despertar_id\":").append(d.despertarId);
+            }
             if (d.comandosHechos != null && d.comandosHechos.length > 0) {
                 b.append(",\"comandos_hechos\":[");
                 for (int i = 0; i < d.comandosHechos.length; i++) {

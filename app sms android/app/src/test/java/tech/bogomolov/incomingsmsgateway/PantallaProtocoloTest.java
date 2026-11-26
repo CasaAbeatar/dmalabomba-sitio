@@ -278,15 +278,44 @@ public class PantallaProtocoloTest {
     }
 
     @Test
-    public void textoTieneLimiteDeLargoYSinCaracteresDeControl() {
+    public void textoTieneLimiteDeLargoYSinCaracteresDeControlYElRechazoSeConfirma() {
         String doscientos = "a".repeat(200);
         String doscientosUno = "a".repeat(201);
+        // (el tope es de 5 acciones por respuesta: se prueba en dos)
         PantallaProtocolo.Respuesta r = sesionCon("[{\"id\":1,\"a\":\"texto\",\"t\":\"hola\"},{\"id\":2,\"a\":\"texto\",\"t\":\"" + doscientos + "\"},"
-                + "{\"id\":3,\"a\":\"texto\",\"t\":\"" + doscientosUno + "\"},{\"id\":4,\"a\":\"texto\",\"t\":\"\"},"
-                + "{\"id\":5,\"a\":\"texto\"},{\"id\":6,\"a\":\"texto\",\"t\":5},{\"id\":7,\"a\":\"texto\",\"t\":\"a\\u0007b\"}]");
-        assertEquals(2, r.acciones.size());
+                + "{\"id\":3,\"a\":\"texto\",\"t\":\"" + doscientosUno + "\"},{\"id\":4,\"a\":\"texto\",\"t\":\"\"}]");
+        PantallaProtocolo.Respuesta r2 = sesionCon("[{\"id\":5,\"a\":\"texto\"},{\"id\":6,\"a\":\"texto\",\"t\":5},{\"id\":7,\"a\":\"texto\",\"t\":\"a\\u0007b\"}]");
+        // 2.11.0: ya no se descartan en silencio: llegan marcadas para confirmarse como «texto_invalido»
+        assertEquals(4, r.acciones.size());
+        assertEquals(3, r2.acciones.size());
         assertEquals("hola", r.acciones.get(0).t);
+        assertNull(r.acciones.get(0).rechazo);
         assertEquals(200, r.acciones.get(1).t.length());
+        assertNull(r.acciones.get(1).rechazo);
+        for (PantallaProtocolo.Accion a : new PantallaProtocolo.Accion[]{r.acciones.get(2), r.acciones.get(3),
+                r2.acciones.get(0), r2.acciones.get(1), r2.acciones.get(2)}) {
+            assertEquals("texto_invalido", a.rechazo);
+            assertNull(a.t);
+        }
+        assertEquals(3, r.acciones.get(2).id);
+        assertEquals(7, r2.acciones.get(2).id);
+    }
+
+    @Test
+    public void textoSeMideEnUnidadesUtf16() {
+        String cien = "\uD83D\uDE00".repeat(100);   // 100 emojis = 200 unidades UTF-16
+        assertEquals(200, cien.length());
+        assertTrue(PantallaProtocolo.textoValido(cien));
+        assertFalse("101 emojis = 202 unidades", PantallaProtocolo.textoValido("\uD83D\uDE00".repeat(101)));
+        assertTrue(PantallaProtocolo.textoValido("a".repeat(200)));
+        assertFalse(PantallaProtocolo.textoValido("a".repeat(201)));
+        assertTrue(PantallaProtocolo.textoValido("uno\ndos"));
+        assertFalse(PantallaProtocolo.textoValido("uno\rdos"));
+        assertFalse(PantallaProtocolo.textoValido("a\u007fb"));
+        assertFalse("sustituto suelto", PantallaProtocolo.textoValido("a\uD83Db"));
+        assertFalse("sustituto bajo suelto", PantallaProtocolo.textoValido("\uDE00"));
+        assertFalse(PantallaProtocolo.textoValido(""));
+        assertFalse(PantallaProtocolo.textoValido(null));
     }
 
     @Test
@@ -362,5 +391,114 @@ public class PantallaProtocoloTest {
         assertTrue(r.sesion);
         assertEquals(1, r.acciones.size());
         assertTrue(r.ecoCoincide(42));
+    }
+
+    // ------------------------------------------------------------------ 2.11.0: https obligatorio en /pantalla
+
+    @Test
+    public void pantallaExigeHttpsYSoloAceptaHttpEnElBucleLocal() {
+        assertNull(PantallaProtocolo.urlPantalla("http://pagos.dmalabomba.com/sms"));
+        assertNull(PantallaProtocolo.urlPantalla("http://10.0.2.2:8099/sms"));
+        assertNull(PantallaProtocolo.urlPantalla("http://192.168.1.50/sms"));
+        assertNull(PantallaProtocolo.urlPantalla("http://localhost.evil.com/sms"));
+        assertNull(PantallaProtocolo.urlPantalla("http://127.0.0.1.evil.com/sms"));
+        assertEquals("https://pagos.dmalabomba.com/pantalla", PantallaProtocolo.urlPantalla("https://pagos.dmalabomba.com/sms"));
+        assertEquals("https://10.0.2.2:8443/pantalla", PantallaProtocolo.urlPantalla("https://10.0.2.2:8443/sms"));
+        // bucle local: el trafico no sale del telefono (pruebas con servidor falso en el propio aparato)
+        assertEquals("http://127.0.0.1:8080/pantalla", PantallaProtocolo.urlPantalla("http://127.0.0.1:8080/latido"));
+        assertEquals("http://localhost:8080/pantalla", PantallaProtocolo.urlPantalla("http://localhost:8080/latido"));
+    }
+
+    // ------------------------------------------------------------------ 2.11.0: acciones atadas al cuadro
+
+    @Test
+    public void cuadroSeqSeLeeYSinElSeEjecutaComoAntes() {
+        PantallaProtocolo.Respuesta r = sesionCon("[{\"id\":1,\"a\":\"atras\",\"cuadro_seq\":7},{\"id\":2,\"a\":\"inicio\"},"
+                + "{\"id\":3,\"a\":\"atras\",\"cuadro_seq\":\"7\"},{\"id\":4,\"a\":\"atras\",\"cuadro_seq\":-1},"
+                + "{\"id\":5,\"a\":\"atras\",\"cuadro_seq\":7.5},{\"id\":6,\"a\":\"atras\",\"cuadro_seq\":0}]");
+        assertEquals("tope de 5 por respuesta", 5, r.acciones.size());
+        assertEquals(7, r.acciones.get(0).cuadroSeq);
+        assertEquals(PantallaProtocolo.SIN_CUADRO_SEQ, r.acciones.get(1).cuadroSeq);
+        assertEquals(PantallaProtocolo.CUADRO_SEQ_INVALIDO, r.acciones.get(2).cuadroSeq);
+        assertEquals(PantallaProtocolo.CUADRO_SEQ_INVALIDO, r.acciones.get(3).cuadroSeq);
+        assertEquals(PantallaProtocolo.CUADRO_SEQ_INVALIDO, r.acciones.get(4).cuadroSeq);
+    }
+
+    private static PantallaProtocolo.Accion accion(String json) {
+        return sesionCon("[" + json + "]").acciones.get(0);
+    }
+
+    @Test
+    public void pantallaEstaticaConVariosSinCambioEntreMediasLasAccionesSiSeEjecutan() {
+        // cuadro 1 con imagen; 2, 3, 4 y 5 son «sin_cambio» (no cambian la imagen): el visor sigue mostrando la del 1
+        PantallaProtocolo.SeqImagen img = new PantallaProtocolo.SeqImagen();
+        img.registrarImagen(1, 1000);
+        PantallaProtocolo.Accion a = accion("{\"id\":1,\"a\":\"toque\",\"x\":0.5,\"y\":0.5,\"cuadro_seq\":1}");
+        assertNull("mucho despues y con la misma imagen: se ejecuta", PantallaProtocolo.resultadoPrevio(a, true, img, 1000 + 600_000));
+    }
+
+    @Test
+    public void pantallaAnimadaAceptaLaImagenAnteriorSoloDosSegundos() {
+        PantallaProtocolo.SeqImagen img = new PantallaProtocolo.SeqImagen();
+        img.registrarImagen(1, 1000);
+        img.registrarImagen(2, 5000);   // la imagen 2 reemplazo a la 1 en t=5000
+        PantallaProtocolo.Accion sobre1 = accion("{\"id\":1,\"a\":\"toque\",\"x\":0.1,\"y\":0.1,\"cuadro_seq\":1}");
+        PantallaProtocolo.Accion sobre2 = accion("{\"id\":2,\"a\":\"toque\",\"x\":0.1,\"y\":0.1,\"cuadro_seq\":2}");
+        assertNull(PantallaProtocolo.resultadoPrevio(sobre2, true, img, 5000));
+        assertNull("una imagen de diferencia, recien cambiada", PantallaProtocolo.resultadoPrevio(sobre1, true, img, 5000));
+        assertNull(PantallaProtocolo.resultadoPrevio(sobre1, true, img, 6999));
+        assertEquals("a los 2000 ms ya no", "obsoleta", PantallaProtocolo.resultadoPrevio(sobre1, true, img, 7000));
+        assertEquals("obsoleta", PantallaProtocolo.resultadoPrevio(sobre1, true, img, 60_000));
+        assertNull("la ultima imagen siempre vale", PantallaProtocolo.resultadoPrevio(sobre2, true, img, 60_000));
+        // dos imagenes de diferencia: no
+        img.registrarImagen(3, 8000);
+        assertEquals("obsoleta", PantallaProtocolo.resultadoPrevio(sobre1, true, img, 8001));
+        assertNull("la 2 era la previa, dentro del margen", PantallaProtocolo.resultadoPrevio(sobre2, true, img, 8001));
+    }
+
+    @Test
+    public void cuadroSeqDeOtraImagenFuturaOMalFormadoEsObsoleta() {
+        PantallaProtocolo.SeqImagen img = new PantallaProtocolo.SeqImagen();
+        img.registrarImagen(4, 1000);
+        assertEquals("obsoleta", PantallaProtocolo.resultadoPrevio(accion("{\"id\":1,\"a\":\"atras\",\"cuadro_seq\":9}"), true, img, 1000));
+        assertEquals("obsoleta", PantallaProtocolo.resultadoPrevio(accion("{\"id\":1,\"a\":\"atras\",\"cuadro_seq\":3}"), true, img, 1000));
+        assertEquals("obsoleta", PantallaProtocolo.resultadoPrevio(accion("{\"id\":1,\"a\":\"atras\",\"cuadro_seq\":\"4\"}"), true, img, 1000));
+        assertEquals("obsoleta", PantallaProtocolo.resultadoPrevio(accion("{\"id\":1,\"a\":\"atras\",\"cuadro_seq\":-1}"), true, img, 1000));
+    }
+
+    @Test
+    public void sinImagenTodaviaUnCuadroSeqNoPuedeCoincidir() {
+        PantallaProtocolo.SeqImagen img = new PantallaProtocolo.SeqImagen();   // solo hubo cuadros sin imagen
+        assertEquals("obsoleta", PantallaProtocolo.resultadoPrevio(accion("{\"id\":1,\"a\":\"atras\",\"cuadro_seq\":0}"), true, img, 1000));
+        assertEquals("obsoleta", PantallaProtocolo.resultadoPrevio(accion("{\"id\":1,\"a\":\"atras\",\"cuadro_seq\":2}"), true, img, 1000));
+        assertNull("sin cuadro_seq (servidor viejo) se ejecuta", PantallaProtocolo.resultadoPrevio(accion("{\"id\":1,\"a\":\"atras\"}"), true, img, 1000));
+    }
+
+    @Test
+    public void encenderEstaExentaDeLaReglaDeLaImagenPeroNoDeLaDelPrimerCuadro() {
+        PantallaProtocolo.SeqImagen img = new PantallaProtocolo.SeqImagen();   // pantalla apagada: nunca hubo imagen
+        PantallaProtocolo.Accion enc = accion("{\"id\":1,\"a\":\"encender\",\"cuadro_seq\":99}");
+        assertNull(PantallaProtocolo.resultadoPrevio(enc, true, img, 1000));
+        assertEquals("antes del primer cuadro todo es obsoleto", "obsoleta", PantallaProtocolo.resultadoPrevio(enc, false, img, 1000));
+    }
+
+    @Test
+    public void antesDelPrimerCuadroTodaAccionEsObsoleta() {
+        PantallaProtocolo.SeqImagen img = new PantallaProtocolo.SeqImagen();
+        PantallaProtocolo.Respuesta r = sesionCon("[{\"id\":1,\"a\":\"atras\"},{\"id\":2,\"a\":\"atras\",\"cuadro_seq\":0}]");
+        for (PantallaProtocolo.Accion a : r.acciones) {
+            assertEquals("obsoleta", PantallaProtocolo.resultadoPrevio(a, false, img, 0));
+        }
+    }
+
+    @Test
+    public void elResultadoObsoletaCabeEnElCuerpoDelCuadro() throws Exception {
+        Map<Long, String> res = new LinkedHashMap<>();
+        res.put(1L, "obsoleta");
+        res.put(2L, "texto_invalido");
+        String b = PantallaProtocolo.cuadro(5L, "soda", "s1", 2, 10, 10, null, true, true, false, null, new long[]{1, 2}, res);
+        JSONObject o = new JSONObject(b);
+        assertEquals("obsoleta", o.getJSONObject("resultados").getString("1"));
+        assertEquals("texto_invalido", o.getJSONObject("resultados").getString("2"));
     }
 }
