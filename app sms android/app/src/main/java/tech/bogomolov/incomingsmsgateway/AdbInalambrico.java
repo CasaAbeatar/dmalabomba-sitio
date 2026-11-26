@@ -65,7 +65,9 @@ public final class AdbInalambrico {
             Settings.Global.putInt(ctx.getContentResolver(), AJUSTE_ADB_WIFI, 1);
             st.setAdbCierraTs(ahora + AUTOCIERRE_MS);
             Guardian.scheduleAlarm(ctx, AUTOCIERRE_MS);
-            return activo(ctx);
+            boolean queda = activo(ctx);
+            Log.i(TAG, "abrir: depuracion inalambrica activa=" + queda);
+            return queda;
         } catch (Throwable e) {
             Log.e(TAG, "abrir: " + e);
             return false;

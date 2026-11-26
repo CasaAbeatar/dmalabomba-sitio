@@ -14,6 +14,7 @@ import android.util.Log;
 import android.view.WindowManager;
 import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityNodeInfo;
+import android.view.accessibility.AccessibilityWindowInfo;
 
 import java.io.ByteArrayOutputStream;
 import java.security.MessageDigest;
@@ -502,24 +503,39 @@ public class PantallaRemotaService extends AccessibilityService {
      * @return true si pulsó
      */
     boolean pulsarBotonInstalador(String paqueteInstalador) {
-        AccessibilityNodeInfo raiz = null;
         try {
-            raiz = getRootInActiveWindow();
-            if (raiz == null || raiz.getPackageName() == null || !paqueteInstalador.contentEquals(raiz.getPackageName())) return false;
-            for (String texto : Actualizador.TEXTOS_BOTON) {
-                List<AccessibilityNodeInfo> nodos = raiz.findAccessibilityNodeInfosByText(texto);
-                if (nodos == null) continue;
-                for (AccessibilityNodeInfo n : nodos) {
-                    CharSequence t = n.getText();
-                    if (t == null || !t.toString().trim().equalsIgnoreCase(texto) || !n.isEnabled()) continue;
-                    if (n.getPackageName() == null || !paqueteInstalador.contentEquals(n.getPackageName())) continue;
-                    AccessibilityNodeInfo clic = n;
-                    for (int i = 0; i < 3 && clic != null && !clic.isClickable(); i++) clic = clic.getParent();
-                    if (clic != null && clic.isClickable() && clic.performAction(AccessibilityNodeInfo.ACTION_CLICK)) return true;
+            // La ventana activa puede ser otra (p. ej. un aviso del sistema encima): se buscan todas las ventanas
+            // interactivas y se actua solo sobre la que es del instalador del sistema.
+            AccessibilityNodeInfo activa = getRootInActiveWindow();
+            if (activa != null && activa.getPackageName() != null && paqueteInstalador.contentEquals(activa.getPackageName())) {
+                if (pulsarEn(activa, paqueteInstalador)) return true;
+            }
+            List<AccessibilityWindowInfo> ventanas = getWindows();
+            if (ventanas != null) {
+                for (AccessibilityWindowInfo w : ventanas) {
+                    AccessibilityNodeInfo r = w.getRoot();
+                    if (r == null || r.getPackageName() == null || !paqueteInstalador.contentEquals(r.getPackageName())) continue;
+                    if (pulsarEn(r, paqueteInstalador)) return true;
                 }
             }
         } catch (Throwable e) {
             Log.w(TAG, "pulsar boton del instalador: " + e);
+        }
+        return false;
+    }
+
+    private boolean pulsarEn(AccessibilityNodeInfo raiz, String paqueteInstalador) {
+        for (String texto : Actualizador.TEXTOS_BOTON) {
+            List<AccessibilityNodeInfo> nodos = raiz.findAccessibilityNodeInfosByText(texto);
+            if (nodos == null) continue;
+            for (AccessibilityNodeInfo n : nodos) {
+                CharSequence t = n.getText();
+                if (t == null || !t.toString().trim().equalsIgnoreCase(texto) || !n.isEnabled()) continue;
+                if (n.getPackageName() == null || !paqueteInstalador.contentEquals(n.getPackageName())) continue;
+                AccessibilityNodeInfo clic = n;
+                for (int i = 0; i < 3 && clic != null && !clic.isClickable(); i++) clic = clic.getParent();
+                if (clic != null && clic.isClickable() && clic.performAction(AccessibilityNodeInfo.ACTION_CLICK)) return true;
+            }
         }
         return false;
     }
