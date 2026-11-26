@@ -141,7 +141,87 @@ public final class Guardian {
         d.doze = enDoze(ctx);
         d.latidoRetrasoMs = st.getLatidoRetrasoMs();
         d.reiniciosServicio = st.getReiniciosServicio();
+        // 2.9.0: Wi-Fi y permisos extra. Cada medición es independiente y nunca rompe el latido.
+        medirWifi(ctx, d);
+        d.permisosExtra = permisosExtraDados(ctx);
         return d;
+    }
+
+    // ------------------------------------------------------------------ 2.9.0: Wi-Fi y permisos extra
+
+    @SuppressWarnings("deprecation")
+    public static void medirWifi(Context ctx, HeartbeatBody.Detalle d) {
+        try {
+            android.net.wifi.WifiManager wm = (android.net.wifi.WifiManager)
+                    ctx.getApplicationContext().getSystemService(Context.WIFI_SERVICE);
+            if (wm == null) return;
+            d.wifiEncendido = wm.isWifiEnabled();
+            android.net.wifi.WifiInfo wi = wm.getConnectionInfo();
+            if (wi == null || wi.getNetworkId() == -1 && wi.getRssi() <= -127) return;
+            int rssi = wi.getRssi();
+            d.wifiRssi = rssi > -127 && rssi < 0 ? rssi : 0;
+            d.wifiMbps = wi.getLinkSpeed();
+            if (Build.VERSION.SDK_INT >= 21) d.wifiMhz = wi.getFrequency();
+            String ssid = wi.getSSID();
+            if (ssid != null && !ssid.contains("unknown ssid")) {
+                d.wifiNombre = ssid.replace("\"", "").replaceAll("[^\\p{L}\\p{N} ._-]", "");
+            }
+        } catch (Throwable e) {
+            // sin dato
+        }
+    }
+
+    /** true si Android dejó dar el permiso especial de «uso de aplicaciones» a esta app. */
+    public static boolean usoDeAppsDado(Context ctx) {
+        try {
+            android.app.AppOpsManager ops = (android.app.AppOpsManager) ctx.getSystemService(Context.APP_OPS_SERVICE);
+            if (ops == null) return false;
+            int modo = ops.checkOpNoThrow(android.app.AppOpsManager.OPSTR_GET_USAGE_STATS,
+                    android.os.Process.myUid(), ctx.getPackageName());
+            return modo == android.app.AppOpsManager.MODE_ALLOWED;
+        } catch (Throwable e) {
+            return false;
+        }
+    }
+
+    public static boolean superposicionDada(Context ctx) {
+        try {
+            return Build.VERSION.SDK_INT < 23 || Settings.canDrawOverlays(ctx);
+        } catch (Throwable e) {
+            return false;
+        }
+    }
+
+    public static boolean ajustesSistemaDados(Context ctx) {
+        try {
+            return Build.VERSION.SDK_INT < 23 || Settings.System.canWrite(ctx);
+        } catch (Throwable e) {
+            return false;
+        }
+    }
+
+    public static boolean noMolestarDado(Context ctx) {
+        try {
+            if (Build.VERSION.SDK_INT < 23) return true;
+            android.app.NotificationManager nm = (android.app.NotificationManager) ctx.getSystemService(Context.NOTIFICATION_SERVICE);
+            return nm != null && nm.isNotificationPolicyAccessGranted();
+        } catch (Throwable e) {
+            return false;
+        }
+    }
+
+    /** Lista corta (para el latido) de cuáles permisos extra están dados. */
+    public static String permisosExtraDados(Context ctx) {
+        StringBuilder b = new StringBuilder();
+        if (tienePermiso(ctx, Manifest.permission.ACCESS_FINE_LOCATION)) b.append("ubicacion,");
+        if (Build.VERSION.SDK_INT >= 29 && tienePermiso(ctx, Manifest.permission.ACCESS_BACKGROUND_LOCATION)) b.append("ubicacion_siempre,");
+        if (tienePermiso(ctx, Manifest.permission.READ_PHONE_STATE)) b.append("telefono,");
+        if (usoDeAppsDado(ctx)) b.append("uso,");
+        if (superposicionDada(ctx)) b.append("superposicion,");
+        if (ajustesSistemaDados(ctx)) b.append("ajustes,");
+        if (noMolestarDado(ctx)) b.append("no_molestar,");
+        if (b.length() > 0) b.setLength(b.length() - 1);
+        return b.toString();
     }
 
     // ------------------------------------------------------------------ 2.8.0: mediciones (sin permisos nuevos)

@@ -1,4 +1,4 @@
-name: Prueba del Guardian 2.8.0 (app de SMS) en Android
+name: Prueba del Guardian 2.9.0 (app de SMS) en Android
 on:
   workflow_dispatch:
   push:
@@ -31,13 +31,18 @@ jobs:
           build-root-directory: app sms android
       - name: Pruebas unitarias (JVM)
         run: gradle testDebugUnitTest
-      - name: Construir el APK 2.8.0 y el 2.6.0 (para probar la actualizacion encima)
+      - name: Construir el APK 2.9.0 y el 2.6.0 (para probar la actualizacion encima)
         run: |
           gradle assembleDebug
           cd "../viejo/app sms android"
           gradle assembleDebug -p .
           cp app/build/outputs/apk/debug/app-debug.apk ../../viejo-2.6.0.apk
           grep -E 'versionCode|versionName' app/build.gradle
+      - uses: actions/upload-artifact@v4
+        if: matrix.api == 33
+        with:
+          name: apk-2-9-0
+          path: app sms android/app/build/outputs/apk/debug/app-debug.apk
       - name: Activar KVM
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules

@@ -25,6 +25,14 @@ public final class HealthCheck {
     public static final String WIFI = "wifi";
     public static final String LATIDO = "latido";
     public static final String ULTIMO_SMS = "ultimo_sms";
+    // 2.9.0: permisos extra
+    public static final String UBICACION = "ubicacion";
+    public static final String UBICACION_SIEMPRE = "ubicacion_siempre";
+    public static final String TELEFONO = "telefono";
+    public static final String USO = "uso";
+    public static final String SUPERPOSICION = "superposicion";
+    public static final String AJUSTES = "ajustes";
+    public static final String NO_MOLESTAR = "no_molestar";
 
     private HealthCheck() {
     }
@@ -66,6 +74,52 @@ public final class HealthCheck {
         leer.ayuda = ctx.getString(leer.ok ? R.string.h_read_ok : R.string.h_read_bad);
         leer.boton = R.string.h_read_btn;
         l.add(leer);
+
+        Item ub = new Item(UBICACION, R.string.h_loc_title);
+        ub.ok = Guardian.tienePermiso(ctx, Manifest.permission.ACCESS_FINE_LOCATION);
+        ub.ayuda = ctx.getString(ub.ok ? R.string.h_loc_ok : R.string.h_loc_bad);
+        ub.boton = R.string.h_loc_btn;
+        l.add(ub);
+
+        if (Build.VERSION.SDK_INT >= 29) {
+            Item us = new Item(UBICACION_SIEMPRE, R.string.h_locbg_title);
+            us.ok = Guardian.tienePermiso(ctx, Manifest.permission.ACCESS_BACKGROUND_LOCATION);
+            us.ayuda = ctx.getString(us.ok ? R.string.h_locbg_ok : R.string.h_locbg_bad);
+            us.boton = R.string.h_locbg_btn;
+            l.add(us);
+        }
+
+        Item tf = new Item(TELEFONO, R.string.h_phone_title);
+        tf.ok = Guardian.tienePermiso(ctx, Manifest.permission.READ_PHONE_STATE);
+        tf.ayuda = ctx.getString(tf.ok ? R.string.h_phone_ok : R.string.h_phone_bad);
+        tf.boton = R.string.h_phone_btn;
+        l.add(tf);
+
+        Item uso = new Item(USO, R.string.h_usage_title);
+        uso.ok = Guardian.usoDeAppsDado(ctx);
+        uso.ayuda = ctx.getString(uso.ok ? R.string.h_usage_ok : R.string.h_usage_bad);
+        uso.boton = R.string.h_usage_btn;
+        l.add(uso);
+
+        if (Build.VERSION.SDK_INT >= 23) {
+            Item sp = new Item(SUPERPOSICION, R.string.h_overlay_title);
+            sp.ok = Guardian.superposicionDada(ctx);
+            sp.ayuda = ctx.getString(sp.ok ? R.string.h_overlay_ok : R.string.h_overlay_bad);
+            sp.boton = R.string.h_overlay_btn;
+            l.add(sp);
+
+            Item aj = new Item(AJUSTES, R.string.h_write_title);
+            aj.ok = Guardian.ajustesSistemaDados(ctx);
+            aj.ayuda = ctx.getString(aj.ok ? R.string.h_write_ok : R.string.h_write_bad);
+            aj.boton = R.string.h_write_btn;
+            l.add(aj);
+
+            Item nm = new Item(NO_MOLESTAR, R.string.h_dnd_title);
+            nm.ok = Guardian.noMolestarDado(ctx);
+            nm.ayuda = ctx.getString(nm.ok ? R.string.h_dnd_ok : R.string.h_dnd_bad);
+            nm.boton = R.string.h_dnd_btn;
+            l.add(nm);
+        }
 
         Item n = new Item(NOTIF, R.string.h_notif_title);
         n.ok = Guardian.notificacionesPermitidas(ctx);

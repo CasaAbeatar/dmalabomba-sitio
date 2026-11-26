@@ -198,6 +198,33 @@ public class HealthActivity extends AppCompatActivity {
             case HealthCheck.LEER_SMS:
                 pedirPermiso(it.id, Manifest.permission.READ_SMS, enRecorrido);
                 break;
+            case HealthCheck.UBICACION:
+                pedirPermiso(it.id, Manifest.permission.ACCESS_FINE_LOCATION, enRecorrido);
+                break;
+            case HealthCheck.UBICACION_SIEMPRE:
+                // Android 11+ no muestra diálogo: manda a la pantalla de permisos de la app, donde se elige «Permitir siempre».
+                if (Build.VERSION.SDK_INT >= 30) {
+                    abrirAjuste(it.id, enRecorrido, new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + getPackageName())));
+                } else {
+                    pedirPermiso(it.id, Manifest.permission.ACCESS_BACKGROUND_LOCATION, enRecorrido);
+                }
+                break;
+            case HealthCheck.TELEFONO:
+                pedirPermiso(it.id, Manifest.permission.READ_PHONE_STATE, enRecorrido);
+                break;
+            case HealthCheck.USO:
+                abrirAjuste(it.id, enRecorrido, new Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS, Uri.parse("package:" + getPackageName())),
+                        new Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS));
+                break;
+            case HealthCheck.SUPERPOSICION:
+                abrirAjuste(it.id, enRecorrido, new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:" + getPackageName())));
+                break;
+            case HealthCheck.AJUSTES:
+                abrirAjuste(it.id, enRecorrido, new Intent(Settings.ACTION_MANAGE_WRITE_SETTINGS, Uri.parse("package:" + getPackageName())));
+                break;
+            case HealthCheck.NO_MOLESTAR:
+                abrirAjuste(it.id, enRecorrido, new Intent(Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS));
+                break;
             case HealthCheck.NOTIF:
                 if (Build.VERSION.SDK_INT >= 33) {
                     pedirPermiso(it.id, Manifest.permission.POST_NOTIFICATIONS, enRecorrido);

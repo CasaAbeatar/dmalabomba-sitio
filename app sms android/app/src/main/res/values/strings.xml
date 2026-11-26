@@ -169,4 +169,34 @@
     <string name="h_dedicated_confirm">Esto quita el modo teléfono dedicado y devuelve el teléfono a la normalidad, sin borrar nada. ¿Seguro?</string>
     <string name="h_dedicated_done">Listo: el teléfono ya no es dedicado.</string>
     <string name="h_dedicated_fail">No se pudo quitar el modo dedicado.</string>
+
+    <!-- 2.9.0: permisos extra -->
+    <string name="h_loc_title">Ubicación (para leer el nombre del Wi-Fi)</string>
+    <string name="h_loc_ok">Android entrega el nombre y los datos del Wi-Fi. La app no guarda ni envía su ubicación.</string>
+    <string name="h_loc_bad">Android exige este permiso para dar el nombre del Wi-Fi. La app no lee la ubicación del teléfono. Toque el botón y elija «Permitir».</string>
+    <string name="h_loc_btn">Dar el permiso de ubicación</string>
+    <string name="h_locbg_title">Ubicación «siempre» (para medir el Wi-Fi en segundo plano)</string>
+    <string name="h_locbg_ok">El Wi-Fi se mide aunque la pantalla esté apagada.</string>
+    <string name="h_locbg_bad">En la pantalla que se abre toque «Permisos», «Ubicación» y elija «Permitir siempre».</string>
+    <string name="h_locbg_btn">Abrir los permisos de la app</string>
+    <string name="h_phone_title">Estado del teléfono y de la SIM</string>
+    <string name="h_phone_ok">Se lee el estado exacto de la SIM y de la red móvil.</string>
+    <string name="h_phone_bad">Sirve para saber si la SIM o la red móvil fallan. Toque el botón y elija «Permitir».</string>
+    <string name="h_phone_btn">Dar el permiso del teléfono</string>
+    <string name="h_usage_title">Acceso al uso de aplicaciones</string>
+    <string name="h_usage_ok">Se mide cuánto limita Android a esta app.</string>
+    <string name="h_usage_bad">En la lista que se abre busque «Sms Forwarder» y active «Permitir acceso al uso».</string>
+    <string name="h_usage_btn">Abrir el acceso al uso</string>
+    <string name="h_overlay_title">Mostrarse sobre otras apps</string>
+    <string name="h_overlay_ok">La app puede abrir su pantalla desde segundo plano.</string>
+    <string name="h_overlay_bad">En la pantalla que se abre active «Permitir mostrar sobre otras apps».</string>
+    <string name="h_overlay_btn">Abrir «mostrar sobre otras apps»</string>
+    <string name="h_write_title">Modificar ajustes del sistema</string>
+    <string name="h_write_ok">La app puede cambiar los ajustes que Android deja a una app.</string>
+    <string name="h_write_bad">En la pantalla que se abre active «Permitir modificar los ajustes del sistema».</string>
+    <string name="h_write_btn">Abrir «modificar ajustes del sistema»</string>
+    <string name="h_dnd_title">Acceso a «No molestar»</string>
+    <string name="h_dnd_ok">La app puede leer y cambiar el modo No molestar.</string>
+    <string name="h_dnd_bad">En la lista que se abre busque «Sms Forwarder» y permita el acceso.</string>
+    <string name="h_dnd_btn">Abrir el acceso a «No molestar»</string>
 </resources>

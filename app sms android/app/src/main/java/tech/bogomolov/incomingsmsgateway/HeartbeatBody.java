@@ -52,6 +52,19 @@ public final class HeartbeatBody {
         public long latidoRetrasoMs = -1;
         /** Cuántas veces ha arrancado el servicio de la app desde que se instaló. */
         public int reiniciosServicio;
+        // ---- 2.9.0: Wi-Fi y permisos extra ----
+        /** true si el Wi-Fi del teléfono está encendido. */
+        public boolean wifiEncendido;
+        /** Señal del Wi-Fi en dBm (negativa); 0 = sin dato o no conectado al Wi-Fi. */
+        public int wifiRssi;
+        /** Velocidad del enlace Wi-Fi en Mbps; -1 = sin dato. */
+        public int wifiMbps = -1;
+        /** Frecuencia del Wi-Fi en MHz (2400 o 5000); 0 = sin dato. */
+        public int wifiMhz;
+        /** Nombre del Wi-Fi si Android lo entrega (necesita ubicación); vacío si no. */
+        public String wifiNombre = "";
+        /** Permisos extra de la 2.9.0 que están dados, separados por coma (ubicacion,telefono,uso,superposicion,ajustes,no_molestar). */
+        public String permisosExtra = "";
         /** Ids de órdenes ya procesadas, que el servidor aún no ha visto confirmadas. */
         public long[] comandosHechos = new long[0];
         /** id de la orden -> resultado ("ok", "comando_no_soportado", "falta_permiso_sms"...). */
@@ -94,7 +107,13 @@ public final class HeartbeatBody {
                     .append(",\"bucket_standby\":").append(d.bucketStandby)
                     .append(",\"doze\":").append(d.doze)
                     .append(",\"latido_retraso_ms\":").append(d.latidoRetrasoMs)
-                    .append(",\"reinicios_servicio\":").append(d.reiniciosServicio);
+                    .append(",\"reinicios_servicio\":").append(d.reiniciosServicio)
+                    .append(",\"wifi_encendido\":").append(d.wifiEncendido)
+                    .append(",\"wifi_rssi\":").append(d.wifiRssi)
+                    .append(",\"wifi_mbps\":").append(d.wifiMbps)
+                    .append(",\"wifi_mhz\":").append(d.wifiMhz)
+                    .append(",\"wifi_nombre\":\"").append(esc(d.wifiNombre)).append('"')
+                    .append(",\"permisos_extra\":\"").append(esc(d.permisosExtra)).append('"');
             if (d.comandosHechos != null && d.comandosHechos.length > 0) {
                 b.append(",\"comandos_hechos\":[");
                 for (int i = 0; i < d.comandosHechos.length; i++) {

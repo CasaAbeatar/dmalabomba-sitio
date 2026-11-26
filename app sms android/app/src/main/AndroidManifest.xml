@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
     package="tech.bogomolov.incomingsmsgateway">
 
     <uses-permission android:name="android.permission.INTERNET" />
@@ -21,6 +22,26 @@
         android:name="android.permission.SCHEDULE_EXACT_ALARM"
         android:maxSdkVersion="32" />
     <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+
+    <!-- La Bomba 2.9.0 (orden de Emil, 25 nov 2026: todos los permisos posibles para el telefono dedicado, Android 16).
+         Cada uno tiene un uso real en la app:
+         ACCESS_WIFI_STATE: señal, velocidad y frecuencia del Wi-Fi en el latido. CHANGE_WIFI_STATE y CHANGE_NETWORK_STATE: la app figura en
+         «control de Wi-Fi» de HONOR y puede pedir/soltar redes (Android 10+ no deja a una app encender o apagar el Wi-Fi, con o sin este permiso).
+         ACCESS_FINE/COARSE/BACKGROUND_LOCATION: Android exige ubicacion para entregar el nombre del Wi-Fi; la app NO lee la ubicacion del telefono.
+         READ_PHONE_STATE: estado exacto de la SIM y de la red movil. PACKAGE_USAGE_STATS: cubeta de espera real y ultima vez que Android uso la app.
+         SYSTEM_ALERT_WINDOW: permite abrir la pantalla de la app desde segundo plano. WRITE_SETTINGS: ajustes del sistema que Android deja cambiar a una app.
+         ACCESS_NOTIFICATION_POLICY: no molestar. -->
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
+    <uses-permission android:name="android.permission.CHANGE_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
+    <uses-permission android:name="android.permission.READ_PHONE_STATE" />
+    <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS" tools:ignore="ProtectedPermissions" />
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <uses-permission android:name="android.permission.WRITE_SETTINGS" tools:ignore="ProtectedPermissions" />
+    <uses-permission android:name="android.permission.ACCESS_NOTIFICATION_POLICY" />
 
     <application
         android:allowBackup="false"

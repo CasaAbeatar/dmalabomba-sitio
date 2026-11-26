@@ -42,6 +42,12 @@ public class HeartbeatBodyTest {
         d.doze = true;
         d.latidoRetrasoMs = 2700000L;
         d.reiniciosServicio = 4;
+        d.wifiEncendido = true;
+        d.wifiRssi = -58;
+        d.wifiMbps = 433;
+        d.wifiMhz = 5180;
+        d.wifiNombre = "Soda Bomba";
+        d.permisosExtra = "ubicacion,telefono,uso";
         return d;
     }
 
@@ -89,6 +95,12 @@ public class HeartbeatBodyTest {
         assertTrue(d.getBoolean("doze"));
         assertEquals(2700000L, d.getLong("latido_retraso_ms"));
         assertEquals(4, d.getInt("reinicios_servicio"));
+        assertTrue(d.getBoolean("wifi_encendido"));
+        assertEquals(-58, d.getInt("wifi_rssi"));
+        assertEquals(433, d.getInt("wifi_mbps"));
+        assertEquals(5180, d.getInt("wifi_mhz"));
+        assertEquals("Soda Bomba", d.getString("wifi_nombre"));
+        assertEquals("ubicacion,telefono,uso", d.getString("permisos_extra"));
     }
 
     @Test
@@ -100,6 +112,10 @@ public class HeartbeatBodyTest {
         assertEquals(-1, d.getInt("bucket_standby"));
         assertEquals(-1L, d.getLong("latido_retraso_ms"));
         assertEquals(0, d.getInt("reinicios_servicio"));
+        assertEquals(false, d.getBoolean("wifi_encendido"));
+        assertEquals(0, d.getInt("wifi_rssi"));
+        assertEquals(-1, d.getInt("wifi_mbps"));
+        assertEquals("", d.getString("permisos_extra"));
     }
 
     @Test
