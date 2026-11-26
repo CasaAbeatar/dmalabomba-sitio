@@ -3,7 +3,7 @@
 $ErrorActionPreference = "Continue"
 $aqui = Split-Path -Parent $MyInvocation.MyCommand.Path
 $repo = (Resolve-Path (Join-Path $aqui "..\..")).Path
-$kitReal = (Get-ChildItem -LiteralPath (Join-Path $repo "kit pc caja") -Directory | Where-Object { $_.Name -like "v3.6*" } | Select-Object -First 1).FullName
+$kitReal = (Get-ChildItem -LiteralPath (Join-Path $repo "kit pc caja") -Directory | Where-Object { $_.Name -like "v3.7*" } | Select-Object -First 1).FullName
 $llavePriv = Join-Path $aqui "llave-prueba-NO-USAR-EN-PRODUCCION.txt"
 $llavePub = Join-Path $aqui "llave-prueba.xml"
 $crear = Join-Path $repo "ota-kit\crear_lanzamiento.py"
@@ -54,8 +54,8 @@ function Servidor($carpeta, $kitDir, $estaciones = "caja-pollos", $extra = @()) 
   $o = & python @args2 2>&1
   Dice ("   servidor de prueba: " + ($o -join " "))
 }
-function Correr($raiz, $manifiesto, $extra = @()) {
-  $a = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "$raiz\20 actualizador.ps1", "-Raiz", $raiz, "-Prueba", "-Manifiesto", $manifiesto, "-LlavePublica", $llavePub, "-Estacion", "caja-pollos", "-EsperaSaludSeg", "40") + $extra
+function Correr($raiz, $manifiesto, $extra = @(), $est = "caja-pollos", $espera = "40") {
+  $a = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "$raiz\20 actualizador.ps1", "-Raiz", $raiz, "-Prueba", "-Manifiesto", $manifiesto, "-LlavePublica", $llavePub, "-Estacion", $est, "-EsperaSaludSeg", $espera) + $extra
   $o = & powershell.exe @a 2>&1 | Out-String
   foreach ($l in ($o -split "`r?`n")) { if ($l.Trim()) { Dice ("      | " + $l.Trim()) } }
   return $LASTEXITCODE
@@ -64,10 +64,10 @@ function Version-De($raiz) { $m = [regex]::Match((Get-Content -LiteralPath "$rai
 function Estado-De($raiz) { try { return (Get-Content -LiteralPath "$raiz\ota\estado.json" -Raw | ConvertFrom-Json) } catch { return $null } }
 function Eventos-De($raiz) { $f = "$raiz\datos\eventos pendientes.jsonl"; if (Test-Path $f) { return @(Get-Content $f) } else { return @() } }
 
-# ---------- 0) sintaxis de todos los scripts del kit v3.6 con el parser de 5.1 ----------
+# ---------- 0) sintaxis de todos los scripts del kit v3.7 con el parser de 5.1 ----------
 $malos = 0
 foreach ($f in Get-ChildItem $kitReal -Filter *.ps1) { $e = $null; $t = $null; [void][System.Management.Automation.Language.Parser]::ParseFile($f.FullName, [ref]$t, [ref]$e); if ($e.Count) { $malos++; Dice ("SINTAXIS " + $f.Name + ": " + $e[0].Message + " L" + $e[0].Extent.StartLineNumber) } }
-Ok ($malos -eq 0) "0) Ningun script del kit v3.6 tiene errores de sintaxis en 5.1"
+Ok ($malos -eq 0) "0) Ningun script del kit v3.7 tiene errores de sintaxis en 5.1"
 
 # ---------- 1) firma: cruce openssl -> .NET con la llave de PRODUCCION no se puede (privada fuera); se prueba con la de prueba ----------
 $k1 = Join-Path $base "kit-a"; Nuevo-Kit $k1 "T-100" 100
@@ -76,12 +76,14 @@ $k2 = Join-Path $base "kit-b"; Nuevo-Kit $k2 "T-101" 101
 # ---------- 2) camino feliz ----------
 Dice "2) Camino feliz: de T-100 a T-101"
 $raiz = Join-Path $base "pc1"; Instalar-Raiz $raiz "T-100" 100
+$hEquipo = (Get-FileHash "$raiz\datos\equipo.json").Hash
 $srv = Join-Path $base "srv1"; Servidor $srv $k2
 $cod = Correr $raiz (Join-Path $srv "manifiesto.json") @("-Ahora")
 Ok ($cod -eq 0) "2a) el actualizador termino sin error (codigo $cod)"
 Ok ((Version-De $raiz) -eq "T-101") "2b) la version instalada es T-101 (es: $(Version-De $raiz))"
 Ok (-not (Test-Path "$raiz\viejo-que-ya-no-va.ps1")) "2c) el script viejo que ya no esta en el paquete se quito"
 Ok ((Get-Content "$raiz\datos\dato-del-negocio.txt" -Raw).Trim() -eq "no tocar") "2d) la carpeta datos quedo intacta"
+Ok ((Get-FileHash "$raiz\datos\equipo.json").Hash -eq $hEquipo) "2d') la identidad de la PC (datos\equipo.json) se conservo byte por byte"
 $st = Estado-De $raiz
 Ok ($st -and $st.ultimo_resultado -eq "ok") "2e) estado.json dice ok (es: $($st.ultimo_resultado) / $($st.ultimo_mensaje))"
 Ok ((@(Eventos-De $raiz) -join "`n") -match "reparacion.*OTA kit: actualizado de T-100 a T-101") "2f) quedo el evento de actualizacion para el panel"
@@ -175,10 +177,15 @@ $raiz = Join-Path $base "pc6"; Instalar-Raiz $raiz "T-100" 100
 $srv5 = Join-Path $base "srv5"; Servidor $srv5 $k2 "caja-soda"
 $cod = Correr $raiz (Join-Path $srv5 "manifiesto.json") @("-Ahora")
 Ok ((Version-De $raiz) -eq "T-100") "8a) un lanzamiento solo para caja-soda NO se instala en caja-pollos"
+$srvP = Join-Path $base "srv5p"; Servidor $srvP $k2 "caja-pollos"
+$cod = Correr $raiz (Join-Path $srvP "manifiesto.json") @("-Ahora") "caja-soda"
+Ok ((Version-De $raiz) -eq "T-100") "8a') el anillo de Pollos (estaciones caja-pollos) NO se instala en la caja de Soda"
+$cod = Correr $raiz (Join-Path $srvP "manifiesto.json") @("-Ahora") "caja-otra"
+Ok ((Version-De $raiz) -eq "T-100") "8a'') el anillo de Pollos NO se instala en una estacion desconocida"
 $srv6 = Join-Path $base "srv6"; Servidor $srv6 $k2 "caja-pollos" @("--desde", "2099-01-01T00:00:00Z")
 $cod = Correr $raiz (Join-Path $srv6 "manifiesto.json") @("-Ahora")
 Ok ((Version-De $raiz) -eq "T-100") "8b) un lanzamiento con fecha futura NO se instala todavia"
-$srvAll = Join-Path $base "srv8"; Servidor $srvAll $k2 "*" @("--desde", "2020-01-01T00:00:00Z")
+$srvAll = Join-Path $base "srv8"; Servidor $srvAll $k2 "caja-pollos" @("--desde", "2020-01-01T00:00:00Z")
 $cod = Correr $raiz (Join-Path $srvAll "manifiesto.json") @("-AhoraUtc", "2026-11-26T15:00:00Z")
 Ok ((Version-De $raiz) -eq "T-100") "8c) fuera de la ventana (09:00 hora de Costa Rica) no se instala"
 $cod = Correr $raiz (Join-Path $srvAll "manifiesto.json") @("-AhoraUtc", "2099-01-01T09:30:00Z")
@@ -188,7 +195,7 @@ $cod = Correr $raiz (Join-Path $srvSerie "manifiesto.json") @("-Ahora")
 Ok ((Version-De $raiz) -eq "T-100") "8e) un lanzamiento con serie MENOR (retroceso) no se instala"
 $hoyUtc = (Get-Date).ToUniversalTime().ToString("yyyy-MM-dd") + "T09:30:00Z"   # 03:30 hora de Costa Rica
 $cod = Correr $raiz (Join-Path $srvAll "manifiesto.json") @("-AhoraUtc", $hoyUtc)
-Ok ((Version-De $raiz) -eq "T-101") "8f) dentro de la ventana (03:30 CR) y con estaciones '*' SI se instala (es: $(Version-De $raiz))"
+Ok ((Version-De $raiz) -eq "T-101") "8f) dentro de la ventana (03:30 CR), anillo caja-pollos, en la caja de Pollos SI se instala (es: $(Version-De $raiz))"
 Detener-Pruebas $raiz
 
 # ---------- 9) paquetes peligrosos ----------
@@ -285,6 +292,142 @@ Ok ((Version-De $raiz) -eq "T-100") "13'b) no cambia nada"
 Ok ((@(Eventos-De $raiz) -join "`n") -notmatch "OTA kit") "13'c) no genera ningun aviso para Emil"
 Dice ("   log: " + ((@(Get-Content "$raiz\ota\actualizador.log" -Tail 3 -ErrorAction SilentlyContinue)) -join " | "))
 Detener-Pruebas $raiz
+
+
+# ---------- 14) De la v3.6 de PRODUCCION (21 nov, subdominio) a la v3.7, con el kit REAL en C:\PantallaCliente ----------
+Dice "14) Actualizar desde la v3.6 de produccion (zip servido en www.dmalabomba.com) a la v3.7"
+$shaV36 = "f5bf29ddfa56d4ce6fc4c9582a89a664e656acc99a0d6ec8089a38767e9db77b"
+$real = "C:\PantallaCliente"
+$z36 = Join-Path $base "kit-v3.6-produccion.zip"; $d36 = Join-Path $base "v36-produccion"
+function Instalar-V36-Produccion {
+  Detener-Pruebas $real
+  foreach ($t in @("La Bomba Kit - Actualizador", "La Bomba Kit - Relanzar")) { Unregister-ScheduledTask -TaskName $t -TaskPath "\La Bomba\" -Confirm:$false -ErrorAction SilentlyContinue }
+  if (Test-Path $real) { & takeown.exe /F $real /R /D Y 2>&1 | Out-Null; & icacls.exe $real /reset /T /C 2>&1 | Out-Null; Remove-Item $real -Recurse -Force -ErrorAction SilentlyContinue }
+  & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $d36 "1 crear accesos y arranque automatico.ps1") -Silencioso 2>&1 | Out-Null
+  & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $d36 "5 pantallas y permiso de ventanas.ps1") -Silencioso 2>&1 | Out-Null
+  New-Item -ItemType Directory -Force "$real\datos" | Out-Null
+  Set-Content -LiteralPath "$real\datos\equipo.json" -Value ('{"estacion":"caja-pollos","token":"x","pc":"' + $env:COMPUTERNAME + '"}') -Encoding UTF8
+  Set-Content -LiteralPath "$real\datos\dato-del-negocio.txt" -Value "no tocar" -Encoding UTF8
+}
+function Cfg-De($raiz) {
+  $o = & powershell.exe -NoProfile -Command ('. "' + $raiz + '\config.ps1"; "{0}|{1}|{2}|{3}" -f $UrlCaja, $UrlCliente, ($Sitios -join ","), $VersionKit') 2>&1 | Select-Object -Last 1
+  $p = ([string]$o).Split("|"); return [pscustomobject]@{ caja = $p[0]; cliente = $p[1]; sitios = $p[2]; version = $p[3] }
+}
+function Directivas-Ok {
+  $mal = @()
+  foreach ($marca in @("Google\Chrome", "Microsoft\Edge")) { foreach ($lista in @("WindowManagementAllowedForUrls", "PopupsAllowedForUrls", "AutomaticFullscreenAllowedForUrls", "LocalNetworkAccessAllowedForUrls")) {
+    $ru = "HKLM:\SOFTWARE\Policies\$marca\$lista"; $v = @(); if (Test-Path $ru) { $p = Get-ItemProperty $ru; $v = @($p.PSObject.Properties | Where-Object { $_.Name -notmatch '^PS' } | ForEach-Object { $_.Name + "=" + $_.Value }) }
+    if (-not (($v.Count -eq 2) -and ($v -contains "1=https://facturacion.dmalabomba.com") -and ($v -contains "2=https://www.dmalabomba.com"))) { $mal += ($marca + "\" + $lista + ": " + ($v -join ",")) }
+  } }
+  return $mal
+}
+try {
+  [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+  Invoke-WebRequest -Uri "https://www.dmalabomba.com/kit-caja/kit-pc-de-caja-v3.6.zip" -OutFile $z36 -UseBasicParsing -Headers @{ "Cache-Control" = "no-cache" }
+  $h = (Get-FileHash $z36 -Algorithm SHA256).Hash.ToLower()
+  Ok ($h -eq $shaV36) "14a) el zip v3.6 bajado de produccion tiene el SHA-256 publicado del 21 nov (es: $h)"
+  Expand-Archive -LiteralPath $z36 -DestinationPath $d36 -Force
+
+  # 14M) Camino real de la primera vez: INSTALAR TODO de la v3.7 encima de una caja con la v3.6 (pasos 1, 5 y 20 del instalador, con los scripts reales)
+  Dice "14M) Instalacion manual de la v3.7 encima de la v3.6 de produccion"
+  Instalar-V36-Produccion
+  $c0 = Cfg-De $real
+  Ok (($c0.version -eq "3.6 21nov") -and ($c0.caja -eq "https://facturacion.dmalabomba.com/")) "14M-a) punto de partida: v3.6 21nov apuntando al subdominio (es: $($c0.version) / $($c0.caja))"
+  $hEq = (Get-FileHash "$real\datos\equipo.json").Hash
+  & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kitReal "1 crear accesos y arranque automatico.ps1") -Silencioso 2>&1 | Out-Null
+  & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kitReal "5 pantallas y permiso de ventanas.ps1") -Silencioso 2>&1 | Out-Null
+  $o20 = & powershell.exe -NoProfile -ExecutionPolicy Bypass -Command ('Set-Location "' + $kitReal + '"; . ".\config.ps1"; . ".\funciones.ps1"; . ".\funciones v3.ps1"; Remove-Item "$Carpeta\ota\.acl-v1" -Force -ErrorAction SilentlyContinue; Registrar-Tareas-OTA; & powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$Carpeta\20 actualizador.ps1" -SoloComprobar -Ahora 2>&1 | Out-Null; Test-Path "$Carpeta\ota\.acl-v1"') 2>&1 | Out-String
+  Dice ("   paso 20: " + ($o20 -replace "\s+", " "))
+  $c1 = Cfg-De $real
+  Ok ($c1.version -eq "3.7 ota 26nov") "14M-b) quedo la v3.7 (es: $($c1.version))"
+  Ok (($c1.caja -eq "https://facturacion.dmalabomba.com/") -and ($c1.cliente -eq "https://facturacion.dmalabomba.com/cliente/")) "14M-c) la caja sigue en facturacion.dmalabomba.com y el cliente en /cliente/ (es: $($c1.caja) / $($c1.cliente))"
+  Ok ($c1.sitios -eq "https://facturacion.dmalabomba.com,https://www.dmalabomba.com") "14M-d) los dos origenes de la transicion se conservan (es: $($c1.sitios))"
+  $dm = @(Directivas-Ok); Ok ($dm.Count -eq 0) ("14M-e) Chrome y Edge siguen con permisos para el subdominio y www en las cuatro directivas " + ($dm -join " ; "))
+  Ok ((Get-FileHash "$real\datos\equipo.json").Hash -eq $hEq) "14M-f) la identidad de la PC se conservo"
+  Ok ((Get-Content "$real\datos\dato-del-negocio.txt" -Raw).Trim() -eq "no tocar") "14M-g) la carpeta datos se conservo"
+  Ok ((Test-Path "$real\20 actualizador.ps1") -and (Test-Path "$real\ota serie.ps1") -and ((Get-Content "$real\ota serie.ps1" -Raw) -match '\$OtaSerie = 37')) "14M-h) el actualizador y la serie 37 quedaron instalados"
+  $t1 = Get-ScheduledTask -TaskName "La Bomba Kit - Actualizador" -TaskPath "\La Bomba\" -ErrorAction SilentlyContinue
+  Ok ($t1 -and ($t1.Principal.UserId -match "SYSTEM") -and ($t1.Triggers[0].StartBoundary -match "T03:00")) "14M-i) la tarea del actualizador existe, como SYSTEM, desde las 03:00 (es: $($t1.Triggers[0].StartBoundary) cada $($t1.Triggers[0].Repetition.Interval) por $($t1.Triggers[0].Repetition.Duration))"
+  Ok (Test-Path "$real\ota\.acl-v1") "14M-j) la carpeta segura ota quedo preparada"
+  foreach ($t in @("La Bomba Kit - Actualizador", "La Bomba Kit - Relanzar")) { Unregister-ScheduledTask -TaskName $t -TaskPath "\La Bomba\" -Confirm:$false -ErrorAction SilentlyContinue }
+
+  # 14A) El mismo salto por el AIRE con el kit real (paquete de la v3.7 real, firmado con la llave de prueba): latido real, comprobacion de salud real
+  Dice "14A) Actualizacion en el aire de la v3.6 de produccion a la v3.7 real"
+  Instalar-V36-Produccion
+  Copy-Item -LiteralPath (Join-Path $kitReal "20 actualizador.ps1") -Destination $real -Force   # arranque: la v3.6 no trae actualizador
+  $hEq = (Get-FileHash "$real\datos\equipo.json").Hash
+  $srv37 = Join-Path $base "srv37"; Servidor $srv37 $kitReal "caja-pollos"
+  $cod = Correr $real (Join-Path $srv37 "manifiesto.json") @("-Ahora") "caja-pollos" "120"
+  $c2 = Cfg-De $real
+  Ok ($c2.version -eq "3.7 ota 26nov") "14A-a) por el aire quedo la v3.7 (es: $($c2.version))"
+  Ok ((Estado-De $real).ultimo_resultado -eq "ok") "14A-b) el latido REAL de la v3.7 arranco y la salud dio ok (estado: $((Estado-De $real).ultimo_resultado) / $((Estado-De $real).ultimo_mensaje))"
+  Ok (($c2.caja -eq "https://facturacion.dmalabomba.com/") -and ($c2.sitios -eq "https://facturacion.dmalabomba.com,https://www.dmalabomba.com")) "14A-c) el subdominio facturacion.dmalabomba.com y los dos origenes se conservan (es: $($c2.caja) / $($c2.sitios))"
+  $dm = @(Directivas-Ok); Ok ($dm.Count -eq 0) ("14A-d) las directivas del navegador no se tocaron " + ($dm -join " ; "))
+  Ok ((Get-FileHash "$real\datos\equipo.json").Hash -eq $hEq) "14A-e) la identidad de la PC se conservo"
+  Ok ((Get-Content "$real\datos\dato-del-negocio.txt" -Raw).Trim() -eq "no tocar") "14A-f) la carpeta datos se conservo"
+  $difs = @(); foreach ($f in @(Get-ChildItem $kitReal -File | Where-Object { $_.Extension -in ".ps1", ".bat" })) { if ((Get-FileHash $f.FullName).Hash -ne (Get-FileHash (Join-Path $real $f.Name)).Hash) { $difs += $f.Name } }
+  Ok ($difs.Count -eq 0) ("14A-g) cada script instalado es identico al de la v3.7 " + ($difs -join ", "))
+  Ok (Tiene-Usuarios "$real\config.ps1") "14A-h) los archivos nuevos son legibles para la cuenta de la caja"
+  Ok ((Test-Path "$real\datos\ota estado.json") -and ((Get-Content "$real\datos\ota estado.json" -Raw) -match '"s":37')) "14A-i) el latido tiene el estado ota con la serie 37"
+  Detener-Pruebas $real
+
+  # 14B) Siguiente salto por el aire desde la v3.7 (simula una v3.8 de prueba): se conserva la configuracion y el subdominio
+  Dice "14B) Desde la v3.7 a una v3.8 de prueba por el aire"
+  $k38 = Join-Path $base "kit-38"; if (Test-Path $k38) { Remove-Item $k38 -Recurse -Force }; Copy-Item $kitReal $k38 -Recurse
+  $cf = [IO.File]::ReadAllText("$k38\config.ps1"); [IO.File]::WriteAllText("$k38\config.ps1", ($cf -replace '\$VersionKit\s*=\s*"3\.7 ota 26nov"', '$VersionKit       = "3.8 prueba"'), (New-Object Text.UTF8Encoding($true)))
+  [IO.File]::WriteAllText("$k38\ota serie.ps1", ([IO.File]::ReadAllText("$k38\ota serie.ps1") -replace '\$OtaSerie = 37', '$OtaSerie = 38'), (New-Object Text.UTF8Encoding($true)))
+  $srv38 = Join-Path $base "srv38"; Servidor $srv38 $k38 "caja-pollos"
+  $cod = Correr $real (Join-Path $srv38 "manifiesto.json") @("-Ahora") "caja-pollos" "120"
+  $c3 = Cfg-De $real
+  Ok (($c3.version -eq "3.8 prueba") -and ((Estado-De $real).ultimo_resultado -eq "ok")) "14B-a) de la v3.7 a la v3.8 por el aire, salud ok (es: $($c3.version) / $((Estado-De $real).ultimo_resultado))"
+  Ok (($c3.caja -eq "https://facturacion.dmalabomba.com/") -and ($c3.sitios -eq "https://facturacion.dmalabomba.com,https://www.dmalabomba.com")) "14B-b) se conservan el subdominio y los origenes"
+  Ok ((Get-FileHash "$real\datos\equipo.json").Hash -eq $hEq) "14B-c) se conserva la identidad"
+  Detener-Pruebas $real
+} catch { Ok $false ("14) actualizacion desde la v3.6 de produccion: " + $_.Exception.Message + " (linea " + $_.InvocationInfo.ScriptLineNumber + ")") }
+finally { Detener-Pruebas $real }
+
+# ---------- 15) El lanzamiento que se va a publicar (serie 37), firmado con la llave de PRODUCCION ----------
+Dice "15) Lanzamiento a publicar: ota-kit\lanzamientos\serie 37"
+try {
+  $L = Join-Path $repo "ota-kit\lanzamientos\serie 37"
+  . "$kitReal\ota llave publica.ps1"
+  $mb = [IO.File]::ReadAllBytes("$L\manifiesto.json")
+  $fb = [Convert]::FromBase64String(([IO.File]::ReadAllText("$L\manifiesto.json.firma")).Trim())
+  $rsa = New-Object System.Security.Cryptography.RSACryptoServiceProvider; $rsa.FromXmlString($OtaLlavePublicaXml)
+  Ok ($rsa.VerifyData($mb, "SHA256", $fb)) "15a) la firma del manifiesto se verifica con la llave publica de produccion que trae el kit"
+  $m = ([Text.Encoding]::UTF8.GetString($mb)) | ConvertFrom-Json
+  $l = @($m.lanzamientos)
+  Ok (($l.Count -eq 1) -and ([int]$l[0].serie -eq 37) -and ($l[0].version -eq "3.7 ota 26nov")) "15b) un solo lanzamiento: serie 37, version 3.7 ota 26nov"
+  Ok ((@($l[0].estaciones).Count -eq 1) -and (@($l[0].estaciones)[0] -eq "caja-pollos")) "15c) el anillo es solo caja-pollos (es: $(@($l[0].estaciones) -join ','))"
+  $ds = [DateTime]::Parse([string]$l[0].desde, [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::AdjustToUniversal -bor [Globalization.DateTimeStyles]::AssumeUniversal)
+  $ca = [DateTime]::Parse([string]$m.caduca, [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::AdjustToUniversal -bor [Globalization.DateTimeStyles]::AssumeUniversal)
+  Ok (($ds -le [DateTime]::UtcNow) -and ($ca -gt [DateTime]::UtcNow.AddDays(20))) "15d) la fecha de inicio ya esta vigente ($($l[0].desde)) y caduca $($m.caduca)"
+  Ok ($l[0].url -eq "https://www.dmalabomba.com/kit-caja/ota/paquetes/kit-37.zip") "15e) la direccion del paquete es la oficial"
+  $zp = "$L\paquetes\kit-37.zip"
+  Ok (((Get-FileHash $zp -Algorithm SHA256).Hash.ToLower() -eq $l[0].sha256) -and ((Get-Item $zp).Length -eq [long]$l[0].bytes)) "15f) el paquete coincide en SHA-256 y tamano con el manifiesto firmado"
+  $chk = Join-Path $base "chk37"; Expand-Archive -LiteralPath $zp -DestinationPath $chk -Force
+  $difs = @(); foreach ($f in @(Get-ChildItem $kitReal -File | Where-Object { $_.Extension -in ".ps1", ".bat" })) { if (-not (Test-Path (Join-Path $chk $f.Name)) -or ((Get-FileHash $f.FullName).Hash -ne (Get-FileHash (Join-Path $chk $f.Name)).Hash)) { $difs += $f.Name } }
+  Ok (($difs.Count -eq 0) -and (@(Get-ChildItem $chk -File).Count -eq @(Get-ChildItem $kitReal -File | Where-Object { $_.Extension -in ".ps1", ".bat" }).Count)) ("15g) el paquete trae exactamente los scripts de la v3.7 " + ($difs -join ", "))
+} catch { Ok $false ("15) lanzamiento a publicar: " + $_.Exception.Message) }
+
+# ---------- 16) (solo despues de publicar) camino de PRODUCCION sin -Prueba contra www.dmalabomba.com ----------
+if ($env:OTA_EN_VIVO -eq "1") {
+  Dice "16) En vivo: el actualizador de produccion (sin -Prueba) contra el manifiesto publicado"
+  try {
+    foreach ($caso in @(@{ est = "caja-soda"; espera = "3.6 21nov" }, @{ est = "caja-pollos"; espera = "3.7 ota 26nov" })) {
+      Instalar-V36-Produccion
+      Copy-Item -LiteralPath (Join-Path $kitReal "20 actualizador.ps1") -Destination $real -Force
+      Copy-Item -LiteralPath (Join-Path $kitReal "ota llave publica.ps1") -Destination $real -Force
+      Set-Content -LiteralPath "$real\datos\equipo.json" -Value ('{"estacion":"' + $caso.est + '","token":"x","pc":"' + $env:COMPUTERNAME + '"}') -Encoding UTF8
+      $o = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$real\20 actualizador.ps1" -Ahora 2>&1 | Out-String
+      Dice ("   " + $caso.est + " log: " + ((@(Get-Content "$real\ota\actualizador.log" -Tail 6 -ErrorAction SilentlyContinue)) -join " | "))
+      $cv = Cfg-De $real
+      Ok ($cv.version -eq $caso.espera) ("16) " + $caso.est + ": queda " + $caso.espera + " (es: " + $cv.version + "; estado " + (Estado-De $real).ultimo_resultado + ")")
+      if ($caso.est -eq "caja-pollos") { Ok ($cv.caja -eq "https://facturacion.dmalabomba.com/") "16b) caja-pollos en vivo: el subdominio se conserva" }
+      Detener-Pruebas $real
+    }
+  } catch { Ok $false ("16) en vivo: " + $_.Exception.Message) }
+}
 
 Dice ("RESULTADO: " + ($script:Pasos - $script:Fallos) + " de " + $script:Pasos + " comprobaciones correctas; fallos: " + $script:Fallos)
 Get-ChildItem $base -Recurse -Filter "actualizador.log" -ErrorAction SilentlyContinue | ForEach-Object { Copy-Item $_.FullName (Join-Path $res ("actualizador-" + $_.Directory.Parent.Name + ".log")) -ErrorAction SilentlyContinue }

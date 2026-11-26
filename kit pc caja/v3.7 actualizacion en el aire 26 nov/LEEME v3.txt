@@ -1,11 +1,11 @@
-﻿KIT v3.6 (26 nov 2026, ACTUALIZACIONES EN EL AIRE; probado en Windows real por GitHub Actions; falta confirmar en la PC de Pollos)
+﻿KIT v3.7 (26 nov 2026, ACTUALIZACIONES EN EL AIRE sobre la v3.6 del 21 nov; probado en Windows real por GitHub Actions; falta confirmar en la PC de Pollos)
 
-CAMBIOS DE LA v3.6 (26 nov, por orden de Emil: todo lo que se disene se actualiza en el aire)
+CAMBIOS DE LA v3.7 (26 nov, por orden de Emil: todo lo que se disene se actualiza en el aire). Conserva TODO lo de la v3.6 del 21 nov (caja en facturacion.dmalabomba.com y permisos para los dos origenes).
 - NUEVO "20 actualizador.ps1": desde esta version el kit se actualiza solo. Una tarea programada de Windows ("La Bomba Kit - Actualizador", cuenta SYSTEM) lo corre cada 30 minutos entre las 03:00 y las 05:00 (hora de Costa Rica, fuera del horario de atencion). Fuera de esa ventana termina enseguida y casi no gasta nada.
-- Seguridad: lo que baja va FIRMADO. El actualizador solo acepta un manifiesto firmado con la llave del sistema de La Bomba (RSA de 3072 bits; la llave publica viaja en "ota llave publica.ps1" y la privada NO esta en ninguna PC). Comprueba la huella SHA-256 del paquete, que no traiga rutas raras ni archivos que no sean .ps1/.bat/.txt, que cada script no tenga errores de sintaxis, que la serie sea MAYOR a la instalada (no se puede "retroceder" por el aire) y que el manifiesto no este vencido. Solo baja de https://www.dmalabomba.com/kit-caja/ota/.
+- Seguridad: lo que baja va FIRMADO. El actualizador solo acepta un manifiesto firmado con la llave del sistema de La Bomba (RSA de 3072 bits; la llave publica viaja en "ota llave publica.ps1" y la privada NO esta en ninguna PC). Comprueba la huella SHA-256 del paquete, que no traiga rutas raras ni archivos que no sean .ps1/.bat/.txt, que cada script no tenga errores de sintaxis, que la serie sea MAYOR a la instalada (no se puede "retroceder" por el aire; esta es la serie 37) y que el manifiesto no este vencido. Solo baja de https://www.dmalabomba.com/kit-caja/ota/.
 - El paquete se prepara en C:\PantallaCliente\ota, una carpeta que la cuenta de la caja NO puede ni leer ni escribir (solo SYSTEM y administradores).
 - Se instala archivo por archivo con un diario y un respaldo de la version anterior. Si se corta la luz a la mitad, al volver el actualizador revierte solo. Despues vuelve a abrir latido y facturador (tarea "La Bomba Kit - Relanzar", sin privilegios) y comprueba que el latido nuevo arranco; si no, vuelve a la version anterior y avisa. Una serie que fallo no se reintenta enseguida (espera 1 h, luego 6 h, luego 24 h; a la tercera espera un lanzamiento nuevo).
-- Por etapas: cada lanzamiento dice para que estaciones es (caja-pollos, caja-soda o todas) y desde cuando, asi se prueba primero en una caja y despues en la otra.
+- Por etapas: cada lanzamiento dice para que estaciones es (caja-pollos, caja-soda o las dos) y desde cuando. Primero va solo a la caja de Pollos.
 - Avisos: el panel recibe el estado en el latido (campo "ota") y un evento cuando se actualiza ("reparacion") o cuando algo falla o se rechaza ("otro": abre un aviso).
 - Primera vez: esta version se instala A MANO una sola vez en cada PC (INSTALAR TODO.bat, como siempre; crea las dos tareas programadas). De ahi en adelante las versiones llegan solas.
 - Se respeta "Salir para mantenimiento" (no actualiza mientras ese modo este activo) y no actualiza si hay menos de 300 MB libres.
@@ -13,7 +13,18 @@ CAMBIOS DE LA v3.6 (26 nov, por orden de Emil: todo lo que se disene se actualiz
 - Limite: cambiar la llave de firma obliga a reinstalar a mano en cada PC.
 - Para ver que paso: C:\PantallaCliente\ota\actualizador.log (solo administradores) y, para todos, C:\PantallaCliente\datos\ota estado.json.
 
-VERSION ANTERIOR: KIT v3.5 (19 nov 2026, probado en Windows real por GitHub Actions; falta confirmar en la PC de Pollos)
+VERSION ANTERIOR: KIT v3.6 (21 nov 2026, probado en Windows real por GitHub Actions; falta confirmar en la PC de Pollos)
+
+CAMBIOS DE LA v3.6 (21 nov, por orden de Emil): LA CAJA PASA A LA DIRECCION NUEVA
+- El facturador ahora vive en https://facturacion.dmalabomba.com y la pantalla del cliente en https://facturacion.dmalabomba.com/cliente/. El kit abre esas direcciones (antes abria dmalabomba.com/facturacion, que pasaba por www.dmalabomba.com).
+- Los permisos del navegador (manejo de ventanas para la pantalla del cliente, ventanas emergentes, pantalla completa y lectura de la publicidad del servidor local) se conceden a la direccion nueva y tambien a www.dmalabomba.com durante la transicion. Las listas de config.ps1 ($Sitios) se escriben completas cada vez que se instala.
+- El servidor local de la publicidad acepta las dos direcciones y sigue rechazando cualquier otra pagina de internet.
+- La ventana de la pantalla del cliente se reconoce tambien mientras carga con la direccion nueva (antes el kit podia confundirla con la caja durante esos segundos).
+- Los sitios que no cuentan como salir del sistema ya cubrian facturacion.dmalabomba.com (cubren cualquier subdominio de dmalabomba.com); se comprobo.
+
+AVISO IMPORTANTE PARA LA CAJERA: la primera vez que se abre la caja con la direccion nueva, la cajera tiene que volver a entrar con su usuario y su clave. El navegador guarda la sesion y los ajustes de cada direccion por separado; al cambiar de direccion la caja empieza "limpia". Ese primer ingreso puede tardar un poco mas de lo normal, porque el navegador todavia no reconoce la computadora. Tambien hay que revisar la impresora de la caja (elegirla de nuevo y hacer una impresion de prueba) y la forma de impresion que se haya dejado guardada. Los datos del negocio (ventas, clientes, inventario) no se pierden: estan en la base, no en la computadora.
+
+COMO ACTUALIZAR UNA CAJA QUE YA TIENE LA v3.5: extraiga el zip completo y haga doble clic en INSTALAR TODO.bat (encima de lo que ya hay). El instalador cierra la caja, copia los archivos nuevos, reescribe los permisos del navegador y vuelve a abrir la caja en la direccion nueva. No crea cuentas de Windows. Mientras una caja no se actualice, sigue abriendo la direccion anterior.
 
 CAMBIOS DE LA v3.5 (19 nov, por orden de Emil)
 - Control remoto: en Chrome queda permitida la extension Chrome Remote Desktop (ID inomeogfingihgjfjlpeplalcfajhgai), por la lista de permitidas de Chrome (ExtensionInstallAllowlist). Todas las demas extensiones de Chrome siguen bloqueadas y Edge sigue con bloqueo total. Se aplica con el paso 16 al instalar el kit encima (INSTALAR TODO.bat); REPARAR no lo repite.

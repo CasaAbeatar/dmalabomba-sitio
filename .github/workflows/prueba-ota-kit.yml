@@ -1,20 +1,55 @@
-name: Prueba del actualizador OTA del kit en Windows
+name: Prueba del kit v3.7 con actualizador OTA en Windows
 on:
   workflow_dispatch:
+    inputs:
+      en_vivo:
+        description: "1 = ademas probar contra el manifiesto publicado en www.dmalabomba.com (solo despues de publicar)"
+        required: false
+        default: "0"
   push:
-    branches: [kit-ota-26nov]
-    paths: ['kit pc caja/v3.6*/**', 'ota-kit/**', '.github/workflows/prueba-ota-kit.yml']
+    branches: [kit-ota-v37]
+    paths: ['kit pc caja/v3.7*/**', 'ota-kit/**', 'pruebas windows/probar kit v3.ps1', '.github/workflows/prueba-ota-kit.yml']
 jobs:
   ota:
     runs-on: windows-latest
-    timeout-minutes: 30
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
       - name: Probar el actualizador con Windows PowerShell 5.1
         shell: powershell
+        env:
+          OTA_EN_VIVO: ${{ github.event.inputs.en_vivo }}
         run: ./ota-kit/pruebas/probar-ota.ps1
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: resultados-ota
           path: ota-kit/pruebas/resultados
+  kit:
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Probar el kit v3.7 completo (lo de la v3.6 del 21 nov sigue igual) con Windows PowerShell 5.1
+        shell: powershell
+        working-directory: pruebas windows
+        run: ./"probar kit v3.ps1"
+      - name: Chrome real con las directivas del kit lee la publicidad local desde el subdominio
+        if: always()
+        shell: pwsh
+        working-directory: pruebas windows
+        run: |
+          Get-CimInstance Win32_Process -Filter "Name='powershell.exe'" | Where-Object { $_.CommandLine -like "*servidor publicidad*" } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+          . "C:\PantallaCliente\config.ps1"
+          New-Item -ItemType Directory -Force (Join-Path $CarpetaPublicidad "Soda") | Out-Null
+          [IO.File]::WriteAllBytes((Join-Path $CarpetaPublicidad "Soda\prueba-chrome.png"), [byte[]](0x89, 0x50, 0x4E, 0x47, 0, 0, 0, 0))
+          Start-Process powershell.exe -WindowStyle Hidden -ArgumentList '-NoProfile -ExecutionPolicy Bypass -File "C:\PantallaCliente\servidor publicidad.ps1"'
+          Start-Sleep -Seconds 6
+          npm init -y | Out-Null
+          npm i playwright@1.49.1 | Out-Null
+          node "prueba chrome subdominio.mjs"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: resultados-kit
+          path: pruebas windows/resultados

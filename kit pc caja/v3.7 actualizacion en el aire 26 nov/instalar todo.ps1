@@ -88,7 +88,7 @@ function Paso($nombre, [scriptblock]$bloque) {
   try { $salida = (& $bloque 2>&1 | Out-String); if ($salida.Trim()) { Anotar-Registro $salida.TrimEnd() }; Hecho $nombre }
   catch { Falta ("FALLO: " + $nombre + " (" + $_.Exception.Message + ")"); Anotar-Registro ("FALLO " + $nombre + ": " + $_.Exception.Message) }
 }
-Anotar-Registro ("==== {0:yyyy-MM-dd HH:mm:ss} instalacion v3.6 (OTA) en {1} ====" -f (Get-Date), $env:COMPUTERNAME)
+Anotar-Registro ("==== {0:yyyy-MM-dd HH:mm:ss} instalacion v3.7 (OTA) en {1} ====" -f (Get-Date), $env:COMPUTERNAME)
 if (-not $datosListo) { Falta ("No se pudo escribir en " + $Datos + " (permisos). El registro de esta instalacion queda en " + $script:RegistroTemp) }
 
 # 1) Detectar lo que hay
@@ -127,7 +127,7 @@ Paso "16 Bloquear instalaciones para la cajera" { & "$PSScriptRoot\16 bloquear i
 Paso "10 Diagnostico inicial"               { & "$PSScriptRoot\10 diagnostico.ps1" -Silencioso }
 Paso "14 Control remoto (Chrome Remote Desktop)" { & "$PSScriptRoot\14 control remoto.ps1" -Silencioso }
 
-# 6b) v3.6: actualizaciones en el aire (OTA). Dos tareas programadas y la carpeta segura "ota" (solo SYSTEM y administradores).
+# 6b) v3.7: actualizaciones en el aire (OTA). Dos tareas programadas y la carpeta segura "ota" (solo SYSTEM y administradores).
 Paso "20 Actualizaciones en el aire (tareas programadas y carpeta segura)" {
   Remove-Item "$Carpeta\ota\.acl-v1" -Force -ErrorAction SilentlyContinue   # el paso 1 pudo devolverle los permisos heredados: se vuelven a cerrar
   Write-Output (Registrar-Tareas-OTA)
