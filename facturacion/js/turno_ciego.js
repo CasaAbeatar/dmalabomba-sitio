@@ -14,6 +14,11 @@ const MAX_NOTAS = 200;
 const TOPE = 99999999.99;
 const ymdDe = (iso) => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Costa_Rica' }).format(new Date(iso));
 const fechaPartida = (d) => (d ? [h('span.nw', fechaCorta(d) + ','), ' ', h('span.nw', horaCorta(d))] : '');
+// Después de cada cobro la caja abre sola una cuenta nueva para el siguiente cliente, y desde el 5 nov 2026 toda cuenta nace con nombre «Cuenta N» (m_caja.js).
+// Si nadie le agregó nada esa cuenta vacía no estorba: no se cuenta como abierta y se anula sola al cerrar la caja (27 nov 2026: aquí faltaba, y después de cualquier cobro el cierre decía «Hay cuentas abiertas»).
+const NOMBRE_AUTO = /^Cuenta \d+$/;
+const cuentaVacia = (c) => c.estado === 'abierta' && Number(c.lineas) === 0 && (!String(c.referencia || '').trim() || NOMBRE_AUTO.test(String(c.referencia).trim()));
+const conProductos = (l) => (l || []).filter((c) => !cuentaVacia(c));
 const rechazoPorCuentas = (e) => !!e && !esTransitorio(e) && (e.hint === 'cuentas_abiertas' || /cuentas? abiertas?/i.test(e.message || ''));
 const noCoincideDe = (e) => !!e && !esTransitorio(e) && (e.hint === 'no_coincide' || e.hint === 'faltante');
 const conteoBajoDe = (e) => !!e && !esTransitorio(e) && e.hint === 'conteo_bajo';
@@ -47,7 +52,7 @@ export async function montarCajera(root, app) {
     }
     if (!vivo || mi !== nCarga) return;
     if (turnoVisto && e?.turno?.cerrado_en) { try { await app.refrescar(); } catch { /* sin conexión */ } turnoVisto = null; e = null; ab = []; }
-    est = e; abiertas = ab || [];
+    est = e; abiertas = conProductos(ab);
     pintar();
   }
 
@@ -167,7 +172,12 @@ export async function montarCajera(root, app) {
 
   /* ---------- Cierre ---------- */
   async function revisar(contado) {
-    const [fresco, lista] = await Promise.all([api.turnoEstado(turnoVisto), api.ventasAbiertas(socId)]);
+    let [fresco, lista] = await Promise.all([api.turnoEstado(turnoVisto), api.ventasAbiertas(socId)]);
+    const vacias = (lista || []).filter(cuentaVacia);
+    if (vacias.length) {
+      for (const c of vacias) { try { await api.ventaAnular(c.id, 'Cuenta vacía al cerrar la caja'); } catch { /* si no se pudo, el aviso de cuentas abiertas lo dirá */ } }
+      lista = await api.ventasAbiertas(socId);
+    }
     if (fresco?.turno?.cerrado_en) { await terminar(fresco, true); return; }
     if ((lista || []).length) { abiertas = lista; pintar(); toast('Hay cuentas abiertas. Cóbrelas o anúlelas antes de cerrar la caja.', 'error', 9000); return; }
     // El servidor compara y solo contesta si coincide o no (igual si falta que si sobra). Nunca dice cuánto debía haber ni cuánto falta.

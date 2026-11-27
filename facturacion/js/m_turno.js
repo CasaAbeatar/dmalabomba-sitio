@@ -30,7 +30,9 @@ const cents = (n) => Math.round((Number(n) || 0) * 100);
 const numCuenta = (n) => '#' + String(n || '').split('-').pop();
 // fx_turno_cerrar rechaza el cierre con cuentas abiertas (error P0001, hint «cuentas_abiertas»). api.js guarda el hint en el error; el texto queda solo de respaldo por si el servidor no lo manda.
 // Después de cada cobro la caja abre sola una cuenta nueva para el siguiente cliente (4 nov 2026). Si nadie le agregó nada, esa cuenta vacía y sin nombre no estorba: no se cuenta como abierta y se anula sola al cerrar la caja.
-const cuentaVacia = (a) => a.estado === 'abierta' && Number(a.lineas) === 0 && !String(a.referencia || '').trim();
+// Desde el 5 nov 2026 toda cuenta nace con nombre «Cuenta N» (m_caja.js, AUTO_NOMBRE): la vacía de después de cada cobro también cuenta como vacía (27 nov 2026: antes solo valía la que no tenía nombre y esa cuenta bloqueaba el cierre).
+const NOMBRE_AUTO = /^Cuenta \d+$/;
+const cuentaVacia = (a) => a.estado === 'abierta' && Number(a.lineas) === 0 && (!String(a.referencia || '').trim() || NOMBRE_AUTO.test(String(a.referencia).trim()));
 const conProductos = (l) => (l || []).filter((a) => !cuentaVacia(a));
 const rechazoPorCuentas = (e) => !!e && !esTransitorio(e) && (e.hint === 'cuentas_abiertas' || /cuentas? abiertas?/i.test(e.message || ''));
 
