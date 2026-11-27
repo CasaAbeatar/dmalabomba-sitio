@@ -443,6 +443,33 @@ try {
     anotar('[D] Perfil de Dixia: sin errores de JavaScript', bad(errores).length === 0, bad(errores).join(' | ').slice(0, 300));
     await ctx.close();
   }
+
+  /* ==================== E. Permisos de «Caja para mí»: la cajera no la ve, no entra y no le llega nada de administración (revisión 27 nov 2026) ==================== */
+  {
+    const admFn = (l) => /^fx_sinpe_adm_/.test(l.fn);
+    // E1: cajera (usuario zzcajera, admin: false): ni en el menú, ni en la búsqueda, ni escribiendo la dirección a mano
+    const c = await sesion({ ancho: 1366, alto: 768 });
+    await c.pag.waitForTimeout(1200);
+    const txt0 = await c.pag.evaluate(() => document.body.innerText);
+    anotar('[E] Cajera: ni «Caja para mí» ni «Pagos SINPE» aparecen en la pantalla', !/Caja para m/i.test(txt0) && !/Pagos SINPE/.test(txt0), txt0.replace(/\s+/g, ' ').slice(0, 100));
+    for (const ruta of ['caja-para-mi', 'admin/caja-para-mi', 'sinpe_caja']) {
+      await c.pag.evaluate((r) => { location.hash = r; }, ruta); await c.pag.waitForTimeout(700);
+      const t = await c.pag.evaluate(() => document.body.innerText); const h = await c.pag.evaluate(() => location.hash);
+      anotar('[E] Cajera: escribir la dirección «' + ruta + '» a mano no abre la pantalla de administración', !/Solo para el administrador|Mi teléfono|Órdenes al teléfono|Conciliaci/i.test(t) && !/caja-para-mi/.test(h), h);
+    }
+    anotar('[E] Cajera: ninguna llamada a fx_sinpe_adm_* sale de su sesión', !mundo.llamadas.some(admFn), mundo.llamadas.filter(admFn).map((l) => l.fn).join(','));
+    anotar('[E] Cajera: sin errores de JavaScript', bad(c.errores).length === 0, bad(c.errores).join(' | ').slice(0, 300));
+    await c.ctx.close();
+    // E2: administradora (dixia): sí la ve en el menú y la pantalla abre (el servidor de mentira no implementa fx_sinpe_adm_*: solo se comprueba la puerta)
+    const a = await sesion({ ancho: 1366, alto: 768, usuario: { usuario: 'dixia', nombre: 'Dixia', admin: true } });
+    await a.pag.waitForTimeout(1200);
+    const ta = await a.pag.evaluate(() => document.body.innerText);
+    anotar('[E] Administradora: «Caja para mí» aparece en el menú', /Caja para m/i.test(ta));
+    await a.pag.evaluate(() => { location.hash = 'caja-para-mi'; }); await a.pag.waitForTimeout(1200);
+    const tb = await a.pag.evaluate(() => document.body.innerText);
+    anotar('[E] Administradora: «Caja para mí» abre con sus pestañas', /Solo para el administrador/.test(tb) && /SINPE sin factura/.test(tb), tb.replace(/\s+/g, ' ').slice(0, 100));
+    await a.ctx.close();
+  }
 } finally {
   fs.writeFileSync(path.join(salida, 'sinpe-cobro.json'), JSON.stringify(informe, null, 1));
   await nav.close(); servidor.close();

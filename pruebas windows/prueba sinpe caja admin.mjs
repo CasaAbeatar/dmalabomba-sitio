@@ -1,7 +1,7 @@
 // Prueba en Chrome de «Caja para mí» (SINPE, solo administrador). Monta la pantalla con una empresa y datos INVENTADOS (nada real: ni cédulas, ni pagadores, ni referencias de banco)
 // interceptando las llamadas a public.fx_sinpe_adm_*; recorre cada pestaña en computadora y en celular, guarda capturas y revisa:
 //   sin desborde horizontal, sin errores de JavaScript, sin fondos negros, la pestaña solo para administrador, las órdenes que pide al teléfono y el error con «Intentar de nuevo».
-// Uso: node "prueba sinpe caja.mjs"   (con la carpeta facturacion copiada al lado, como hace el flujo de Windows). CAPTURAS=ruta cambia dónde guarda las imágenes.
+// Uso: node "prueba sinpe caja admin.mjs"   (con la carpeta facturacion copiada al lado, como hace el flujo de Windows). CAPTURAS=ruta cambia dónde guarda las imágenes.
 import { chromium } from 'playwright';
 import http from 'node:http';
 import fs from 'node:fs';

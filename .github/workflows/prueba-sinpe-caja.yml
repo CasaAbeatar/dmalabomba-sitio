@@ -1,8 +1,8 @@
-name: Prueba Caja para mí (SINPE)
+name: Prueba SINPE (caja y Caja para mí)
 on:
   workflow_dispatch:
   push:
-    branches: ['admin-sinpe']
+    branches: ['admin-sinpe', 'revision-sinpe-*']
 permissions:
   contents: read
 jobs:
@@ -15,6 +15,10 @@ jobs:
         shell: pwsh
         working-directory: pruebas windows
         run: node --test "prueba sinpe caja calculos.mjs"
+      - name: SINPE en la caja, lógica y emisor de la pantalla del cliente (node)
+        shell: pwsh
+        working-directory: pruebas windows
+        run: node "prueba sinpe unidad.mjs"
       - name: Preparar Playwright
         shell: pwsh
         working-directory: pruebas windows
@@ -26,6 +30,14 @@ jobs:
         shell: pwsh
         working-directory: pruebas windows
         run: node "prueba sinpe caja admin.mjs"
+      - name: SINPE en la caja en Chrome (indicador, monto exacto, comprobante, pantalla del cliente)
+        shell: pwsh
+        working-directory: pruebas windows
+        run: node "prueba sinpe caja.mjs"
+      - name: Cobro y cierre de punta a punta con SINPE, permisos de la cajera y del administrador
+        shell: pwsh
+        working-directory: pruebas windows
+        run: node "prueba sinpe cobro.mjs"
       - name: La caja de siempre sigue cargando en Chrome (prueba que ya existía)
         shell: pwsh
         working-directory: pruebas windows
