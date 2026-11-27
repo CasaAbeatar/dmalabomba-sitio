@@ -137,6 +137,8 @@ jobs:
           cp app/build/outputs/apk/debug/app-debug.apk act-apks/apk-27.apk
           gradle assembleDebug -PvcPrueba=28 -PvnPrueba=2.12.4
           cp app/build/outputs/apk/debug/app-debug.apk act-apks/apk-28.apk
+          gradle assembleDebug -PvcPrueba=29 -PvnPrueba=2.12.5
+          cp app/build/outputs/apk/debug/app-debug.apk act-apks/apk-29.apk
           keytool -genkeypair -keystore otra.jks -alias otra -keyalg RSA -keysize 2048 -validity 3650 -storepass pruebaprueba -keypass pruebaprueba -dname "CN=Otro Certificado"
           APKSIGNER=$(ls $ANDROID_HOME/build-tools/*/apksigner | tail -1)
           $APKSIGNER sign --ks otra.jks --ks-pass pass:pruebaprueba --key-pass pass:pruebaprueba --out act-apks/apk-24-otra.apk act-apks/apk-24.apk
