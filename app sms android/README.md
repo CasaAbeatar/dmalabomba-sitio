@@ -195,6 +195,48 @@ Real limits: with the screen off or on a window marked `FLAG_SECURE` (banking ap
 black or fails; a lock screen with PIN/pattern cannot be bypassed from the app (the "wake" action only turns the screen on);
 `takeScreenshot` needs Android 11+ and gestures Android 7+ (on older versions the app keeps working without that part).
 
+#### La Bomba 2.12.0: extended health, on-demand wireless debugging, `abrir_ajuste`, automatic update
+
+Contract with the server: `CONTRATO-2.12.md` and `PROTOCOLO.md` (server side, not in this repo).
+
+- **Extended health (flat keys in `detalle`)**: `enchufe` (ac|usb|inalambrico|ninguno), `sms_inbox_ultimo_ms`,
+  `sms_sin_reenviar` (0..999, `-1` without READ_SMS: SMS in the inbox from senders covered by the rules, newer than the last
+  successful forward and from the last 48 h; no SMS is sent), `adb_activo`, `adb_puerto`, `actualizacion_estado`
+  (ninguna|descargando|instalando|fallo), `actualizacion_detalle` (`[a-z0-9_]{1,30}`), `actualizacion_objetivo` (x.y.z).
+- **Orders `abrir_adb` / `cerrar_adb`**: toggle `Settings.Global.adb_wifi_enabled` (needs WRITE_SECURE_SETTINGS, granted once
+  by adb). What the app turns on is turned off again after 30 min. Without the permission the order is still confirmed and
+  `adb_activo=false` is reported. On a Wi-Fi network not approved before, SystemUI shows "Allow wireless debugging on this
+  network?" and Android turns it off again unless someone taps Allow (it can be tapped from the remote screen); seen on the
+  API 33 and 35 emulators.
+- **Remote-screen action `abrir_ajuste`** with `que` in {bateria, app, acceso_notificaciones, accesibilidad, inicio_apps,
+  ahorro_energia}; result `ok:<intent>` or `no_disponible` (HONOR/Huawei startup-manager candidates with fallback to app details).
+- **Automatic update**: the heartbeat response may carry `actualizacion` signed with
+  `HMAC-SHA256(rule key, "ACT1|v|vc|url|sha256|ts|eco")` (hex, constant-time check, `eco` = the `ts` this heartbeat sent).
+  Nothing is installed unless ALL hold: valid signature and eco; `https://pagos.dmalabomba.com/instalar/<file>.apk` exactly
+  (no redirects); `vc` greater than installed; offer `ts` at most 24 h old; downloaded file sha256 equal; package, version and
+  signing certificate of the file identical to the installed app; at most 3 attempts per version with waits of 1 h, 6 h,
+  24 h; no recent pending forward queue and no SMS received in the last 60 s.
+  - **Silent path (Android 12+)**: `PackageInstaller` session with `USER_ACTION_NOT_REQUIRED`. Android honours it only if the
+    app declares `UPDATE_PACKAGES_WITHOUT_USER_ACTION` (done), is updating itself (or is the installer of record), and its
+    `targetSdkVersion` is high enough for the device: 30 on Android 13, 31 on 14, **33 on 15**, **34 on 16**, 35 on 17
+    (official `SessionParams.setRequireUserAction` docs). With `targetSdkVersion 33` the silent path covers Android 12 to 15;
+    on Android 16+ Android will ask for confirmation.
+  - **Fallback (confirmation dialog)**: if the remote-screen accessibility service is on, it taps exactly
+    "Instalar/Actualizar/Install/Update" only in the system installer package Android gave for our session. On Android 14+
+    the installer button is hidden from accessibility services that are not declared `isAccessibilityTool` (declared in
+    `pantalla_remota_config.xml`).
+  - **No loop**: if Android asks for confirmation and the accessibility service is off, the session is abandoned and
+    `actualizacion_estado=fallo`, `actualizacion_detalle=requiere_confirmacion` is reported; if the button is not tapped within
+    3 min, `boton_no_pulsado`. The next attempt waits 1 h / 6 h / 24 h, max 3 per version.
+  - After the update the new version starts by itself (`MY_PACKAGE_REPLACED`) and reports `actualizacion_estado=ninguna`.
+
+CI (`.github/workflows/prueba-guardian-2-12.yml`, API 33 and 35): JVM tests, instrumented tests, and a real end-to-end
+update on the emulator against a fake server (`scripts-prueba/actualizacion-e2e.sh`): rejections (bad/missing signature,
+wrong eco, expired ts, foreign URL, bad sha256, other certificate), silent update, forced confirmation without accessibility
+(reported failure, no retry loop) and forced confirmation tapped by the accessibility service. The debug APK is uploaded as
+artifact `apk-2-12-0` (with its sha256). The production APK is built unsigned by `apk-release-sms.yml`; signing and
+publishing are manual.
+
 ### Request info
 HTTP method: POST  
 Content-type: application/json; charset=utf-8  
