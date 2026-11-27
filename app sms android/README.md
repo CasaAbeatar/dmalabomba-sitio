@@ -243,6 +243,29 @@ Contract with the server: `CONTRATO-2.12.md` and `PROTOCOLO.md` (server side, no
     90 s, `boton_no_pulsado`. The next attempt waits 1 h / 6 h / 24 h, max 3 per version.
   - After the update the new version starts by itself (`MY_PACKAGE_REPLACED`) and reports `actualizacion_estado=ninguna`.
 
+- **Domain-outage fallback paths (27 nov 2026)**: on 27 Nov 2026 the registration of dmalabomba.com was cancelled by mistake
+  and `pagos.dmalabomba.com` stopped resolving, which silenced the forwarding (the rule URL, the heartbeat URL and the remote
+  screen all go through that name: the Cloudflare Pages worker proxies `/sms`, `/latido` and `/pantalla` to the Supabase functions).
+  `RutasAlternas` defines a CLOSED list of equivalent routes that do not depend on the dmalabomba.com DNS, same HMAC
+  signatures, https only, no redirects:
+  - messages (`/sms`, `/latido`, `/pantalla`): `pagos.dmalabomba.com` → `sinpe-pagos.pages.dev` (same Cloudflare Pages project)
+    → `dwlbcbtwdungyrykgahm.supabase.co/functions/v1/sinpe-recibir[/latido]` and `/sinpe-pantalla` (direct; `verify_jwt=false`,
+    the functions authenticate by HMAC). `Request.execute()` tries the next route ONLY when the previous one fails before the
+    server received anything (name does not resolve, connection refused / no route, connect timeout, certificate mismatch) or
+    answers a 2xx HTML page that is not ours (a registrar "parked" page); an answer from the server, even an error, stops the
+    search, and a lost response is never re-sent (the SMS endpoint is idempotent anyway). The alternates never ignore certificate errors.
+  - update download (`/instalar/<file>.apk`): the offer may carry `pagos.dmalabomba.com` or `sinpe-pagos.pages.dev`; if the first
+    host fails the other is tried with the same path. sha256, signing certificate and version are still checked on the file.
+  - **Last good offer is remembered** (`upd_oferta_cache`, app-private): if a heartbeat gets no answer at all, the offer is
+    retried with exactly the same rules (24 h validity, higher `vc`, daily cap, attempts, safe moment). A failed attempt where NO route
+    connected (`actualizacion_detalle=sin_red`) neither spends an attempt nor counts against the 3 daily downloads, and the next
+    one waits 15 min.
+  - Everything else (queue, backoff) is unchanged: `RequestWorker` retries with WorkManager exponential backoff up to 10 times
+    and then stores the failed message (`FailedMessage`) for the manual/automatic re-send.
+  - Known server-side limit: the production Cloudflare worker returns `/latido` and `/sms` without the response `X-Signature`
+    header (only `/pantalla` passes it), so through that route the "sensitive" orders are never accepted; the direct Supabase and
+    (after a worker fix) Pages routes carry it.
+
 CI (`.github/workflows/prueba-guardian-2-12.yml`, API 33 and 35): JVM tests, instrumented tests, and a real end-to-end
 update on the emulator against a fake server (`scripts-prueba/actualizacion-e2e.sh`): rejections (bad/missing signature,
 wrong eco, expired ts, foreign URL, bad sha256, other certificate), silent update, forced confirmation without accessibility

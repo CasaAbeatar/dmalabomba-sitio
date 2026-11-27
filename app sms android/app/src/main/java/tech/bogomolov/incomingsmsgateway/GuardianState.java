@@ -190,6 +190,30 @@ public class GuardianState {
         pref.edit().putString(K_UPD_DESCARGAS, b.toString()).commit();
     }
 
+    /** Quita la descarga más reciente del tope diario (un intento que no pudo conectar a nada no gastó datos ni cuenta). */
+    public synchronized void quitarUltimaDescargaUpd() {
+        long[] l = getUpdDescargas();
+        if (l.length == 0) return;
+        StringBuilder b = new StringBuilder();
+        for (int i = 0; i < l.length - 1; i++) b.append(l[i]).append(',');
+        pref.edit().putString(K_UPD_DESCARGAS, b.toString()).commit();
+    }
+
+    // 27 nov 2026: última oferta de actualización ya verificada (ver ActualizacionPolitica.ofertaAJson).
+    private static final String K_UPD_OFERTA = "upd_oferta_cache";
+
+    public synchronized ActualizacionPolitica.Oferta getOfertaUpd(boolean depuracion) {
+        return ActualizacionPolitica.ofertaDeJson(pref.getString(K_UPD_OFERTA, ""), depuracion);
+    }
+
+    public synchronized void guardarOfertaUpd(ActualizacionPolitica.Oferta o) {
+        pref.edit().putString(K_UPD_OFERTA, ActualizacionPolitica.ofertaAJson(o)).commit();
+    }
+
+    public synchronized void limpiarOfertaUpd() {
+        pref.edit().remove(K_UPD_OFERTA).commit();
+    }
+
     public synchronized void limpiarIntentosUpd() {
         pref.edit().remove(K_UPD_VC).remove(K_UPD_CUENTA).remove(K_UPD_ULTIMO).commit();
     }

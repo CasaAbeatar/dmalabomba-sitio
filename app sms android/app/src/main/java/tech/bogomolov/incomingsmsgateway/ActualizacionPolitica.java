@@ -17,8 +17,9 @@ import java.util.regex.Pattern;
  *   firma = HMAC-SHA256 hex minúsculas, con la clave de la regla, del texto  ACT1|v|vc|url|sha256|ts|eco
  * donde «eco» es el ts que ESTA app mandó en el latido (así una respuesta vieja o repetida no sirve).
  * Todas las reglas siguientes se cumplen, o no se instala nada:
- *   firma válida (tiempo constante) y eco = ts enviado; https y host exacto pagos.dmalabomba.com (ruta /instalar/*.apk,
- *   sin usuario, puerto, consulta ni fragmento); versionCode mayor que el instalado; ts de hace 24 h como máximo;
+ *   firma válida (tiempo constante) y eco = ts enviado; https y host exacto pagos.dmalabomba.com o su alterno
+ *   sinpe-pagos.pages.dev (lista cerrada; ruta /instalar/*.apk, sin usuario, puerto, consulta ni fragmento; 27 nov 2026:
+ *   si el primero no responde, la descarga prueba el otro con la misma ruta); versionCode mayor que el instalado; ts de hace 24 h como máximo;
  *   sha256 del archivo igual; mismo certificado de firma que la app instalada; hasta 3 intentos por versión con espera
  *   creciente; como máximo 3 descargas en 24 h en total (de cualquier versión); vc de 1 a 10.000.000 (el servidor aplica el
  *   mismo límite: ver CONTRATO-2.12.md); y nunca con cola de reenvío pendiente ni un SMS recibido hace menos de 60 s.
@@ -27,6 +28,13 @@ import java.util.regex.Pattern;
 public final class ActualizacionPolitica {
 
     public static final String HOST = "pagos.dmalabomba.com";
+    /**
+     * 27 nov 2026 (caída de los dominios): nombre propio de Cloudflare del MISMO proyecto de Pages (sinpe-pagos), que sirve
+     * /instalar/ y los APK sin depender del DNS de dmalabomba.com. Lista cerrada: solo estos dos anfitriones.
+     */
+    public static final String HOST_ALTERNO = "sinpe-pagos.pages.dev";
+    /** Tras un fallo «sin_red» (nada conectó) no se vuelve a intentar antes de esto: no gasta intentos ni descargas, pero tampoco martilla. */
+    public static final long ESPERA_SIN_RED_MS = 15L * 60_000L;
     /** Antigüedad máxima del ts de la oferta (y adelanto máximo permitido: 5 min). */
     public static final long VIGENCIA_MS = 24L * 3600_000L;
     public static final long ADELANTO_MAX_MS = 5L * 60_000L;
@@ -126,7 +134,7 @@ public final class ActualizacionPolitica {
     }
 
     /**
-     * Solo https://pagos.dmalabomba.com/instalar/<archivo>.apk (host exacto, sin usuario, puerto, consulta ni fragmento).
+     * Solo https://pagos.dmalabomba.com/instalar/<archivo>.apk o https://sinpe-pagos.pages.dev/instalar/<archivo>.apk (host exacto, sin usuario, puerto, consulta ni fragmento).
      * En depuración se admite también http hacia el servidor de pruebas del emulador/ejecutor (10.0.2.2, 127.0.0.1 o localhost);
      * en la compilación de producción {@code depuracion} es false y eso NO existe.
      */
@@ -139,7 +147,7 @@ public final class ActualizacionPolitica {
             if (path == null || !RUTA.matcher(path).matches()) return false;
             String host = u.getHost() == null ? "" : u.getHost().toLowerCase();
             if ("https".equals(u.getProtocol())) {
-                return host.equals(HOST) && (u.getPort() == -1 || u.getPort() == 443);
+                return (host.equals(HOST) || host.equals(HOST_ALTERNO)) && (u.getPort() == -1 || u.getPort() == 443);
             }
             if (depuracion && "http".equals(u.getProtocol())) {
                 return host.equals("10.0.2.2") || host.equals("127.0.0.1") || host.equals("localhost");
@@ -153,6 +161,51 @@ public final class ActualizacionPolitica {
     /** ¿La oferta es de una versión más nueva que la instalada? */
     public static boolean esMasNueva(int vcOferta, long vcInstalado) {
         return vcOferta > vcInstalado;
+    }
+
+    // ------------------------------------------------------------------ red caída y oferta guardada
+
+    /** ¿Toca esperar antes de volver a intentar porque el último intento no pudo conectar a ningún camino? */
+    public static boolean esperandoPorSinRed(String estado, String detalle, long estadoTs, long ahoraMs) {
+        if (!"fallo".equals(estado) || !"sin_red".equals(detalle)) return false;
+        if (estadoTs > ahoraMs) return false;   // el reloj retrocedió: no se bloquea
+        return ahoraMs - estadoTs < ESPERA_SIN_RED_MS;
+    }
+
+    /**
+     * Texto con que se guarda la última oferta ya VERIFICADA (firma y eco comprobados al recibirla) para reintentarla si el
+     * servidor no responde. Vive en la memoria privada de la app; al usarla se vuelve a exigir vigencia de 24 h, versión
+     * mayor, URL permitida, tope diario, intentos y momento seguro. Su firma no se repite (el eco ya no existe).
+     */
+    public static String ofertaAJson(Oferta o) {
+        try {
+            JSONObject j = new JSONObject();
+            j.put("v", o.v);
+            j.put("vc", o.vc);
+            j.put("url", o.url);
+            j.put("sha256", o.sha256);
+            j.put("ts", o.ts);
+            return j.toString();
+        } catch (Exception e) {
+            return "";
+        }
+    }
+
+    /** Lee una oferta guardada; null si falta algo o ya no cumple las reglas de forma. */
+    public static Oferta ofertaDeJson(String texto, boolean depuracion) {
+        if (texto == null || texto.isEmpty()) return null;
+        try {
+            JSONObject j = new JSONObject(texto);
+            Object v = j.opt("v"), url = j.opt("url"), sha = j.opt("sha256");
+            long vc = entero(j.opt("vc")), ts = entero(j.opt("ts"));
+            if (!(v instanceof String) || !VERSION.matcher((String) v).matches()) return null;
+            if (vc < 1 || vc > 10_000_000L || ts < 0) return null;
+            if (!(url instanceof String) || !urlPermitida((String) url, depuracion)) return null;
+            if (!(sha instanceof String) || !SHA256.matcher((String) sha).matches()) return null;
+            return new Oferta((String) v, (int) vc, (String) url, (String) sha, ts);
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     // ------------------------------------------------------------------ intentos y momento seguro

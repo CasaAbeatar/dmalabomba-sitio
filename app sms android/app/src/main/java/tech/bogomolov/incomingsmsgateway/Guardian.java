@@ -118,6 +118,9 @@ public final class Guardian {
                         // 2.12.0: oferta de actualizacion (firma propia y eco = el ts de ESTE latido; ver Actualizador).
                         Actualizador.alResponderLatido(app, st, rule.secret, request.getResponseBody(), ahora);
                     }
+                } else {
+                    // 27 nov 2026: sin respuesta del servidor (por ningun camino): se reintenta la oferta guardada, si la hay.
+                    Actualizador.reintentarDesdeCache(app, st);
                 }
                 return res;
             } catch (Exception e) {

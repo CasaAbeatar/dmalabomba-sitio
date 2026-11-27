@@ -272,4 +272,74 @@ public class ActualizacionPoliticaTest {
                     leer(respuesta("2.12.0", vc, URL_BUENA, SHA, ts, ECO, firmar("2.12.0", vc, URL_BUENA, SHA, ts, ECO))).rechazo);
         }
     }
+
+    // ------------------------------------------------------------------ 27 nov 2026: anfitrión alterno, espera sin red, oferta guardada
+
+    @Test
+    public void elAnfitrionAlternoDePagesSeAcepta() {
+        assertTrue(ActualizacionPolitica.urlPermitida("https://sinpe-pagos.pages.dev/instalar/reenviador-sms-la-bomba-2.12.0.apk", false));
+        assertTrue(ActualizacionPolitica.urlPermitida("https://SINPE-PAGOS.pages.dev:443/instalar/a.apk", false));
+    }
+
+    @Test
+    public void otrosAnfitrionesParecidosSiguenRechazados() {
+        String[] malas = {
+                "https://otro.pages.dev/instalar/a.apk",
+                "https://sinpe-pagos.pages.dev.evil.com/instalar/a.apk",
+                "https://evil.sinpe-pagos.pages.dev/instalar/a.apk",
+                "https://sinpe-pagos.pages.dev:8443/instalar/a.apk",
+                "http://sinpe-pagos.pages.dev/instalar/a.apk",
+                "https://sinpe-pagos.pages.dev/otra/a.apk",
+                "https://dwlbcbtwdungyrykgahm.supabase.co/instalar/a.apk",
+        };
+        for (String u : malas) assertFalse(u, ActualizacionPolitica.urlPermitida(u, false));
+    }
+
+    @Test
+    public void unaOfertaFirmadaConElAnfitrionAlternoSeAcepta() throws Exception {
+        String url = "https://sinpe-pagos.pages.dev/instalar/reenviador-sms-la-bomba-2.12.0.apk";
+        long ts = AHORA - 3_600_000L;
+        ActualizacionPolitica.Lectura l = leer(respuesta("2.12.0", 22, url, SHA, ts, ECO, firmar("2.12.0", 22, url, SHA, ts, ECO)));
+        assertNotNull(l.rechazo, l.oferta);
+        assertEquals(url, l.oferta.url);
+    }
+
+    @Test
+    public void tras_unFalloSinRedSeEsperaQuinceMinutosYNada_mas() {
+        long t = AHORA;
+        assertTrue(ActualizacionPolitica.esperandoPorSinRed("fallo", "sin_red", t - 60_000L, t));
+        assertTrue(ActualizacionPolitica.esperandoPorSinRed("fallo", "sin_red", t - 14 * 60_000L, t));
+        assertFalse(ActualizacionPolitica.esperandoPorSinRed("fallo", "sin_red", t - 15 * 60_000L, t));
+        assertFalse("otro fallo: lo gobiernan los intentos", ActualizacionPolitica.esperandoPorSinRed("fallo", "sha256_distinto", t - 60_000L, t));
+        assertFalse(ActualizacionPolitica.esperandoPorSinRed("ninguna", "sin_red", t - 60_000L, t));
+        assertFalse("reloj retrocedido: no se bloquea", ActualizacionPolitica.esperandoPorSinRed("fallo", "sin_red", t + 3_600_000L, t));
+    }
+
+    @Test
+    public void laOfertaGuardadaSeLeeIgualYSoloSiSigueSiendoValida() throws Exception {
+        ActualizacionPolitica.Lectura l = leer(buena());
+        String json = ActualizacionPolitica.ofertaAJson(l.oferta);
+        ActualizacionPolitica.Oferta o = ActualizacionPolitica.ofertaDeJson(json, false);
+        assertNotNull(o);
+        assertEquals(l.oferta.v, o.v);
+        assertEquals(l.oferta.vc, o.vc);
+        assertEquals(l.oferta.url, o.url);
+        assertEquals(l.oferta.sha256, o.sha256);
+        assertEquals(l.oferta.ts, o.ts);
+        // alterada: URL ajena, huella corta, versión rara, vacía o basura
+        assertNull(ActualizacionPolitica.ofertaDeJson(json.replace("pagos.dmalabomba.com", "evil.example.com"), false));
+        assertNull(ActualizacionPolitica.ofertaDeJson(json.replace(SHA, "abc"), false));
+        assertNull(ActualizacionPolitica.ofertaDeJson(json.replace("2.12.0", "x.y"), false));
+        assertNull(ActualizacionPolitica.ofertaDeJson("", false));
+        assertNull(ActualizacionPolitica.ofertaDeJson(null, false));
+        assertNull(ActualizacionPolitica.ofertaDeJson("{no es json", false));
+        assertNull(ActualizacionPolitica.ofertaDeJson("{}", false));
+    }
+
+    @Test
+    public void laOfertaGuardadaVenceA_las24h() throws Exception {
+        ActualizacionPolitica.Oferta o = leer(buena()).oferta;
+        assertTrue(ActualizacionPolitica.vigente(o.ts, AHORA));
+        assertFalse(ActualizacionPolitica.vigente(o.ts, o.ts + 24L * 3600_000L + 1));
+    }
 }

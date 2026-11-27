@@ -80,9 +80,48 @@ final class Actualizador {
                 return;
             }
             final ActualizacionPolitica.Oferta o = l.oferta;
-            if (!ActualizacionPolitica.esMasNueva(o.vc, BuildConfig.VERSION_CODE)) return;
+            if (!ActualizacionPolitica.esMasNueva(o.vc, BuildConfig.VERSION_CODE)) {
+                st.limpiarOfertaUpd();   // ya se tiene esa version (o una mayor): la oferta guardada no sirve
+                return;
+            }
+            st.guardarOfertaUpd(o);   // 27 nov 2026: se recuerda para reintentarla si el servidor deja de responder
+            procesarOferta(app, st, o, ahora);
+        } catch (Throwable e) {
+            Log.e(TAG, "alResponderLatido: " + e);
+        }
+    }
+
+    /**
+     * 27 nov 2026 (caida de los dominios): el latido no obtuvo respuesta del servidor. Si hay una oferta ya verificada y
+     * vigente (24 h), se reintenta con TODAS las mismas reglas; no hace falta que el servidor la repita.
+     * Nunca lanza.
+     */
+    static void reintentarDesdeCache(final Context ctx, final GuardianState st) {
+        try {
+            final Context app = ctx.getApplicationContext();
+            long ahora = System.currentTimeMillis();
+            ActualizacionPolitica.Oferta o = st.getOfertaUpd(BuildConfig.DEBUG);
+            if (o == null) return;
+            if (!ActualizacionPolitica.esMasNueva(o.vc, BuildConfig.VERSION_CODE) || !ActualizacionPolitica.vigente(o.ts, ahora)) {
+                st.limpiarOfertaUpd();
+                return;
+            }
+            Log.i(TAG, "sin respuesta del servidor: se reintenta la oferta guardada " + o.v);
+            procesarOferta(app, st, o, ahora);
+        } catch (Throwable e) {
+            Log.e(TAG, "reintentarDesdeCache: " + e);
+        }
+    }
+
+    /** Las reglas de seguridad y de ritmo, iguales para una oferta recien recibida y para la guardada. */
+    private static void procesarOferta(final Context app, final GuardianState st, final ActualizacionPolitica.Oferta o, long ahora) {
+        try {
             revisarPendiente(app, st, ahora);
             // Auditoría 2.12.0: tope global de descargas por día, de cualquier versión (además del límite por versión).
+            if (ActualizacionPolitica.esperandoPorSinRed(st.getUpdEstado(), st.getUpdDetalle(), st.getUpdEstadoTs(), ahora)) {
+                Log.i(TAG, "actualizacion " + o.v + ": sin red hacia ningun camino, se espera antes de reintentar");
+                return;
+            }
             if (!ActualizacionPolitica.dentroDelTopeDiario(st.getUpdDescargas(), ahora, topeDescargasDia(app))) {
                 Log.i(TAG, "actualizacion " + o.v + ": tope diario de descargas alcanzado ("
                         + ActualizacionPolitica.descargasEnLaVentana(st.getUpdDescargas(), ahora) + " en 24 h)");
@@ -115,7 +154,7 @@ final class Actualizador {
             t.setDaemon(true);
             t.start();
         } catch (Throwable e) {
-            Log.e(TAG, "alResponderLatido: " + e);
+            Log.e(TAG, "procesarOferta: " + e);
         }
     }
 
@@ -135,6 +174,12 @@ final class Actualizador {
         String error = descargar(o.url, apk, o.sha256);
         if (error != null) {
             apk.delete();
+            if ("sin_red".equals(error)) {
+                // Ningun camino conecto (caida de dominios o sin Internet): no gasta intento, ni cuenta para el tope diario
+                // (no se gasto un solo byte). Se espera ESPERA_SIN_RED_MS antes del siguiente.
+                st.devolverIntentoUpd(o.vc);
+                st.quitarUltimaDescargaUpd();
+            }
             fallo(st, o.vc, o.v, error);
             return;
         }
@@ -177,8 +222,24 @@ final class Actualizador {
 
     // ------------------------------------------------------------------ descarga
 
-    /** @return null si quedó bien; si no, un código corto [a-z0-9_]{1,30}. */
+    /**
+     * @return null si quedó bien; si no, un código corto [a-z0-9_]{1,30}.
+     * 27 nov 2026: si el anfitrión de la oferta falla, se prueba el otro de la lista cerrada (pagos.dmalabomba.com y
+     * sinpe-pagos.pages.dev) con la misma ruta; el archivo debe cumplir igual la huella sha256, el certificado y la versión.
+     */
     static String descargar(String url, File destino, String sha256Esperado) {
+        String primero = null;
+        for (String u : RutasAlternas.candidatasInstalador(url)) {
+            String err = descargarDe(u, destino, sha256Esperado);
+            if (err == null) return null;
+            if ("url_no_permitida".equals(err) || "demasiado_grande".equals(err)) return err;
+            if (primero == null || "sin_red".equals(primero)) primero = err;   // se informa el fallo mas util
+            destino.delete();
+        }
+        return primero == null ? "descarga_error" : primero;
+    }
+
+    private static String descargarDe(String url, File destino, String sha256Esperado) {
         HttpURLConnection c = null;
         try {
             if (!ActualizacionPolitica.urlPermitida(url, BuildConfig.DEBUG)) return "url_no_permitida";

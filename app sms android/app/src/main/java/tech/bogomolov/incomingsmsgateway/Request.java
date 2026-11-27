@@ -24,6 +24,9 @@ import java.security.InvalidKeyException;
 import java.security.KeyManagementException;
 import java.security.NoSuchAlgorithmException;
 import java.util.Iterator;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
@@ -42,6 +45,12 @@ public class Request {
     private String responseSignature = null;
 
     private HttpURLConnection connection;
+    // 2.12.0 (caida de dominios): lo necesario para repetir la misma peticion por otro camino (ver RutasAlternas).
+    private final String urlOriginal;
+    private String urlUsada;
+    private final Map<String, String> cabeceras = new LinkedHashMap<>();
+    private boolean falloDeRed = false;
+    private boolean alternasPermitidas = true;
 
     public static final String RESULT_SUCCESS = "success";
     public static final String RESULT_ERROR = "error";
@@ -49,14 +58,22 @@ public class Request {
 
     public Request(String urlString, String payload) {
         this.payload = payload;
+        this.urlOriginal = urlString;
+        this.urlUsada = urlString;
+        abrir(urlString);
+    }
 
+    /** Abre (o reabre) la conexion hacia {@code urlString} con las cabeceras ya puestas. @return false si no se pudo (queda this.error). */
+    private boolean abrir(String urlString) {
+        this.error = null;
+        this.connection = null;
         URL url;
         try {
             url = new URL(urlString);
         } catch (MalformedURLException e) {
             Log.e("SmsGateway", "malformed url error: " + urlString);
             this.error = RESULT_ERROR;
-            return;
+            return false;
         }
 
         try {
@@ -64,7 +81,7 @@ public class Request {
         } catch (IOException e) {
             Log.e("SmsGateway", "open connection error: " + e);
             this.error = RESULT_ERROR;
-            return;
+            return false;
         }
 
         this.connection.setRequestProperty("Content-Type", "application/json; charset=utf-8");
@@ -72,6 +89,15 @@ public class Request {
         // siempre (el latido y el reenvio se quedaban mudos sin avisar). Ahora se corta y se reintenta.
         this.connection.setConnectTimeout(20_000);
         this.connection.setReadTimeout(45_000);
+        for (Map.Entry<String, String> e : cabeceras.entrySet()) {
+            this.connection.setRequestProperty(e.getKey(), e.getValue());
+        }
+        return true;
+    }
+
+    private void cabecera(String clave, String valor) {
+        cabeceras.put(clave, valor);
+        if (this.connection != null) this.connection.setRequestProperty(clave, valor);
     }
 
     public void setJsonHeaders(String headers) {
@@ -86,7 +112,7 @@ public class Request {
                     continue;
                 }
 
-                this.connection.setRequestProperty(key, (String) headersObj.get(key));
+                cabecera(key, (String) headersObj.get(key));
             }
         } catch (JSONException e) {
             Log.e("SmsGateway", "headers error: " + e);
@@ -114,7 +140,7 @@ public class Request {
 
     public void setSignatureHeader(@NonNull String secret, @NonNull String body) {
         try {
-            this.connection.setRequestProperty("X-Signature", computeHmacSha256Hex(secret, body));
+            cabecera("X-Signature", computeHmacSha256Hex(secret, body));
         } catch (NoSuchAlgorithmException | InvalidKeyException | IllegalArgumentException e) {
             // IllegalArgumentException covers an empty secret, which SecretKeySpec
             // rejects — never let a bad signing config crash the delivery path.
@@ -147,8 +173,46 @@ public class Request {
         return this.responseSignature;
     }
 
-    @SuppressLint({"AllowAllHostnameVerifier"})
+    /** La URL con la que se obtuvo el ultimo resultado (la original, o la de un camino alterno). */
+    public String getUrlUsada() {
+        return this.urlUsada;
+    }
+
+    /** Pruebas y casos especiales: no probar caminos alternos aunque el principal falle. */
+    public void setAlternasPermitidas(boolean permitidas) {
+        this.alternasPermitidas = permitidas;
+    }
+
+    /**
+     * 2.12.0: manda la peticion y, SOLO si fallo a nivel de red (el nombre no resuelve, no conecta, el certificado no
+     * corresponde, o contesto una pagina HTML que no es nuestra), la repite por los caminos equivalentes de
+     * {@link RutasAlternas} (mismas firmas; los alternos nunca ignoran errores de certificado). Un mensaje nunca se manda dos
+     * veces por una respuesta perdida, y una respuesta legitima del servidor (aunque sea un error) pone fin a la busqueda.
+     */
     public String execute() {
+        String r = ejecutarUna();
+        if (RESULT_SUCCESS.equals(r) || !falloDeRed || !alternasPermitidas) return r;
+        List<String> caminos = RutasAlternas.candidatasMensaje(urlOriginal);
+        boolean ignoraOriginal = this.ignoreSsl;
+        for (int i = 1; i < caminos.size(); i++) {
+            String alt = caminos.get(i);
+            Log.w("SmsGateway", "sin respuesta por " + urlUsada + ": se prueba " + alt);
+            this.responseCode = -1;
+            this.responseBody = "";
+            this.responseSignature = null;
+            this.ignoreSsl = false;
+            this.urlUsada = alt;
+            if (!abrir(alt)) continue;
+            r = ejecutarUna();
+            if (RESULT_SUCCESS.equals(r) || !falloDeRed) break;
+        }
+        this.ignoreSsl = ignoraOriginal;
+        return r;
+    }
+
+    @SuppressLint({"AllowAllHostnameVerifier"})
+    private String ejecutarUna() {
+        this.falloDeRed = false;
         if (this.error != null) {
             return this.error;
         }
@@ -218,6 +282,12 @@ public class Request {
             if (!isSuccess) {
                 Log.e("SmsGateway", "response code: " + this.responseCode + " for " + this.connection.getURL());
                 result = RESULT_RETRY;
+            } else if (RutasAlternas.esAnfitrionPropio(this.urlUsada) && RutasAlternas.pareceHtml(this.responseBody)) {
+                // 2.12.0: un 2xx con una pagina HTML no es nuestro servidor (p. ej. la pagina «parked» de un registrador
+                // cuando el dominio se cae): no cuenta como entregado y se prueba otro camino.
+                Log.e("SmsGateway", "respuesta HTML ajena de " + this.urlUsada + ": no se da por entregado");
+                result = RESULT_RETRY;
+                this.falloDeRed = true;
             }
         } catch (NoSuchAlgorithmException e) {
             Log.e("SmsGateway", "ssl algorithm error: " + e);
@@ -228,6 +298,7 @@ public class Request {
         } catch (IOException e) {
             Log.e("SmsGateway", "io error " + e);
             result = RESULT_RETRY;
+            this.falloDeRed = RutasAlternas.esFalloDeRed(e);
         } finally {
             if (this.connection != null) {
                 this.connection.disconnect();
