@@ -349,6 +349,12 @@ final class Actualizador {
                 case PackageInstaller.STATUS_SUCCESS:
                     // Android reemplaza la app y el proceso termina; el nuevo proceso lo anota en alIniciar().
                     break;
+                case PackageInstaller.STATUS_FAILURE_ABORTED:
+                    // Si la sesion la abandono la propia app (requiere_confirmacion, boton_no_pulsado...), Android avisa
+                    // «abortada» despues: se conserva el motivo ya reportado en vez de pisarlo con instalador_3.
+                    if ("fallo".equals(st.getUpdEstado())) break;
+                    fallo(st, vc, version, "instalador_" + status);
+                    break;
                 default:
                     fallo(st, vc, version, "instalador_" + status);
                     break;

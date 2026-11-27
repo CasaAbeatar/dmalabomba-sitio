@@ -129,6 +129,10 @@ if esperar_val 200 '"ok"' resultado 402; then bien "cerrar_adb confirmado ok"; e
 [ "$(adb shell settings get global adb_wifi_enabled | tr -d '\r')" = "0" ] && bien "Settings.Global.adb_wifi_enabled=0" || mal "adb_wifi_enabled no quedo en 0"
 if esperar_val 150 'false' detalle adb_activo; then bien "el latido reporta adb_activo=false"; else mal "el latido no reporta adb_activo=false"; fi
 [ "$(consulta veces_ejecutada 401)" = "1" ] && bien "abrir_adb (id 401) se ejecuto una sola vez" || mal "id 401 ejecutado $(consulta veces_ejecutada 401) veces"
+# Android (SystemUI) pregunta «¿Permitir depuracion inalambrica en esta red?» al encender adb_wifi en una red no aprobada:
+# se anota si quedo en pantalla y se cierra para no tapar los pasos siguientes.
+adb shell dumpsys window | grep -m1 mCurrentFocus | sed 's/^ */foco tras abrir_adb: /'
+adb shell dumpsys window | grep -m1 mCurrentFocus | grep -q WifiDebugging && adb shell input keyevent KEYCODE_BACK
 modo '{}'
 
 nota "4. actualizacion: oferta con firma MALA (no debe ni descargar)"
