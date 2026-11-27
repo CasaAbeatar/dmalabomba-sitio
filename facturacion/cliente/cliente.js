@@ -159,6 +159,9 @@ function fitCliente(host) {
 // El bloque solo existe en la vista que se está mostrando; las otras quedan vacías
 const HOSTS = { cuenta: ['cu-cli', 'completo'], pago: ['pg-cli', 'completo'], pagado: ['pd-cli', 'pagado'] };
 function vaciarOtros(vistaActual) {
+  // el SINPE y el nombre del pagador solo viven mientras se ve el cobro o el «pagado» de esa venta
+  if (vistaActual !== 'pago') { $('pg-sinpe').hidden = true; $('pg-sinpe-t').textContent = ''; $('pg-sinpe-n').textContent = ''; $('v-pago').classList.remove('con-sinpe'); }
+  if (vistaActual !== 'pagado') { $('pd-sinpe').hidden = true; $('pd-sinpe').textContent = ''; }
   Object.keys(HOSTS).forEach((k) => { if (k === vistaActual) return; const e = $(HOSTS[k][0]); if (e.childNodes.length || !e.hidden) { vaciar(e); e.hidden = true; e._h = ''; } });
   $('v-pago').classList.toggle('con-cli', vistaActual === 'pago' && !$('pg-cli').hidden); $('v-pagado').classList.toggle('con-cli', vistaActual === 'pagado' && !$('pd-cli').hidden);
 }
@@ -168,6 +171,7 @@ function repintarCliente() {
 }
 function borrarCliente() {
   cliente = null;
+  vaciarOtros('');
   ['cu-cli', 'pg-cli', 'pd-cli'].forEach((id) => { const e = $(id); vaciar(e); e.hidden = true; e._h = ''; });
   $('v-pago').classList.remove('con-cli'); $('v-pagado').classList.remove('con-cli');
 }
@@ -244,8 +248,17 @@ function pintarCuenta(s) {
   ajustarTotalCuenta();
 }
 
+// «Pago recibido ₡X» con el nombre de quien pagó por SINPE Móvil (Emil, 27 nov 2026). Solo llega cuando la cajera ligó ese SINPE a esta venta.
+function pintarSinpePago(s) {
+  const caja = $('pg-sinpe'), sp = s.sinpe;
+  caja.hidden = !sp;
+  $('v-pago').classList.toggle('con-sinpe', !!sp);
+  if (!sp) { texto('pg-sinpe-t', ''); $('pg-sinpe-n').hidden = true; return; }
+  texto('pg-sinpe-t', '✓ Pago recibido ' + colones(sp.monto));
+  const n = texto('pg-sinpe-n', sp.nombre ? 'SINPE Móvil de ' + sp.nombre : 'SINPE Móvil'); n.hidden = false;
+}
 function pintarPago(s) {
-  cliente = s.cliente; pintarCliente($('pg-cli'), 'completo'); vaciarOtros('pago');
+  cliente = s.cliente; pintarCliente($('pg-cli'), 'completo'); vaciarOtros('pago'); pintarSinpePago(s);
   texto('pg-rotulo', 'Total a pagar');
   const t = texto('pg-total', colones(s.total));
   texto('pg-medio', MEDIOS[s.medio] || '');
@@ -257,6 +270,7 @@ function pintarPagado(s) {
   if (s.cliente) cliente = s.cliente;  // si la caja no lo manda en «pagado», se usa el de la cuenta (solo en memoria)
   pintarCliente($('pd-cli'), 'pagado'); vaciarOtros('pagado');
   const t = texto('pd-total', colones(s.total));
+  const psp = $('pd-sinpe'); psp.hidden = !s.sinpe; psp.textContent = s.sinpe ? (s.sinpe.nombre ? 'SINPE Móvil recibido de ' + s.sinpe.nombre : 'SINPE Móvil recibido') : '';
   const det = $('pd-det'); vaciar(det);
   const par = (rot, val) => { const dt = document.createElement('dt'); dt.textContent = rot; const dd = document.createElement('dd'); dd.className = 'monto'; dd.textContent = val; det.append(dt, dd); };
   if (esNum(s.recibido) && s.recibido > 0) par('Recibido', colones(s.recibido));
@@ -274,6 +288,13 @@ let ultimaRecepcion = 0, ultimoTs = 0, timerPagado = 0, pagadoTs = 0, pagadoActi
 let soc = '';
 try { soc = params.get('soc') || localStorage.getItem(LLAVE_SOC) || ''; } catch { /* nada */ }
 
+// Pago por SINPE ligado a la venta: { nombre, monto }. Solo en memoria (nunca a localStorage, Cache Storage ni consola)
+function limpiarSinpe(x) {
+  if (!x || typeof x !== 'object' || Array.isArray(x)) return null;
+  const monto = Math.round((Number(x.monto) || 0) * 100) / 100;
+  if (!esNum(monto) || !(monto > 0) || monto > 100000000) return null;
+  return { nombre: limpioTxt(x.nombre, 60), monto };
+}
 function limpiar(m) {
   if (!m || typeof m !== 'object') return null;
   const est = m.estado;
@@ -291,11 +312,12 @@ function limpiar(m) {
     total: n(m.total) ?? 0, medio: ['efectivo', 'tarjeta', 'sinpe', 'mixto'].includes(m.medio) ? m.medio : null,
     recibido: n(m.recibido), vuelto: n(m.vuelto), ts: n(m.ts) ?? Date.now(),
     cliente: est === 'cuenta' || est === 'pago' || est === 'pagado' ? limpiarCliente(m.cliente) : null,
+    sinpe: est === 'pago' || est === 'pagado' ? limpiarSinpe(m.sinpe) : null,
   };
 }
 
 let firmaPintada = '';
-const firmaDe = (s) => JSON.stringify([s.estado, s.empresa, s.lineas, s.subtotal, s.descuento, s.iva, s.total, s.medio, s.cliente]);
+const firmaDe = (s) => JSON.stringify([s.estado, s.empresa, s.lineas, s.subtotal, s.descuento, s.iva, s.total, s.medio, s.cliente, s.sinpe]);
 const temaDe = (e) => (e === 'soda' ? 'soda' : e === 'pollos' ? 'pollos' : 'neutro');
 function aplicar(s) {
   if (s.empresa && s.empresa !== empresaActual) { empresaActual = s.empresa; try { localStorage.setItem(LLAVE_EMP, empresaActual); } catch { /* nada */ } setTimeout(pedirAnuncios, 0); }
@@ -428,7 +450,8 @@ function muestra(estado) {
   return { v: 1, estado, empresa: params.get('empresa') === 'pollos' ? 'pollos' : params.get('empresa') === 'neutro' ? '' : 'soda', lineas: estado === 'espera' ? [] : lineas, subtotal, descuento, iva, total,
     medio: estado === 'cuenta' || estado === 'espera' ? null : (efectivo ? 'efectivo' : params.get('medio')), recibido: estado === 'pagado' ? recibido : null,
     vuelto: estado === 'pagado' && efectivo && params.get('vuelto') !== '0' ? recibido - total : null, ts: Date.now(),
-    cliente: estado !== 'espera' && CLIENTES_DEMO[params.get('cliente')] ? CLIENTES_DEMO[params.get('cliente')] : null };
+    cliente: estado !== 'espera' && CLIENTES_DEMO[params.get('cliente')] ? CLIENTES_DEMO[params.get('cliente')] : null,
+    sinpe: params.get('sinpe') && (estado === 'pago' || estado === 'pagado') ? { nombre: params.get('sinpe') === 'sin-nombre' ? '' : 'Tiffany Melanie Araica Larios', monto: total } : null };
 }
 
 function demo(modo) {

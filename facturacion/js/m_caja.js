@@ -8,8 +8,9 @@ import { apiM } from './api_mantenimiento.js';
 import { esTransitorio, esPinObligatorio } from './api.js';
 import { reemplazoInfo, cobrarReemplazo, esRespuestaDeNegocio, tiposIdentificacion, avisoTipoId, correoActivo } from './api_documentos.js';
 import { cargarBanderaSinpe } from './api_sinpe.js';
+import { datosParaPantalla } from './sinpe_comprobante.js';
 import { sinpeActivo } from './bandera_sinpe.js';
-import { escogerSinpe } from './ui_sinpe.js';
+import { escogerSinpe, notasComprobante } from './ui_sinpe.js';
 import { flotanteSinpe } from './sinpe_flotante.js';
 import { TARIFAS_IVA, tarifaDeLinea, desgloseIva, tarifaHabitual } from './iva.js';
 import { infoActividad, textoActividad } from './actividades.js';
@@ -1324,6 +1325,9 @@ export default {
       const inpRef = h('input.campo', { type: 'text', maxlength: 60, autocomplete: 'off' });
       const refTxt = h('span');
       const refEtq = h('label.etq', refTxt, inpRef);
+      // Revisión del comprobante del SINPE (27 nov 2026): repetido, fecha y empresa. Solo informa: nunca desactiva «Cobrar» ni detiene nada.
+      const refRevision = notasComprobante({ soc: socId, ventaId, total: Number(venta.total) || 0 });
+      const refNota = refRevision.el; let refUltima = '';
       const rapidos = h('div.rapidos',
         h('button.btn', { type: 'button', onclick: () => { auto = true; sugerir(); actualizar(); } }, 'Exacto'),
         RAPIDOS.map((n) => h('button.btn', { type: 'button', onclick: () => { inpMonto.value = String(n); auto = false; actualizar(); } }, money0(n))));
@@ -1428,7 +1432,7 @@ export default {
         actEl,
         avisoCortesia,
         formaPago, sinpeEl, etqMonto,
-        refEtq, btnOtro, bloqueMixto, errEl, btnRevisar,
+        refEtq, refNota, btnOtro, bloqueMixto, errEl, btnRevisar,
         h('div.cobro-pie', pedirMedio, razonCobro, btnVolver, btnCobrar));
 
       const sinErr = () => { errEl.hidden = true; };
@@ -1636,7 +1640,7 @@ export default {
         const sinpeVista = sinpeOn && medio === 'sinpe' && !cortesia;
         if (sinpeVista && !listaSinpeCobro) {
           listaSinpeCobro = escogerSinpe({ soc: socId, empresa: app.empresa?.codigo || 'soda', ventaId, ventaNumero: numCuenta(venta.numero), total: Number(venta.total) || 0,
-            alCambiar: (p) => { if (p && p.comprobante) inpRef.value = String(p.comprobante); else if (!p) inpRef.value = ''; actualizar(); } });
+            alCambiar: (p) => { if (p && p.comprobante) inpRef.value = String(p.comprobante); else if (!p) inpRef.value = ''; try { pantalla?.sinpe(p ? datosParaPantalla(p) : null, ventaId); } catch { /* la pantalla del cliente nunca estorba */ } refRevision.olvidar(); actualizar(); } });
           sinpeEl.replaceChildren(listaSinpeCobro.el);
         } else if (!sinpeVista && listaSinpeCobro) { listaSinpeCobro.destruir(); listaSinpeCobro = null; sinpeEl.replaceChildren(); }
         sinpeEl.hidden = !sinpeVista;
@@ -1674,6 +1678,7 @@ export default {
         razonCobro.hidden = !bloqueo; razonCobro.parentElement?.classList.toggle('con-razon', !!bloqueo);
         btnOtro.disabled = cobrando || !b.v || !medio || !!r.error;
         btnVolver.disabled = cobrando;
+        if (refUltima !== medio + '|' + inpRef.value) { refUltima = medio + '|' + inpRef.value; refRevision.revisar(inpRef.value, sinpeOn && medio === 'sinpe' && !cortesia); }
       }
       function agregarOtro() {
         const b = borrador();
@@ -1774,7 +1779,7 @@ export default {
         } catch { return { estado: 'desconocido' }; }
       }
       async function terminar(comp, aviso, vueltoLocal) {
-        terminado = true; listaSinpeCobro?.conservar();
+        terminado = true; listaSinpeCobro?.conservar(); refRevision.destruir();
         pantalla?.pagado(comp, vueltoLocal);
         duda = false; ventasEnDuda.delete(ventaId); ventasEnCobro.delete(ventaId);
         m.cerrar();
@@ -1863,7 +1868,7 @@ export default {
       // Con el cobro en camino la ventana no se puede cerrar (ni con Escape, ni tocando fuera, ni con «Volver», ni con el botón Atrás)
       m = modal({ titulo: 'Cobrar', contenido: raiz, ancho: 960,
         bloqueo: () => (cobrando ? 'El cobro va en camino. Espere a que termine; la ventana se cierra sola.' : ''),
-        alCerrar: () => { cobroAbierto = false; listaSinpeCobro?.destruir(); listaSinpeCobro = null; if (!terminado) pantalla?.cerrarPago(cur); vigilaAjustes.disconnect(); if (vivo && !terminado && buscador && fino()) buscador.inp.focus(); } });
+        alCerrar: () => { cobroAbierto = false; refRevision.destruir(); listaSinpeCobro?.destruir(); listaSinpeCobro = null; if (!terminado) pantalla?.cerrarPago(cur); vigilaAjustes.disconnect(); if (vivo && !terminado && buscador && fino()) buscador.inp.focus(); } });
       avisarCreada();
       pantalla?.pago(cur);
       mostrar(vistaPago);

@@ -20,5 +20,7 @@ export const olvidarBanderaSinpe = () => { banderaPromesa = null; banderaEn = 0;
 
 export const sinpe = {
   lista: (soc, dias = 3) => rpc('fx_sinpe_lista', { p_soc: soc, p_dias: dias }),
+  // Revisa el comprobante escrito o escogido (solo informa: repetido, fecha, empresa). Nunca detiene el cobro.
+  revisar: (soc, ref, venta = null) => rpc('fx_sinpe_ref_revisar', { p_soc: soc, p_ref: ref, p_venta: venta }),
   usar: (pago, usado = true, venta = null) => rpc('fx_sinpe_usar', { p_pago: pago, p_usado: usado, p_venta: venta }),
 };

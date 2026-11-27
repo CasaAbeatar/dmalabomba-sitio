@@ -2,7 +2,7 @@ name: Prueba en Windows
 on:
   workflow_dispatch:
   push:
-    branches: [prueba-windows, 'pantalla-*', 'perfeccion-*']
+    branches: [prueba-windows, 'pantalla-*', 'perfeccion-*', 'sinpe-caja-*']
 permissions:
   contents: write
 jobs:
@@ -28,6 +28,16 @@ jobs:
         run: |
           Copy-Item ../facturacion ./facturacion -Recurse
           node prueba.mjs
+        continue-on-error: true
+      - name: Probar SINPE en la caja (lógica y emisor de la pantalla del cliente)
+        shell: pwsh
+        working-directory: pruebas windows
+        run: node "prueba sinpe unidad.mjs"
+        continue-on-error: true
+      - name: Probar SINPE en la caja en Chrome (indicador, monto exacto, comprobante, pantalla del cliente)
+        shell: pwsh
+        working-directory: pruebas windows
+        run: node "prueba sinpe caja.mjs"
         continue-on-error: true
       - name: Probar «Ver factura (PDF)» y «Consultar con Claude» en Chrome
         shell: pwsh

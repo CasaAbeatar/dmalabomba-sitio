@@ -97,3 +97,22 @@
 .sinpe-resumen strong{font-size:1.15rem}
 .sinpe-dia{display:flex;justify-content:space-between;gap:.6rem}
 .sinpe-dia-total{text-transform:none;letter-spacing:0;font-variant-numeric:tabular-nums}
+
+/* SINPE en la caja (27 nov 2026): indicador del teléfono, monto exacto y notas del comprobante. Sin negro; el estado siempre se dice con palabras, no solo con color. */
+.sinpe-ind{display:flex;align-items:flex-start;gap:.5rem;padding:.4rem 1rem;border-bottom:1px solid var(--linea);font-size:.92rem;color:var(--s-tinta)}
+.sinpe-ind[hidden]{display:none}
+.sinpe-ind-punto{flex:none;width:.7rem;height:.7rem;margin-top:.42rem;border-radius:50%;background:#2e9e5b}
+.sinpe-ind[data-nivel=atraso],.sinpe-ind[data-nivel=sin]{background:var(--ambar-suave);color:#7a4f00;border-bottom-color:var(--borde-ambar)}
+.sinpe-ind[data-nivel=atraso] .sinpe-ind-punto,.sinpe-ind[data-nivel=sin] .sinpe-ind-punto{background:#c47a00}
+.sinpe-ind-txt{min-width:0;overflow-wrap:anywhere}
+.sinpe-fila.exacto{background:#eaf6ef;box-shadow:inset 4px 0 0 #2e9e5b}
+.sinpe-chip.exacto{color:#14573a;border-color:#2e9e5b;background:#fff;font-weight:600}
+.sinpe-flot-sen{margin-left:.45rem;padding:.05rem .5rem;border-radius:999px;border:1px solid var(--borde-ambar);background:var(--ambar-suave);color:#7a4f00;font-size:.78rem;font-weight:600;white-space:nowrap}
+.sinpe-flot-sen[hidden]{display:none}
+.sinpe-ref-notas{display:flex;flex-direction:column;gap:.35rem;margin:.35rem 0 .2rem}
+.sinpe-ref-notas[hidden]{display:none}
+.sinpe-ref-nota{margin:0;padding:.45rem .75rem;border-radius:10px;border:1px solid var(--linea2);background:#fdfbf7;color:var(--s-tinta,#24402f);font-size:.92rem;overflow-wrap:anywhere}
+.sinpe-ref-nota.aviso{border-color:var(--borde-ambar);background:var(--ambar-suave);color:#7a4f00;font-weight:600}
+.sinpe-ref-nota.ok{border-color:#2e9e5b;background:#eaf6ef;color:#14573a}
+.sinpe-ref-nota.aviso::before{content:'⚠ '}
+.sinpe-ref-nota.ok::before{content:'✓ '}

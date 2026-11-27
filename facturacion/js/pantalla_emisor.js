@@ -4,6 +4,7 @@
 // Los montos son los mismos que muestra la caja (misma fórmula de IVA y de descuentos que el pie de la cuenta en m_caja.js).
 import { tarifaDeLinea } from './iva.js';
 import { abrirClienteEnOtraPantalla, abrirManual, detenerVentana } from './pantalla_ventana.js';
+import { sinpeSeguro } from './sinpe_comprobante.js';
 
 export const NOMBRE_CANAL = 'lb-pantalla-cliente'; // BroadcastChannel entre la ventana de la caja y la ventana del cliente (mismo navegador y mismo origen)
 export const RUTA_CLIENTE = new URL('../cliente/', import.meta.url).href;
@@ -73,6 +74,7 @@ export function iniciar(app, opciones = {}) {
   let ackEn = 0;           // cuándo contestó por última vez la ventana del cliente
   let modo = 'cuenta';     // cuenta | pago (hay una ventana de cobro abierta)
   let correosOff = [];     // correos desactivados por la cajera en el cobro (solo de la venta en curso)
+  let sinpeVenta = null;   // SINPE que la cajera ligó a ESTA venta en el cobro: { nombre, monto, ventaId }. Solo así el cliente ve «Pago recibido» (27 nov 2026); se borra al cerrar el cobro o terminar
   let ultimo = null;       // último cuerpo de «estado» publicado (sin ts)
   let ultimoJson = '';
   let retieneHasta = 0, timerRetencion = null;
@@ -150,11 +152,13 @@ export function iniciar(app, opciones = {}) {
       enviar('estado', { ...completo, ts: Date.now() });
     } catch { fallos++; }
   }
+  // «Pago recibido ₡X» con el nombre del pagador: solo en el cobro, y solo si el SINPE está ligado a la venta que se está cobrando
+  const sinpeDe = (cur) => (sinpeVenta && cur?.venta?.id && sinpeVenta.ventaId === cur.venta.id ? { nombre: sinpeVenta.nombre, monto: sinpeVenta.monto } : null);
   const cuerpo = (estado, cur, extra = {}) => {
     const m = montosDe(cur);
-    return { estado, empresa: empresa(), lineas: m.lineas, subtotal: m.subtotal, descuento: m.descuento, iva: m.iva, total: m.total, medio: null, recibido: null, vuelto: null, cliente: clienteDe(cur, correosOff), ...extra };
+    return { estado, empresa: empresa(), lineas: m.lineas, subtotal: m.subtotal, descuento: m.descuento, iva: m.iva, total: m.total, medio: null, recibido: null, vuelto: null, cliente: clienteDe(cur, correosOff), sinpe: estado === 'pago' ? sinpeDe(cur) : null, ...extra };
   };
-  const cuerpoEspera = () => ({ estado: 'espera', empresa: empresa(), lineas: [], subtotal: 0, descuento: 0, iva: 0, total: 0, medio: null, recibido: null, vuelto: null, cliente: null });
+  const cuerpoEspera = () => ({ estado: 'espera', empresa: empresa(), lineas: [], subtotal: 0, descuento: 0, iva: 0, total: 0, medio: null, recibido: null, vuelto: null, cliente: null, sinpe: null });
 
   /* ---------- Segunda ventana: se abre sola en la otra pantalla (Window Management API); si no se puede, no pasa nada ---------- */
   function abrirVentanaCliente() {
@@ -168,7 +172,7 @@ export function iniciar(app, opciones = {}) {
         if (!activo) return;
         const hayLineas = !!cur && (cur.lineas || []).length > 0;
         if (Date.now() < retieneHasta) { if (!hayLineas) return; retieneHasta = 0; clearTimeout(timerRetencion); } // acaba de pagarse: la caja vacía espera a que termine el «pagado»
-        if (!hayLineas) { modo = 'cuenta'; publicar(cuerpoEspera()); return; }
+        if (!hayLineas) { modo = 'cuenta'; sinpeVenta = null; publicar(cuerpoEspera()); return; }
         publicar(cuerpo(modo === 'pago' ? 'pago' : 'cuenta', cur));
       } catch { fallos++; }
     },
@@ -179,12 +183,20 @@ export function iniciar(app, opciones = {}) {
         if (activo && ultimo && ultimo.cliente && ultimo.estado !== 'pagado') publicar({ ...ultimo, cliente: { ...ultimo.cliente, correo_off: correosOff } });
       } catch { fallos++; }
     },
+    // La cajera escogió (o quitó) el SINPE de esta venta en el cobro. d = { nombre, monto } o null. La pantalla del cliente lo muestra al instante.
+    sinpe(d, ventaId) {
+      try {
+        const s = sinpeSeguro(d);
+        sinpeVenta = s && ventaId ? { ...s, ventaId } : null;
+        if (activo && ultimo && ultimo.estado === 'pago') publicar({ ...ultimo, sinpe: sinpeVenta ? { nombre: sinpeVenta.nombre, monto: sinpeVenta.monto } : null });
+      } catch { fallos++; }
+    },
     // Se abrió la ventana de cobro
     pago(cur) {
       try { if (!activo || !cur || !(cur.lineas || []).length) return; modo = 'pago'; publicar(cuerpo('pago', cur)); } catch { fallos++; }
     },
     // La ventana de cobro se cerró sin cobrar
-    cerrarPago(cur) { modo = 'cuenta'; api.cuenta(cur); },
+    cerrarPago(cur) { modo = 'cuenta'; sinpeVenta = null; api.cuenta(cur); },
     // El cobro salió bien. comp = comprobante del servidor; vueltoLocal = vuelto calculado en la caja (solo si el servidor no lo trajo)
     pagado(comp, vueltoLocal) {
       try {
@@ -199,7 +211,9 @@ export function iniciar(app, opciones = {}) {
         modo = 'cuenta';
         retieneHasta = Date.now() + RETENCION_PAGADO;
         clearTimeout(timerRetencion);
-        const base = { ...ultimo, estado: 'pagado', medio, recibido: conEfectivo && recibido > 0 ? r2(recibido) : null, vuelto, cliente: soloCorreo(ultimo.cliente) };
+        const conSinpe = medios.includes('sinpe') ? sinpeVenta : null; // el cliente solo ve el SINPE si de verdad se cobró con SINPE
+        sinpeVenta = null;
+        const base = { ...ultimo, estado: 'pagado', sinpe: conSinpe ? { nombre: conSinpe.nombre, monto: conSinpe.monto } : null, medio, recibido: conEfectivo && recibido > 0 ? r2(recibido) : null, vuelto, cliente: soloCorreo(ultimo.cliente) };
         ultimoJson = JSON.stringify(base); ultimo = base;
         enviar('estado', { ...base, ts: Date.now() });
         timerRetencion = setTimeout(() => { if (activo && ultimo && ultimo.estado === 'pagado') publicar(cuerpoEspera()); }, RETENCION_PAGADO);
@@ -209,7 +223,7 @@ export function iniciar(app, opciones = {}) {
     detener() {
       if (!activo) return;
       try { publicar(cuerpoEspera()); } catch { /* sin aviso */ }
-      activo = false;
+      activo = false; sinpeVenta = null;
       detenerVentana();
       timers.forEach(clearInterval); clearTimeout(timerRetencion);
       try { window.removeEventListener('pointerdown', alPrimerToque, true); } catch { /* ya quitado */ }

@@ -182,3 +182,17 @@ body[data-pub-cuenta=no] #v-cuenta{right:0}
   #v-pagado.con-cli.sin-vuelto .pd-total{font-size:calc(19rem*var(--ajuste))}
   #v-pagado.con-cli .pd-vuelto{font-size:calc(11rem*var(--ajuste));padding:1.2rem 3rem}
 }
+
+/* «Pago recibido ₡X» por SINPE Móvil, con el nombre de quien pagó (27 nov 2026). Solo aparece cuando la cajera ligó ese SINPE a la venta. */
+.pg-sinpe{margin-top:2.4rem;padding:2.2rem 4rem;border:var(--fino) solid var(--verde);border-radius:2rem;background:var(--verde-suave);color:var(--verde);text-align:center;max-width:92%}
+.pg-sinpe-t{font-size:6.4rem;font-weight:800;line-height:1.1;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.pg-sinpe-n{font-size:4.2rem;margin-top:.8rem;color:var(--tinta);overflow-wrap:anywhere}
+#v-pago.con-sinpe .pg-medio{display:none}
+#v-pago.con-sinpe:not(.con-cli) .pg-total{font-size:calc(22rem*var(--ajuste));margin:1.2rem 0 1.4rem}
+#v-pago.con-sinpe.con-cli{padding:2.4rem 6rem}
+#v-pago.con-sinpe.con-cli .pg-total{font-size:calc(15rem*var(--ajuste));margin:.6rem 0 1rem}
+#v-pago.con-sinpe.con-cli .pg-sinpe{margin-top:1rem;padding:1.2rem 3rem}
+#v-pago.con-sinpe.con-cli .pg-sinpe-t{font-size:4.6rem}
+#v-pago.con-sinpe.con-cli .pg-sinpe-n{font-size:3.2rem;margin-top:.4rem}
+.pd-sinpe{font-size:3.6rem;color:var(--verde);margin:-1rem 0 2.4rem;overflow-wrap:anywhere;max-width:92%}
+#v-pagado.con-cli .pd-sinpe{font-size:3rem;margin:-.6rem 0 1.4rem}

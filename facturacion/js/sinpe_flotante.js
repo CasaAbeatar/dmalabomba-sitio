@@ -4,6 +4,7 @@
 import { h } from './util.js';
 import { listaSinpe, cargarCssSinpe } from './ui_sinpe.js';
 import { sinpe as apiSinpe } from './api_sinpe.js';
+import { indicadorTelefono } from './sinpe_comprobante.js';
 
 const ssGet = (k) => { try { const v = sessionStorage.getItem(k); return v === null ? null : JSON.parse(v); } catch { return null; } };
 const ssSet = (k, v) => { try { sessionStorage.setItem(k, JSON.stringify(v)); } catch { /* sin almacenamiento: la marca «nuevo» vale solo mientras la pantalla está abierta */ } };
@@ -13,14 +14,18 @@ export function flotanteSinpe({ soc, empresa = 'soda', api = apiSinpe, intervalo
   const clave = 'fx_sinpe_vistos_' + (soc || '');
   const previo = ssGet(clave);
   let vistos = Array.isArray(previo) ? new Set(previo) : null; // null: todavía no se conoce lo que ya había (la primera consulta fija el punto de partida sin marcar nada como nuevo)
+  let ind = null; // indicador del teléfono de SINPE (27 nov 2026): si no da señal, la pastilla lo dice con palabras («sin señal»); solo informa
   let abierto = false, nuevo = false, muerto = false, sondeando = false, lista = null, ventana = null;
   const guardar = () => ssSet(clave, [...vistos].slice(-300));
   const marca = h('span.sinpe-flot-nuevo', { hidden: true }, 'nuevo');
+  const sen = h('span.sinpe-flot-sen', { hidden: true }, 'sin señal');
   const pastilla = h('button.sinpe-flot-pastilla', { type: 'button', dataset: { emp: empresa }, 'aria-haspopup': 'dialog', 'aria-expanded': 'false', onclick: () => abrir() },
-    h('span.sinpe-flot-texto', 'Ver SINPE'), marca);
+    h('span.sinpe-flot-texto', 'Ver SINPE'), marca, sen);
   const pintarPastilla = () => {
     marca.hidden = !nuevo;
-    pastilla.setAttribute('aria-label', nuevo ? 'Ver la lista de SINPE: hay un SINPE nuevo' : 'Ver la lista de SINPE');
+    const sinSenal = !!ind && ind.nivel !== 'ok';
+    sen.hidden = !sinSenal; pastilla.dataset.senal = ind ? ind.nivel : '';
+    pastilla.setAttribute('aria-label', (nuevo ? 'Ver la lista de SINPE: hay un SINPE nuevo' : 'Ver la lista de SINPE') + (sinSenal ? '. El teléfono de SINPE no da señal' : ''));
     pastilla.classList.toggle('abierta', abierto);
   };
   const verIds = (r) => {
@@ -34,6 +39,8 @@ export function flotanteSinpe({ soc, empresa = 'soda', api = apiSinpe, intervalo
     try {
       const x = await api.lista(soc);
       if (muerto || abierto || !x || x.activa === false) return;
+      const nuevoInd = indicadorTelefono(x);
+      if ((nuevoInd && nuevoInd.nivel) !== (ind && ind.nivel)) { ind = nuevoInd; pintarPastilla(); }
       if (verIds(x) && !nuevo) { nuevo = true; pintarPastilla(); }
     } catch { /* sin respuesta: la pastilla se queda como está; el cobro no depende de ella */ }
     finally { sondeando = false; }

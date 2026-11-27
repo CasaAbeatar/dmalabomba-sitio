@@ -4,6 +4,7 @@
 // nunca dependen de esta lista. Opcional: tocar un SINPE pone su comprobante en el cobro (fact.pagos.referencia) y lo marca «Ya lo usé».
 import { h, money, horaCorta, textoDeError } from './util.js';
 import { sinpe as apiSinpe } from './api_sinpe.js';
+import { indicadorTelefono, esExacto, revisarComprobante, refConsultable } from './sinpe_comprobante.js';
 
 const CSS_SINPE = new URL('../css/sinpe.css', import.meta.url).href;
 export function cargarCssSinpe() {
@@ -54,8 +55,9 @@ export function nombreDia(d, ahora) {
 }
 
 // opciones: soc (id de la empresa), empresa ('soda'|'pollos'), alEscoger(pago) (si existe, cada SINPE se puede escoger para el cobro), alQuitar(pago),
-// ventaId / ventaNumero (a qué venta queda ligado un SINPE escogido: «Usado en la venta N»), api, intervaloMs
-export function listaSinpe({ soc, empresa = 'soda', alEscoger = null, alQuitar = null, ventaId = null, ventaNumero = '', api = apiSinpe, intervaloMs = 6000, titulo = 'SINPE Móvil recibidos', alCargar = null, periodos = false } = {}) {
+// ventaId / ventaNumero (a qué venta queda ligado un SINPE escogido: «Usado en la venta N»), api, intervaloMs,
+// total (monto del cobro en curso: si un SINPE de hoy sin usar tiene exactamente ese monto, su fila se resalta con «Coincide con el cobro»)
+export function listaSinpe({ soc, empresa = 'soda', alEscoger = null, alQuitar = null, ventaId = null, ventaNumero = '', api = apiSinpe, intervaloMs = 6000, titulo = 'SINPE Móvil recibidos', alCargar = null, periodos = false, total = null } = {}) {
   cargarCssSinpe();
   // periodos (Administración y perfil de Dixia, 19 nov 2026): Hoy / Esta semana / Este mes, cada pago uno por uno y con el total de cada día y del período
   let dias = periodos ? diasDe('hoy') : undefined, periodo = 'hoy';
@@ -67,6 +69,10 @@ export function listaSinpe({ soc, empresa = 'soda', alEscoger = null, alQuitar =
   buscador.addEventListener('input', () => { consulta = buscador.value; pintarFilas(); });
   const cuerpo = h('div.sinpe-filas', { role: 'list' });
   const ultimo = h('span.sinpe-ultimo', { role: 'status' }, 'Buscando los avisos del banco…');
+  // Indicador del teléfono (27 nov 2026): dice con palabras y punto si el teléfono de SINPE dio señal hace poco; solo informa
+  const indPunto = h('span.sinpe-ind-punto', { 'aria-hidden': 'true' });
+  const indTxt = h('span.sinpe-ind-txt');
+  const indicador = h('div.sinpe-ind', { role: 'status', hidden: true }, indPunto, indTxt);
   const actualizado = h('span.sinpe-act', { role: 'status' }, '');
   const btnActualizar = h('button.btn.sinpe-refrescar', { type: 'button', onclick: () => cargar(true) }, 'Refrescar');
   const aviso = h('div.sinpe-aviso', { hidden: true, role: 'status' });
@@ -76,12 +82,14 @@ export function listaSinpe({ soc, empresa = 'soda', alEscoger = null, alQuitar =
       onclick: () => { periodo = id; dias = diasDe(id); r = null; botones.forEach((b) => { const on = b.dataset.periodo === id; b.classList.toggle('primario', on); b.setAttribute('aria-pressed', String(on)); }); pintarFilas(); cargar(true); } }, txt));
     return h('div.sinpe-periodos', { role: 'group', 'aria-label': 'Período' }, botones);
   }
-  raiz.append(
+  // (el selector de período solo existe en Administración: raiz.append(null) escribiría la palabra «null» en la pantalla, por eso se filtra)
+  raiz.append(...[
     h('div.sinpe-banda', h('span', titulo), h('span.sinpe-hoy', 'Más reciente primero')),
     h('div.sinpe-barra', h('div.sinpe-barra-txt', ultimo, actualizado), btnActualizar),
+    indicador,
     periodos ? selectorPeriodo() : null,
     h('div.sinpe-buscar', buscador),
-    aviso, resumenPeriodo, cuerpo);
+    aviso, resumenPeriodo, cuerpo].filter(Boolean));
 
   const usado = (p) => !!p.usado || locales.has(p.id);
   const ventaDe = (p) => p.usado_venta || locales.get(p.id) || '';
@@ -90,6 +98,8 @@ export function listaSinpe({ soc, empresa = 'soda', alEscoger = null, alQuitar =
     ultimo.textContent = r ? textoUltimoAviso(r) : (falla ? 'No se pudo consultar el banco ahora.' : 'Buscando los avisos del banco…');
     btnActualizar.disabled = cargando && manualActiva; btnActualizar.textContent = cargando && manualActiva ? 'Actualizando…' : 'Refrescar';
     actualizado.textContent = cargando && manualActiva ? 'Actualizando…' : (actualizadoEn ? 'Actualizado a las ' + horaConSegundos(actualizadoEn) : '');
+    const ind = r ? indicadorTelefono(r) : null;
+    indicador.hidden = !ind; if (ind) { indicador.dataset.nivel = ind.nivel; indTxt.textContent = ind.texto; }
     aviso.hidden = !falla; aviso.textContent = falla ? falla + ' Se puede tocar «Refrescar» para intentar otra vez; el cobro no depende de esta lista.' : '';
     if (!r) { cuerpo.replaceChildren(h('p.sinpe-vacio', falla ? '' : 'Cargando los SINPE Móvil recibidos…')); return; }
     const todos = [...(r.pagos || [])].sort((a, b) => new Date(b.hora) - new Date(a.hora));
@@ -112,17 +122,19 @@ export function listaSinpe({ soc, empresa = 'soda', alEscoger = null, alQuitar =
   }
   function fila(p) {
     const u = usado(p);
+    const exacto = esExacto(p, total, u, r?.ahora || Date.now());
     const nombre = p.pagador || 'Sin nombre en el aviso';
     const sub = [p.telefono, p.detalle].filter(Boolean).join(' · ');
     const izq = h('div.sinpe-izq', h('strong.sinpe-nombre', nombre), h('small', sub || 'Sin detalle en el aviso'));
     const der = h('div.sinpe-der', h('strong.sinpe-monto', money(p.monto)), h('small', horaCorta(p.hora) + (p.comprobante ? ' · comprobante ' + p.comprobante : ' · sin comprobante')));
-    const marca = u ? h('span.sinpe-chip.neutro', '● ' + (ventaDe(p) ? 'Usado en la venta ' + ventaDe(p) : 'Ya lo usé') + (p.usado_por ? ' (' + p.usado_por + ')' : '')) : null;
+    const marca = u ? h('span.sinpe-chip.neutro', '● ' + (ventaDe(p) ? 'Usado en la venta ' + ventaDe(p) : 'Ya lo usé') + (p.usado_por ? ' (' + p.usado_por + ')' : ''))
+      : exacto ? h('span.sinpe-chip.exacto', '✓ Coincide con el cobro') : null;
     const accion = alEscoger
       ? (u
         ? h('button.btn.chico', { type: 'button', 'aria-label': 'Quitar la marca del SINPE de ' + nombre, onclick: (e) => { e.stopPropagation(); quitar(p); } }, 'Quitar')
         : h('button.btn.chico.primario', { type: 'button', 'aria-label': 'Escoger el SINPE de ' + nombre + ' por ' + money(p.monto), onclick: () => escoger(p) }, 'Escoger este SINPE'))
       : null;
-    return h('div.sinpe-fila' + (u ? '.usado' : '') + (p.prueba ? '.prueba' : ''), { role: 'listitem', dataset: { id: p.id } }, izq, der, marca || h('span'), accion || h('span'));
+    return h('div.sinpe-fila' + (u ? '.usado' : '') + (exacto ? '.exacto' : '') + (p.prueba ? '.prueba' : ''), { role: 'listitem', dataset: { id: p.id } }, izq, der, marca || h('span'), accion || h('span'));
   }
   async function marcar(p, valor) {
     if (valor) locales.set(p.id, ventaNumero || ''); else locales.delete(p.id);
@@ -180,7 +192,7 @@ export function escogerSinpe({ soc, empresa = 'soda', ventaId, ventaNumero = '',
   }
   function mostrarLista() {
     if (lista || muerto || elegido) return;
-    lista = listaSinpe({ soc, empresa, ventaId, ventaNumero, api,
+    lista = listaSinpe({ soc, empresa, ventaId, ventaNumero, api, total,
       alEscoger: (p) => { elegido = p; recoger(); pintarElegido(); alCambiar(p); },
       alQuitar: (p) => { if (elegido && elegido.id === p.id) { elegido = null; pintarElegido(); alCambiar(null); mostrarLista(); } } });
     hueco.replaceChildren(lista.el); nota.hidden = false;
@@ -193,4 +205,30 @@ export function escogerSinpe({ soc, empresa = 'soda', ventaId, ventaNumero = '',
     conservar() { conservado = true; }, // el cobro salió: el SINPE queda «Usado en la venta N»
     destruir() { muerto = true; if (elegido && !conservado) quitar(); recoger(); },
   };
+}
+
+// Notas bajo el campo del comprobante del cobro (27 nov 2026): le pregunta a la base si ese comprobante ya se usó en otra venta, si es de hoy y si es de esta empresa.
+// Solo informa: no toca el botón Cobrar ni nada del cobro. Sin respuesta o sin bandera, no dice nada.
+export function notasComprobante({ soc, ventaId = null, total = 0, api = apiSinpe, esperaMs = 450 } = {}) {
+  const el = h('div.sinpe-ref-notas', { hidden: true, role: 'status', 'aria-live': 'polite' });
+  let seq = 0, timer = null, muerto = false; const cache = new Map();
+  const limpiar = () => { el.hidden = true; el.replaceChildren(); };
+  function pintar(res) {
+    const notas = revisarComprobante(res, { total });
+    el.hidden = !notas.length;
+    el.replaceChildren(...notas.map((n) => h('p.sinpe-ref-nota.' + n.tono, n.texto)));
+  }
+  function revisar(ref, activo = true) {
+    clearTimeout(timer); const mi = ++seq; const t = String(ref ?? '').trim();
+    if (muerto || !activo || !refConsultable(t)) { limpiar(); return; }
+    if (cache.has(t)) { pintar(cache.get(t)); return; }
+    timer = setTimeout(async () => {
+      try {
+        const res = await api.revisar(soc, t, ventaId);
+        if (muerto || mi !== seq) return;
+        cache.set(t, res); pintar(res);
+      } catch { if (!muerto && mi === seq) limpiar(); } // sin respuesta: no se dice nada; el cobro sigue igual
+    }, esperaMs);
+  }
+  return { el, revisar, olvidar: () => cache.clear(), destruir() { muerto = true; clearTimeout(timer); limpiar(); } };
 }
