@@ -137,7 +137,7 @@ public class GuardianInstrumentedTest {
             assertTrue("falta detalle." + k, d.has(k));
         }
         assertEquals(BuildConfig.VERSION_NAME, d.getString("app"));
-        assertEquals("2.12.0", d.getString("app"));
+        assertEquals("2.12.1", d.getString("app"));
         // 2.12.0: salud ampliada (llaves planas)
         for (String k : new String[]{"sms_inbox_ultimo_ms", "sms_sin_reenviar", "adb_activo", "adb_puerto", "actualizacion_estado"}) {
             assertTrue("falta detalle." + k, d.has(k));
@@ -509,6 +509,19 @@ public class GuardianInstrumentedTest {
             assertTrue(new GuardianState(ctx).confirmado("wifi"));
             onView(allOf(withId(R.id.h_done), isDescendantOfA(withTagValue(equalTo((Object) "wifi")))))
                     .perform(scrollTo()).check(matches(withText(R.string.health_btn_undo)));
+        }
+    }
+
+    /** 2.12.1: desde Android 10 la fila de Wi-Fi en suspensión explica el ajuste por app y abre la información de la app. */
+    @Test
+    public void filaWifiSuspensionUsaElTextoYElBotonSegunLaVersionDeAndroid() {
+        HealthCheck.Item w = null;
+        for (HealthCheck.Item i : HealthCheck.evaluar(ctx)) if (i.id.equals(HealthCheck.WIFI)) w = i;
+        assertTrue(w != null);
+        if (android.os.Build.VERSION.SDK_INT >= 29) {
+            assertEquals(R.string.h_wifi_btn_29, w.boton);
+        } else {
+            assertEquals(R.string.h_wifi_btn, w.boton);
         }
     }
 

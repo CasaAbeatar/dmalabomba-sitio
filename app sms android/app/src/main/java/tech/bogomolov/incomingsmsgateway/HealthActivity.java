@@ -277,7 +277,11 @@ public class HealthActivity extends AppCompatActivity {
                 abrirAjuste(it.id, enRecorrido, new Intent[0]);   // cae a la información de la app
                 break;
             case HealthCheck.WIFI:
-                abrirAjuste(it.id, enRecorrido, new Intent(Settings.ACTION_WIFI_SETTINGS));
+                if (Build.VERSION.SDK_INT >= 29) {
+                    abrirAjuste(it.id, enRecorrido, new Intent[0]);   // 2.12.1: cae a la información de la app (allí está «Batería»)
+                } else {
+                    abrirAjuste(it.id, enRecorrido, new Intent(Settings.ACTION_WIFI_SETTINGS));
+                }
                 break;
             case HealthCheck.LATIDO:
                 latido(it, enRecorrido);

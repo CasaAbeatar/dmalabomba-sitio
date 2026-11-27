@@ -123,7 +123,7 @@ jobs:
       - name: Construir las versiones de prueba (mismo certificado de depuracion) y una firmada con OTRO certificado
         run: |
           mkdir -p act-apks
-          gradle assembleDebug
+          gradle assembleDebug -PvcPrueba=22 -PvnPrueba=2.12.0
           cp app/build/outputs/apk/debug/app-debug.apk act-apks/apk-22.apk
           gradle assembleDebug -PvcPrueba=23 -PvnPrueba=2.12.1
           cp app/build/outputs/apk/debug/app-debug.apk act-apks/apk-23.apk

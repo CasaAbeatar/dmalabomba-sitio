@@ -202,8 +202,10 @@ public final class HealthCheck {
         Item w = new Item(WIFI, R.string.h_wifi_title);
         w.manual = true;
         w.ok = st.confirmado(WIFI);
-        w.ayuda = ctx.getString(w.ok ? R.string.health_marked_by_you : R.string.h_wifi_bad);
-        w.boton = R.string.h_wifi_btn;
+        boolean sinAjusteGeneral = Build.VERSION.SDK_INT >= 29;   // 2.12.1: desde Android 10 ese ajuste general ya no existe
+        w.ayuda = ctx.getString(w.ok ? R.string.health_marked_by_you
+                : (sinAjusteGeneral ? R.string.h_wifi_bad_29 : R.string.h_wifi_bad));
+        w.boton = sinAjusteGeneral ? R.string.h_wifi_btn_29 : R.string.h_wifi_btn;
         l.add(w);
 
         HeartbeatSettings hs = HeartbeatSettings.load(ctx);

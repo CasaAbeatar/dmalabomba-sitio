@@ -144,6 +144,8 @@
     <string name="h_wifi_title">Wi-Fi activo con la pantalla apagada</string>
     <string name="h_wifi_bad">Para que el Wi-Fi no se apague cuando el teléfono duerme: Ajustes, Wi-Fi, Más ajustes (o Ajustes avanzados) y deje «Mantener Wi-Fi activo en suspensión» en «Siempre». Cuando termine, toque «Ya lo hice».</string>
     <string name="h_wifi_btn">Abrir los ajustes de Wi-Fi</string>
+    <string name="h_wifi_bad_29">En este teléfono (Android 10 o más nuevo) el Wi-Fi en suspensión no tiene un ajuste general. Abra «Batería» en la información de la app y deje las opciones de red y de espera de «Sms Forwarder» sin restricción («Permitir», «No restringir» o «Siempre»). Si su teléfono no las tiene, no hace falta: la app mantiene la conexión y pasa a datos móviles si el Wi-Fi se duerme. Cuando termine, toque «Ya lo hice».</string>
+    <string name="h_wifi_btn_29">Abrir la información de la app</string>
 
     <string name="h_hb_title">Último latido enviado</string>
     <string name="h_hb_off">El latido está apagado, así que el servidor no puede saber si el teléfono está vivo. Toque el botón para encenderlo en Ajustes.</string>
