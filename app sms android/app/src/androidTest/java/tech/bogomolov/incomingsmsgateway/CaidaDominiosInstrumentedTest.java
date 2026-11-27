@@ -155,6 +155,7 @@ public class CaidaDominiosInstrumentedTest {
         final String vivo = "http://127.0.0.1:" + servidor.getLocalPort() + "/latido";
         RutasAlternas.paraPrueba = url -> new ArrayList<>(Arrays.asList(muerto, vivo));
         Request r = new Request(muerto, "{\"tipo\":\"latido\"}");
+        r.setUseChunkedMode(false);   // el servidor de prueba lee Content-Length (el latido real tambien va asi)
         r.setSignatureHeader("clave", "{\"tipo\":\"latido\"}");
         assertEquals(Request.RESULT_SUCCESS, r.execute());
         assertEquals(vivo, r.getUrlUsada());
