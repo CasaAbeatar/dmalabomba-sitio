@@ -39,7 +39,7 @@
   {
    "nombre": "[escritorio] Comprobante «repetido» muestra su nota",
    "ok": true,
-   "detalle": "Este comprobante ya se usó en la venta #007. Revise que no sea el mismo SINPE cobrado dos veces. |  | Es un SINPE recibido hoy a las 10:23 por ₡8 250."
+   "detalle": "Este comprobante ya se usó en la venta #007. Revise que no sea el mismo SINPE cobrado dos veces. |  | Es un SINPE recibido hoy a las 11:17 por ₡8 250."
   },
   {
    "nombre": "[escritorio] Comprobante «otro día» muestra su nota",
@@ -59,7 +59,7 @@
   {
    "nombre": "[escritorio] Comprobante «de hoy» muestra su nota",
    "ok": true,
-   "detalle": "Es un SINPE recibido hoy a las 10:33 por ₡8 250."
+   "detalle": "Es un SINPE recibido hoy a las 11:27 por ₡8 250."
   },
   {
    "nombre": "[escritorio] Sin comprobante válido, con SINPE apagado o con la base caída no se dice nada ni se rompe",
@@ -114,7 +114,7 @@
   {
    "nombre": "[telefono] Comprobante «repetido» muestra su nota",
    "ok": true,
-   "detalle": "Este comprobante ya se usó en la venta #007. Revise que no sea el mismo SINPE cobrado dos veces. |  | Es un SINPE recibido hoy a las 10:23 por ₡8 250."
+   "detalle": "Este comprobante ya se usó en la venta #007. Revise que no sea el mismo SINPE cobrado dos veces. |  | Es un SINPE recibido hoy a las 11:17 por ₡8 250."
   },
   {
    "nombre": "[telefono] Comprobante «otro día» muestra su nota",
@@ -134,7 +134,7 @@
   {
    "nombre": "[telefono] Comprobante «de hoy» muestra su nota",
    "ok": true,
-   "detalle": "Es un SINPE recibido hoy a las 10:33 por ₡8 250."
+   "detalle": "Es un SINPE recibido hoy a las 11:27 por ₡8 250."
   },
   {
    "nombre": "[telefono] Sin comprobante válido, con SINPE apagado o con la base caída no se dice nada ni se rompe",

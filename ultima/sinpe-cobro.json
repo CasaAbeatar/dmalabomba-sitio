@@ -1,0 +1,80 @@
+{
+ "navegador": "158.0.8127.89",
+ "pruebas": [
+  {
+   "nombre": "[A] Abrir caja con el usuario de caja de la empresa de pruebas",
+   "ok": true,
+   "detalle": ""
+  },
+  {
+   "nombre": "[A] La pastilla «Ver SINPE» está en la caja y la caja no escribe «null»",
+   "ok": true,
+   "detalle": ""
+  },
+  {
+   "nombre": "[A] Lista flotante: muestra los SINPE y el indicador del teléfono, sin «null»",
+   "ok": true,
+   "detalle": ""
+  },
+  {
+   "nombre": "[A] Pantalla del cliente: al abrir el cobro pasa a «pago» sin «Pago recibido» ni nombre",
+   "ok": true,
+   "detalle": ""
+  },
+  {
+   "nombre": "[A] Cobro con SINPE: indicador «conectado», sin «null», y «Cobrar» disponible sin escoger nada",
+   "ok": true,
+   "detalle": "{\"ind\":\"ok\",\"cobrarOff\":false}"
+  },
+  {
+   "nombre": "[A] Monto exacto: se resaltan solo los de hoy y sin usar del mismo monto (p1 y p2), no el de ayer ni el de otro monto",
+   "ok": true,
+   "detalle": "p1,p2"
+  },
+  {
+   "nombre": "[A] Escoger un SINPE de la lista llena el comprobante",
+   "ok": true,
+   "detalle": "2026112715284002322660417"
+  },
+  {
+   "nombre": "[A] Pantalla del cliente con el pago ligado: «Pago recibido ₡7 500» y el nombre del pagador",
+   "ok": true,
+   "detalle": "TOTAL A PAGAR ₡7 500 ✓ Pago recibido ₡7 500 SINPE Móvil de Araica Larios Tiffany Melanie Cerrar pantalla"
+  },
+  {
+   "nombre": "[A] La base anota el SINPE como usado en esta venta",
+   "ok": true,
+   "detalle": "#001"
+  },
+  {
+   "nombre": "[A] Retirar el SINPE: el comprobante se vacía y la lista vuelve",
+   "ok": true,
+   "detalle": "\"\""
+  },
+  {
+   "nombre": "[A] Retirar el SINPE: la pantalla del cliente deja de mostrar el pago y el nombre",
+   "ok": true,
+   "detalle": ""
+  },
+  {
+   "nombre": "[A] Retirar el SINPE: la base lo libera",
+   "ok": true,
+   "detalle": ""
+  },
+  {
+   "nombre": "[A] Sin SINPE escogido «Cobrar» sigue disponible",
+   "ok": true,
+   "detalle": ""
+  },
+  {
+   "nombre": "[A] Cerrar el cobro con un SINPE escogido: la pantalla del cliente vuelve a la cuenta sin nombre",
+   "ok": true,
+   "detalle": ""
+  },
+  {
+   "nombre": "[A] Cerrar el cobro con un SINPE escogido: la base lo libera y la cuenta sigue abierta",
+   "ok": true,
+   "detalle": ""
+  }
+ ]
+}
