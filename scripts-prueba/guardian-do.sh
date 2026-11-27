@@ -15,7 +15,8 @@ nota "1. convertir en Device Owner"
 adb shell dpm set-device-owner $P/.GuardianAdminReceiver 2>&1 | tee guardian-do-1.txt
 adb shell dpm list-owners 2>&1 | tee -a guardian-do-1.txt
 adb shell dumpsys device_policy 2>&1 | grep -i -A3 "device owner" | head -12 | tee -a guardian-do-1.txt
-sleep 6
+# la app arranca desde cero al ser nombrada Device Owner: en un ejecutor lento tarda mas de 6 s; se espera hasta 60 s a que aplique la politica
+for i in $(seq 1 30); do [ "$(adb shell settings get global stay_on_while_plugged_in | tr -d '\r')" = 7 ] && break; sleep 2; done
 nota "2. politicas aplicadas por ser Device Owner (antes de abrir la app ni configurar nada)"
 {
   echo "stay_on_while_plugged_in=$(adb shell settings get global stay_on_while_plugged_in | tr -d '\r')"
