@@ -1,0 +1,206 @@
+# Abre la caja (pantalla del cajero) y la pantalla del cliente, las acomoda en su monitor y las vigila.
+# v3: una sola ventana 2, cerrar la ventana 1 cierra la 2, plan B de una sola pantalla y recordatorio si falta el enlace.
+function Arranque($t) { foreach ($d in @("C:\PantallaCliente\datos", $env:TEMP)) { try { Add-Content -LiteralPath "$d\arranque.txt" -Value ("{0:yyyy-MM-dd HH:mm:ss}  [abrir pid {1}] {2}" -f (Get-Date), $PID, $t) -ErrorAction Stop; return } catch { $null = 1 } } }
+trap { Arranque ("ERROR " + $_.Exception.GetType().Name + ": " + $_.Exception.Message + " (linea " + $_.InvocationInfo.ScriptLineNumber + ")"); break }
+$esAdminArr = $false; try { $esAdminArr = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator) } catch { $null = 1 }
+Arranque ("inicio. usuario " + $env:USERNAME + ", con privilegios de administrador: " + $esAdminArr)
+. "$PSScriptRoot\config.ps1"
+. "$PSScriptRoot\funciones.ps1"
+. "$PSScriptRoot\funciones v3.ps1"
+# v3.8: contingencia si el facturador no es alcanzable. Si el archivo faltara o fallara, el kit abre el facturador como siempre.
+try { . "$PSScriptRoot\funciones contingencia.ps1" }
+catch {
+  Arranque ("no se cargo funciones contingencia: " + $_.Exception.Message)
+  $script:ModoFacturador = "normal"
+  function Decidir-Apertura { return $script:UrlCajaAbrir }
+  function Vigilar-Facturador { }
+  function Puede-Abrir-Cliente { return $true }
+}
+$c = Crear-Mutex "Local\PantallaClienteLB"; $m = $c.Mutex; $tengo = $c.Tengo
+Arranque ("candado PantallaClienteLB: " + $(if ($tengo) { "obtenido" } else { "NO obtenido" }) + ". " + $c.Motivo)
+if (-not $tengo) {
+  # Ya hay una vigilancia corriendo: se le pide abrir el facturador (si la cajera cerro la caja, vuelve) y esta copia termina.
+  try { New-Item -ItemType Directory -Force -Path $Datos | Out-Null; Set-Content -LiteralPath "$Datos\abrir.flag" -Value (Get-Date).ToString("s") } catch { Write-Verbose "no se pudo pedir la apertura" }
+  exit
+}
+try { (Get-Process -Id $PID).PriorityClass = "BelowNormal" } catch { Write-Verbose "sin prioridad baja" }   # la vigilancia nunca le quita CPU al navegador
+New-Item -ItemType Directory -Force -Path $Datos | Out-Null
+$log = "$Datos\registro.txt"
+# Un error al escribir el registro (disco lleno, antivirus) nunca debe detener la vigilancia.
+function Anotar($t) { try { Add-Content -Path $log -Value ("{0:yyyy-MM-dd HH:mm:ss}  {1}" -f (Get-Date), $t) } catch { Write-Verbose "no se pudo escribir el registro" } }
+try { if ((Test-Path $log) -and ((Get-Item $log).Length -gt 500KB)) { Remove-Item $log -Force } } catch { Write-Verbose "registro" }
+Remove-Item "$Datos\mantenimiento.txt" -Force -ErrorAction SilentlyContinue
+Remove-Item "$Datos\abrir.flag" -Force -ErrorAction SilentlyContinue
+Afinar-Usuario
+
+# Identidad: si falta, esta danada o es de otra PC, queda un recordatorio visible hasta que se enlace (Reparar o ENLAZAR EQUIPO.bat).
+$ultimoAviso = [DateTime]::MinValue
+try {
+  $e0 = Estado-Identidad
+  if ($e0.Estado -ne "ok") {
+    if (-not (Hay-Pendiente)) { Marcar-Pendiente ("La identidad de esta computadora esta en estado: " + $e0.Estado) }
+    Anotar ("Identidad de la computadora: " + $e0.Estado + ". Queda el recordatorio de enlazar.")
+  } elseif (Hay-Pendiente) { Quitar-Pendiente }
+  if (Hay-Pendiente) { Mostrar-Aviso-Pendiente; $ultimoAviso = Get-Date }
+} catch { Anotar "No se pudo revisar la identidad: $($_.Exception.Message)" }
+
+# Servidor local de la publicidad (carpeta de la computadora). Si se cae, se levanta solo en la vigilancia.
+function Levantar-Servidor {
+  try { return Lanzar-Oculto ("-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$Carpeta\servidor publicidad.ps1`"") -PassThru }
+  catch { Anotar "No se pudo iniciar el servidor de publicidad: $($_.Exception.Message)"; return $null }
+}
+function Servidor-Vivo {
+  $c = $null
+  try { $c = New-Object Net.Sockets.TcpClient; $a = $c.BeginConnect("127.0.0.1", $PuertoPublicidad, $null, $null); return ($a.AsyncWaitHandle.WaitOne(1500) -and $c.Connected) }
+  catch { return $false } finally { if ($c) { try { $c.Close() } catch { Write-Verbose "cierre" } } }
+}
+$servidorPub = Levantar-Servidor
+$ultimoIntentoServidor = Get-Date
+
+# Esperar red hasta 3 minutos (si no hay, abre igual: la pantalla guarda lo ultimo que vio)
+for ($i = 0; $i -lt 36; $i++) {
+  if ([System.Net.NetworkInformation.NetworkInterface]::GetIsNetworkAvailable()) { break }
+  Start-Sleep -Seconds 5
+}
+# Esperar al segundo monitor hasta 45 segundos (algunos monitores tardan en despertar despues de encender)
+Extender-Pantallas
+for ($i = 0; $i -lt 15; $i++) {
+  if ([System.Windows.Forms.Screen]::AllScreens.Count -ge 2) { break }
+  Start-Sleep -Seconds 3
+}
+Start-Sleep -Seconds 2
+
+$urlCajaAbrir = $UrlCaja
+if ($AbrirClienteDesdeKit) { $urlCajaAbrir = $UrlCaja + "?kit=1" }   # con ?kit=1 la caja no abre la pantalla del cliente por su cuenta (no se duplica)
+$ultimoReinicio = (Get-Date).Date
+$sinClienteDesde = $null
+$ultimasPantallas = -1
+$ultimoFijado = $null   # al menos 5 minutos entre reintentos de fijar los roles
+$cierreDeliberado = $false   # la cajera cerro la ventana 1 a proposito: no se reabre sola (ver $ReabrirTrasCierreDeliberado)
+$sinCajaVueltas = 0
+$clienteVisto = $false          # la ventana del cliente ya se vio abierta (para saber si la cerraron a mano)
+$sinClienteVueltas = 0
+$clienteCerradoAMano = $false   # v3.3: el administrador cerro la pantalla del cliente a proposito: no se reabre sola (vuelve con el icono Facturador, el reinicio diario o al cambiar las pantallas)
+
+function Abrir-Todo {
+  $exe = Buscar-Navegador
+  if (-not $exe) { Anotar "No se encontro Chrome ni Edge."; return }
+  Cerrar-Navegador $Perfil
+  Start-Sleep -Seconds 2
+  Arreglar-Cierre $Perfil
+  New-Item -ItemType Directory -Force -Path $Perfil | Out-Null
+  $p = Elegir-Pantallas $CajaEnPantalla
+  Anotar ("Pantallas detectadas: {0}. Navegador: {1}" -f $p.Cuantas, $exe)
+  $urlApertura = Decidir-Apertura
+  if ($script:ModoFacturador -ne "normal") { Anotar ("Facturador no alcanzable: se abre en modo " + $script:ModoFacturador + ".") }
+  [void](Abrir-Ventana $exe $urlApertura $Perfil $p.Caja $CajaPantallaCompleta)
+  if ($AbrirClienteDesdeKit -and $p.Cliente -and (Puede-Abrir-Cliente)) { [void](Abrir-Ventana $exe $UrlCliente $Perfil $p.Cliente) }
+  elseif ($AbrirClienteDesdeKit) { Anotar "Solo hay una pantalla: se abrio solo la caja (plan B)." }
+}
+$cajaVista = $false   # la caja ya se vio abierta alguna vez (para saber si la cerraron a proposito)
+Abrir-Todo
+while ($true) {
+  Start-Sleep -Seconds $SegundosVigilar
+  try {
+    if (((Get-Date) - $ultimoIntentoServidor).TotalSeconds -ge 60) { $ultimoIntentoServidor = Get-Date; if (-not (Servidor-Vivo)) { Anotar "El servidor de publicidad no responde. Se levanta."; $servidorPub = Levantar-Servidor } }
+    Vigilar-Facturador
+    # El icono Facturador, con la vigilancia ya corriendo, deja este pedido.
+    $bandera = "$Datos\abrir.flag"
+    if (Test-Path -LiteralPath $bandera) {
+      Remove-Item -LiteralPath $bandera -Force -ErrorAction SilentlyContinue
+      Anotar "Se pidio abrir el facturador (icono Facturador)."
+      $cierreDeliberado = $false; $sinCajaVueltas = 0; $clienteCerradoAMano = $false; $clienteVisto = $false; $sinClienteVueltas = 0
+      Extender-Pantallas; Start-Sleep -Seconds 2; Abrir-Todo; continue
+    }
+    # Recordatorio de enlace pendiente (si ya quedo enlazada, se quita solo)
+    if ((Hay-Pendiente) -and (((Get-Date) - $ultimoAviso).TotalMinutes -ge $MinutosAvisoPendiente)) {
+      $ultimoAviso = Get-Date
+      if ((Estado-Identidad).Estado -eq "ok") { Quitar-Pendiente } else { Mostrar-Aviso-Pendiente }
+    }
+    if ($HoraReinicioDiario -and ((Get-Date).Date -gt $ultimoReinicio) -and ((Get-Date).ToString("HH:mm") -ge $HoraReinicioDiario)) {
+      $ultimoReinicio = (Get-Date).Date; Anotar "Reinicio diario del navegador."
+      $cierreDeliberado = $false; $sinCajaVueltas = 0; $clienteCerradoAMano = $false; $clienteVisto = $false; $sinClienteVueltas = 0
+      Extender-Pantallas; Start-Sleep -Seconds 2; Abrir-Todo; continue
+    }
+    if ($cierreDeliberado) { continue }   # la cajera cerro la caja: se espera el icono Facturador
+    $procs = @(Procesos-Navegador $Perfil)   # una sola consulta por vuelta: es lo mas caro de la vigilancia
+    $p = Elegir-Pantallas $CajaEnPantalla
+    if ($FijarPantallas -and $p.Cuantas -ge 2 -and (-not $p.Caja.Primary) -and ((-not $ultimoFijado) -or (((Get-Date) - $ultimoFijado).TotalMinutes -ge 5))) { $ultimoFijado = Get-Date; Anotar "La caja ya no es la pantalla principal. Se vuelven a fijar los roles."; Extender-Pantallas; $p = Elegir-Pantallas $CajaEnPantalla }
+    if ($p.Cuantas -ne $ultimasPantallas) {
+      if ($ultimasPantallas -ne -1) { Anotar ("Cambio de pantallas: {0} -> {1}" -f $ultimasPantallas, $p.Cuantas); $script:IntentosF11.Clear(); $clienteCerradoAMano = $false; $clienteVisto = $false; $sinClienteVueltas = 0 }
+      if (($p.Cuantas -ge 2) -and ($ultimasPantallas -eq 1)) {
+        # Plan B terminado: volvio la segunda pantalla. Se vuelve al modo de dos pantallas y se abre la ventana del cliente en unos segundos.
+        Anotar "Volvio la segunda pantalla: se vuelve al modo de dos pantallas."
+        Extender-Pantallas; $p = Elegir-Pantallas $CajaEnPantalla
+        $clienteCerradoAMano = $false; $clienteVisto = $false; $sinClienteVueltas = 0
+        $sinClienteDesde = (Get-Date).AddSeconds(-($EsperaRespaldoSeg - 10))
+      }
+      if ($p.Cuantas -lt 2) { Anotar "Una sola pantalla: plan B, solo el facturador (sin ventana del cliente)." }
+      $ultimasPantallas = $p.Cuantas
+    }
+    if ($procs.Count -eq 0) {
+      if ($cajaVista -and -not $ReabrirCajaSiSeCierra) { Anotar "El navegador se cerro. El kit no lo reabre y termina (para volver: icono Facturador)."; break }
+      Anotar "El navegador se cerro. Se reabre en 10 segundos."; Start-Sleep -Seconds 10; Extender-Pantallas; Start-Sleep -Seconds 2; Abrir-Todo; continue
+    }
+    $hs = @(Ventanas-Nuestras $Perfil $procs)
+    $cajas = @(); $clientes = @()
+    foreach ($h in $hs) {
+      $t = [W32]::Titulo($h)
+      if ([string]::IsNullOrWhiteSpace($t)) { continue }
+      if (Es-Titulo-Cliente $t) { $clientes += $h } else { $cajas += $h }   # cualquier otra ventana nuestra es la caja, aunque este en Clientes, Anular o Administracion (el titulo cambia por modulo)
+    }
+    $hayCaja = ($cajas.Count -gt 0)
+    if ($hayCaja) { $cajaVista = $true; $sinCajaVueltas = 0 }
+    # UNA SOLA ventana 2: si hay mas de una, se cierran las sobrantes.
+    if ($clientes.Count -gt 1) {
+      Anotar ("Habia {0} ventanas del cliente: se cierran las sobrantes y queda una." -f $clientes.Count)
+      foreach ($x in @($clientes | Select-Object -Skip 1)) { Cerrar-Ventana $x }
+      $clientes = @($clientes[0])
+    }
+    $hayCliente = ($clientes.Count -gt 0)
+    # v3.3: si la pantalla del cliente estaba abierta y desaparece mientras la caja sigue abierta, la cerraron a mano: se respeta (dos vueltas seguidas, para no confundir una recarga).
+    if ($hayCliente) { $clienteVisto = $true; $sinClienteVueltas = 0; if ($clienteCerradoAMano) { $clienteCerradoAMano = $false; Anotar "La pantalla del cliente volvio a abrirse." } }
+    elseif ($clienteVisto -and $hayCaja -and $p.Cliente -and (-not $clienteCerradoAMano)) {
+      $sinClienteVueltas++
+      if ($sinClienteVueltas -ge 2) { $clienteCerradoAMano = $true; $clienteVisto = $false; $sinClienteVueltas = 0; Anotar "La pantalla del cliente se cerro a mano. No se reabre sola (para volver: icono Facturador)." }
+    }
+    # CERRAR la ventana 1 CIERRA la 2 (dos vueltas seguidas sin ventana de caja, para no confundir una pagina que esta cargando).
+    if ((-not $hayCaja) -and $cajaVista -and $hayCliente -and (-not $ReabrirTrasCierreDeliberado)) {
+      $sinCajaVueltas++
+      if ($sinCajaVueltas -ge 2) {
+        Anotar "Se cerro la ventana de la caja: se cierra tambien la pantalla del cliente. Para volver: icono Facturador."
+        foreach ($x in $clientes) { Cerrar-Ventana $x }
+        $cierreDeliberado = $true; $sinCajaVueltas = 0
+      }
+      continue
+    }
+    # v3.4: estado de la vigilancia para el latido (se ve en el panel)
+    try { ([ordered]@{ ts = (Get-Date).ToString("s"); caja = $hayCaja; cliente = $hayCliente; cliente_cerrado_a_mano = $clienteCerradoAMano; cierre_deliberado = $cierreDeliberado; pantallas = $p.Cuantas } | ConvertTo-Json -Compress) | Set-Content -LiteralPath "$Datos\estado.json" -Encoding ASCII } catch { Write-Verbose "sin estado.json" }
+    $exe = Buscar-Navegador
+    if ((-not $hayCaja) -and $exe) {
+      if ($cajaVista -and -not $ReabrirCajaSiSeCierra) { Anotar "Se cerro la caja con la X. El kit no la reabre y termina (para volver: icono Facturador)."; break }
+      Anotar "Falta la ventana de la caja. Se abre."; [void](Abrir-Ventana $exe (Decidir-Apertura) $Perfil $p.Caja $CajaPantallaCompleta)
+    }
+    if ($p.Cliente -and $exe) {
+      if ($hayCliente) { $sinClienteDesde = $null }
+      elseif ($clienteCerradoAMano) { $sinClienteDesde = $null }
+      elseif (-not (Puede-Abrir-Cliente)) { $sinClienteDesde = $null }   # v3.8: facturador no alcanzable: no se abre la pantalla del cliente
+      elseif ($AbrirClienteDesdeKit) { Anotar "Falta la ventana del cliente. Se abre."; [void](Abrir-Ventana $exe $UrlCliente $Perfil $p.Cliente) }
+      else {
+        # La abre la caja (Window Management API). El kit espera un tiempo y, si no aparece, la abre el mismo.
+        if (-not $sinClienteDesde) { $sinClienteDesde = Get-Date }
+        elseif (((Get-Date) - $sinClienteDesde).TotalSeconds -ge $EsperaRespaldoSeg) {
+          Anotar "La caja no abrio la pantalla del cliente en $EsperaRespaldoSeg s. La abre el kit (respaldo)."
+          [void](Abrir-Ventana $exe $UrlCliente $Perfil $p.Cliente); $sinClienteDesde = $null
+        }
+      }
+    } else {
+      $sinClienteDesde = $null
+      # Plan B (una sola pantalla): no debe haber ventana 2; si Windows paso una a la unica pantalla, se cierra para que no tape la caja.
+      if ($hayCliente) { Anotar "Una sola pantalla: se cierra la ventana del cliente."; foreach ($x in $clientes) { Cerrar-Ventana $x } }
+    }
+    if ($hayCaja -or $hayCliente) { Afinar-Ventanas $p $Perfil $procs }
+    # v3.3: el mouse puede pasar a la pantalla del cliente (ya no se lleva a la esquina): asi el administrador puede cerrarla.
+  } catch { Anotar "Error: $($_.Exception.Message)" }
+}
+Anotar "El kit termino."
