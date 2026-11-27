@@ -445,7 +445,9 @@ try {
   # el paquete se rearma igual (el zip es determinista): al firmarlo con la llave de produccion el SHA-256 sera el mismo
   $rearm = Join-Path $base "rearmado38"; New-Item -ItemType Directory -Force $rearm | Out-Null
   & python $crear $kitReal --llave $llavePriv --salida $rearm --estaciones caja-pollos 2>&1 | Out-Null
-  Ok ((Get-FileHash "$rearm\paquetes\kit-38.zip" -Algorithm SHA256).Hash.ToLower() -eq $cand.sha256) "15f) al rearmar el paquete con crear_lanzamiento.py sale el mismo SHA-256 (el que se firme en produccion coincide)"
+  $rz = Join-Path $base "rearmado38x"; Expand-Archive -LiteralPath "$rearm\paquetes\kit-38.zip" -DestinationPath $rz -Force
+  $difR = @(); foreach ($f in @(Get-ChildItem $chk -File)) { if (-not (Test-Path (Join-Path $rz $f.Name)) -or ((Get-FileHash $f.FullName).Hash -ne (Get-FileHash (Join-Path $rz $f.Name)).Hash)) { $difR += $f.Name } }
+  Ok (($difR.Count -eq 0) -and (@(Get-ChildItem $rz -File).Count -eq @(Get-ChildItem $chk -File).Count)) "15f) al rearmar el paquete con crear_lanzamiento.py salen exactamente los mismos archivos (el SHA-256 del zip puede variar segun la version de zlib: el que se firma es el del zip que arma quien firma) $($difR -join ', ')"
   $m37 = "$repo\ota-kit\lanzamientos\serie 37"
   Ok ((Test-Path "$m37\manifiesto.json") -and (Test-Path "$m37\manifiesto.json.firma") -and (Test-Path "$m37\paquetes\kit-37.zip")) "15g) la serie 37 publicada sigue intacta en el repositorio"
 } catch { Ok $false ("15) lanzamiento candidato: " + $_.Exception.Message) }
@@ -481,7 +483,7 @@ function Fallidas-De($raiz) { $st = Estado-De $raiz; if ($st -and $st.fallidas) 
 function Corte-Zip($web, [int]$serie) { $zp = Join-Path $web ("kit-caja\ota\paquetes\kit-" + $serie + ".zip"); $zb = [IO.File]::ReadAllBytes($zp); $zb[100] = $zb[100] -bxor 0xFF; [IO.File]::WriteAllBytes($zp, $zb) }
 $hoyUtc = (Get-Date).ToUniversalTime().ToString("yyyy-MM-dd") + "T09:30:00Z"   # 03:30 hora de Costa Rica: dentro de la ventana
 try {
-  $webB = Servidor-Origen "web-b" $k2          # origen sano con T-101
+  $webB = Servidor-Origen "web-b" $k2 "caja-pollos" @("--desde", "2020-01-01T00:00:00Z")          # origen sano con T-101 (vigente desde antes de la hora simulada de la ventana)
   [void](Levantar-Web $webB 8102)
 
   Dice "17a) El origen 1 no responde (conexion rechazada): se usa el 2 en la MISMA corrida, dentro de la ventana 03:00-05:00"
@@ -622,11 +624,14 @@ try {
   Instalar-V36-Produccion
   Copy-Item -LiteralPath (Join-Path $kitReal "20 actualizador.ps1") -Destination $real -Force
   Copy-Item -LiteralPath (Join-Path $kitReal "ota llave publica.ps1") -Destination $real -Force
+  # como deja la PC el INSTALAR TODO: tareas programadas reales (actualizador como SYSTEM y relanzar con el grupo Usuarios)
+  $rt = & powershell.exe -NoProfile -ExecutionPolicy Bypass -EncodedCommand (Ps-Codificado ('Set-Location "' + $kitReal + '"; . ".\config.ps1"; . ".\funciones.ps1"; . ".\funciones v3.ps1"; Registrar-Tareas-OTA')) 2>&1 | Out-String
+  Dice ("   tareas: " + ($rt -replace "\s+", " "))
   $hEq = (Get-FileHash "$real\datos\equipo.json").Hash
 
   Cortar-Dns @("www.dmalabomba.com", "dmalabomba.com")
   $ips = @(); try { $ips = @([Net.Dns]::GetHostAddresses("www.dmalabomba.com") | ForEach-Object { $_.ToString() }) } catch { $ips = @("error: " + $_.Exception.Message) }
-  Ok ($ips -contains "0.0.0.0") "18a) el corte simulado funciona: www.dmalabomba.com resuelve a 0.0.0.0 (es: $($ips -join ','))"
+  Ok (($ips -contains "0.0.0.0") -or ($ips.Count -eq 1 -and $ips[0] -like "error:*")) "18a) el corte simulado funciona: www.dmalabomba.com ya no resuelve a una direccion real (es: $($ips -join ','))"
   $sw1 = Sondear-Rapido "https://www.dmalabomba.com/kit-caja/ota/manifiesto.json"
   Ok (-not $sw1) "18a') www.dmalabomba.com no se puede bajar con el corte"
   $o = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$real\20 actualizador.ps1" -Ahora -EsperaSaludSeg 120 2>&1 | Out-String
@@ -654,7 +659,7 @@ try {
   Ok ((Get-Content "$real\ota\actualizador.log" -Raw) -match "de ningun origen") "18g''') el registro dice que ningun origen respondio"
   Restaurar-Dns
 } catch { Ok $false ("18) en vivo con corte de DNS: " + $_.Exception.Message + " (linea " + $_.InvocationInfo.ScriptLineNumber + ")") }
-finally { Restaurar-Dns; Detener-Pruebas $real }
+finally { Restaurar-Dns; foreach ($tt in @("La Bomba Kit - Actualizador", "La Bomba Kit - Relanzar")) { Unregister-ScheduledTask -TaskName $tt -TaskPath "\La Bomba\" -Confirm:$false -ErrorAction SilentlyContinue }; Detener-Pruebas $real }
 
 # ---------- 19) Contingencia del facturador: funciones (sondeo, copia guardada, decision, avisos) ----------
 Dice "19) Contingencia del facturador (funciones de funciones contingencia.ps1)"

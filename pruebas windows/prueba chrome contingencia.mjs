@@ -36,7 +36,11 @@ try {
     const escribir = (okv, motivo, modoF) => execSync(`powershell -NoProfile -ExecutionPolicy Bypass -Command ". 'C:\\PantallaCliente\\funciones contingencia.ps1'; Guardar-Estado-Facturador ([pscustomobject]@{ ok = $${okv}; motivo = '${motivo}' }) '${modoF}' '${estado}'"`);
     escribir('false', 'dns', 'contingencia');
     const ctx = await abrir(perfil || 'C:\\perfil-pagina'); const p = await ctx.newPage();
-    await p.goto('http://127.0.0.1:8766/contingencia/', { waitUntil: 'load' });
+    p.on('requestfailed', (r) => dice('   (peticion fallida: ' + r.url() + ' ' + (r.failure() && r.failure().errorText) + ')'));
+    p.on('console', (m) => dice('   (consola: ' + m.text() + ')'));
+    const t0 = Date.now();
+    await p.goto('http://127.0.0.1:8766/contingencia/', { waitUntil: 'domcontentloaded', timeout: 60000 });
+    dice('   la pagina cargo en ' + (Date.now() - t0) + ' ms');
     await p.waitForTimeout(2500);
     ok((await p.title()) === 'Sin conexión al facturador', 'la pantalla local abre con su titulo (' + (await p.title()) + ')');
     const est = await p.textContent('#est');

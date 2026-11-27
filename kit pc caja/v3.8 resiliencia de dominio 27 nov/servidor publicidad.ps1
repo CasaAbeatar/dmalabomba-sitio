@@ -57,6 +57,8 @@ function Archivos-De($negocio) {
 function Atender($cliente) {
   $flujo = $cliente.GetStream()
   $cliente.ReceiveTimeout = 5000; $cliente.SendTimeout = 15000
+  # v3.8: el navegador abre conexiones "de reserva" que no mandan nada; este servidor atiende de a una, asi que no se espera mas de 0.7 s por una conexion muda (la peticion real llega al instante)
+  try { if (-not $cliente.Client.Poll(700000, [Net.Sockets.SelectMode]::SelectRead)) { return } } catch { return }
   # Leer la cabecera de la peticion (hasta 8 KB)
   $buf = New-Object byte[] 8192; $n = 0
   while ($n -lt 8192) {

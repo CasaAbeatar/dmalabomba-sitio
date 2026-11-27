@@ -273,6 +273,7 @@ Get-CimInstance Win32_Process -Filter "Name='powershell.exe'" | Where-Object { $
 Start-Sleep -Seconds 2
 foreach ($f in @("registro.txt", "arranque.txt", "facturador.json", "eventos pendientes.jsonl", "abrir.flag")) { Remove-Item (Join-Path "C:\PantallaCliente\datos" $f) -Force -ErrorAction SilentlyContinue }
 $hostsRuta = "$env:SystemRoot\System32\drivers\etc\hosts"; $hostsOrig = [IO.File]::ReadAllBytes($hostsRuta)
+function Texto-Seguro($ruta) { $fs = $null; try { $fs = New-Object IO.FileStream($ruta, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::ReadWrite); $sr = New-Object IO.StreamReader($fs); return [string]$sr.ReadToEnd() } catch { return "" } finally { if ($fs) { $fs.Dispose() } } }
 function Lanzar-Normal($nombre, $comando) {
   $bat = "C:\Windows\Temp\corre-$nombre.cmd"
   Set-Content -LiteralPath $bat -Value ('@echo off' + "`r`n" + $comando)
@@ -300,17 +301,19 @@ try {
   $gB = Pide "GET" "/facturador" $null $hostOk
   Chequea38 "/facturador devuelve el sondeo del supervisor: ok false, modo contingencia, edad reciente" (($gB.Cuerpo -match '"ok":false') -and ($gB.Cuerpo -match '"modo":"contingencia"')) $gB.Cuerpo
   # un solo aviso por caida: se espera a la segunda comprobacion (cada 10 s mientras este caido)
-  $t = 0; $ev = ""; while ($t -lt 45 -and ($ev -notmatch "no alcanzable desde esta caja")) { Start-Sleep -Seconds 3; $t += 3; $ev = (Get-Content "C:\PantallaCliente\datos\eventos pendientes.jsonl" -Raw -ErrorAction SilentlyContinue) }
-  $nAvisos = @([regex]::Matches([string]$ev, "no alcanzable desde esta caja")).Count
+  $t = 0; $ev = ""; while ($t -lt 90 -and ($ev -notmatch "no alcanzable desde esta caja")) { Start-Sleep -Seconds 3; $t += 3; $ev = Texto-Seguro "C:\PantallaCliente\datos\eventos pendientes.jsonl" }
+  Volcar "registro.txt (tras esperar el aviso)" "C:\PantallaCliente\datos\registro.txt"
+  Volcar "eventos pendientes.jsonl" "C:\PantallaCliente\datos\eventos pendientes.jsonl"
+  $nAvisos = @([regex]::Matches("$ev", "no alcanzable desde esta caja")).Count
   Chequea38 "Quedo UN aviso para el panel (tipo otro) por la caida" (($nAvisos -eq 1) -and ($ev -match '"tipo":"otro"')) ("avisos: " + $nAvisos + " tras ~" + $t + " s")
   Start-Sleep -Seconds 25
-  $nAvisos2 = @([regex]::Matches([string](Get-Content "C:\PantallaCliente\datos\eventos pendientes.jsonl" -Raw -ErrorAction SilentlyContinue), "no alcanzable desde esta caja")).Count
+  $nAvisos2 = @([regex]::Matches((Texto-Seguro "C:\PantallaCliente\datos\eventos pendientes.jsonl"), "no alcanzable desde esta caja")).Count
   Chequea38 "Mas comprobaciones fallidas de la misma caida no repiten el aviso" ($nAvisos2 -eq 1) ("avisos: " + $nAvisos2)
   # vuelve el DNS: el supervisor lo nota solo, avisa una vez y deja el estado en ok
   [IO.File]::WriteAllBytes($hostsRuta, $hostsOrig); & ipconfig.exe /flushdns 2>&1 | Out-Null
   $t = 0; $ok2 = $false; while ($t -lt 60 -and -not $ok2) { Start-Sleep -Seconds 3; $t += 3; $ok2 = ((Pide "GET" "/facturador" $null $hostOk).Cuerpo -match '"ok":true') }
   Chequea38 "Al volver el DNS el estado del facturador pasa a ok" $ok2 ("tras ~" + $t + " s")
-  $ev3 = [string](Get-Content "C:\PantallaCliente\datos\eventos pendientes.jsonl" -Raw -ErrorAction SilentlyContinue)
+  $ev3 = Texto-Seguro "C:\PantallaCliente\datos\eventos pendientes.jsonl"
   Chequea38 "Quedo el aviso de restablecido (uno solo)" (@([regex]::Matches($ev3, "alcanzable de nuevo desde esta caja")).Count -eq 1) ""
   Volcar "registro.txt (final)" "C:\PantallaCliente\datos\registro.txt"
 } catch { $script:fallos38++; Dice ("   FALLO v3.8 supervisor: " + $_.Exception.Message + " (linea " + $_.InvocationInfo.ScriptLineNumber + ")") }

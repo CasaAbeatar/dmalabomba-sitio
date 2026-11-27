@@ -61,7 +61,13 @@ jobs:
           Get-CimInstance Win32_Process -Filter "Name='powershell.exe'" | Where-Object { $_.CommandLine -like "*servidor publicidad*" } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
           Start-Process powershell.exe -WindowStyle Hidden -ArgumentList '-NoProfile -ExecutionPolicy Bypass -File "C:\PantallaCliente\servidor publicidad.ps1"'
           Start-Sleep -Seconds 8
+          curl.exe -s -m 10 -i http://127.0.0.1:8766/salud
+          Write-Host ""
+          curl.exe -s -m 10 -i http://127.0.0.1:8766/contingencia/ | Select-Object -First 8
           node "prueba chrome contingencia.mjs" pagina C:\perfil-pagina
+          $codigo = $LASTEXITCODE
+          Get-Content C:\PantallaCliente\datos\arranque.txt, C:\PantallaCliente\datos\registro.txt -ErrorAction SilentlyContinue | Select-Object -Last 20
+          exit $codigo
       - uses: actions/upload-artifact@v4
         if: always()
         with:
