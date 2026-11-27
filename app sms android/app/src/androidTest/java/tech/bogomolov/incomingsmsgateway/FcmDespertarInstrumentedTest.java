@@ -107,7 +107,8 @@ public class FcmDespertarInstrumentedTest {
         assertEquals(41, d.getLong("despertar_id"));
         assertEquals(Request.computeHmacSha256Hex(SECRETO, lat.cuerpo), lat.cabecera("x-signature"));
         assertTrue("el servicio debe quedar corriendo", esperar(SmsReceiverService::isRunning, 15_000));
-        assertEquals("«Reconectando...» debe retirarse al terminar", 0, notificacionesPropias(Notificaciones.ID_DESPERTAR));
+        // se retira cuando termina el hilo del latido: en un emulador lento puede tardar unos segundos (se espera, no se asume)
+        assertTrue("«Reconectando...» debe retirarse al terminar", esperar(() -> notificacionesPropias(Notificaciones.ID_DESPERTAR) == 0, 15_000));
         assertEquals(41, new GuardianState(ctx).getDespertarIdUltimo());
     }
 
