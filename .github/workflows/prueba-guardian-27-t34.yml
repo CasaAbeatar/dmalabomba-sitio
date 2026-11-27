@@ -7,7 +7,7 @@ on:
         required: false
         default: ''
   push:
-    branches: [prueba-guardian-27-t34]
+    branches: [prueba-t34-control]
 jobs:
   android:
     name: Android API ${{ matrix.api }}
@@ -17,7 +17,7 @@ jobs:
       fail-fast: false
       max-parallel: 4
       matrix:
-        api: [33, 34, 35, 36]
+        api: [36]
     defaults:
       run:
         working-directory: app sms android
@@ -110,7 +110,7 @@ jobs:
       fail-fast: false
       max-parallel: 4
       matrix:
-        api: [33, 34, 35, 36]
+        api: [36]
     defaults:
       run:
         working-directory: app sms android

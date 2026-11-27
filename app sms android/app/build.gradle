@@ -8,7 +8,7 @@ android {
         applicationId "tech.bogomolov.incomingsmsgateway"
         // 2.11.0: firebase-messaging 23.x pide minSdk 19 (Android 4.4); el teléfono de la Soda y todo lo que se usa es muy posterior.
         minSdkVersion 19
-        targetSdkVersion 34
+        targetSdkVersion 33
         // 2.12.0: las pruebas de actualizacion automatica compilan una version posterior (-PvcPrueba=23 -PvnPrueba=2.12.1)
         // para que la app se actualice a si misma en el emulador; sin esas propiedades es 22 / 2.12.0.
         versionCode (project.hasProperty('vcPrueba') ? project.property('vcPrueba').toInteger() : 22)
