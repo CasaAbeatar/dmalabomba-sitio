@@ -28,14 +28,14 @@ chk "bateria: en la lista blanca de Doze" "adb shell cmd deviceidle whitelist | 
 UIDAPP=$(grep -m1 -E '(userId|appId)=[0-9]+' resultados/dumpsys-package-api$SDK.txt | sed -E 's/.*(userId|appId)=([0-9]+).*/\2/')
 chk "datos: en la lista blanca de ahorro de datos (uid $UIDAPP)" "adb shell cmd netpolicy list restrict-background-whitelist | tr -d '\\r' | grep -qw $UIDAPP"
 chk "ancla en enabled_notification_listeners" "adb shell settings get secure enabled_notification_listeners | grep -q $P/$P.GuardianListenerService"
-chk "pantalla remota en enabled_accessibility_services" "adb shell settings get secure enabled_accessibility_services | grep -q $P/$P.PantallaRemotaService"
-chk "accessibility_enabled = 1" "[ \"\$(adb shell settings get secure accessibility_enabled | tr -d '\\r')\" = 1 ]"
-chk "adb_allowed_connection_time = 0" "[ \"\$(adb shell settings get global adb_allowed_connection_time | tr -d '\\r')\" = 0 ]"
+[ "$SDK" -ge 30 ] && chk "pantalla remota en enabled_accessibility_services" "adb shell settings get secure enabled_accessibility_services | grep -q $P/$P.PantallaRemotaService"
+[ "$SDK" -ge 30 ] && chk "accessibility_enabled = 1" "[ \"\$(adb shell settings get secure accessibility_enabled | tr -d '\\r')\" = 1 ]"
+[ "$SDK" -ge 30 ] && chk "adb_allowed_connection_time = 0" "[ \"\$(adb shell settings get global adb_allowed_connection_time | tr -d '\\r')\" = 0 ]"
 adb shell dumpsys notification | tr -d '\r' > resultados/dumpsys-notification-api$SDK.txt
 adb shell dumpsys accessibility | tr -d '\r' > resultados/dumpsys-accessibility-api$SDK.txt
 adb shell cmd appops get $P > resultados/appops-completo-api$SDK.txt 2>&1
 chk "el sistema tiene ENLAZADA el ancla (servicio vivo)" "awk '/Live notification listeners/{f=1} f&&/GuardianListenerService/{print; exit}' resultados/dumpsys-notification-api$SDK.txt | grep -q ."
-chk "el sistema tiene enlazada la pantalla remota (accesibilidad)" "grep -q 'PantallaRemotaService' resultados/dumpsys-accessibility-api$SDK.txt"
+[ "$SDK" -ge 30 ] && chk "el sistema tiene enlazada la pantalla remota (accesibilidad)" "grep -q 'PantallaRemotaService' resultados/dumpsys-accessibility-api$SDK.txt"
 chk "No molestar: lista de permitidos incluye el paquete" "awk '/Allowed condition providers:/{f=1;next} f&&/Has user set/{exit} f' resultados/dumpsys-notification-api$SDK.txt | grep -q $P"
 chk "la app corre" "adb shell pidof $P | grep -q '[0-9]'"
 
