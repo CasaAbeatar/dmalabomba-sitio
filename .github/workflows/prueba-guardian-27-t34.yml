@@ -15,6 +15,7 @@ jobs:
     timeout-minutes: 60
     strategy:
       fail-fast: false
+      max-parallel: 4
       matrix:
         api: [33, 34, 35, 36]
     defaults:
@@ -107,6 +108,7 @@ jobs:
     timeout-minutes: 60
     strategy:
       fail-fast: false
+      max-parallel: 4
       matrix:
         api: [33, 34, 35, 36]
     defaults:

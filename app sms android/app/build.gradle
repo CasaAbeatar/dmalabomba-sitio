@@ -66,6 +66,11 @@ dependencies {
     androidTestImplementation 'androidx.test.ext:junit:1.1.5'
     androidTestImplementation 'androidx.test.espresso:espresso-core:3.5.1'
     androidTestImplementation "org.mockito:mockito-android:3.7.0"
+    // targetSdk 34: Android 14+ rechaza el dex ESCRIBIBLE que Byte Buddy (viejo) deja en la cache para crear los dobles de Mockito
+    // («Writable dex file is not allowed»). Byte Buddy >= 1.14.6 lo deja de solo lectura. Solo pruebas instrumentadas.
+    androidTestImplementation 'net.bytebuddy:byte-buddy:1.14.18'
+    androidTestImplementation 'net.bytebuddy:byte-buddy-android:1.14.18'
+    androidTestImplementation 'net.bytebuddy:byte-buddy-agent:1.14.18'
     androidTestImplementation 'androidx.test:rules:1.5.0'
     androidTestImplementation "androidx.work:work-testing:$work_version"
 }
