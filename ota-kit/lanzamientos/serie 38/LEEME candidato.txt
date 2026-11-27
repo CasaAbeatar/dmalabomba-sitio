@@ -1,0 +1,10 @@
+Lanzamiento CANDIDATO serie 38 (3.8 dominios 27nov). NO esta firmado ni publicado.
+
+Paquete: paquetes/kit-38.zip  sha256=610089a757ca9702b81850426031023953aab41c213f1f9b943d134363ee9014  bytes=93695
+
+Para publicarlo (lo decide Emil; este repositorio no tiene la llave privada de produccion):
+  1) Copiar la carpeta publicada actual (manifiesto.json, manifiesto.json.firma, paquetes/) a una carpeta de trabajo para conservar la serie 37.
+  2) python3 ota-kit/crear_lanzamiento.py "kit pc caja/<carpeta v3.8>" --llave <llave-privada-de-produccion.pem> --salida <carpeta de trabajo> --estaciones caja-pollos [--desde ...]
+     (conserva lo anterior del manifiesto y agrega la serie 38; el zip sale identico: mismo SHA-256 que arriba).
+  3) Subir manifiesto.json, manifiesto.json.firma y paquetes/kit-38.zip a www.dmalabomba.com/kit-caja/ota/ Y a dma-sitio.pages.dev/kit-caja/ota/ (el origen alterno debe tener los mismos archivos).
+  4) Verificar los dos origenes con: python3 -c "import urllib.request as u; print(u.urlopen('https://dma-sitio.pages.dev/kit-caja/ota/manifiesto.json').read()[:80])"

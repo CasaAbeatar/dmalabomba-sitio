@@ -1,0 +1,12 @@
+{
+  "version": "3.8 dominios 27nov",
+  "serie": 38,
+  "estaciones": [
+    "caja-pollos"
+  ],
+  "url": "https://www.dmalabomba.com/kit-caja/ota/paquetes/kit-38.zip",
+  "sha256": "610089a757ca9702b81850426031023953aab41c213f1f9b943d134363ee9014",
+  "bytes": 93695,
+  "minimo_actualizador": 1,
+  "nota": "CANDIDATO sin firmar. El manifiesto y su firma se generan con la llave privada de produccion (crear_lanzamiento.py); no existe aqui. 'desde' lo fija quien publique."
+}
