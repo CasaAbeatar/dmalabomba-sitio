@@ -25,7 +25,8 @@ for o in GET_USAGE_STATS SYSTEM_ALERT_WINDOW WRITE_SETTINGS RUN_IN_BACKGROUND RU
 done
 [ "$SDK" -ge 33 ] && chk "appop ACCESS_RESTRICTED_SETTINGS allow" "op ACCESS_RESTRICTED_SETTINGS"
 chk "bateria: en la lista blanca de Doze" "adb shell cmd deviceidle whitelist | grep -q $P"
-chk "datos: en la lista blanca de ahorro de datos" "adb shell cmd netpolicy list restrict-background-whitelist | grep -qw \$(adb shell dumpsys package $P | grep -m1 'userId=' | sed 's/.*userId=\\([0-9]*\\).*/\\1/')"
+UIDAPP=$(grep -m1 -E '(userId|appId)=[0-9]+' resultados/dumpsys-package-api$SDK.txt | sed -E 's/.*(userId|appId)=([0-9]+).*/\2/')
+chk "datos: en la lista blanca de ahorro de datos (uid $UIDAPP)" "adb shell cmd netpolicy list restrict-background-whitelist | tr -d '\\r' | grep -qw $UIDAPP"
 chk "ancla en enabled_notification_listeners" "adb shell settings get secure enabled_notification_listeners | grep -q $P/$P.GuardianListenerService"
 chk "pantalla remota en enabled_accessibility_services" "adb shell settings get secure enabled_accessibility_services | grep -q $P/$P.PantallaRemotaService"
 chk "accessibility_enabled = 1" "[ \"\$(adb shell settings get secure accessibility_enabled | tr -d '\\r')\" = 1 ]"
@@ -33,9 +34,9 @@ chk "adb_allowed_connection_time = 0" "[ \"\$(adb shell settings get global adb_
 adb shell dumpsys notification | tr -d '\r' > resultados/dumpsys-notification-api$SDK.txt
 adb shell dumpsys accessibility | tr -d '\r' > resultados/dumpsys-accessibility-api$SDK.txt
 adb shell cmd appops get $P > resultados/appops-completo-api$SDK.txt 2>&1
-chk "el sistema tiene ENLAZADA el ancla (servicio vivo)" "grep -q 'GuardianListenerService' resultados/dumpsys-notification-api$SDK.txt"
+chk "el sistema tiene ENLAZADA el ancla (servicio vivo)" "awk '/Live notification listeners/{f=1} f&&/GuardianListenerService/{print; exit}' resultados/dumpsys-notification-api$SDK.txt | grep -q ."
 chk "el sistema tiene enlazada la pantalla remota (accesibilidad)" "grep -q 'PantallaRemotaService' resultados/dumpsys-accessibility-api$SDK.txt"
-chk "No molestar: la politica lista el paquete" "grep -i -B2 -A8 'policy\\|dnd' resultados/dumpsys-notification-api$SDK.txt | grep -q $P"
+chk "No molestar: lista de permitidos incluye el paquete" "awk '/Allowed condition providers:/{f=1;next} f&&/Has user set/{exit} f' resultados/dumpsys-notification-api$SDK.txt | grep -q $P"
 chk "la app corre" "adb shell pidof $P | grep -q '[0-9]'"
 
 echo "== Lo que dice la propia app en «Salud del telefono» =="
@@ -58,11 +59,15 @@ assert tap_id("btn_health"), "no encontre btn_health"
 time.sleep(3)
 size = re.findall(r"\d+x\d+", adb("shell", "wm", "size"))[-1].split("x"); W, H = int(size[0]), int(size[1])
 textos = ""
-for i in range(7):
-    textos += html.unescape(dump())
-    open("resultados/salud-api%d-%d.xml" % (sdk, i), "w").write(textos[-60000:])
-    os.system("adb exec-out screencap -p > resultados/salud-api%d-%d.png" % (sdk, i))
+previo = None
+for i in range(25):
+    x = html.unescape(dump())
+    textos += x
+    if x == previo: break
+    previo = x
+    if i < 8: os.system("adb exec-out screencap -p > resultados/salud-api%d-%d.png" % (sdk, i))
     adb("shell", "input", "swipe", str(W//2), str(H*80//100), str(W//2), str(H*25//100), "400"); time.sleep(1)
+open("resultados/salud-api%d.txt" % sdk, "w").write(" | ".join(re.findall(r'text="([^"]+)"', textos)))
 estr = open("app sms android/app/src/main/res/values/strings.xml", encoding="utf8").read()
 def s(n):
     m = re.search(r'<string name="%s"[^>]*>(.*?)</string>' % n, estr, re.S)
