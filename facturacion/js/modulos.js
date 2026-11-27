@@ -77,6 +77,8 @@ export const MODULOS = [
   { id: 'cotizaciones', titulo: 'Cotizaciones', descripcion: 'Precios para un cliente: se mandan, se aceptan y pasan a Caja sin volver a escribirlas', grupo: 'admin', ruta: 'admin/cotizaciones', icono: 'libro', orden: 27, soloAdmin: true, cargar: () => import('./m_cotizaciones.js') },
   // SINPE Móvil confirmado por el banco: solo existe mientras la bandera fact.config «sinpe_tarjeta» esté encendida (requiere: 'sinpe')
   { id: 'sinpe', alias: ['pagos-sinpe'], titulo: 'Pagos SINPE', descripcion: 'SINPE Móvil que avisó el banco, tal como llegan, para consultar', grupo: 'admin', ruta: 'admin/pagos-sinpe', icono: 'caja', orden: 26.5, soloAdmin: true, requiere: 'sinpe', cargar: () => import('./m_sinpe.js') },
+  // «Caja para mí»: el teléfono de los SINPE, SINPE sin factura, conciliación, informes y kit ↔ app. Solo administrador; no depende de la bandera de las cajeras. (27 nov 2026)
+  { id: 'sinpe_caja', alias: ['caja-para-mi'], titulo: 'Caja para mí', descripcion: 'Mi teléfono de SINPE, lo que no tiene factura, la conciliación y los informes', grupo: 'admin', ruta: 'admin/caja-para-mi', icono: 'caja', orden: 26.6, soloAdmin: true, cargar: () => import('./m_sinpe_caja.js') },
   { id: 'recurrentes', alias: ['pedidos-fijos'], titulo: 'Pedidos fijos', descripcion: 'Clientes que piden lo mismo cada semana o cada mes: el sistema lo prepara y usted lo confirma', grupo: 'admin', ruta: 'admin/pedidos-fijos', icono: 'emitidas', orden: 27.5, soloAdmin: true, insignia: (app) => { const n = Number(app.recurrentes?.pendientes) || 0; return n > 0 ? { texto: n === 1 ? '1 por confirmar' : n + ' por confirmar', urgente: false } : null; }, cargar: () => import('./m_recurrentes.js') },
   { id: 'emitidas', alias: ['facturas-emitidas'], titulo: 'Facturas emitidas', descripcion: 'Buscar facturas y tiquetes de cualquier fecha y ver si Hacienda los aceptó', grupo: 'admin', ruta: 'admin/facturas-emitidas', icono: 'emitidas', orden: 25, soloAdmin: true, cargar: () => import('./m_facturas_emitidas.js') },
   { id: 'contabilidad', alias: ['recepcion', 'contable', 'admin/contable'], titulo: 'Contabilidad', descripcion: 'Facturas de proveedores y respuesta a Hacienda, cuentas, asientos, IVA, formularios y estados', grupo: 'admin', ruta: 'admin/contabilidad', icono: 'libro', orden: 30, soloAdmin: true, insignia: insigniaContable, cargar: () => import('./m_contabilidad.js') },
@@ -134,7 +136,7 @@ export function descripcionDe(m, app) {
 // `nav.hoy` es la pantalla de inicio (Hoy). El orden dentro de cada grupo es el de esta lista. En el celular: Hoy, Vender, Inventario, Conta y «Más» (Informes y Sistema).
 export const GRUPOS_NAV = [
   { id: 'hoy', titulo: 'Hoy', ruta: 'inicio', icono: 'caja', items: [] },
-  { id: 'vender', titulo: 'Vender', corto: 'Vender', icono: 'facturar', items: ['caja', 'turno', 'anular', 'clientes', 'sinpe', 'cotizaciones', 'contingencia'] },
+  { id: 'vender', titulo: 'Vender', corto: 'Vender', icono: 'facturar', items: ['caja', 'turno', 'anular', 'clientes', 'sinpe', 'sinpe_caja', 'cotizaciones', 'contingencia'] },
   { id: 'inventario', titulo: 'Inventario', corto: 'Inventario', icono: 'bodega', items: ['inventarios', 'productos'] },
   { id: 'conta', titulo: 'Contabilidad', corto: 'Conta', icono: 'libro', items: ['contabilidad', 'alertas_hacienda', 'pago_sin_factura'] },
   { id: 'informes', titulo: 'Informes', corto: 'Informes', icono: 'barras', items: ['listados', 'semanal', 'emitidas'] },
