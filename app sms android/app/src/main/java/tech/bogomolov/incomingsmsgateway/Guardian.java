@@ -111,7 +111,10 @@ public final class Guardian {
                     if (!acks.isEmpty()) st.quitarAcks(new ArrayList<>(acks.keySet()));
                     if (RemoteCommands.respuestaConfiable(url, request.getResponseCode(),
                             request.getResponseBody(), request.getResponseSignature(), rule.secret)) {
-                        procesarOrdenes(app, st, url, request.getResponseBody(), profundidad);
+                        // 2.12.0 (auditoría): reiniciar_telefono y abrir_adb exigen la firma; https solo no basta.
+                        boolean firmada = RemoteCommands.respuestaFirmada(request.getResponseCode(),
+                                request.getResponseBody(), request.getResponseSignature(), rule.secret);
+                        procesarOrdenes(app, st, url, request.getResponseBody(), profundidad, firmada);
                         // 2.12.0: oferta de actualizacion (firma propia y eco = el ts de ESTE latido; ver Actualizador).
                         Actualizador.alResponderLatido(app, st, rule.secret, request.getResponseBody(), ahora);
                     }
@@ -619,12 +622,13 @@ public final class Guardian {
 
     // ------------------------------------------------------------------ órdenes remotas
 
-    private static void procesarOrdenes(Context app, GuardianState st, String url, String cuerpo, int profundidad) {
+    static void procesarOrdenes(Context app, GuardianState st, String url, String cuerpo, int profundidad, boolean firmada) {
         List<RemoteCommands.Command> nuevas = RemoteCommands.nuevas(RemoteCommands.parse(cuerpo), st.getCommandLog());
         if (nuevas.isEmpty()) return;
         boolean hayReinicio = false;
         for (RemoteCommands.Command c : nuevas) {
-            String resultado = resultadoPrevisto(app, c.cmd);
+            String resultado = RemoteCommands.bloqueadaPorFaltaDeFirma(c.cmd, firmada)
+                    ? RemoteCommands.SIN_FIRMA : resultadoPrevisto(app, c.cmd);
             // Primero queda registrada (con commit): si la orden reinicia el teléfono, el registro ya existe.
             st.registrarOrden(c.id, c.cmd, resultado, System.currentTimeMillis());
             Log.i(TAG, "orden remota " + c.id + " " + c.cmd + " -> " + resultado);

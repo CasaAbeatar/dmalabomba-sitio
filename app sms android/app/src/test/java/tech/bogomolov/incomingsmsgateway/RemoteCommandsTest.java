@@ -122,4 +122,51 @@ public class RemoteCommandsTest {
         assertFalse(RemoteCommands.respuestaConfiable("https://x/latido", 401, body, null, secret));
         assertFalse(RemoteCommands.respuestaConfiable("https://x/latido", 200, null, null, secret));
     }
+
+    // ------------------------------------------------------------------ 2.12.0 (auditoría): órdenes sensibles exigen firma
+
+    @Test
+    public void lasOrdenesSensiblesSonReiniciarTelefonoYAbrirAdb() {
+        assertTrue(RemoteCommands.esSensible("reiniciar_telefono"));
+        assertTrue(RemoteCommands.esSensible("abrir_adb"));
+        assertFalse(RemoteCommands.esSensible("cerrar_adb"));   // apagar nunca aumenta el riesgo
+        assertFalse(RemoteCommands.esSensible("latido_ya"));
+        assertFalse(RemoteCommands.esSensible("reiniciar_servicio"));
+        assertFalse(RemoteCommands.esSensible("reenviar_historial"));
+        assertFalse(RemoteCommands.esSensible(null));
+        // toda orden sensible está en la lista cerrada de permitidas
+        assertTrue(RemoteCommands.PERMITIDOS.containsAll(RemoteCommands.SENSIBLES));
+    }
+
+    @Test
+    public void sinFirmaValidaLasSensiblesSeBloqueanYLasDemasPasan() {
+        for (String c : RemoteCommands.PERMITIDOS) {
+            assertEquals(c, RemoteCommands.esSensible(c), RemoteCommands.bloqueadaPorFaltaDeFirma(c, false));
+            assertFalse(c, RemoteCommands.bloqueadaPorFaltaDeFirma(c, true));
+        }
+        assertEquals("orden_sensible_sin_firma", RemoteCommands.SIN_FIRMA);
+        assertTrue(HeartbeatBody.codigoCorto(RemoteCommands.SIN_FIRMA));   // viaja en comandos_resultado
+    }
+
+    @Test
+    public void respuestaFirmadaExigeFirmaPresenteYValida() throws Exception {
+        String secret = "clave";
+        String body = "{\"comandos\":[{\"id\":1,\"cmd\":\"abrir_adb\"}]}";
+        String firma = Request.computeHmacSha256Hex(secret, body);
+        assertTrue(RemoteCommands.respuestaFirmada(200, body, firma, secret));
+        assertTrue(RemoteCommands.respuestaFirmada(200, body, " " + firma.toUpperCase() + " ", secret));
+        // https sin firma NO basta (sí basta para respuestaConfiable, pero no para las sensibles)
+        assertFalse(RemoteCommands.respuestaFirmada(200, body, null, secret));
+        assertFalse(RemoteCommands.respuestaFirmada(200, body, "", secret));
+        assertFalse(RemoteCommands.respuestaFirmada(200, body, "   ", secret));
+        assertTrue(RemoteCommands.respuestaConfiable("https://x/latido", 200, body, null, secret));
+        // firma errónea, cuerpo alterado, otra clave, sin clave, código no 2xx
+        assertFalse(RemoteCommands.respuestaFirmada(200, body, "00" + firma.substring(2), secret));
+        assertFalse(RemoteCommands.respuestaFirmada(200, body + " ", firma, secret));
+        assertFalse(RemoteCommands.respuestaFirmada(200, body, firma, "otra"));
+        assertFalse(RemoteCommands.respuestaFirmada(200, body, firma, ""));
+        assertFalse(RemoteCommands.respuestaFirmada(200, body, firma, null));
+        assertFalse(RemoteCommands.respuestaFirmada(500, body, firma, secret));
+        assertFalse(RemoteCommands.respuestaFirmada(200, null, firma, secret));
+    }
 }

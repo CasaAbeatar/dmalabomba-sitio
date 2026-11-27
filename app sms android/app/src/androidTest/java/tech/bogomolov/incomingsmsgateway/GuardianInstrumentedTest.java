@@ -358,6 +358,36 @@ public class GuardianInstrumentedTest {
         if (!AdbInalambrico.tienePermiso(ctx)) assertEquals(0, st.getAdbCierraTs());
     }
 
+    /**
+     * 2.12.0 (auditoría): reiniciar_telefono y abrir_adb solo se ejecutan si la respuesta del latido trae X-Signature válida.
+     * Sin ella (p. ej. la respuesta llegó por https pero sin firma) se ignoran y se confirman como «orden_sensible_sin_firma»;
+     * las no sensibles siguen pasando. Con firma válida, las dos se ejecutan como siempre.
+     */
+    @Test
+    public void ordenesSensiblesSinFirmaSeIgnoranYConFirmaSeEjecutan() {
+        GuardianState st = new GuardianState(ctx);
+        String sinFirma = "{\"comandos\":[{\"id\":61,\"cmd\":\"abrir_adb\"},{\"id\":62,\"cmd\":\"reiniciar_telefono\"},"
+                + "{\"id\":63,\"cmd\":\"latido_ya\"}]}";
+        // profundidad 1: sin latido de seguimiento (las confirmaciones quedan pendientes y se leen aquí)
+        Guardian.procesarOrdenes(ctx, st, urlLatido(), sinFirma, 1, false);
+        Map<Long, String> acks = st.getAcksPendientes();
+        assertEquals(RemoteCommands.SIN_FIRMA, acks.get(61L));
+        assertEquals(RemoteCommands.SIN_FIRMA, acks.get(62L));
+        assertEquals("la no sensible sigue pasando", "ok", acks.get(63L));
+        assertEquals("abrir_adb sin firma no enciende nada ni anota hora de cierre", 0, st.getAdbCierraTs());
+        assertEquals(1, st.vecesEjecutada(61));   // queda registrada: no se reevalúa en cada latido
+        assertEquals(1, st.vecesEjecutada(62));
+
+        String conFirma = "{\"comandos\":[{\"id\":71,\"cmd\":\"abrir_adb\"},{\"id\":72,\"cmd\":\"reiniciar_telefono\"}]}";
+        Guardian.procesarOrdenes(ctx, st, urlLatido(), conFirma, 1, true);
+        acks = st.getAcksPendientes();
+        String esperadoAbrir = !AdbInalambrico.soportado() ? "comando_no_soportado"
+                : (AdbInalambrico.tienePermiso(ctx) ? "ok" : "falta_permiso_ajustes");
+        assertEquals("con firma, abrir_adb se evalúa y ejecuta como siempre", esperadoAbrir, acks.get(71L));
+        assertEquals("con firma, reiniciar_telefono se evalúa (no es dispositivo dedicado)", "comando_no_soportado", acks.get(72L));
+        if (AdbInalambrico.tienePermiso(ctx) && AdbInalambrico.soportado()) AdbInalambrico.cerrar(ctx, st);
+    }
+
     @Test
     public void respuestaSinFirmaPorHttpOConFirmaMalaNoEjecutaNada() {
         String cmds = "{\"comandos\":[{\"id\":21,\"cmd\":\"reiniciar_servicio\"},{\"id\":22,\"cmd\":\"latido_ya\"}]}";

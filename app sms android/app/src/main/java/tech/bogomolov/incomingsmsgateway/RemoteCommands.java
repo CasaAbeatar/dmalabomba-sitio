@@ -22,6 +22,11 @@ import java.util.Set;
  *    de la regla) o, sin firma, solo si la conexión fue https con certificado verificado.
  *    Si trae firma y no coincide, se descarta todo.
  *  - Cada id se ejecuta una sola vez (CommandLog).
+ *  - 2.12.0 (auditoría): las órdenes SENSIBLES (SENSIBLES: reiniciar_telefono, abrir_adb y cualquiera que se agregue
+ *    después) se ejecutan SOLO si la respuesta trae X-Signature válida (respuestaFirmada). Con https sin firma se
+ *    ignoran y se confirman como SIN_FIRMA. Las no sensibles (latido_ya, reiniciar_servicio, reenviar_historial,
+ *    cerrar_adb) siguen aceptándose por https sin firma SOLO mientras el servidor no firme todas sus respuestas;
+ *    cuando lo haga, se exigirá la firma para TODAS (bastará con que esSensible() devuelva true siempre).
  */
 public final class RemoteCommands {
 
@@ -32,6 +37,16 @@ public final class RemoteCommands {
     /** 2.12.0: encender / apagar la depuración inalámbrica (necesita WRITE_SECURE_SETTINGS; se apaga sola a los 30 min). */
     public static final String ABRIR_ADB = "abrir_adb";
     public static final String CERRAR_ADB = "cerrar_adb";
+
+    /**
+     * Órdenes que solo se ejecutan con la respuesta firmada (HMAC). cerrar_adb NO está: apagar nunca aumenta el riesgo.
+     * Toda orden nueva que cambie el estado del teléfono o abra una puerta debe agregarse aquí.
+     */
+    public static final Set<String> SENSIBLES = Collections.unmodifiableSet(new LinkedHashSet<>(
+            Arrays.asList(REINICIAR_TELEFONO, ABRIR_ADB)));
+
+    /** Resultado que se confirma al servidor cuando una orden sensible llegó sin firma válida (no se ejecutó). */
+    public static final String SIN_FIRMA = "orden_sensible_sin_firma";
 
     public static final Set<String> PERMITIDOS = Collections.unmodifiableSet(new LinkedHashSet<>(
             Arrays.asList(REINICIAR_SERVICIO, LATIDO_YA, REENVIAR_HISTORIAL, REINICIAR_TELEFONO, ABRIR_ADB, CERRAR_ADB)));
@@ -92,21 +107,45 @@ public final class RemoteCommands {
         return out;
     }
 
+    public static boolean esSensible(String cmd) {
+        return cmd != null && SENSIBLES.contains(cmd);
+    }
+
+    /** ¿Esta orden se bloquea porque es sensible y la respuesta no venía firmada? */
+    public static boolean bloqueadaPorFaltaDeFirma(String cmd, boolean respuestaFirmada) {
+        return esSensible(cmd) && !respuestaFirmada;
+    }
+
+    /**
+     * ¿La respuesta trae una firma X-Signature VÁLIDA? (2xx, firma presente y HMAC-SHA256 hex del cuerpo exacto con la
+     * clave de la regla, comparado en tiempo constante). Sin firma, o con firma errónea, es false: la confianza por https
+     * no basta para las órdenes sensibles.
+     */
+    public static boolean respuestaFirmada(int httpCode, String body, String firmaHex, String secret) {
+        if (httpCode < 200 || httpCode >= 300 || body == null) return false;
+        if (firmaHex == null || firmaHex.trim().isEmpty()) return false;
+        return firmaCoincide(body, firmaHex, secret);
+    }
+
+    private static boolean firmaCoincide(String body, String firmaHex, String secret) {
+        if (secret == null || secret.isEmpty()) return false;
+        try {
+            String esperado = Request.computeHmacSha256Hex(secret, body);
+            return MessageDigest.isEqual(
+                    esperado.getBytes(StandardCharsets.UTF_8),
+                    firmaHex.trim().toLowerCase().getBytes(StandardCharsets.UTF_8));
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
     /**
      * ¿Se puede confiar en esta respuesta? Con firma: debe coincidir. Sin firma: solo si es https y 2xx.
      */
     public static boolean respuestaConfiable(String url, int httpCode, String body, String firmaHex, String secret) {
         if (httpCode < 200 || httpCode >= 300 || body == null) return false;
         if (firmaHex != null && !firmaHex.trim().isEmpty()) {
-            if (secret == null || secret.isEmpty()) return false;
-            try {
-                String esperado = Request.computeHmacSha256Hex(secret, body);
-                return MessageDigest.isEqual(
-                        esperado.getBytes(StandardCharsets.UTF_8),
-                        firmaHex.trim().toLowerCase().getBytes(StandardCharsets.UTF_8));
-            } catch (Exception e) {
-                return false;
-            }
+            return firmaCoincide(body, firmaHex, secret);
         }
         return url != null && url.toLowerCase().startsWith("https://");
     }
