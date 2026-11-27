@@ -2,6 +2,7 @@
 # Corre el paquete de comandos en el emulador (API del matrix) y lo comprueba. Desde la raiz del repositorio.
 P=tech.bogomolov.incomingsmsgateway
 mkdir -p resultados
+exec > >(tee resultados/completo-api$(adb shell getprop ro.build.version.sdk | tr -d "\r").txt) 2>&1
 RC=0
 echo "##### A. APK alterado: el guion debe DETENERSE sin instalar"
 cp apk-real.apk apk-alterado.apk && printf 'x' >> apk-alterado.apk
@@ -16,4 +17,5 @@ cat paquete-soda/configurar-telefono-soda.sh | ADB=adb APK_LOCAL=apk-real.apk SI
 echo "codigo de salida corrida 2: ${PIPESTATUS[1]}"
 echo "##### D. Verificacion independiente"
 bash paquete-soda/verificar-emulador.sh || RC=1
+sleep 2
 exit $RC
