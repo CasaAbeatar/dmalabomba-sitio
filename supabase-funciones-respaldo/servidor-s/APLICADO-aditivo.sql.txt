@@ -1,0 +1,36 @@
+-- APLICADO el 27 nov 2026 (CR) como migración sinpe_alertas_montos_sin_venta_27nov. Aditivo: no modifica funciones existentes.
+-- Tras aplicarla, el texto de sinpe_montos_vigilar se corrigió con un create or replace para decir "N desviaciones)" en vez de "N)".
+insert into fact.alertas_hacienda_tipos (tipo, nombre, severidad, titulo_n, cuerpo_n, que_hacer, destino) values
+ ('sinpe_pago_sin_venta', 'SINPE Movil sin venta asociada', 'importante', 'Hay {n} pagos de SINPE Movil sin venta asociada',
+  'En {empresa} hay {n} pagos de SINPE Movil con mas de 30 minutos que no se han unido a ninguna venta.',
+  'Abra la lista de SINPE y asigne cada pago a su venta. Si el pago no era de caja, marquelo como tal.', null),
+ ('sinpe_monto_fuera_banda', 'SINPE Movil con monto fuera de lo normal', 'importante', 'Hay {n} pagos de SINPE Movil con monto fuera de lo normal',
+  'En {empresa} llegaron {n} pagos de SINPE Movil con un monto muy distinto al habitual.',
+  'Revise el monto en la lista de SINPE. Si es un pago real no hace falta hacer nada; si no reconoce el pago, revise la cuenta del banco.', null),
+ ('sinpe_monto_extremo', 'SINPE Movil con monto extremo', 'urgente', 'Hay {n} pagos de SINPE Movil con monto extremo',
+  'En {empresa} llegaron {n} pagos de SINPE Movil con un monto extremadamente alto frente al habitual.',
+  'Revise el monto en la lista de SINPE y confirmelo en la cuenta del banco. Si fue un error del cliente o del telefono, corrijalo de inmediato.', null)
+on conflict (tipo) do nothing;
+insert into fact.alertas_politica (tipo, modo, retraso_min, reenvio_horas, grupo, orden, nota) values
+ ('sinpe_pago_sin_venta', 'resumen', 0, null, 'SINPE Movil', 5, 'Informativa: Panel al instante, correo solo en el resumen diario.'),
+ ('sinpe_monto_fuera_banda', 'resumen', 0, null, 'SINPE Movil', 5, 'Fuera de +-3 desviaciones (escala log) de los pagos reales de la empresa.'),
+ ('sinpe_monto_extremo', 'inmediato', 0, 6, 'SINPE Movil', 5, 'Sobre +4 desviaciones: correo inmediato, maximo uno cada 6 h por empresa (el Panel recibe todos).')
+on conflict (tipo) do nothing;
+insert into fact.sinpe_vigilancia_config (clave, empresa, valor, activo, activo_desde, unidad, nota) values
+ ('chequeo_montos', 'soda', null, true, now(), null, 'Solo evalua pagos recibidos desde esta fecha.'),
+ ('chequeo_montos', 'pollos', null, false, null, null, 'Se enciende cuando el telefono de Pollos tenga historial real.'),
+ ('chequeo_sin_venta', 'soda', null, false, null, null, 'Apagado: Soda factura en Prisma y no deja ventas en fact.ventas.'),
+ ('chequeo_sin_venta', 'pollos', null, false, null, null, 'Apagado hasta que Pollos use los pagos SINPE en el facturador.'),
+ ('monto_k_fuera', '*', 3, true, null, 'desviaciones', 'Banda normal: media +- k desviaciones del logaritmo del monto.'),
+ ('monto_k_extremo', '*', 4, true, null, 'desviaciones', 'Extremo (solo hacia arriba).'),
+ ('monto_min_pagos', '*', 100, true, null, 'pagos', 'Minimo de pagos reales de la empresa para medir la banda.'),
+ ('sin_venta_min', '*', 30, true, null, 'minutos', 'Espera antes de avisar que un pago no tiene venta.')
+on conflict (clave, empresa) do nothing;
+
+-- fact.sinpe_monto_evaluar: z = (ln(monto) - mu) / sd; nivel extremo si z >= k_extremo, fuera_banda si |z| >= k_fuera, normal si no; sin_base si falta sd o monto <= 0.
+-- fact.sinpe_montos_vigilar(p_prueba, p_ahora, p_base): por empresa con chequeo_montos activo (o prueba con p_base), base = avg/stddev_samp de ln(monto) de pagos reales CRC anteriores a p_ahora - 24 h (mínimo monto_min_pagos);
+--   evalúa pagos de la empresa con creado_en entre greatest(activo_desde, p_ahora - 24 h) y p_ahora; abre sinpe_monto_extremo (ref [prueba:]extremo:<emp>|<pago>) o sinpe_monto_fuera_banda (ref [prueba:]banda:<emp>|<pago>) con fact.ah_abrir.
+-- fact.sinpe_sin_venta_vigilar(p_prueba, p_ahora, p_hay_ventas): con chequeo_sin_venta activo y ventas reales en 24 h, cuenta pagos sin_asignar sin venta ni pedido con más de sin_venta_min minutos y abre sinpe_pago_sin_venta (ref [prueba:]sinventa:<emp>:<AAAAMMDD CR>); si no hay nada, o está apagado, cierra las abiertas.
+-- Los cuerpos completos están en la base: select pg_get_functiondef('fact.sinpe_montos_vigilar(boolean,timestamptz,jsonb)'::regprocedure) (y las otras dos).
+select cron.schedule('sinpe-montos-5min', '1-56/5 * * * *', $c$set statement_timeout = '30s'; select fact.sinpe_montos_vigilar()$c$);
+select cron.schedule('sinpe-sin-venta-5min', '2-57/5 * * * *', $c$set statement_timeout = '30s'; select fact.sinpe_sin_venta_vigilar()$c$);

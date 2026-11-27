@@ -1,0 +1,15 @@
+-- Reversa de la migración sinpe_alertas_montos_sin_venta_27nov (27 nov 2026, CR). Ejecutar en el proyecto dwlbcbtwdungyrykgahm.
+-- Orden: crons, funciones, alertas abiertas de estos tipos, política, tipos, claves de configuración.
+select cron.unschedule('sinpe-montos-5min');
+select cron.unschedule('sinpe-sin-venta-5min');
+drop function if exists fact.sinpe_montos_vigilar(boolean, timestamptz, jsonb);
+drop function if exists fact.sinpe_sin_venta_vigilar(boolean, timestamptz, boolean);
+drop function if exists fact.sinpe_monto_evaluar(numeric, numeric, numeric, numeric, numeric);
+-- Las alertas ya creadas apuntan a los tipos por llave foránea: borrarlas (o cerrarlas) antes de quitar los tipos.
+delete from fact.alertas_hacienda where tipo in ('sinpe_pago_sin_venta', 'sinpe_monto_fuera_banda', 'sinpe_monto_extremo');
+delete from fact.alertas_politica where tipo in ('sinpe_pago_sin_venta', 'sinpe_monto_fuera_banda', 'sinpe_monto_extremo');
+delete from fact.alertas_hacienda_tipos where tipo in ('sinpe_pago_sin_venta', 'sinpe_monto_fuera_banda', 'sinpe_monto_extremo');
+delete from fact.sinpe_vigilancia_config where clave in ('chequeo_montos', 'chequeo_sin_venta', 'monto_k_fuera', 'monto_k_extremo', 'monto_min_pagos', 'sin_venta_min');
+-- Opcional: quitar los 5 pagos de prueba que dejó la prueba del 27 nov.
+-- delete from fact.sinpe_pagos where es_prueba and detalle_pagador like 'PRUEBA S fork%';
+-- Apagar sin quitar nada: update fact.sinpe_vigilancia_config set activo = false where clave in ('chequeo_montos', 'chequeo_sin_venta');
