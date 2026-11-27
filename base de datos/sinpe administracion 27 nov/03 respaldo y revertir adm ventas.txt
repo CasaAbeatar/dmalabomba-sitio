@@ -1,0 +1,25 @@
+Respaldo y REVERTIR - correccion (c) ventas anuladas por estado, igual que fx_sinpe_ref_revisar
+27 nov 2026, 12:12 hora de Costa Rica (18:12 UTC). Proyecto Supabase dwlbcbtwdungyrykgahm.
+Definicion anterior tomada con pg_get_functiondef ANTES de cambiar nada.
+Huella md5 del texto anterior: fact.sinpe_adm_ventas(uuid,timestamptz,timestamptz,boolean) = fdb3d5c759420a15cb43082ecf6b3975
+Permisos que no cambian: {postgres=X, service_role=X}. SECURITY DEFINER, search_path vacio, STABLE.
+REVERTIR: ejecutar tal cual la seccion RESPALDO. Luego: notify pgrst, 'reload schema';
+
+========== RESPALDO (definicion anterior = REVERTIR) ==========
+
+CREATE OR REPLACE FUNCTION fact.sinpe_adm_ventas(p_soc uuid, p_desde timestamp with time zone, p_hasta timestamp with time zone, p_pruebas boolean DEFAULT false)
+ RETURNS TABLE(pago_id uuid, creado_en timestamp with time zone, monto numeric, referencia text, ref_norm text, venta_id uuid, venta_numero text, cobrado_por text, clave text)
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+  select p.id, p.creado_en, p.monto, p.referencia, fact.sinpe_ref_norm(p.referencia), v.id, v.numero, p.cobrado_por, cp.clave
+    from fact.pagos p
+    join fact.ventas v on v.id = p.venta_id and v.sociedad_id = p_soc and v.anulada_motivo is null
+    left join lateral (select c.clave from fact.comprobantes c where c.venta_id = v.id and c.tipo_doc in ('01','04')
+                        order by (c.estado = 'aceptado') desc, c.creado_en desc limit 1) cp on true
+   where p.medio = 'sinpe' and p.creado_en >= p_desde and p.creado_en < p_hasta
+     and (p_pruebas or not (coalesce(p.cobrado_por, '') = 'prueba' or coalesce(p.cobrado_por, '') like 'zz%' or coalesce(p.referencia, '') ~* '^prueba'))
+$function$;
+
+notify pgrst, 'reload schema';

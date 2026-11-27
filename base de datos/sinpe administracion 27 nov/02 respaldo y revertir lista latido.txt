@@ -1,0 +1,35 @@
+Respaldo y REVERTIR - correccion (b) ultimo latido de la lista de la caja excluye telefonos de prueba
+27 nov 2026, 12:12 hora de Costa Rica (18:12 UTC). Proyecto Supabase dwlbcbtwdungyrykgahm.
+Definicion anterior tomada con pg_get_functiondef ANTES de cambiar nada.
+Huella md5 del texto anterior: public.fx_sinpe_lista(uuid,integer) = 6099c2cab6ed897d84037b45eda16686
+Permisos que no cambian: {postgres=X, service_role=X, authenticated=X}. SECURITY DEFINER, search_path vacio, STABLE.
+REVERTIR: ejecutar tal cual la seccion RESPALDO. Luego: notify pgrst, 'reload schema';
+
+========== RESPALDO (definicion anterior = REVERTIR) ==========
+
+CREATE OR REPLACE FUNCTION public.fx_sinpe_lista(p_soc uuid, p_dias integer DEFAULT 3)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare emp text; d0 timestamptz; dias integer := least(greatest(coalesce(p_dias, 3), 1), 31); ve_pruebas boolean;
+begin
+  perform public.fx_chk();
+  perform public.fx_exigir_soc(p_soc);
+  if not fact.sinpe_activa() then return jsonb_build_object('activa', false, 'pagos', '[]'::jsonb); end if;
+  select codigo into emp from fact.sociedades where id = p_soc;
+  ve_pruebas := exists (select 1 from fact.usuarios uu where uu.auth_id = auth.uid() and uu.activo and (uu.usuario = 'prueba' or uu.usuario like 'zz%'));
+  d0 := ((now() at time zone 'America/Costa_Rica')::date - (dias - 1))::timestamp at time zone 'America/Costa_Rica';
+  return jsonb_build_object('activa', true, 'ahora', now(), 'empresa', emp,
+    'ultimo_aviso', (select max(coalesce(fecha_aviso, creado_en)) from fact.sinpe_pagos where empresa is not distinct from emp and coalesce(es_prueba, false) = false and motivo is distinct from 'historico'),
+    'ultimo_latido', (select max(ultimo_latido) from fact.sinpe_latidos where empresa is not distinct from emp),
+    'pagos', coalesce((select jsonb_agg(jsonb_build_object('id', p.id, 'hora', p.fecha_pago, 'monto', p.monto, 'pagador', p.pagador_nombre_parcial,
+          'telefono', p.pagador_telefono_parcial, 'detalle', p.detalle_pagador, 'comprobante', p.referencia_banco, 'prueba', coalesce(p.es_prueba, false),
+          'usado', u.pago_id is not null, 'usado_por', u.usado_por, 'usado_venta', u.venta_numero) order by p.fecha_pago desc)
+        from fact.sinpe_pagos p left join fact.sinpe_usados u on u.pago_id = p.id
+       where p.empresa is not distinct from emp and p.fecha_pago >= d0 and p.estado <> 'duplicado' and p.motivo is distinct from 'historico'
+         and (coalesce(p.es_prueba, false) = false or ve_pruebas)), '[]'::jsonb));
+end $function$;
+
+notify pgrst, 'reload schema';
