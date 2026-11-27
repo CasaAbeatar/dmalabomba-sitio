@@ -320,15 +320,15 @@ final class Actualizador {
                     Intent confirmar = intent.getParcelableExtra(Intent.EXTRA_INTENT);
                     String paquete = paqueteInstalador(app, confirmar);
                     if (paquete == null) {
+                        fallo(st, vc, version, "confirmacion_no_valida");   // primero el motivo: el aviso «abortada» llega despues
                         abandonarSesiones(app);
-                        fallo(st, vc, version, "confirmacion_no_valida");
                         return;
                     }
                     // Android pide confirmar y no hay quien pulse: no se abre un dialogo que nadie atendera; se reporta y
                     // se espera al siguiente intento (1 h, 6 h, 24 h; maximo 3 por version), sin bucle.
                     if (PantallaRemotaService.instancia() == null) {
+                        fallo(st, vc, version, "requiere_confirmacion");   // primero el motivo: el aviso «abortada» llega despues
                         abandonarSesiones(app);
-                        fallo(st, vc, version, "requiere_confirmacion");
                         return;
                     }
                     st.setUpdEstado("instalando", "esperando_confirmar", version, System.currentTimeMillis());
@@ -411,8 +411,8 @@ final class Actualizador {
             if (instaladorEsperado != null) {
                 // Nadie pulso en la ventana (el servicio no ve o no alcanza el boton): fallo claro, sin esperar los 15 min.
                 instaladorEsperado = null;
+                fallo(st, vc, version, "boton_no_pulsado");   // primero el motivo: el aviso «abortada» llega despues
                 abandonarSesiones(app);
-                fallo(st, vc, version, "boton_no_pulsado");
             }
         }, "ActualizacionBoton");
         t.setDaemon(true);
