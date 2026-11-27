@@ -223,7 +223,8 @@ activar_accesibilidad
 modo '{"actualizacion":{"v":"2.12.5","vc":29,"archivo":"apk-29.apk"}}'
 if esperar_val 300 '"boton_no_pulsado"' detalle actualizacion_detalle; then bien "con otro nombre en el dialogo: fallo reportado boton_no_pulsado (no pulso)"; else mal "no se reporto boton_no_pulsado (estado $(consulta detalle actualizacion_estado) / $(consulta detalle actualizacion_detalle))"; fi
 [ "$(vc_instalado)" = "$VC8A" ] && bien "no se instalo nada: sigue la vc $VC8A" || mal "se instalo algo aunque el nombre no coincidia: $(vc_instalado)"
-adb logcat -d | grep -q "boton del instalador pulsado" && mal "el pulsador pulso un dialogo que no era de esta app" || bien "el log no muestra pulsaciones en el caso del nombre distinto"
+# (se mira el registro continuo act-logcat-vivo.txt: «adb logcat -d» solo guarda ~100 KB y en la API 35 ya habria rotado)
+grep -q "boton del instalador pulsado" act-logcat-vivo.txt && mal "el pulsador pulso un dialogo que no era de esta app" || bien "el log no muestra pulsaciones en el caso del nombre distinto"
 adb shell run-as $P rm -f files/prueba_nombre_otro
 # el dialogo del instalador de la sesion abandonada sigue en pantalla: se cierra para que no lo pulse el paso 8 por error
 adb shell input keyevent KEYCODE_HOME
@@ -242,8 +243,8 @@ adb exec-out screencap -p > act-final.png
 adb logcat -d > act-logcat.txt 2>/dev/null
 sleep 2; kill $LOGCAT_PID 2>/dev/null
 [ -s act-logcat.txt ] || cp act-logcat-vivo.txt act-logcat.txt
-grep -E "Actualizador|boton del instalador|diag instalador|PantallaRemota" act-logcat.txt | tail -80 > act-logcat-actualizador.txt
-grep -q "boton del instalador pulsado" act-logcat.txt && bien "el log confirma «boton del instalador pulsado»" || mal "el log no muestra que el pulsador actuara"
+grep -E "Actualizador|boton del instalador|diag instalador|PantallaRemota" act-logcat-vivo.txt | tail -300 > act-logcat-actualizador.txt
+grep -q "boton del instalador pulsado" act-logcat-vivo.txt && bien "el log confirma «boton del instalador pulsado»" || mal "el log no muestra que el pulsador actuara"
 if esperar_val 240 '"2.12.3"' detalle app; then bien "la app 2.12.3 manda latidos"; else mal "no hay latidos de la 2.12.3"; fi
 
 if [ -z "$SOLO_PULSADOR" ]; then
