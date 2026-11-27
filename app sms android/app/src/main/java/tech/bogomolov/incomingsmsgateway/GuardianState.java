@@ -182,6 +182,12 @@ public class GuardianState {
     public long getAdbCierraTs() { return pref.getLong(K_ADB_CIERRA, 0); }
     public void setAdbCierraTs(long ts) { pref.edit().putLong(K_ADB_CIERRA, ts).commit(); }
 
+    private static final String K_ADB_DESARROLLO = "adb_desarrollo_por_app";
+
+    /** true si fue la app quien encendió «opciones de desarrollador» para abrir la depuración inalámbrica (al cerrar las apaga). */
+    public boolean getAdbDesarrolloPorApp() { return pref.getBoolean(K_ADB_DESARROLLO, false); }
+    public void setAdbDesarrolloPorApp(boolean v) { pref.edit().putBoolean(K_ADB_DESARROLLO, v).commit(); }
+
     // ---- órdenes remotas ----
 
     public synchronized RemoteCommands.CommandLog getCommandLog() {

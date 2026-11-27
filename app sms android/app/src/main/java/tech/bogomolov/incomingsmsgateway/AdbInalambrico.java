@@ -18,6 +18,11 @@ import java.util.concurrent.atomic.AtomicInteger;
  * concede UNA vez por adb) la app enciende o apaga Settings.Global.adb_wifi_enabled; lo que ELLA enciende se apaga solo a
  * los 30 min. Lo que la persona encendió a mano no se toca (no hay hora de cierre anotada).
  *
+ * Auditoría 2.12.0 (reglas en AdbPolitica, con pruebas): otro abrir_adb mientras está abierta NO extiende el plazo; si la
+ * app tuvo que encender «opciones de desarrollador» para abrirla, al cerrar (orden o autocierre) también las apaga (anota
+ * esa bandera en GuardianState); y el puerto solo se reporta mientras está abierta. abrir_adb exige además la respuesta
+ * firmada (ver RemoteCommands.SENSIBLES).
+ *
  * Límite honesto de Android: encender la depuración inalámbrica NO empareja ningún computador. La primera vez hay que
  * emparejar (adb pair) con el código de la pantalla de «Depuración inalámbrica»; con la pantalla remota se puede abrir
  * ese menú y leer el código. Desde Android 11; en versiones anteriores la orden se confirma como «comando_no_soportado».
@@ -56,12 +61,34 @@ public final class AdbInalambrico {
         return "ok";
     }
 
-    /** Enciende la depuración inalámbrica y anota la hora de cierre automático. @return true si queda encendida. */
+    /** true si «opciones de desarrollador» están encendidas ahora. */
+    static boolean desarrolloEncendido(Context ctx) {
+        try {
+            return Settings.Global.getInt(ctx.getContentResolver(), Settings.Global.DEVELOPMENT_SETTINGS_ENABLED, 0) == 1;
+        } catch (Throwable e) {
+            return false;
+        }
+    }
+
+    /**
+     * Enciende la depuración inalámbrica y anota la hora de cierre automático. Si ya estaba abierta por la app y no venció,
+     * NO se extiende el plazo; si estaba abierta a mano, no se toca. @return true si queda encendida.
+     */
     public static boolean abrir(Context ctx, GuardianState st, long ahora) {
         try {
             if (!soportado() || !tienePermiso(ctx)) return false;
+            AdbPolitica.Apertura a = AdbPolitica.decidirApertura(activo(ctx), st.getAdbCierraTs(), ahora);
+            if (a == AdbPolitica.Apertura.YA_ABIERTA_POR_APP || a == AdbPolitica.Apertura.YA_ABIERTA_A_MANO) {
+                Log.i(TAG, "abrir: ya estaba abierta (" + a + "); no se cambia el plazo");
+                return true;
+            }
+            if (a == AdbPolitica.Apertura.CERRAR_VENCIDA_Y_ABRIR) cerrar(ctx, st);   // vencida: plazo nuevo y limpio
             // Desde Android 11 la depuración inalámbrica solo funciona con las opciones de desarrollador encendidas.
-            Settings.Global.putInt(ctx.getContentResolver(), Settings.Global.DEVELOPMENT_SETTINGS_ENABLED, 1);
+            // Si estaban apagadas las enciende la app y lo anota, para apagarlas al cerrar.
+            if (AdbPolitica.encenderDesarrollo(desarrolloEncendido(ctx))) {
+                st.setAdbDesarrolloPorApp(true);
+                Settings.Global.putInt(ctx.getContentResolver(), Settings.Global.DEVELOPMENT_SETTINGS_ENABLED, 1);
+            }
             Settings.Global.putInt(ctx.getContentResolver(), AJUSTE_ADB_WIFI, 1);
             st.setAdbCierraTs(ahora + AUTOCIERRE_MS);
             Guardian.scheduleAlarm(ctx, AUTOCIERRE_MS);
@@ -74,12 +101,20 @@ public final class AdbInalambrico {
         }
     }
 
-    /** Apaga la depuración inalámbrica. @return true si queda apagada. */
+    /**
+     * Apaga la depuración inalámbrica y, si las opciones de desarrollador las encendió la app, también ellas.
+     * @return true si la depuración inalámbrica queda apagada.
+     */
     public static boolean cerrar(Context ctx, GuardianState st) {
         try {
             if (!soportado() || !tienePermiso(ctx)) return false;
             Settings.Global.putInt(ctx.getContentResolver(), AJUSTE_ADB_WIFI, 0);
             st.setAdbCierraTs(0);
+            if (AdbPolitica.apagarDesarrolloAlCerrar(st.getAdbDesarrolloPorApp())) {
+                Settings.Global.putInt(ctx.getContentResolver(), Settings.Global.DEVELOPMENT_SETTINGS_ENABLED, 0);
+                st.setAdbDesarrolloPorApp(false);
+                Log.i(TAG, "cerrar: se apagaron tambien las opciones de desarrollador que habia encendido la app");
+            }
             return !activo(ctx);
         } catch (Throwable e) {
             Log.e(TAG, "cerrar: " + e);
@@ -102,10 +137,10 @@ public final class AdbInalambrico {
     /**
      * Puerto de la depuración inalámbrica (el de «conectar»); 0 si no se pudo leer. Primero la propiedad del sistema;
      * si Android no la deja leer, se pregunta por mDNS (_adb-tls-connect._tcp), que es como lo hace el propio adb. Se
-     * llama desde un hilo de fondo; espera como mucho ~4 s.
+     * llama desde un hilo de fondo; espera como mucho ~4 s. Solo mientras está abierta (y, si la abrió la app, dentro de su plazo).
      */
-    public static int puerto(Context ctx) {
-        if (!activo(ctx)) return 0;
+    public static int puerto(Context ctx, GuardianState st, long ahora) {
+        if (!AdbPolitica.puertoReportable(activo(ctx), st.getAdbCierraTs(), ahora)) return 0;
         int p = puertoPropiedad();
         if (p > 0) return p;
         return puertoMdns(ctx);

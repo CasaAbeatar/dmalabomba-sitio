@@ -174,7 +174,7 @@ public final class Guardian {
         BandejaSms.medir(ctx, st, d, ahora);
         AdbInalambrico.revisarVencimiento(ctx, st, ahora);
         d.adbActivo = AdbInalambrico.activo(ctx);
-        d.adbPuerto = d.adbActivo ? AdbInalambrico.puerto(ctx) : 0;
+        d.adbPuerto = d.adbActivo ? AdbInalambrico.puerto(ctx, st, ahora) : 0;
         Actualizador.llenarDetalle(ctx, st, d, ahora);
         return d;
     }
