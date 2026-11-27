@@ -25,7 +25,7 @@ nota "1. servicio en primer plano y su tipo"
 adb shell am start -n $P/.MainActivity >/dev/null 2>&1; sleep 3
 if esperar_servicio 60; then bien "SmsReceiverService en primer plano (isForeground=true)"; else mal "SmsReceiverService no esta en primer plano"; fi
 servicio_en_primer_plano > t34-servicio-antes.txt
-if grep -qiE "foregroundServiceType=0x40000000|specialUse" t34-servicio-antes.txt; then bien "tipo de servicio en primer plano: specialUse"; else mal "no se ve el tipo specialUse en dumpsys: $(grep -i foregroundServiceType t34-servicio-antes.txt | head -2)"; fi
+if grep -qiE "types=40000000|foregroundServiceType=0x40000000|specialUse" t34-servicio-antes.txt; then bien "tipo de servicio en primer plano: specialUse"; else mal "no se ve el tipo specialUse en dumpsys: $(grep -iE "isForeground|types=" t34-servicio-antes.txt | head -2)"; fi
 
 nota "2. reiniciar el telefono (BOOT_COMPLETED debe volver a arrancar el servicio en primer plano)"
 python3 ../scripts-prueba/guardian-mock.py & echo $! > srv-t34.pid
@@ -38,7 +38,7 @@ sleep 10
 adb shell input keyevent KEYCODE_WAKEUP; adb shell wm dismiss-keyguard
 if esperar_servicio 180; then bien "tras reiniciar, el servicio volvio solo a primer plano (sin abrir la app)"; else mal "tras reiniciar el servicio no volvio a primer plano"; fi
 servicio_en_primer_plano > t34-servicio-despues.txt
-grep -qiE "foregroundServiceType=0x40000000|specialUse" t34-servicio-despues.txt && bien "tras reiniciar sigue con el tipo specialUse" || mal "tras reiniciar no se ve el tipo specialUse"
+grep -qiE "types=40000000|foregroundServiceType=0x40000000|specialUse" t34-servicio-despues.txt && bien "tras reiniciar sigue con el tipo specialUse" || mal "tras reiniciar no se ve el tipo specialUse"
 
 nota "3. SMS despues del reinicio: debe llegar al servidor falso"
 sleep 5
