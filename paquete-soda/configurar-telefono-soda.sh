@@ -370,8 +370,13 @@ if [ "${SIN_TCPIP:-0}" != "1" ]; then
   IP="$(SH ip -f inet addr show wlan0 | grep -m1 'inet ' | sed 's/.*inet \([0-9.]*\).*/\1/')"
   SALIDA="$(A tcpip 5555)"
   linea "    $SALIDA"
+  # adb se reinicia y el telefono vuelve a aparecer por USB: se espera hasta 40 s, sin quedarse colgado.
   sleep 3
-  "$ADB" -s "$SER" wait-for-device </dev/null >/dev/null 2>&1
+  n=0
+  while [ "$n" -lt 20 ]; do
+    [ "$("$ADB" -s "$SER" get-state </dev/null 2>/dev/null | tr -d '\r')" = "device" ] && break
+    n=$((n+1)); sleep 2
+  done
   PUERTO="$("$ADB" -s "$SER" shell getprop service.adb.tcp.port </dev/null 2>/dev/null | tr -d '\r')"
   if [ "$PUERTO" = "5555" ]; then reg_h "ADB por Wi-Fi listo en el puerto 5555 (hasta que se reinicie el telefono)"; else reg_n "ADB por Wi-Fi (puerto 5555): $SALIDA"; fi
 fi
