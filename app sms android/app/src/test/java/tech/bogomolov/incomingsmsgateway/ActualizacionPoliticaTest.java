@@ -225,4 +225,51 @@ public class ActualizacionPoliticaTest {
         assertFalse("nulo", ActualizacionPolitica.mismosFirmantes(null, new byte[][]{a}));
         assertFalse("certificado vacio", ActualizacionPolitica.mismosFirmantes(new byte[][]{new byte[0]}, new byte[][]{new byte[0]}));
     }
+
+    // ------------------------------------------------------------------ 2.12.0 (auditoría): tope global y límite de vc
+
+    @Test
+    public void topeGlobalDeDescargasPorDiaSinImportarLaVersion() {
+        long h = 3_600_000L;
+        assertEquals(3, ActualizacionPolitica.TOPE_DESCARGAS_DIA);
+        assertTrue(ActualizacionPolitica.dentroDelTopeDiario(new long[0], AHORA, 3));
+        assertTrue(ActualizacionPolitica.dentroDelTopeDiario(null, AHORA, 3));
+        assertTrue("2 descargas: todavía se puede una", ActualizacionPolitica.dentroDelTopeDiario(new long[]{AHORA - h, AHORA - 2 * h}, AHORA, 3));
+        assertFalse("3 en 24 h: tope alcanzado", ActualizacionPolitica.dentroDelTopeDiario(new long[]{AHORA - h, AHORA - 2 * h, AHORA - 3 * h}, AHORA, 3));
+        assertFalse(ActualizacionPolitica.dentroDelTopeDiario(new long[]{AHORA, AHORA, AHORA, AHORA}, AHORA, 3));
+        // las de hace 24 h o más ya no cuentan
+        assertTrue(ActualizacionPolitica.dentroDelTopeDiario(
+                new long[]{AHORA - 25 * h, AHORA - 24 * h, AHORA - 23 * h}, AHORA, 3));
+        assertEquals(1, ActualizacionPolitica.descargasEnLaVentana(new long[]{AHORA - 25 * h, AHORA - 24 * h, AHORA - 23 * h}, AHORA));
+        // un reloj retrocedido (marcas en el futuro lejano) no bloquea para siempre
+        assertTrue(ActualizacionPolitica.dentroDelTopeDiario(new long[]{AHORA + 10 * h, AHORA + 11 * h, AHORA + 12 * h}, AHORA, 3));
+    }
+
+    @Test
+    public void podarDescargasDejaSoloLasDeLasUltimas24hYAcota() {
+        long h = 3_600_000L;
+        long[] p = ActualizacionPolitica.podarDescargas(new long[]{AHORA - 30 * h, AHORA - 2 * h, AHORA - h}, AHORA);
+        assertEquals(2, p.length);
+        assertEquals(AHORA - 2 * h, p[0]);
+        assertEquals(AHORA - h, p[1]);
+        long[] muchas = new long[50];
+        for (int i = 0; i < muchas.length; i++) muchas[i] = AHORA - (50 - i) * 1000L;
+        assertEquals(ActualizacionPolitica.MAX_DESCARGAS_RECORDADAS, ActualizacionPolitica.podarDescargas(muchas, AHORA).length);
+        assertEquals(0, ActualizacionPolitica.podarDescargas(null, AHORA).length);
+    }
+
+    @Test
+    public void elLimiteDeVcCoincideConElDelServidor() throws Exception {
+        long ts = AHORA - 3_600_000L;
+        // 1 a 10.000.000 vale (el servidor rechaza vc > 1e7: ver CONTRATO-2.12.md); 0, negativo y 10.000.001 no
+        for (long vc : new long[]{1, 22, 10_000_000L}) {
+            ActualizacionPolitica.Lectura l = leer(respuesta("2.12.0", vc, URL_BUENA, SHA, ts, ECO, firmar("2.12.0", vc, URL_BUENA, SHA, ts, ECO)));
+            assertNotNull("vc " + vc, l.oferta);
+            assertEquals((int) vc, l.oferta.vc);
+        }
+        for (long vc : new long[]{0, -1, 10_000_001L, 2_147_483_648L}) {
+            assertEquals("vc " + vc, "vc_invalido",
+                    leer(respuesta("2.12.0", vc, URL_BUENA, SHA, ts, ECO, firmar("2.12.0", vc, URL_BUENA, SHA, ts, ECO))).rechazo);
+        }
+    }
 }

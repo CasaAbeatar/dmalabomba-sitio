@@ -47,25 +47,22 @@ final class Actualizador {
     static final String TAG = "Actualizador";
     static final String ACCION_ESTADO = "tech.bogomolov.incomingsmsgateway.ACTUALIZACION_ESTADO";
 
-    /** Textos EXACTOS (sin distinguir mayúsculas) de los botones que el servicio de accesibilidad puede pulsar. */
-    static final String[] TEXTOS_BOTON = {"Instalar", "Actualizar", "Update", "Install"};
-    /** Instaladores del sistema conocidos; cualquier otro paquete de sistema que dé Android también vale (ver paqueteInstalador). */
-    private static final List<String> INSTALADORES = Arrays.asList(
-            "com.google.android.packageinstaller", "com.android.packageinstaller", "com.samsung.android.packageinstaller",
-            "com.hihonor.packageinstaller", "com.huawei.packageinstaller");
+    /** Textos EXACTOS de los botones que el servicio de accesibilidad puede pulsar (reglas en InstaladorPolitica). */
+    static final String[] TEXTOS_BOTON = InstaladorPolitica.TEXTOS_BOTON;
 
     /** Un estado «descargando» o «instalando» más viejo que esto se da por fallido. */
     static final long ESTADO_MAX_MS = 15L * 60_000L;
     /** Cuánto se espera un momento seguro (sin cola ni SMS recientes) después de descargar, antes de abandonar el intento. */
     static final long ESPERA_SEGURA_MS = 5L * 60_000L;
-    /** Tiempo durante el cual se pulsa el botón del instalador tras abrirlo. */
-    static final long VENTANA_PULSAR_MS = 3L * 60_000L;
+    /** Auditoría 2.12.0: el botón del instalador solo se pulsa durante 90 s desde que la app abrió su sesión de instalación. */
+    static final long VENTANA_PULSAR_MS = InstaladorPolitica.VENTANA_MS;
 
     private static final AtomicBoolean EN_CURSO = new AtomicBoolean(false);
 
     /** Paquete del instalador cuyo diálogo se espera y hasta cuándo (reloj monótono); null = nada que pulsar. */
     private static volatile String instaladorEsperado = null;
-    private static volatile long pulsarHastaMs = 0;
+    /** Reloj monótono en que la app abrió su sesión de instalación (createSession); 0 = ninguna. De aquí cuentan los 90 s. */
+    private static volatile long sesionInicioMs = 0;
 
     private Actualizador() {
     }
@@ -85,6 +82,13 @@ final class Actualizador {
             final ActualizacionPolitica.Oferta o = l.oferta;
             if (!ActualizacionPolitica.esMasNueva(o.vc, BuildConfig.VERSION_CODE)) return;
             revisarPendiente(app, st, ahora);
+            // Auditoría 2.12.0: tope global de descargas por día, de cualquier versión (además del límite por versión).
+            if (!ActualizacionPolitica.dentroDelTopeDiario(st.getUpdDescargas(), ahora, topeDescargasDia(app))) {
+                Log.i(TAG, "actualizacion " + o.v + ": tope diario de descargas alcanzado ("
+                        + ActualizacionPolitica.descargasEnLaVentana(st.getUpdDescargas(), ahora) + " en 24 h)");
+                if ("ninguna".equals(st.getUpdEstado())) st.setUpdEstado("fallo", "tope_diario", o.v, ahora);   // visible en el latido, una vez
+                return;
+            }
             String estado = st.getUpdEstado();
             if (("descargando".equals(estado) || "instalando".equals(estado)) && st.getUpdVc() == o.vc) return;   // ya en curso
             int cuenta = st.intentosUpd(o.vc);
@@ -118,6 +122,7 @@ final class Actualizador {
     private static void ejecutar(Context app, GuardianState st, ActualizacionPolitica.Oferta o) {
         long ahora = System.currentTimeMillis();
         int intento = st.contarIntentoUpd(o.vc, ahora);
+        st.registrarDescargaUpd(ahora);   // cuenta para el tope global aunque la descarga falle
         Log.i(TAG, "actualizando a " + o.v + " (vc " + o.vc + "), intento " + intento);
         st.setUpdEstado("descargando", "descarga", o.v, ahora);
         File dir = new File(app.getCacheDir(), "actualizacion");
@@ -278,6 +283,7 @@ final class Actualizador {
                 p.setRequireUserAction(PackageInstaller.SessionParams.USER_ACTION_NOT_REQUIRED);
             }
             id = pi.createSession(p);
+            sesionInicioMs = SystemClock.elapsedRealtime();   // desde aquí corren los 90 s del pulsador de accesibilidad
             sesion = pi.openSession(id);
             try (InputStream in = new FileInputStream(apk); OutputStream out = sesion.openWrite("base.apk", 0, apk.length())) {
                 byte[] buf = new byte[64 * 1024];
@@ -332,8 +338,13 @@ final class Actualizador {
                         return;
                     }
                     st.setUpdEstado("instalando", "esperando_confirmar", version, System.currentTimeMillis());
+                    if (!InstaladorPolitica.dentroDeVentana(sesionInicioMs, SystemClock.elapsedRealtime())) {
+                        // Pasaron más de 90 s desde que la app abrió la sesión (o no la abrió esta app): nada que pulsar.
+                        fallo(st, vc, version, "boton_no_pulsado");
+                        abandonarSesiones(app);
+                        return;
+                    }
                     instaladorEsperado = paquete;
-                    pulsarHastaMs = SystemClock.elapsedRealtime() + VENTANA_PULSAR_MS;
                     confirmar.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
                     try {
                         app.startActivity(confirmar);
@@ -365,8 +376,9 @@ final class Actualizador {
     }
 
     /**
-     * El paquete del instalador al que apunta el intent de confirmación, SOLO si es un instalador conocido o una app del sistema
-     * (nunca la propia app ni una app instalada por el usuario). null si no es válido.
+     * El paquete del instalador al que apunta el intent de confirmación, SOLO si está en la lista cerrada de instaladores del
+     * sistema (InstaladorPolitica.PAQUETES): ni la propia app, ni otra app del sistema, ni una instalada por el usuario.
+     * null si no es válido.
      */
     static String paqueteInstalador(Context ctx, Intent confirmar) {
         if (confirmar == null) return null;
@@ -380,21 +392,42 @@ final class Actualizador {
             if (c == null) return null;
             String pkg = c.getPackageName();
             if (pkg == null || pkg.equals(ctx.getPackageName())) return null;
-            if (INSTALADORES.contains(pkg)) return pkg;
-            try {
-                ApplicationInfo ai = pm.getApplicationInfo(pkg, 0);
-                if ((ai.flags & ApplicationInfo.FLAG_SYSTEM) != 0) return pkg;
-            } catch (PackageManager.NameNotFoundException ignored) {
-            }
+            if (InstaladorPolitica.paqueteValido(pkg)) return pkg;
         } catch (Throwable ignored) {
         }
         return null;
     }
 
+    /**
+     * Tope global de descargas por 24 h. Solo en compilaciones de depuración (pruebas de punta a punta, que descargan seis
+     * versiones seguidas) un archivo marcador lo sube; en producción BuildConfig.DEBUG es false y eso NO existe.
+     */
+    static int topeDescargasDia(Context ctx) {
+        if (BuildConfig.DEBUG && new File(ctx.getFilesDir(), "prueba_tope_global").exists()) return 50;
+        return ActualizacionPolitica.TOPE_DESCARGAS_DIA;
+    }
+
+    /** ¿Seguimos dentro de los 90 s desde que la app abrió su sesión de instalación? (el pulsador lo vuelve a comprobar) */
+    static boolean ventanaDePulsadoAbierta() {
+        return InstaladorPolitica.dentroDeVentana(sesionInicioMs, SystemClock.elapsedRealtime());
+    }
+
+    /** El nombre (label) real de esta app, el que muestra el instalador del sistema en su diálogo. */
+    static String nombreApp(Context ctx) {
+        // Solo depuración (prueba de punta a punta del caso negativo): un archivo marcador finge que el nombre es otro.
+        if (BuildConfig.DEBUG && new File(ctx.getFilesDir(), "prueba_nombre_otro").exists()) return "OtraAppQueNoEsta";
+        try {
+            CharSequence l = ctx.getApplicationInfo().loadLabel(ctx.getPackageManager());
+            return l == null ? "" : l.toString();
+        } catch (Throwable e) {
+            return "";
+        }
+    }
+
     /** Mientras el diálogo del instalador esté en pantalla, pide al servicio de accesibilidad que pulse el botón (una sola vez). */
     private static void iniciarPulsador(final Context app, final GuardianState st, final int vc, final String version) {
         Thread t = new Thread(() -> {
-            while (SystemClock.elapsedRealtime() < pulsarHastaMs && instaladorEsperado != null) {
+            while (InstaladorPolitica.dentroDeVentana(sesionInicioMs, SystemClock.elapsedRealtime()) && instaladorEsperado != null) {
                 try {
                     Thread.sleep(1_000L);
                 } catch (InterruptedException e) {
@@ -402,7 +435,7 @@ final class Actualizador {
                 }
                 PantallaRemotaService s = PantallaRemotaService.instancia();
                 String paquete = instaladorEsperado;
-                if (s != null && paquete != null && s.pulsarBotonInstalador(paquete)) {
+                if (s != null && paquete != null && s.pulsarBotonInstalador(paquete, nombreApp(app))) {
                     Log.i(TAG, "boton del instalador pulsado");
                     instaladorEsperado = null;
                     return;

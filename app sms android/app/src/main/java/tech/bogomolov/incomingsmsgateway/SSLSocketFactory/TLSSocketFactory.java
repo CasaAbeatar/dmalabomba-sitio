@@ -68,10 +68,22 @@ public class TLSSocketFactory extends SSLSocketFactory {
         return enableTLSOnSocket(factory.createSocket(address, port, localAddress, localPort));
     }
 
-    private Socket enableTLSOnSocket(Socket socket) {
-        if((socket instanceof SSLSocket)) {
-            String[] supportedProtocols = ((SSLSocket)socket).getSupportedProtocols();
-            ((SSLSocket)socket).setEnabledProtocols(supportedProtocols);
+    /**
+     * Auditoría 2.12.0: solo TLS 1.2 y 1.3 (TlsPolitica). Si el teléfono no soporta ninguno de los dos no se conecta (nunca se
+     * cae a TLS 1.0/1.1 ni SSLv3).
+     */
+    private Socket enableTLSOnSocket(Socket socket) throws IOException {
+        if ((socket instanceof SSLSocket)) {
+            SSLSocket ssl = (SSLSocket) socket;
+            String[] permitidos = TlsPolitica.filtrar(ssl.getSupportedProtocols());
+            if (permitidos.length == 0) {
+                try {
+                    socket.close();
+                } catch (IOException ignored) {
+                }
+                throw new IOException("el telefono no soporta TLS 1.2 ni 1.3");
+            }
+            ssl.setEnabledProtocols(permitidos);
         }
         return socket;
     }

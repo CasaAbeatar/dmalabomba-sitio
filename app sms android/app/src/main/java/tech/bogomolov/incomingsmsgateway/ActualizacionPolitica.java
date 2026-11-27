@@ -20,7 +20,8 @@ import java.util.regex.Pattern;
  *   firma válida (tiempo constante) y eco = ts enviado; https y host exacto pagos.dmalabomba.com (ruta /instalar/*.apk,
  *   sin usuario, puerto, consulta ni fragmento); versionCode mayor que el instalado; ts de hace 24 h como máximo;
  *   sha256 del archivo igual; mismo certificado de firma que la app instalada; hasta 3 intentos por versión con espera
- *   creciente; y nunca con cola de reenvío pendiente ni un SMS recibido hace menos de 60 s.
+ *   creciente; como máximo 3 descargas en 24 h en total (de cualquier versión); vc de 1 a 10.000.000 (el servidor aplica el
+ *   mismo límite: ver CONTRATO-2.12.md); y nunca con cola de reenvío pendiente ni un SMS recibido hace menos de 60 s.
  * El archivo (sha256, certificado, versión) se comprueba en Actualizador, que usa estas mismas funciones.
  */
 public final class ActualizacionPolitica {
@@ -30,6 +31,15 @@ public final class ActualizacionPolitica {
     public static final long VIGENCIA_MS = 24L * 3600_000L;
     public static final long ADELANTO_MAX_MS = 5L * 60_000L;
     public static final int MAX_INTENTOS = 3;
+    /**
+     * Auditoría 2.12.0: tope GLOBAL de descargas de actualización, sin importar la versión: como máximo 3 en 24 h. Se suma al
+     * límite por versión (que una oferta con otro vc cada vez no puede esquivar) y evita que un servidor, o quien lo suplante,
+     * gaste los datos del chip pidiendo versiones distintas sin parar.
+     */
+    public static final int TOPE_DESCARGAS_DIA = 3;
+    public static final long VENTANA_TOPE_MS = 24L * 3600_000L;
+    /** Cuántas descargas recientes se recuerdan como máximo (el tope real es mucho menor). */
+    public static final int MAX_DESCARGAS_RECORDADAS = 20;
     /** Espera tras el intento 1, 2 y 3 fallidos (1 h, 6 h, 24 h). Tras el tercero ya no se reintenta esa versión. */
     static final long[] ESPERAS_MS = {3600_000L, 6L * 3600_000L, 24L * 3600_000L};
     /** Un SMS recibido hace menos que esto frena la instalación (se espera al siguiente latido). */
@@ -161,6 +171,35 @@ public final class ActualizacionPolitica {
         if (cuenta >= MAX_INTENTOS) return -1;
         if (ultimoIntentoMs > ahoraMs) return 0;
         return Math.max(0, ESPERAS_MS[cuenta - 1] - (ahoraMs - ultimoIntentoMs));
+    }
+
+    /** ¿Cuántas de estas descargas caen en las últimas 24 h? (las del «futuro», por un reloj retrocedido, no cuentan). */
+    public static int descargasEnLaVentana(long[] descargasMs, long ahoraMs) {
+        if (descargasMs == null) return 0;
+        int n = 0;
+        for (long t : descargasMs) {
+            if (t > ahoraMs - VENTANA_TOPE_MS && t <= ahoraMs + ADELANTO_MAX_MS) n++;
+        }
+        return n;
+    }
+
+    /** ¿Todavía se puede descargar otra? (menos de {@code tope} descargas en las últimas 24 h, de cualquier versión). */
+    public static boolean dentroDelTopeDiario(long[] descargasMs, long ahoraMs, int tope) {
+        return descargasEnLaVentana(descargasMs, ahoraMs) < tope;
+    }
+
+    /** Deja solo las descargas de las últimas 24 h (y a lo más las más recientes MAX_DESCARGAS_RECORDADAS), en orden. */
+    public static long[] podarDescargas(long[] descargasMs, long ahoraMs) {
+        if (descargasMs == null) return new long[0];
+        long[] tmp = new long[descargasMs.length];
+        int n = 0;
+        for (long t : descargasMs) {
+            if (t > ahoraMs - VENTANA_TOPE_MS && t <= ahoraMs + ADELANTO_MAX_MS) tmp[n++] = t;
+        }
+        int ini = Math.max(0, n - MAX_DESCARGAS_RECORDADAS);
+        long[] out = new long[n - ini];
+        System.arraycopy(tmp, ini, out, 0, out.length);
+        return out;
     }
 
     /** Nunca se instala con una cola de reenvío pendiente ni con un SMS recibido hace menos de 60 s. */

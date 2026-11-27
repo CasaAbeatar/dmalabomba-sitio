@@ -141,4 +141,19 @@ public class AjustesRemotosTest {
         assertEquals("cerrar_adb", l.get(1).cmd);
         assertEquals("latido_ya", l.get(2).cmd);
     }
+
+    /** Auditoría 2.12.0: «instalar_apps» se acepta igual que las otras seis (el servidor lo acepta en su lista de «que»). */
+    @Test
+    public void instalarAppsSeAceptaConsistenteConElServidor() {
+        assertTrue(AjustesRemotos.QUE.contains("instalar_apps"));
+        List<AjustesRemotos.Candidato> c = AjustesRemotos.candidatos("instalar_apps");
+        assertFalse(c.isEmpty());
+        assertEquals("android.settings.MANAGE_UNKNOWN_APP_SOURCES", c.get(0).accion);
+        assertTrue(c.get(0).conPaqueteDeLaApp);
+        PantallaProtocolo.Accion a = unaAccion("{\"id\":9,\"a\":\"abrir_ajuste\",\"que\":\"instalar_apps\",\"cuadro_seq\":4}");
+        assertNotNull(a);
+        assertNull(a.rechazo);
+        assertEquals("instalar_apps", a.que);
+        assertEquals("ok:instalar_apps", AjustesRemotos.resultadoOk("instalar_apps"));
+    }
 }

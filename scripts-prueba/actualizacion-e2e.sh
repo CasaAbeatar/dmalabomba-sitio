@@ -6,7 +6,12 @@
 #     dos instalaciones buenas: sin confirmacion y, forzando la confirmacion, con el boton pulsado por accesibilidad;
 #     y forzando la confirmacion SIN accesibilidad: fallo «requiere_confirmacion» y ningun reintento en bucle.
 # Necesita en act-apks/: apk-22.apk (esta version), apk-23.apk (vc 23, 2.12.1), apk-24-otra.apk (vc 24, 2.12.2, OTRO certificado),
-# apk-27.apk (vc 27, 2.12.3), apk-28.apk (vc 28, 2.12.4), todos del mismo certificado de depuracion salvo el de «otra».
+# apk-27.apk (vc 27, 2.12.3), apk-28.apk (vc 28, 2.12.4), apk-29.apk (vc 29, 2.12.5), todos del mismo certificado de depuracion
+# salvo el de «otra».
+# Auditoria 2.12.0: ademas se comprueba (a) que cerrar_adb deja «opciones de desarrollador» como estaban, (b) que el pulsador de
+# accesibilidad NO pulsa si el dialogo del instalador no muestra el nombre de la app (paso 8a), y (c) el tope global de 3 descargas
+# por 24 h (paso 9). Los pasos 5 a 8a descargan seis versiones seguidas: un archivo marcador de DEPURACION
+# (files/prueba_tope_global) sube el tope a 50 hasta el paso 9, donde se retira.
 P=tech.bogomolov.incomingsmsgateway
 D=$(pwd)
 SCRIPTS="$D/../scripts-prueba"
@@ -95,6 +100,8 @@ adb logcat -c
 adb logcat -v threadtime > act-logcat-vivo.txt 2>&1 &
 LOGCAT_PID=$!
 adb shell am start -n $P/.MainActivity >/dev/null
+adb shell run-as $P mkdir -p files
+adb shell run-as $P touch files/prueba_tope_global
 
 nota "1. salud ampliada en el latido"
 if esperar_val 150 '"2.12.0"' detalle app; then bien "el latido llega con app=2.12.0"; else mal "no llego el latido de la 2.12.0"; fi
@@ -116,6 +123,8 @@ if esperar_cero 240 detalle_num sms_sin_reenviar; then bien "tras reenviar_histo
 [ "$(consulta resultado 301)" = '"ok"' ] && bien "reenviar_historial confirmado ok" || mal "reenviar_historial resultado: $(consulta resultado 301)"
 
 nota "3. depuracion inalambrica a pedido"
+DEV0=$(adb shell settings get global development_settings_enabled | tr -d '\r')
+echo "opciones de desarrollador antes: $DEV0"
 modo '{"comandos":[{"id":401,"cmd":"abrir_adb"}]}'
 if esperar_val 200 '"ok"' resultado 401; then bien "abrir_adb confirmado ok"; else mal "abrir_adb resultado: $(consulta resultado 401)"; fi
 # El emulador no tiene una red wifi conocida y Android apaga solo la depuracion inalambrica unos segundos despues:
@@ -127,6 +136,8 @@ else mal "ni el latido ni el registro muestran la depuracion inalambrica activa"
 modo '{"comandos":[{"id":401,"cmd":"abrir_adb"},{"id":402,"cmd":"cerrar_adb"}]}'
 if esperar_val 200 '"ok"' resultado 402; then bien "cerrar_adb confirmado ok"; else mal "cerrar_adb resultado: $(consulta resultado 402)"; fi
 [ "$(adb shell settings get global adb_wifi_enabled | tr -d '\r')" = "0" ] && bien "Settings.Global.adb_wifi_enabled=0" || mal "adb_wifi_enabled no quedo en 0"
+# Auditoria: al cerrar, las opciones de desarrollador quedan como estaban (si las encendio la app, las apaga)
+[ "$(adb shell settings get global development_settings_enabled | tr -d '\r')" = "$DEV0" ] && bien "las opciones de desarrollador quedaron como estaban ($DEV0)" || mal "las opciones de desarrollador no quedaron como estaban (antes $DEV0, ahora $(adb shell settings get global development_settings_enabled | tr -d '\r'))"
 if esperar_val 150 'false' detalle adb_activo; then bien "el latido reporta adb_activo=false"; else mal "el latido no reporta adb_activo=false"; fi
 [ "$(consulta veces_ejecutada 401)" = "1" ] && bien "abrir_adb (id 401) se ejecuto una sola vez" || mal "id 401 ejecutado $(consulta veces_ejecutada 401) veces"
 # Android (SystemUI) pregunta «¿Permitir depuracion inalambrica en esta red?» al encender adb_wifi en una red no aprobada:
@@ -191,16 +202,34 @@ N28=$(( $(grep -c "apk-28.apk" act-descargas.log 2>/dev/null) - D28 ))
 adb shell dumpsys window | grep -m1 -E "mCurrentFocus" | sed 's/^ */foco: /'
 
 fi
+activar_accesibilidad() {
+  local SERV="$P/$P.PantallaRemotaService" LISTA NUEVA
+  LISTA=$(adb shell settings get secure enabled_accessibility_services | tr -d '\r')
+  if [ "$LISTA" = "null" ] || [ -z "$LISTA" ]; then NUEVA="$SERV"; else NUEVA="$LISTA:$SERV"; fi
+  case "$LISTA" in *$SERV*) ;; *) adb shell settings put secure enabled_accessibility_services "$NUEVA";; esac
+  adb shell settings put secure accessibility_enabled 1
+  adb shell input keyevent KEYCODE_WAKEUP; adb shell wm dismiss-keyguard
+  sleep 10
+}
+
+nota "8a. Android pide confirmacion, la accesibilidad esta activa, pero el dialogo NO muestra el nombre de esta app (vc 29): el pulsador no pulsa"
+modo '{}'
+VC8A=$(vc_instalado)
+adb shell run-as $P touch files/prueba_confirmacion
+adb shell run-as $P touch files/prueba_nombre_otro   # solo depuracion: la app cree que su nombre es otro
+activar_accesibilidad
+modo '{"actualizacion":{"v":"2.12.5","vc":29,"archivo":"apk-29.apk"}}'
+if esperar_val 300 '"boton_no_pulsado"' detalle actualizacion_detalle; then bien "con otro nombre en el dialogo: fallo reportado boton_no_pulsado (no pulso)"; else mal "no se reporto boton_no_pulsado (estado $(consulta detalle actualizacion_estado) / $(consulta detalle actualizacion_detalle))"; fi
+[ "$(vc_instalado)" = "$VC8A" ] && bien "no se instalo nada: sigue la vc $VC8A" || mal "se instalo algo aunque el nombre no coincidia: $(vc_instalado)"
+adb logcat -d | grep -q "boton del instalador pulsado" && mal "el pulsador pulso un dialogo que no era de esta app" || bien "el log no muestra pulsaciones en el caso del nombre distinto"
+adb shell run-as $P rm -f files/prueba_nombre_otro
+adb shell input keyevent KEYCODE_HOME
+sleep 3
+
 nota "8. actualizacion buena CON confirmacion forzada (vc 27): el pulsador de accesibilidad"
 modo '{}'
 adb shell run-as $P touch files/prueba_confirmacion
-SERV="$P/$P.PantallaRemotaService"
-LISTA=$(adb shell settings get secure enabled_accessibility_services | tr -d '\r')
-if [ "$LISTA" = "null" ] || [ -z "$LISTA" ]; then NUEVA="$SERV"; else NUEVA="$LISTA:$SERV"; fi
-case "$LISTA" in *$SERV*) ;; *) adb shell settings put secure enabled_accessibility_services "$NUEVA";; esac
-adb shell settings put secure accessibility_enabled 1
-adb shell input keyevent KEYCODE_WAKEUP; adb shell wm dismiss-keyguard
-sleep 10
+activar_accesibilidad
 modo '{"actualizacion":{"v":"2.12.3","vc":27,"archivo":"apk-27.apk"}}'
 if esperar_vc 360 27; then bien "con confirmacion forzada la app se actualizo a la vc 27 (pulsador de accesibilidad)"; else mal "no se actualizo a la vc 27 (vc instalada $(vc_instalado), estado $(consulta detalle actualizacion_estado) / $(consulta detalle actualizacion_detalle))"; fi
 adb exec-out screencap -p > act-final.png
@@ -210,6 +239,17 @@ sleep 2; kill $LOGCAT_PID 2>/dev/null
 grep -E "Actualizador|boton del instalador|diag instalador|PantallaRemota" act-logcat.txt | tail -80 > act-logcat-actualizador.txt
 grep -q "boton del instalador pulsado" act-logcat.txt && bien "el log confirma «boton del instalador pulsado»" || mal "el log no muestra que el pulsador actuara"
 if esperar_val 240 '"2.12.3"' detalle app; then bien "la app 2.12.3 manda latidos"; else mal "no hay latidos de la 2.12.3"; fi
+
+if [ -z "$SOLO_PULSADOR" ]; then
+nota "9. tope global: ya hubo 6 descargas en menos de 24 h; sin el marcador de prueba la app no descarga otra version (vc 29)"
+adb shell run-as $P rm -f files/prueba_tope_global
+adb shell run-as $P rm -f files/prueba_confirmacion
+DL9=$(consulta descargas)
+modo '{"actualizacion":{"v":"2.12.5","vc":29,"archivo":"apk-29.apk"}}'
+pasar_latidos 3
+[ "$(consulta descargas)" = "$DL9" ] && bien "tope diario: no se descargo nada mas" || mal "el tope diario no frenó la descarga ($(consulta descargas) vs $DL9)"
+if esperar_val 120 '"tope_diario"' detalle actualizacion_detalle; then bien "el latido reporta actualizacion_detalle=tope_diario"; else mal "el latido no reporta tope_diario ($(consulta detalle actualizacion_detalle))"; fi
+fi
 
 kill $(cat act-srv.pid) 2>/dev/null
 echo "--- resumen ---"

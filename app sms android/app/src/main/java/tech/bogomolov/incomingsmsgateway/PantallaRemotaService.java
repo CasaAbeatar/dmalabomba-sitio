@@ -525,27 +525,31 @@ public class PantallaRemotaService extends AccessibilityService {
 
     /**
      * 2.12.0 (actualización automática): si Android pidió confirmar la instalación, pulsa «Instalar»/«Actualizar» del diálogo del
-     * instalador del sistema. Solo actúa sobre una ventana (la activa o cualquiera de las interactivas) del paquete del instalador que Android dio para NUESTRA sesión, y
-     * solo pulsa un botón cuyo texto sea exactamente uno de Actualizador.TEXTOS_BOTON. No lee ni guarda nada más.
+     * instalador del sistema. Reglas (InstaladorPolitica, con pruebas): el paquete debe estar en la LISTA CERRADA de instaladores
+     * del sistema; solo dentro de los 90 s desde que la app abrió su sesión de instalación; solo en una ventana (la activa o
+     * cualquiera de las interactivas) de ESE paquete; solo si el texto de esa ventana contiene el nombre de esta app (si el
+     * diálogo es de otra app, no pulsa); y solo un botón cuyo texto sea exactamente uno de InstaladorPolitica.TEXTOS_BOTON.
+     * Los textos de la ventana se leen solo para comparar el nombre y no se guardan ni se envían.
      * Android 14+ oculta a los servicios que no se declaran herramienta de accesibilidad (isAccessibilityTool en
      * pantalla_remota_config.xml) las vistas marcadas como sensibles, y el boton del instalador lo es: sin esa marca no se ve.
      * @return true si pulsó
      */
-    boolean pulsarBotonInstalador(String paqueteInstalador) {
+    boolean pulsarBotonInstalador(String paqueteInstalador, String nombreApp) {
+        if (!InstaladorPolitica.paqueteValido(paqueteInstalador) || !Actualizador.ventanaDePulsadoAbierta()) return false;
         diagnosticarInstalador(paqueteInstalador);
         try {
             // La ventana activa puede ser otra (p. ej. un aviso del sistema encima): se buscan todas las ventanas
             // interactivas y se actua solo sobre la que es del instalador del sistema.
             AccessibilityNodeInfo activa = getRootInActiveWindow();
             if (activa != null && activa.getPackageName() != null && paqueteInstalador.contentEquals(activa.getPackageName())) {
-                if (pulsarEn(activa, paqueteInstalador)) return true;
+                if (ventanaEsDeNuestraApp(activa, nombreApp) && pulsarEn(activa, paqueteInstalador)) return true;
             }
             List<AccessibilityWindowInfo> ventanas = getWindows();
             if (ventanas != null) {
                 for (AccessibilityWindowInfo w : ventanas) {
                     AccessibilityNodeInfo r = w.getRoot();
                     if (r == null || r.getPackageName() == null || !paqueteInstalador.contentEquals(r.getPackageName())) continue;
-                    if (pulsarEn(r, paqueteInstalador)) return true;
+                    if (ventanaEsDeNuestraApp(r, nombreApp) && pulsarEn(r, paqueteInstalador)) return true;
                 }
             }
         } catch (Throwable e) {
@@ -554,13 +558,27 @@ public class PantallaRemotaService extends AccessibilityService {
         return false;
     }
 
+    /** ¿El texto de la ventana del instalador contiene el nombre de esta app? (si no, el diálogo es de otra app: no se pulsa). */
+    static boolean ventanaEsDeNuestraApp(AccessibilityNodeInfo raiz, String nombreApp) {
+        List<CharSequence> textos = new ArrayList<>();
+        recogerTextos(raiz, textos, 0);
+        return InstaladorPolitica.contieneNombreDeApp(textos, nombreApp);
+    }
+
+    private static void recogerTextos(AccessibilityNodeInfo n, List<CharSequence> out, int nivel) {
+        if (n == null || nivel > 10 || out.size() > 300) return;
+        if (n.getText() != null) out.add(n.getText());
+        if (n.getContentDescription() != null) out.add(n.getContentDescription());
+        for (int i = 0; i < n.getChildCount(); i++) recogerTextos(n.getChild(i), out, nivel + 1);
+    }
+
     private boolean pulsarEn(AccessibilityNodeInfo raiz, String paqueteInstalador) {
         for (String texto : Actualizador.TEXTOS_BOTON) {
             List<AccessibilityNodeInfo> nodos = raiz.findAccessibilityNodeInfosByText(texto);
             if (nodos == null) continue;
             for (AccessibilityNodeInfo n : nodos) {
                 CharSequence t = n.getText();
-                if (t == null || !t.toString().trim().equalsIgnoreCase(texto) || !n.isEnabled()) continue;
+                if (!InstaladorPolitica.textoDeBotonValido(t) || !t.toString().trim().equalsIgnoreCase(texto) || !n.isEnabled()) continue;
                 if (n.getPackageName() == null || !paqueteInstalador.contentEquals(n.getPackageName())) continue;
                 AccessibilityNodeInfo clic = n;
                 for (int i = 0; i < 3 && clic != null && !clic.isClickable(); i++) clic = clic.getParent();

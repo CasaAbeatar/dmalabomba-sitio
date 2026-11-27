@@ -86,10 +86,13 @@
             </intent-filter>
         </service>
 
+        <!-- 2.12.0 (auditoria): ya no se exporta. Sin intent-filter; solo lo arrancan la propia app (MainActivity, SettingsActivity,
+             Guardian/vigilante, receptor de SMS y de arranque) con un Intent explicito, y eso funciona igual con exported=false.
+             Ninguna otra app (ni adb shell am) puede arrancarlo ni pararlo. -->
         <service
             android:name=".SmsReceiverService"
             android:enabled="true"
-            android:exported="true" />
+            android:exported="false" />
 
         <!--
             SMS delivery is driven by this manifest-declared receiver, not by a

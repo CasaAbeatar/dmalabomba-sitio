@@ -208,33 +208,47 @@ Contract with the server: `CONTRATO-2.12.md` and `PROTOCOLO.md` (server side, no
   `adb_activo=false` is reported. On a Wi-Fi network not approved before, SystemUI shows "Allow wireless debugging on this
   network?" and Android turns it off again unless someone taps Allow (it can be tapped from the remote screen); seen on the
   API 33 and 35 emulators.
+  - **Audit hardening (2.12.0)**: `abrir_adb` and `reiniciar_telefono` (the "sensitive" orders, `RemoteCommands.SENSIBLES`) run
+    ONLY if the heartbeat response carries a valid `X-Signature` (HMAC-SHA256 hex of the exact body with the rule key). Over
+    https without signature they are ignored and confirmed as `orden_sensible_sin_firma`. The non-sensitive orders
+    (`latido_ya`, `reiniciar_servicio`, `reenviar_historial`, `cerrar_adb`) are still accepted over https without signature
+    until the server signs every response; after that, signature will be required for all. Another `abrir_adb` while it is open
+    does NOT extend the 30 min; if the app had to turn on Developer options, closing (order or auto-close) turns them off again;
+    `adb_puerto` is only reported while it is open.
 - **Remote-screen action `abrir_ajuste`** with `que` in {bateria, app, acceso_notificaciones, accesibilidad, inicio_apps,
-  ahorro_energia}; result `ok:<intent>` or `no_disponible` (HONOR/Huawei startup-manager candidates with fallback to app details).
+  ahorro_energia, instalar_apps}; result `ok:<intent>` or `no_disponible` (HONOR/Huawei startup-manager candidates with fallback to app details).
 - **Automatic update**: the heartbeat response may carry `actualizacion` signed with
   `HMAC-SHA256(rule key, "ACT1|v|vc|url|sha256|ts|eco")` (hex, constant-time check, `eco` = the `ts` this heartbeat sent).
   Nothing is installed unless ALL hold: valid signature and eco; `https://pagos.dmalabomba.com/instalar/<file>.apk` exactly
   (no redirects); `vc` greater than installed; offer `ts` at most 24 h old; downloaded file sha256 equal; package, version and
-  signing certificate of the file identical to the installed app; at most 3 attempts per version with waits of 1 h, 6 h,
-  24 h; no recent pending forward queue and no SMS received in the last 60 s.
+  signing certificate of the file identical to the installed app; `vc` between 1 and 10,000,000; at most 3 attempts per
+  version with waits of 1 h, 6 h, 24 h; **at most 3 downloads per 24 h in total, whatever the version** (reported as
+  `actualizacion_detalle=tope_diario`); no recent pending forward queue and no SMS received in the last 60 s.
   - **Silent path (Android 12+)**: `PackageInstaller` session with `USER_ACTION_NOT_REQUIRED`. Android honours it only if the
     app declares `UPDATE_PACKAGES_WITHOUT_USER_ACTION` (done), is updating itself (or is the installer of record), and its
     `targetSdkVersion` is high enough for the device: 30 on Android 13, 31 on 14, **33 on 15**, **34 on 16**, 35 on 17
     (official `SessionParams.setRequireUserAction` docs). With `targetSdkVersion 33` the silent path covers Android 12 to 15;
     on Android 16+ Android will ask for confirmation.
   - **Fallback (confirmation dialog)**: if the remote-screen accessibility service is on, it taps exactly
-    "Instalar/Actualizar/Install/Update" only in the system installer package Android gave for our session. On Android 14+
+    "Instalar/Actualizar/Install/Update" only in a closed list of system installer packages (`InstaladorPolitica.PAQUETES`:
+    `com.google.android.packageinstaller`, `com.android.packageinstaller`, `com.samsung.android.packageinstaller`,
+    `com.huawei.android.packageinstaller`, `com.hihonor.android.packageinstaller`; no generic "any system app"), only within
+    90 s of the app opening its install session, and only if the installer window text contains the app's own label
+    (otherwise it does not tap). On Android 14+
     the installer button is hidden from accessibility services that are not declared `isAccessibilityTool` (declared in
     `pantalla_remota_config.xml`).
   - **No loop**: if Android asks for confirmation and the accessibility service is off, the session is abandoned and
     `actualizacion_estado=fallo`, `actualizacion_detalle=requiere_confirmacion` is reported; if the button is not tapped within
-    3 min, `boton_no_pulsado`. The next attempt waits 1 h / 6 h / 24 h, max 3 per version.
+    90 s, `boton_no_pulsado`. The next attempt waits 1 h / 6 h / 24 h, max 3 per version.
   - After the update the new version starts by itself (`MY_PACKAGE_REPLACED`) and reports `actualizacion_estado=ninguna`.
 
 CI (`.github/workflows/prueba-guardian-2-12.yml`, API 33 and 35): JVM tests, instrumented tests, and a real end-to-end
 update on the emulator against a fake server (`scripts-prueba/actualizacion-e2e.sh`): rejections (bad/missing signature,
 wrong eco, expired ts, foreign URL, bad sha256, other certificate), silent update, forced confirmation without accessibility
 (reported failure, no retry loop) and forced confirmation tapped by the accessibility service. The debug APK is uploaded as
-artifact `apk-2-12-0` (with its sha256). The production APK is built unsigned by `apk-release-sms.yml`; signing and
+artifact `apk-2-12-0` (with its sha256). The e2e also checks that closing wireless debugging leaves Developer options as they
+were, that the accessibility tapper does NOT tap a dialog that does not show the app's name, and the global daily download cap.
+Other audit items: only TLS 1.2 and 1.3 are enabled (`TlsPolitica`), and `SmsReceiverService` is `exported=false`. The production APK is built unsigned by `apk-release-sms.yml`; signing and
 publishing are manual.
 
 ### Request info

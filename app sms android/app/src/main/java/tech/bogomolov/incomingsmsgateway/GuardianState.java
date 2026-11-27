@@ -164,6 +164,32 @@ public class GuardianState {
         pref.edit().putInt(K_UPD_CUENTA, Math.max(0, getUpdCuenta() - 1)).commit();
     }
 
+    // Auditoría 2.12.0: descargas de actualización de las últimas 24 h, de cualquier versión (tope global; ver ActualizacionPolitica).
+    private static final String K_UPD_DESCARGAS = "upd_descargas_ts";
+
+    public synchronized long[] getUpdDescargas() {
+        String s = pref.getString(K_UPD_DESCARGAS, "");
+        java.util.List<Long> l = new java.util.ArrayList<>();
+        for (String p : s.split(",")) {
+            try {
+                if (!p.trim().isEmpty()) l.add(Long.parseLong(p.trim()));
+            } catch (NumberFormatException ignored) {
+            }
+        }
+        long[] out = new long[l.size()];
+        for (int i = 0; i < out.length; i++) out[i] = l.get(i);
+        return out;
+    }
+
+    /** Anota una descarga de actualización (se cuente o no el intento por versión) y olvida las de hace más de 24 h. */
+    public synchronized void registrarDescargaUpd(long ahora) {
+        long[] viejas = ActualizacionPolitica.podarDescargas(getUpdDescargas(), ahora);
+        StringBuilder b = new StringBuilder();
+        for (long t : viejas) b.append(t).append(',');
+        b.append(ahora);
+        pref.edit().putString(K_UPD_DESCARGAS, b.toString()).commit();
+    }
+
     public synchronized void limpiarIntentosUpd() {
         pref.edit().remove(K_UPD_VC).remove(K_UPD_CUENTA).remove(K_UPD_ULTIMO).commit();
     }
