@@ -1,0 +1,126 @@
+{
+ "total": 30,
+ "fallas": 0,
+ "informe": [
+  {
+   "nombre": "Indicador: señal hace 10 minutos = conectado",
+   "ok": true
+  },
+  {
+   "nombre": "Indicador: más de 30 minutos sin señal avisa con palabras y dice que el cobro sigue igual",
+   "ok": true
+  },
+  {
+   "nombre": "Indicador: días sin señal se dicen en días",
+   "ok": true
+  },
+  {
+   "nombre": "Indicador: sin ningún latido conocido = «sin»",
+   "ok": true
+  },
+  {
+   "nombre": "Indicador: sin respuesta no inventa nada",
+   "ok": true
+  },
+  {
+   "nombre": "Indicador: la edad se mide con el reloj del servidor aunque la computadora esté desfasada",
+   "ok": true
+  },
+  {
+   "nombre": "Exacto: mismo monto, de hoy y sin usar = resaltado",
+   "ok": true
+  },
+  {
+   "nombre": "Exacto: monto con decimales de punto flotante igual",
+   "ok": true
+  },
+  {
+   "nombre": "Exacto: monto distinto no se resalta",
+   "ok": true
+  },
+  {
+   "nombre": "Exacto: ya usado no se resalta",
+   "ok": true
+  },
+  {
+   "nombre": "Exacto: de otro día no se resalta",
+   "ok": true
+  },
+  {
+   "nombre": "Exacto: total cero (cortesía) nunca resalta",
+   "ok": true
+  },
+  {
+   "nombre": "Comprobante repetido: avisa con el número de la venta anterior",
+   "ok": true
+  },
+  {
+   "nombre": "Comprobante de hoy y de esta empresa = nota verde con hora y monto",
+   "ok": true
+  },
+  {
+   "nombre": "Comprobante de otro día: avisa la fecha",
+   "ok": true
+  },
+  {
+   "nombre": "Comprobante de la otra empresa: avisa y no muestra monto ni nombre",
+   "ok": true
+  },
+  {
+   "nombre": "Comprobante con monto distinto al cobro: nota informativa, no bloquea",
+   "ok": true
+  },
+  {
+   "nombre": "Comprobante que no aparece: información (el aviso puede no haber llegado), no error",
+   "ok": true
+  },
+  {
+   "nombre": "Comprobante vacío, bandera apagada o sin respuesta: no se dice nada",
+   "ok": true
+  },
+  {
+   "nombre": "refConsultable: pide al menos 4 letras o números",
+   "ok": true
+  },
+  {
+   "nombre": "Nombre para el cliente: de MAYÚSCULAS a nombre propio, con tildes y ñ",
+   "ok": true
+  },
+  {
+   "nombre": "datosParaPantalla: sin monto válido no hay nada que mostrar",
+   "ok": true
+  },
+  {
+   "nombre": "Emisor: en la cuenta y al abrir el cobro NO viaja ningún SINPE ni nombre",
+   "ok": true
+  },
+  {
+   "nombre": "Emisor: al escoger el SINPE de ESTA venta, «pago» lleva nombre y monto",
+   "ok": true
+  },
+  {
+   "nombre": "Emisor: al quitar el SINPE se retira de la pantalla del cliente",
+   "ok": true
+  },
+  {
+   "nombre": "Emisor: un SINPE de otra venta no se muestra en esta (cuenta refrescada)",
+   "ok": true
+  },
+  {
+   "nombre": "Emisor: cerrar el cobro sin cobrar borra el SINPE y vuelve a «cuenta» sin nombre",
+   "ok": true
+  },
+  {
+   "nombre": "Emisor: pagado con SINPE conserva el nombre; el siguiente cobro empieza limpio",
+   "ok": true
+  },
+  {
+   "nombre": "Emisor: pagado en efectivo nunca lleva SINPE aunque hubiera uno escogido",
+   "ok": true
+  },
+  {
+   "nombre": "Emisor: datos inválidos no rompen ni muestran nada",
+   "ok": true
+  }
+ ]
+}

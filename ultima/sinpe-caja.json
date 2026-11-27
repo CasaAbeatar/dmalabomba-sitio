@@ -1,0 +1,300 @@
+{
+ "navegador": "158.0.8127.89",
+ "pruebas": [
+  {
+   "nombre": "[escritorio] Indicador: teléfono conectado (punto verde y palabras)",
+   "ok": true,
+   "detalle": "{\"ind\":\"ok\",\"indTxt\":\"Teléfono de SINPE conectado\",\"exactos\":[\"p1\"],\"chips\":[\"✓ Coincide con el cobro\"]}"
+  },
+  {
+   "nombre": "[escritorio] La lista no escribe la palabra «null» (el selector de período solo existe en Administración)",
+   "ok": true,
+   "detalle": ""
+  },
+  {
+   "nombre": "[escritorio] Monto exacto: solo el SINPE de hoy, sin usar y del mismo monto se resalta, con la leyenda escrita",
+   "ok": true,
+   "detalle": "[\"p1\"]"
+  },
+  {
+   "nombre": "[escritorio] Indicador: sin señal por más de 30 min avisa con palabras y que el cobro sigue igual",
+   "ok": true,
+   "detalle": "El teléfono de SINPE no da señal desde hace 1 hora. Los SINPE podrían no aparecer aquí; el cobro sigue igual."
+  },
+  {
+   "nombre": "[escritorio] Con un monto que no coincide con nadie no se resalta nada y los SINPE se pueden escoger igual",
+   "ok": true,
+   "detalle": ""
+  },
+  {
+   "nombre": "[escritorio] Pastilla «Ver SINPE» dice «sin señal» con palabras cuando el teléfono no responde",
+   "ok": true,
+   "detalle": "{\"txt\":\"Ver SINPEnuevosin señal\",\"aria\":\"Ver la lista de SINPE. El teléfono de SINPE no da señal\"}"
+  },
+  {
+   "nombre": "[escritorio] Pastilla sin aviso cuando el teléfono está bien",
+   "ok": true,
+   "detalle": ""
+  },
+  {
+   "nombre": "[escritorio] Comprobante «repetido» muestra su nota",
+   "ok": true,
+   "detalle": "Este comprobante ya se usó en la venta #007. Revise que no sea el mismo SINPE cobrado dos veces. |  | Es un SINPE recibido hoy a las 10:23 por ₡8 250."
+  },
+  {
+   "nombre": "[escritorio] Comprobante «otro día» muestra su nota",
+   "ok": true,
+   "detalle": "Ese SINPE se recibió hace 6 días, no hoy. Revise que sea el de este cliente."
+  },
+  {
+   "nombre": "[escritorio] Comprobante «otra empresa» muestra su nota",
+   "ok": true,
+   "detalle": "Este comprobante es de un SINPE recibido en la otra empresa, no en esta. Revise que sea el de esta venta."
+  },
+  {
+   "nombre": "[escritorio] Comprobante «no aparece» muestra su nota",
+   "ok": true,
+   "detalle": "Ese comprobante no aparece entre los SINPE recibidos. Puede que el aviso del banco todavía no haya llegado. El cobro sigue igual."
+  },
+  {
+   "nombre": "[escritorio] Comprobante «de hoy» muestra su nota",
+   "ok": true,
+   "detalle": "Es un SINPE recibido hoy a las 10:33 por ₡8 250."
+  },
+  {
+   "nombre": "[escritorio] Sin comprobante válido, con SINPE apagado o con la base caída no se dice nada ni se rompe",
+   "ok": true,
+   "detalle": "[true,true,true]"
+  },
+  {
+   "nombre": "[escritorio] Escribir de corrido hace una sola pregunta a la base (la del último valor)",
+   "ok": true,
+   "detalle": "[\"2026112715\"]"
+  },
+  {
+   "nombre": "[escritorio] Sin errores de JavaScript",
+   "ok": true,
+   "detalle": ""
+  },
+  {
+   "nombre": "[telefono] Indicador: teléfono conectado (punto verde y palabras)",
+   "ok": true,
+   "detalle": "{\"ind\":\"ok\",\"indTxt\":\"Teléfono de SINPE conectado\",\"exactos\":[\"p1\"],\"chips\":[\"✓ Coincide con el cobro\"]}"
+  },
+  {
+   "nombre": "[telefono] La lista no escribe la palabra «null» (el selector de período solo existe en Administración)",
+   "ok": true,
+   "detalle": ""
+  },
+  {
+   "nombre": "[telefono] Monto exacto: solo el SINPE de hoy, sin usar y del mismo monto se resalta, con la leyenda escrita",
+   "ok": true,
+   "detalle": "[\"p1\"]"
+  },
+  {
+   "nombre": "[telefono] Indicador: sin señal por más de 30 min avisa con palabras y que el cobro sigue igual",
+   "ok": true,
+   "detalle": "El teléfono de SINPE no da señal desde hace 1 hora. Los SINPE podrían no aparecer aquí; el cobro sigue igual."
+  },
+  {
+   "nombre": "[telefono] Con un monto que no coincide con nadie no se resalta nada y los SINPE se pueden escoger igual",
+   "ok": true,
+   "detalle": ""
+  },
+  {
+   "nombre": "[telefono] Pastilla «Ver SINPE» dice «sin señal» con palabras cuando el teléfono no responde",
+   "ok": true,
+   "detalle": "{\"txt\":\"Ver SINPEnuevosin señal\",\"aria\":\"Ver la lista de SINPE. El teléfono de SINPE no da señal\"}"
+  },
+  {
+   "nombre": "[telefono] Pastilla sin aviso cuando el teléfono está bien",
+   "ok": true,
+   "detalle": ""
+  },
+  {
+   "nombre": "[telefono] Comprobante «repetido» muestra su nota",
+   "ok": true,
+   "detalle": "Este comprobante ya se usó en la venta #007. Revise que no sea el mismo SINPE cobrado dos veces. |  | Es un SINPE recibido hoy a las 10:23 por ₡8 250."
+  },
+  {
+   "nombre": "[telefono] Comprobante «otro día» muestra su nota",
+   "ok": true,
+   "detalle": "Ese SINPE se recibió hace 6 días, no hoy. Revise que sea el de este cliente."
+  },
+  {
+   "nombre": "[telefono] Comprobante «otra empresa» muestra su nota",
+   "ok": true,
+   "detalle": "Este comprobante es de un SINPE recibido en la otra empresa, no en esta. Revise que sea el de esta venta."
+  },
+  {
+   "nombre": "[telefono] Comprobante «no aparece» muestra su nota",
+   "ok": true,
+   "detalle": "Ese comprobante no aparece entre los SINPE recibidos. Puede que el aviso del banco todavía no haya llegado. El cobro sigue igual."
+  },
+  {
+   "nombre": "[telefono] Comprobante «de hoy» muestra su nota",
+   "ok": true,
+   "detalle": "Es un SINPE recibido hoy a las 10:33 por ₡8 250."
+  },
+  {
+   "nombre": "[telefono] Sin comprobante válido, con SINPE apagado o con la base caída no se dice nada ni se rompe",
+   "ok": true,
+   "detalle": "[true,true,true]"
+  },
+  {
+   "nombre": "[telefono] Escribir de corrido hace una sola pregunta a la base (la del último valor)",
+   "ok": true,
+   "detalle": "[\"2026112715\"]"
+  },
+  {
+   "nombre": "[telefono] Sin errores de JavaScript",
+   "ok": true,
+   "detalle": ""
+  },
+  {
+   "nombre": "[cliente 1920x1080] En la cuenta no hay SINPE ni nombre",
+   "ok": true,
+   "detalle": ""
+  },
+  {
+   "nombre": "[cliente 1920x1080] Al abrir el cobro todavía no hay «Pago recibido» ni nombre",
+   "ok": true,
+   "detalle": ""
+  },
+  {
+   "nombre": "[cliente 1920x1080] Ligado el SINPE a la venta: «Pago recibido ₡8 250» con el nombre del pagador",
+   "ok": true,
+   "detalle": "TOTAL A PAGAR ₡8 250 ✓ Pago recibido ₡8 250 SINPE Móvil de Tiffany Melanie Araica Larios Cerrar pantalla"
+  },
+  {
+   "nombre": "[cliente 1920x1080] El aviso cabe en la pantalla sin cortarse",
+   "ok": true,
+   "detalle": ""
+  },
+  {
+   "nombre": "[cliente 1920x1080] Si la cajera quita el SINPE, el aviso y el nombre desaparecen",
+   "ok": true,
+   "detalle": ""
+  },
+  {
+   "nombre": "[cliente 1920x1080] Cerrar el cobro sin cobrar vuelve a la cuenta sin nombre",
+   "ok": true,
+   "detalle": ""
+  },
+  {
+   "nombre": "[cliente 1920x1080] Cobrado con SINPE: «Muchas gracias» y «SINPE Móvil recibido de» con el nombre",
+   "ok": true,
+   "detalle": "Muchas gracias TOTAL PAGADO ₡8 250 Forma de pago SINPE Móvil SINPE Móvil recibido de Tiffany Melanie Araica Larios Cerrar pantalla"
+  },
+  {
+   "nombre": "[cliente 1920x1080] Pasado el «pagado» no queda el nombre en la página ni se guardó en el navegador",
+   "ok": true,
+   "detalle": ""
+  },
+  {
+   "nombre": "[cliente 1920x1080] Sin errores de JavaScript",
+   "ok": true,
+   "detalle": ""
+  },
+  {
+   "nombre": "[cliente 1366x768] En la cuenta no hay SINPE ni nombre",
+   "ok": true,
+   "detalle": ""
+  },
+  {
+   "nombre": "[cliente 1366x768] Al abrir el cobro todavía no hay «Pago recibido» ni nombre",
+   "ok": true,
+   "detalle": ""
+  },
+  {
+   "nombre": "[cliente 1366x768] Ligado el SINPE a la venta: «Pago recibido ₡8 250» con el nombre del pagador",
+   "ok": true,
+   "detalle": "TOTAL A PAGAR ₡8 250 ✓ Pago recibido ₡8 250 SINPE Móvil de Tiffany Melanie Araica Larios Cerrar pantalla"
+  },
+  {
+   "nombre": "[cliente 1366x768] El aviso cabe en la pantalla sin cortarse",
+   "ok": true,
+   "detalle": ""
+  },
+  {
+   "nombre": "[cliente 1366x768] Si la cajera quita el SINPE, el aviso y el nombre desaparecen",
+   "ok": true,
+   "detalle": ""
+  },
+  {
+   "nombre": "[cliente 1366x768] Cerrar el cobro sin cobrar vuelve a la cuenta sin nombre",
+   "ok": true,
+   "detalle": ""
+  },
+  {
+   "nombre": "[cliente 1366x768] Cobrado con SINPE: «Muchas gracias» y «SINPE Móvil recibido de» con el nombre",
+   "ok": true,
+   "detalle": "Muchas gracias TOTAL PAGADO ₡8 250 Forma de pago SINPE Móvil SINPE Móvil recibido de Tiffany Melanie Araica Larios Cerrar pantalla"
+  },
+  {
+   "nombre": "[cliente 1366x768] Pasado el «pagado» no queda el nombre en la página ni se guardó en el navegador",
+   "ok": true,
+   "detalle": ""
+  },
+  {
+   "nombre": "[cliente 1366x768] Sin errores de JavaScript",
+   "ok": true,
+   "detalle": ""
+  },
+  {
+   "nombre": "[cliente vertical] En la cuenta no hay SINPE ni nombre",
+   "ok": true,
+   "detalle": ""
+  },
+  {
+   "nombre": "[cliente vertical] Al abrir el cobro todavía no hay «Pago recibido» ni nombre",
+   "ok": true,
+   "detalle": ""
+  },
+  {
+   "nombre": "[cliente vertical] Ligado el SINPE a la venta: «Pago recibido ₡8 250» con el nombre del pagador",
+   "ok": true,
+   "detalle": "TOTAL A PAGAR ₡8 250 ✓ Pago recibido ₡8 250 SINPE Móvil de Tiffany Melanie Araica Larios Cerrar pantalla"
+  },
+  {
+   "nombre": "[cliente vertical] El aviso cabe en la pantalla sin cortarse",
+   "ok": true,
+   "detalle": ""
+  },
+  {
+   "nombre": "[cliente vertical] Si la cajera quita el SINPE, el aviso y el nombre desaparecen",
+   "ok": true,
+   "detalle": ""
+  },
+  {
+   "nombre": "[cliente vertical] Cerrar el cobro sin cobrar vuelve a la cuenta sin nombre",
+   "ok": true,
+   "detalle": ""
+  },
+  {
+   "nombre": "[cliente vertical] Cobrado con SINPE: «Muchas gracias» y «SINPE Móvil recibido de» con el nombre",
+   "ok": true,
+   "detalle": "Muchas gracias TOTAL PAGADO ₡8 250 Forma de pago SINPE Móvil SINPE Móvil recibido de Tiffany Melanie Araica Larios Cerrar pantalla"
+  },
+  {
+   "nombre": "[cliente vertical] Pasado el «pagado» no queda el nombre en la página ni se guardó en el navegador",
+   "ok": true,
+   "detalle": ""
+  },
+  {
+   "nombre": "[cliente vertical] Sin errores de JavaScript",
+   "ok": true,
+   "detalle": ""
+  },
+  {
+   "nombre": "Vista previa de la pantalla del cliente con y sin nombre",
+   "ok": true,
+   "detalle": "✓ Pago recibido ₡12 700 SINPE Móvil de Tiffany Melanie Araica Larios // ✓ Pago recibido ₡12 700 SINPE Móvil"
+  },
+  {
+   "nombre": "Vista previa sin errores de JavaScript",
+   "ok": true,
+   "detalle": ""
+  }
+ ]
+}

@@ -18,5 +18,5 @@ OK sintaxis: servidor publicidad.ps1
 --- Equipo de prueba ---
 Microsoft Windows Server 2025 Datacenter 10.0.26100
 Chrome en la ruta que usa el kit: True
-Version de Chrome: 157.0.8103.79
+Version de Chrome: 158.0.8127.89
 Pantallas vistas por Windows: 1 adaptador(es)
