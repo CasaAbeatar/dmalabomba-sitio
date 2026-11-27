@@ -167,6 +167,8 @@ const sesion = async ({ ancho, alto, usuario = null, cliente = false, antes = nu
   }
   return { ctx, pag, cli, errores };
 };
+// Espera sondeando con evaluate: waitForFunction evalúa texto y la política de seguridad de la página (script-src 'self') lo bloquea en Chrome de Windows.
+const esperar = async (pag, fn, ms = 15000) => { const t0 = Date.now(); for (;;) { if (await pag.evaluate(fn)) return; if (Date.now() - t0 > ms) throw new Error('Se acabó el tiempo esperando: ' + String(fn).slice(0, 80)); await pag.waitForTimeout(100); } };
 const modalTxt = (pag) => pag.evaluate(() => { const m = [...document.querySelectorAll('.modal-fondo')].pop(); return m ? m.innerText : ''; });
 const abrirCaja = async (pag, fondo = '20000') => {
   await pag.getByText('Abrir caja', { exact: true }).first().click();
@@ -184,12 +186,12 @@ const medio = (pag, m) => pag.locator('button.medio-btn[data-medio=' + m + ']').
 const cobrarYa = async (pag) => {
   const t0 = Date.now();
   await pag.locator('.modal-fondo').last().getByRole('button', { name: /^Cobrar ₡/ }).click();
-  await pag.waitForFunction(() => /Cobro registrado/.test(document.body.innerText), null, { timeout: 15000 });
+  await esperar(pag, () => /Cobro registrado/.test(document.body.innerText), 15000);
   return Date.now() - t0;
 };
 const cerrarExito = async (pag) => {
   await pag.getByRole('button', { name: 'Listo, cerrar' }).click();
-  try { await pag.waitForFunction(() => !document.querySelector('.modal-fondo'), null, { timeout: 6000 }); }
+  try { await esperar(pag, () => !document.querySelector('.modal-fondo'), 6000); }
   catch { const t = await modalTxt(pag); await pag.screenshot({ path: path.join(salida, 'cobro modal que no cierra.png') }); throw new Error('Después de «Listo, cerrar» sigue una ventana abierta: ' + t.replace(/\n/g, ' | ').slice(0, 300)); }
   await pag.waitForTimeout(300);
 };
@@ -384,7 +386,7 @@ try {
     const efEsperado = 20000 + mundo.pagos.filter((p) => p.medio === 'efectivo').reduce((a, p) => a + p.monto, 0);
     await pag.locator('input').first().fill(String(efEsperado));
     await pag.getByRole('button', { name: 'Cerrar caja' }).last().click();
-    await pag.waitForFunction(() => /Caja cerrada/.test(document.body.innerText), null, { timeout: 15000 }).catch(() => {});
+    await esperar(pag, () => /Caja cerrada/.test(document.body.innerText), 15000).catch(() => {});
     anotar('[A] Cierre de caja con SINPE sin respuesta: la caja se cierra (la cuenta vacía de después del último cobro no estorba)', !!mundo.turnoCerrado && mundo.cierres.length === 1, 'cierres=' + mundo.cierres.length + ' ' + (await pag.evaluate(() => document.body.innerText)).replace(/\n/g, ' ').slice(0, 120));
     await pag.screenshot({ path: path.join(salida, 'cobro A 12 caja cerrada escritorio.png') });
     anotar('[A] Ningún aviso de pantalla ni error de JavaScript en toda la prueba', bad(errores).length === 0, bad(errores).join(' | ').slice(0, 400));
