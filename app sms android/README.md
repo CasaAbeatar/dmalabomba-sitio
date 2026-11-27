@@ -228,7 +228,8 @@ Contract with the server: `CONTRATO-2.12.md` and `PROTOCOLO.md` (server side, no
     app declares `UPDATE_PACKAGES_WITHOUT_USER_ACTION` (done), is updating itself (or is the installer of record), and its
     `targetSdkVersion` is high enough for the device: 30 on Android 13, 31 on 14, **33 on 15**, **34 on 16**, 35 on 17
     (official `SessionParams.setRequireUserAction` docs). With `targetSdkVersion 33` the silent path covers Android 12 to 15;
-    on Android 16+ Android will ask for confirmation.
+    on Android 16+ Android will ask for confirmation. Branch `prueba-guardian-27-t34` raises it to 34 (Android 16 silent; Android 17 would need 35,
+    which also forces edge-to-edge UI). The foreground service is declared `specialUse` (not `dataSync`: 6 h/day limit and no start from BOOT_COMPLETED on Android 15).
   - **Fallback (confirmation dialog)**: if the remote-screen accessibility service is on, it taps exactly
     "Instalar/Actualizar/Install/Update" only in a closed list of system installer packages (`InstaladorPolitica.PAQUETES`:
     `com.google.android.packageinstaller`, `com.android.packageinstaller`, `com.samsung.android.packageinstaller`,

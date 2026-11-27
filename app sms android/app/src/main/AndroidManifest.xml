@@ -8,6 +8,10 @@
     <uses-permission android:name="android.permission.RECEIVE_SMS" />
     <uses-permission android:name="android.permission.READ_SMS" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <!-- targetSdk 34: todo servicio en primer plano declara un tipo y el permiso de ese tipo. specialUse (y no dataSync):
+         dataSync tiene limite de 6 h por dia en Android 15 y no puede arrancar desde BOOT_COMPLETED; el reenvio de SMS
+         debe vivir sin limite y volver solo tras reiniciar. Permiso de nivel normal (se concede al instalar). -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
@@ -92,7 +96,12 @@
         <service
             android:name=".SmsReceiverService"
             android:enabled="true"
-            android:exported="false" />
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Reenvio continuo de SMS entrantes (SINPE Movil) al servidor de pagos del comercio" />
+        </service>
 
         <!--
             SMS delivery is driven by this manifest-declared receiver, not by a

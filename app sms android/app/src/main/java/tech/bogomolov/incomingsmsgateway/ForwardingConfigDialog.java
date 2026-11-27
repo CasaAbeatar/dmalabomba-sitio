@@ -2,6 +2,7 @@ package tech.bogomolov.incomingsmsgateway;
 
 import android.content.BroadcastReceiver;
 import android.content.Context;
+import android.os.Build;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.telephony.SubscriptionManager;
@@ -46,7 +47,12 @@ public class ForwardingConfigDialog {
                 Toast.makeText(context.getApplicationContext(), result, Toast.LENGTH_LONG).show();
             }
         };
-        context.registerReceiver(testResult, filter);
+        if (Build.VERSION.SDK_INT >= 33) {
+            // targetSdk 34: todo receptor registrado en codigo con acciones propias debe declarar si es exportado.
+            context.registerReceiver(testResult, filter, Context.RECEIVER_NOT_EXPORTED);
+        } else {
+            context.registerReceiver(testResult, filter);
+        }
     }
 
     public void showNew() {
@@ -379,7 +385,7 @@ public class ForwardingConfigDialog {
                 result = Request.RESULT_ERROR;
             }
 
-            Intent in = new Intent(BROADCAST_KEY);
+            Intent in = new Intent(BROADCAST_KEY).setPackage(context.getPackageName());
             in.putExtra(BROADCAST_KEY, result);
             context.sendBroadcast(in);
         });
