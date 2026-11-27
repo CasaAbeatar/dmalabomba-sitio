@@ -75,6 +75,231 @@
    "nombre": "[A] Cerrar el cobro con un SINPE escogido: la base lo libera y la cuenta sigue abierta",
    "ok": true,
    "detalle": ""
+  },
+  {
+   "nombre": "[A] Cobro con SINPE: el medio que viaja al servidor es «sinpe» (el XML lo pasa a 06) con el comprobante escogido",
+   "ok": true,
+   "detalle": "[{\"medio\":\"sinpe\",\"monto\":7500,\"referencia\":\"2026112715284002322660417\"}]"
+  },
+  {
+   "nombre": "[A] El tiquete dice «SINPE Móvil» por el total y no escribe «null»",
+   "ok": true,
+   "detalle": "Tiquete electrónico N.° 1 | ₡7 500,00 | SINPE Móvil | ₡7 500,00"
+  },
+  {
+   "nombre": "[A] Pantalla del cliente cobrada con SINPE: «Muchas gracias» y «SINPE Móvil recibido de» con el nombre",
+   "ok": true,
+   "detalle": "Muchas gracias TOTAL PAGADO ₡7 500 Forma de pago SINPE Móvil SINPE Móvil recibido de Araica Larios Tiffany Melanie Cerrar pantalla"
+  },
+  {
+   "nombre": "[A] Cobrar con SINPE conserva el SINPE como usado en la venta #001",
+   "ok": true,
+   "detalle": ""
+  },
+  {
+   "nombre": "[A] Tras el «pagado» la pantalla del cliente vuelve sola y no queda el nombre en la página ni en el navegador",
+   "ok": true,
+   "detalle": ""
+  },
+  {
+   "nombre": "[A] Segunda venta: el SINPE ya usado sale como «Usado en la venta #001» y sin resaltar como exacto",
+   "ok": true,
+   "detalle": "ARAICA LARIOS TIFFANY MELANIE ****-1234 · Casado ₡7 500,00 11:32 · comprobante 2026112715284002322660417 ● Usado en la venta #001 Quitar"
+  },
+  {
+   "nombre": "[A] Comprobante repetido: la nota sale y «Cobrar» sigue disponible",
+   "ok": true,
+   "detalle": "Este comprobante ya se usó en la venta #001. Revise que no sea el mismo SINPE cobrado dos veces. Es un SINPE recibido hoy a las 11:32 por ₡7 500."
+  },
+  {
+   "nombre": "[A] Comprobante de otro día: la nota sale y «Cobrar» sigue disponible",
+   "ok": true,
+   "detalle": "Ese SINPE se recibió ayer, no hoy. Revise que sea el de este cliente."
+  },
+  {
+   "nombre": "[A] Comprobante de otra empresa: la nota sale y «Cobrar» sigue disponible",
+   "ok": true,
+   "detalle": "Este comprobante es de un SINPE recibido en la otra empresa, no en esta. Revise que sea el de esta venta."
+  },
+  {
+   "nombre": "[A] Comprobante de otra empresa: no muestra monto ni nombre de esa empresa",
+   "ok": true,
+   "detalle": "Este comprobante es de un SINPE recibido en la otra empresa, no en esta. Revise que sea el de esta venta."
+  },
+  {
+   "nombre": "[A] Comprobante que no aparece: la nota sale y «Cobrar» sigue disponible",
+   "ok": true,
+   "detalle": "Ese comprobante no aparece entre los SINPE recibidos. Puede que el aviso del banco todavía no haya llegado. El cobro sigue igual."
+  },
+  {
+   "nombre": "[A] Comprobante de hoy y bueno: la nota sale y «Cobrar» sigue disponible",
+   "ok": true,
+   "detalle": "Es un SINPE recibido hoy a las 11:04 por ₡7 500."
+  },
+  {
+   "nombre": "[A] Comprobante escrito a mano (sin ligar de la lista): la pantalla del cliente no muestra «Pago recibido» ni nombre",
+   "ok": true,
+   "detalle": ""
+  },
+  {
+   "nombre": "[A] Segunda venta cobrada aunque el comprobante tuviera notas: medio «sinpe» y el comprobante escrito",
+   "ok": true,
+   "detalle": "[{\"medio\":\"sinpe\",\"monto\":7500,\"referencia\":\"2026112714000000000000001\"}]"
+  },
+  {
+   "nombre": "[A] Cobro escrito a mano: la pantalla del cliente cobra sin nombre",
+   "ok": true,
+   "detalle": ""
+  },
+  {
+   "nombre": "[A] Con la lista de SINPE caída la caja lo dice con palabras (sin «null») y deja cobrar",
+   "ok": true,
+   "detalle": "No se pudieron consultar los SINPE Móvil (Algo no salió bien. Intente de nuevo; si sigue igual, avise a la persona encargada.). Se puede tocar «Refrescar» para intentar otra vez; el cobro no depende de esta lista."
+  },
+  {
+   "nombre": "[A] Con la revisión del comprobante caída no sale ninguna nota ni error y deja cobrar",
+   "ok": true,
+   "detalle": ""
+  },
+  {
+   "nombre": "[A] Con todo SINPE caído el cobro con SINPE Móvil sale igual (comprobante escrito a mano)",
+   "ok": true,
+   "detalle": "[{\"medio\":\"sinpe\",\"monto\":7500,\"referencia\":\"2026112710000000000000007\"}]"
+  },
+  {
+   "nombre": "[A] Con SINPE muy lento (9 s) el cobro sale en menos de 4 s: no espera a la lista ni a la revisión",
+   "ok": true,
+   "detalle": "129 ms"
+  },
+  {
+   "nombre": "[A] Teléfono sin señal 50 min: aviso con palabras y «el cobro sigue igual»; «Cobrar» disponible",
+   "ok": true,
+   "detalle": "El teléfono de SINPE no da señal desde hace 50 minutos. Los SINPE podrían no aparecer aquí; el cobro sigue igual."
+  },
+  {
+   "nombre": "[A] SINPE de otro monto: dice que es solo informativo y deja cobrar",
+   "ok": true,
+   "detalle": ""
+  },
+  {
+   "nombre": "[A] Cobro en efectivo: medio «efectivo», sin lista ni notas, y sin revisar ni marcar nada de SINPE (la pastilla «Ver SINPE» sigue su sondeo aparte)",
+   "ok": true,
+   "detalle": "[\"fx_sinpe_lista\",\"fx_sinpe_lista\"]"
+  },
+  {
+   "nombre": "[A] Cobro con tarjeta: medio «tarjeta»",
+   "ok": true,
+   "detalle": ""
+  },
+  {
+   "nombre": "[A] Cuenta «Express»: el cobro con SINPE muestra la lista sin «null»",
+   "ok": true,
+   "detalle": ""
+  },
+  {
+   "nombre": "[A] Cuenta «Express» cobrada con SINPE: medio «sinpe»",
+   "ok": true,
+   "detalle": ""
+  },
+  {
+   "nombre": "[A] Pago mixto: SINPE ₡3 200 con su comprobante + efectivo ₡2 800 (el resto)",
+   "ok": true,
+   "detalle": "[{\"medio\":\"sinpe\",\"monto\":3200,\"referencia\":\"2026112713000000000000002\"},{\"medio\":\"efectivo\",\"monto\":2800,\"referencia\":null,\"recibido\":2800}]"
+  },
+  {
+   "nombre": "[A] Pantalla de cierre de la cajera: no hay nada de SINPE, no sale «null» y no hay cuentas abiertas",
+   "ok": true,
+   "detalle": "CUENTAS ABIERTAS 0 Todo cobrado Dinero que entra o sale "
+  },
+  {
+   "nombre": "[A] Cierre de caja con SINPE sin respuesta: la caja se cierra (la cuenta vacía de después del último cobro no estorba)",
+   "ok": true,
+   "detalle": "cierres=1 EMPRESA DE PRUEBAS MODO DE PRUEBAS ‹ Volver al inicio Apertura y cierre de caja Caja cerrada Anular factura ZZ Cajera Ce"
+  },
+  {
+   "nombre": "[A] Ningún aviso de pantalla ni error de JavaScript en toda la prueba",
+   "ok": true,
+   "detalle": ""
+  },
+  {
+   "nombre": "[A] Funciones del servidor sin implementar en el servidor de mentira (solo ajustes ajenos a SINPE)",
+   "ok": true,
+   "detalle": "fx_tipos_identificacion_permitidos,fx_pantalla_config_leer"
+  },
+  {
+   "nombre": "[B celular] Cobro con SINPE: la lista cabe sin desborde horizontal",
+   "ok": true,
+   "detalle": ""
+  },
+  {
+   "nombre": "[B celular] Nota de comprobante de otro día visible y «Cobrar» disponible",
+   "ok": true,
+   "detalle": "Ese SINPE se recibió ayer, no hoy. Revise que sea el de este cliente."
+  },
+  {
+   "nombre": "[B celular] Cobro con SINPE sale desde el celular",
+   "ok": true,
+   "detalle": ""
+  },
+  {
+   "nombre": "[B celular] Sin errores de JavaScript",
+   "ok": true,
+   "detalle": ""
+  },
+  {
+   "nombre": "[C] bandera apagada: no hay lista ni indicador ni notas de SINPE en el cobro, y se cobra con SINPE Móvil como siempre",
+   "ok": true,
+   "detalle": ""
+  },
+  {
+   "nombre": "[C] bandera apagada: escribir un comprobante no dispara ninguna revisión",
+   "ok": true,
+   "detalle": ""
+  },
+  {
+   "nombre": "[C] bandera apagada: el cobro con SINPE sale con medio «sinpe»",
+   "ok": true,
+   "detalle": ""
+  },
+  {
+   "nombre": "[C] bandera apagada: sin errores de JavaScript",
+   "ok": true,
+   "detalle": ""
+  },
+  {
+   "nombre": "[C] bandera sin respuesta: no hay lista ni indicador ni notas de SINPE en el cobro, y se cobra con SINPE Móvil como siempre",
+   "ok": true,
+   "detalle": ""
+  },
+  {
+   "nombre": "[C] bandera sin respuesta: escribir un comprobante no dispara ninguna revisión",
+   "ok": true,
+   "detalle": ""
+  },
+  {
+   "nombre": "[C] bandera sin respuesta: el cobro con SINPE sale con medio «sinpe»",
+   "ok": true,
+   "detalle": ""
+  },
+  {
+   "nombre": "[C] bandera sin respuesta: sin errores de JavaScript",
+   "ok": true,
+   "detalle": ""
+  },
+  {
+   "nombre": "[D] Perfil de Dixia: el inicio muestra la tarjeta «Pagos SINPE»",
+   "ok": true,
+   "detalle": "DMA Grupo DMA-La Bomba Está trabajando en Empresa de pruebas Hoy Vender Cotizaciones Venta de contingencia Pagos SINPE I"
+  },
+  {
+   "nombre": "[D] Perfil de Dixia: Pagos SINPE muestra la lista (con períodos) sin «null»",
+   "ok": true,
+   "detalle": ""
+  },
+  {
+   "nombre": "[D] Perfil de Dixia: sin errores de JavaScript",
+   "ok": true,
+   "detalle": ""
   }
  ]
 }
