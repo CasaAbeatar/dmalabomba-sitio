@@ -85,13 +85,14 @@ Valen para la app 2.11.0 en adelante; la 2.10.0 sigue funcionando (ver «Compati
 Contrato completo y fe de erratas: `CONTRATO-2.12.md`. Reversa y notas del servidor: `servidor-212/`.
 
 ### Acción nueva `abrir_ajuste` (pantalla remota)
-- Visor → servidor: `accion` con `a:"abrir_ajuste"`, `params:{"que":"<valor>"}` y `cuadro_seq` como cualquier acción atada al imagen. `que` EXACTO en {`bateria`,`app`,`acceso_notificaciones`,`accesibilidad`,`inicio_apps`,`ahorro_energia`}; otro valor → `{"ok":false,"error":"ajuste no permitido"}` y no se encola.
+- Visor → servidor: `accion` con `a:"abrir_ajuste"`, `params:{"que":"<valor>"}` y `cuadro_seq` como cualquier acción atada al imagen. `que` EXACTO en {`bateria`,`app`,`acceso_notificaciones`,`accesibilidad`,`inicio_apps`,`ahorro_energia`,`instalar_apps`}; otro valor → `{"ok":false,"error":"ajuste no permitido"}` y no se encola.
 - Servidor → teléfono (en `acciones` de la respuesta del cuadro): `{"id":n,"a":"abrir_ajuste","que":"bateria","cuadro_seq":42}`. Misma regla que las demás: se ejecuta una sola vez por id, se descarta con `obsoleta` si `cuadro_seq` no es el de la última imagen, vence a los 15 s sin llegar.
 - Teléfono → servidor (en `resultados` del cuadro siguiente): `"ok:<texto corto [a-z0-9_.]>"` (qué intent se usó) o `"no_disponible"`. El servidor guarda hasta 40 caracteres; el visor muestra `hecho` si empieza con `ok`.
+- `instalar_apps` (fork L, 26 nov 2026): abre «Instalar apps desconocidas» de la app (ACTION_MANAGE_UNKNOWN_APP_SOURCES con package:<la app>), necesario para que Android deje instalar la actualizacion sin pasar por la tienda.
 - Intents sugeridos: bateria → ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS; app → ACTION_APPLICATION_DETAILS_SETTINGS; acceso_notificaciones → ACTION_NOTIFICATION_LISTENER_SETTINGS; accesibilidad → ACTION_ACCESSIBILITY_SETTINGS; ahorro_energia → ACTION_BATTERY_SAVER_SETTINGS; inicio_apps → lista de actividades de HONOR/Huawei (com.hihonor.systemmanager, com.huawei.systemmanager StartupNormalAppListActivity y similares) con respaldo a los detalles de la app.
 
 ### Visor `/remoto`
-- Botones nuevos «Abrir batería», «Abrir inicio de aplicaciones», «Abrir acceso a notificaciones», «Abrir accesibilidad», «Abrir ajustes de la app», «Abrir ahorro de energía».
+- Botones nuevos «Abrir batería», «Abrir inicio de aplicaciones», «Abrir acceso a notificaciones», «Abrir accesibilidad», «Abrir ajustes de la app», «Abrir ahorro de energía», «Abrir instalar apps desconocidas».
 - Sección «Salud del teléfono» (carga, red, ahorro, restricción de batería, SMS sin reenviar, último SMS y reenvío, última señal, versión de la app, actualización, depuración inalámbrica y los riesgos activos). Se actualiza cada 15 s. Ops nuevas del visor: `salud` {empresa} y `adb` {empresa, telefono, cmd:"abrir"|"cerrar"}; ambas exigen la ficha de administrador general.
 
 ### Latido (detalle plano; lo nuevo es opcional)
@@ -103,3 +104,9 @@ Contrato completo y fe de erratas: `CONTRATO-2.12.md`. Reversa y notas del servi
 - Respuesta del latido: `{"ok":true,...,"eco":<ts del latido>,"actualizacion":{"v":"2.12.0","vc":22,"url":"https://pagos.dmalabomba.com/instalar/<archivo>.apk","sha256":"<64 hex>","ts":<ms servidor>,"firma":"<hex>"}}`, solo si hay una fila ACTIVA en `fact.sinpe_actualizaciones` y la versión del latido (`detalle.app`) es menor que `v`.
 - `firma` = HMAC-SHA256 hex minúsculas, con la clave de la regla de la app (la de su empresa), sobre el texto exacto `ACT1|<v>|<vc>|<url>|<sha256>|<ts>|<eco>`. La app verifica en tiempo constante y que `eco` sea el `ts` que ella mandó, más todas las reglas del contrato (host exacto, https, vc mayor, sha256 del archivo, mismo certificado, ts <= 24 h, reintentos 1 h/6 h/24 h, no instalar con cola de reenvío ni SMS < 60 s).
 - Nada se activa solo: `sinpe-actualizacion` (secreto `sinpe_actualizacion_secreto` en la bóveda, cabecera `x-actualizacion-secreto`) con ops `registrar` {empresa, telefono?, v, vc, url, sha256}, `verificar` {id}, `activar` {id} (descarga la URL, compara el sha256 y solo si coincide activa), `desactivar` {id?}. Parada de emergencia: `select public.sinpe_actualizacion_desactivar();`.
+
+### Respuestas del latido firmadas (fork L, 26 nov 2026, sinpe-recibir v8)
+- Toda respuesta 200 a un latido (`/latido`, `tipo:"latido"`) lleva `X-Signature` = HMAC-SHA256 hex minúsculas de los bytes exactos del cuerpo de la respuesta, con la clave de la regla de la app (la de su empresa). Con o sin órdenes, con o sin `actualizacion`. El cuerpo no cambia. Las respuestas de error no se firman.
+- La app ejecuta órdenes sensibles (`abrir_adb`, `cerrar_adb`, `reiniciar_telefono`) y ofrece/instala actualizaciones solo si esa firma es válida (comparación en tiempo constante).
+- `ts` de la oferta ACT1 = instante de emisión de la respuesta (ahora); la app sigue exigiendo <= 24 h como defensa en profundidad.
+- Oferta de actualización solo con fila activa y verificada (`verificada_sha = sha256`); cambiar url, sha256, v o vc desactiva y desverifica la fila (trigger `sinpe_actualizaciones_guardia`). `vc` <= 10 000 000 y v/vc coherentes por empresa.
