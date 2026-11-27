@@ -123,7 +123,9 @@ if esperar_cero 240 detalle_num sms_sin_reenviar; then bien "tras reenviar_histo
 [ "$(consulta resultado 301)" = '"ok"' ] && bien "reenviar_historial confirmado ok" || mal "reenviar_historial resultado: $(consulta resultado 301)"
 
 nota "3. depuracion inalambrica a pedido"
-DEV0=$(adb shell settings get global development_settings_enabled | tr -d '\r')
+# «null» (ajuste sin definir) equivale a apagado
+dev_ajuste() { local v; v=$(adb shell settings get global development_settings_enabled | tr -d '\r'); [ "$v" = "null" ] && v=0; echo "$v"; }
+DEV0=$(dev_ajuste)
 echo "opciones de desarrollador antes: $DEV0"
 modo '{"comandos":[{"id":401,"cmd":"abrir_adb"}]}'
 if esperar_val 200 '"ok"' resultado 401; then bien "abrir_adb confirmado ok"; else mal "abrir_adb resultado: $(consulta resultado 401)"; fi
@@ -137,7 +139,7 @@ modo '{"comandos":[{"id":401,"cmd":"abrir_adb"},{"id":402,"cmd":"cerrar_adb"}]}'
 if esperar_val 200 '"ok"' resultado 402; then bien "cerrar_adb confirmado ok"; else mal "cerrar_adb resultado: $(consulta resultado 402)"; fi
 [ "$(adb shell settings get global adb_wifi_enabled | tr -d '\r')" = "0" ] && bien "Settings.Global.adb_wifi_enabled=0" || mal "adb_wifi_enabled no quedo en 0"
 # Auditoria: al cerrar, las opciones de desarrollador quedan como estaban (si las encendio la app, las apaga)
-[ "$(adb shell settings get global development_settings_enabled | tr -d '\r')" = "$DEV0" ] && bien "las opciones de desarrollador quedaron como estaban ($DEV0)" || mal "las opciones de desarrollador no quedaron como estaban (antes $DEV0, ahora $(adb shell settings get global development_settings_enabled | tr -d '\r'))"
+[ "$(dev_ajuste)" = "$DEV0" ] && bien "las opciones de desarrollador quedaron como estaban ($DEV0)" || mal "las opciones de desarrollador no quedaron como estaban (antes $DEV0, ahora $(dev_ajuste))"
 if esperar_val 150 'false' detalle adb_activo; then bien "el latido reporta adb_activo=false"; else mal "el latido no reporta adb_activo=false"; fi
 [ "$(consulta veces_ejecutada 401)" = "1" ] && bien "abrir_adb (id 401) se ejecuto una sola vez" || mal "id 401 ejecutado $(consulta veces_ejecutada 401) veces"
 # Android (SystemUI) pregunta «¿Permitir depuracion inalambrica en esta red?» al encender adb_wifi en una red no aprobada:
@@ -223,8 +225,12 @@ if esperar_val 300 '"boton_no_pulsado"' detalle actualizacion_detalle; then bien
 [ "$(vc_instalado)" = "$VC8A" ] && bien "no se instalo nada: sigue la vc $VC8A" || mal "se instalo algo aunque el nombre no coincidia: $(vc_instalado)"
 adb logcat -d | grep -q "boton del instalador pulsado" && mal "el pulsador pulso un dialogo que no era de esta app" || bien "el log no muestra pulsaciones en el caso del nombre distinto"
 adb shell run-as $P rm -f files/prueba_nombre_otro
+# el dialogo del instalador de la sesion abandonada sigue en pantalla: se cierra para que no lo pulse el paso 8 por error
 adb shell input keyevent KEYCODE_HOME
+adb shell am force-stop com.google.android.packageinstaller 2>/dev/null
+adb shell am force-stop com.android.packageinstaller 2>/dev/null
 sleep 3
+adb shell dumpsys window | grep -m1 -E "mCurrentFocus" | sed 's/^ */foco tras 8a: /'
 
 nota "8. actualizacion buena CON confirmacion forzada (vc 27): el pulsador de accesibilidad"
 modo '{}'
