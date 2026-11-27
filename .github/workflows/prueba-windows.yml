@@ -39,6 +39,11 @@ jobs:
         working-directory: pruebas windows
         run: node "prueba sinpe caja.mjs"
         continue-on-error: true
+      - name: Probar el cobro y el cierre de punta a punta con SINPE en Chrome (ventana de cobro real, servidor de mentira)
+        shell: pwsh
+        working-directory: pruebas windows
+        run: node "prueba sinpe cobro.mjs"
+        continue-on-error: true
       - name: Probar «Ver factura (PDF)» y «Consultar con Claude» en Chrome
         shell: pwsh
         working-directory: pruebas windows
