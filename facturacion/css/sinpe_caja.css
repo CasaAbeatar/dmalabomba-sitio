@@ -1,0 +1,120 @@
+/* «Caja para mí» (SINPE, administración). Una sola tipografía (la del facturador), sin negro, sin tiras que se deslizan de lado:
+   las tablas se apilan en el celular. Los montos van alineados a la derecha, con el ₡ pegado a la cifra y cifras de ancho fijo. */
+.sc{max-width:1100px;margin:0 auto;padding:.5rem 0 2.5rem;font-family:var(--letra);color:var(--tinta)}
+.sc-cab h2{font-size:1.4rem}
+.sc-cab p{margin:.2rem 0 0;color:var(--tinta2);max-width:75ch}
+
+/* Pestañas: se acomodan en renglones, nunca se deslizan de lado */
+.sc-tabs{display:flex;flex-wrap:wrap;gap:.5rem;margin:.9rem 0}
+.sc-tab{flex:1 1 150px;min-height:48px;padding:.4rem .9rem;border:1.5px solid var(--borde-control);border-radius:var(--r);background:var(--papel);font-weight:600;cursor:pointer}
+.sc-tab:hover{border-color:var(--rojo)}
+.sc-tab[aria-selected=true]{background:var(--rojo);border-color:var(--rojo);color:#fff}
+.sc-tab .sc-punto{display:inline-block;width:.6rem;height:.6rem;margin-left:.4rem;border-radius:50%;background:var(--ambar);vertical-align:middle}
+.sc-panel{display:flex;flex-direction:column;gap:.9rem}
+
+/* Tarjetas */
+.sc-tarjeta{background:var(--papel);border:1px solid var(--linea);border-radius:12px;padding:.9rem 1rem;box-shadow:var(--sombra)}
+.sc-tarjeta>h2,.sc-tarjeta>h3{margin-bottom:.3rem}
+.sc-cab-tarjeta{display:flex;justify-content:space-between;align-items:flex-start;gap:.6rem;flex-wrap:wrap;margin-bottom:.5rem}
+.sc-cab-tarjeta h2{font-size:1.15rem}
+.sc-ayuda{margin:.1rem 0 0;color:var(--tinta2);font-size:.92rem;max-width:75ch}
+.sc-ancla{display:flex;justify-content:space-between;align-items:center;gap:.6rem;flex-wrap:wrap}
+.sc-ancla .sc-act{color:var(--tinta2);font-size:.9rem}
+.sc-aviso{margin:0;padding:.65rem .9rem;border:1px solid #efd08f;background:var(--ambar-suave);border-radius:var(--r);color:#6b4600;font-size:.94rem;overflow-wrap:anywhere}
+.sc-aviso.alto{border-color:var(--borde-mal);background:var(--rojo-suave);color:var(--rojo-osc)}
+.sc-aviso.info{border-color:var(--linea2);background:#fffaf0;color:var(--tinta2)}
+.sc-nota{margin:.4rem 0 0;padding:.6rem .85rem;border-left:3px solid var(--ambar);background:#fffaf0;border-radius:0 var(--r) var(--r) 0;font-size:.92rem;overflow-wrap:anywhere}
+
+/* Cifras grandes */
+.sc-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:.7rem}
+.sc-kpi{display:flex;flex-direction:column;gap:.2rem;padding:.7rem .9rem;border:1px solid var(--linea);border-radius:var(--r);background:#fdfbf7}
+.sc-kpi-t{font-size:.78rem;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:var(--tinta2)}
+.sc-kpi-v{font-size:1.4rem;font-weight:700;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.sc-kpi-n{font-size:.85rem;color:var(--tinta2);line-height:1.35}
+.sc-kpi.rojo .sc-kpi-v{color:var(--rojo)}
+
+/* Datos del teléfono: etiqueta a la izquierda, dato a la derecha */
+.sc-datos{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.4fr);gap:.3rem 1rem;margin:.4rem 0;font-size:.95rem}
+.sc-datos dt{color:var(--tinta2)}
+.sc-datos dd{margin:0;text-align:right;overflow-wrap:anywhere;font-variant-numeric:tabular-nums}
+.sc-riesgos{margin:.4rem 0 0;padding:0;list-style:none;display:flex;flex-direction:column;gap:.35rem}
+.sc-riesgos li{padding:.4rem .7rem;border:1px solid var(--linea2);border-radius:var(--r);font-size:.92rem;overflow-wrap:anywhere}
+.sc-riesgos li.critico{border-color:var(--borde-mal);background:var(--rojo-suave)}
+.sc-riesgos li.alto{border-color:var(--borde-ambar);background:var(--ambar-suave)}
+.sc-acciones{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:.7rem;margin-top:.7rem}
+.sc-accion{display:flex;flex-direction:column;gap:.35rem}
+.sc-accion .btn{width:100%}
+.sc-accion small{color:var(--tinta2);line-height:1.35}
+
+/* Etiquetas de estado (se suman a .chip de app.css) */
+.chip.sin{color:var(--rojo-osc);border-color:var(--borde-mal);background:var(--rojo-suave)}
+.chip.tarda{color:#7a4f00;border-color:var(--borde-ambar);background:var(--ambar-suave)}
+.chip.neutro{color:var(--tinta2);border-color:var(--linea2);background:#fff}
+
+/* Listas por día: nombre a la izquierda y monto a la derecha, con los mismos márgenes a ambos lados */
+.sc-dia{margin:0;padding:.45rem 1rem;display:flex;justify-content:space-between;gap:.8rem;flex-wrap:wrap;background:#f6f0e4;border-top:1px solid var(--linea);border-bottom:1px solid var(--linea);font-size:.85rem;font-weight:600;letter-spacing:.03em;color:var(--tinta2)}
+.sc-dia span:last-child{font-variant-numeric:tabular-nums}
+.sc-lista{border:1px solid var(--linea);border-radius:12px;background:#fdfbf7;overflow:hidden}
+.sc-fila{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,auto);gap:.15rem 1rem;align-items:center;padding:.6rem 1rem;border-top:1px solid var(--linea)}
+.sc-dia+.sc-fila{border-top:0}
+.sc-fila-i{display:flex;flex-direction:column;min-width:0;overflow-wrap:anywhere}
+.sc-fila-i small{color:var(--tinta2)}
+.sc-fila-d{display:flex;flex-direction:column;align-items:flex-end;text-align:right;gap:.15rem}
+.sc-monto{font-weight:700;font-size:1.1rem;font-variant-numeric:tabular-nums;white-space:nowrap}
+.sc-nombre{font-weight:600}
+.sc-vacio{margin:0;padding:.9rem 1rem;color:var(--tinta2)}
+.sc-buscar{max-width:560px}
+
+/* Tablas (se apilan en el celular) */
+.sc-tabla{width:100%;border-collapse:collapse;font-size:.93rem}
+.sc-tabla th{text-align:left;font-weight:600;font-size:.76rem;text-transform:uppercase;letter-spacing:.04em;color:var(--tinta2);padding:.55rem .6rem;border-bottom:1px solid var(--linea2);vertical-align:bottom}
+.sc-tabla td{padding:.55rem .6rem;border-bottom:1px solid var(--linea);vertical-align:top;overflow-wrap:anywhere}
+.sc-tabla th.der,.sc-tabla td.der{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.sc-tabla tfoot td{font-weight:700;border-top:1px solid var(--linea2);border-bottom:0}
+.sc-tabla td.nw{white-space:nowrap}
+.sc-tabla code{font-size:.8rem;overflow-wrap:anywhere}
+.sc-tabla-caja{border:1px solid var(--linea);border-radius:12px;background:var(--papel);padding:.2rem .4rem}
+@media(max-width:680px){
+  .sc-tabla thead{display:none}
+  .sc-tabla,.sc-tabla tbody,.sc-tabla tfoot{display:block}
+  .sc-tabla tr{display:grid;grid-template-columns:1fr 1fr;gap:.1rem 1rem;padding:.55rem .2rem;border-bottom:1px solid var(--linea)}
+  .sc-tabla td{display:flex;justify-content:space-between;align-items:baseline;gap:.5rem;padding:.12rem 0;border:0}
+  .sc-tabla td::before{content:attr(data-t);color:var(--tinta2);font-size:.78rem;flex:0 0 auto}
+  .sc-tabla td.cab{grid-column:1/-1;font-weight:700}
+  .sc-tabla td.cab::before{content:none}
+  .sc-tabla td.ancha{grid-column:1/-1;flex-direction:column;align-items:flex-start;gap:.05rem}
+  .sc-tabla td.der,.sc-tabla td.nw{white-space:normal}
+  .sc-tabla tfoot tr{border-bottom:0}
+}
+
+/* Tres puntos de la conciliación */
+.sc-tres{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.7rem;align-items:stretch}
+.sc-punto-caja{display:flex;flex-direction:column;gap:.25rem;padding:.8rem .9rem;border:1px solid var(--linea);border-radius:12px;background:var(--papel)}
+.sc-punto-caja h3{font-size:.8rem;text-transform:uppercase;letter-spacing:.04em;color:var(--tinta2)}
+.sc-punto-caja .sc-kpi-v{font-size:1.3rem}
+.sc-punto-caja.pendiente{border-style:dashed;background:#fdfbf7}
+@media(max-width:760px){.sc-tres{grid-template-columns:minmax(0,1fr)}}
+.sc-detalle{border:1px solid var(--linea);border-radius:12px;background:var(--papel);padding:0 1rem}
+.sc-detalle[open]{padding-bottom:.8rem}
+.sc-detalle summary{display:flex;justify-content:space-between;gap:.6rem;flex-wrap:wrap}
+
+/* Gráficos */
+.sc-graf{width:100%}
+.sc-graf svg.gr{display:block;width:100%;height:auto;max-width:100%;overflow:visible}
+.sc-lectura{margin:.5rem 0 0;padding:.65rem .85rem;min-height:48px;border:1px solid var(--linea);border-left:3px solid var(--ambar);background:#fff;border-radius:var(--r);font-weight:500;overflow-wrap:anywhere}
+.sc-paso{display:flex;gap:.5rem;margin-top:.5rem}
+.sc-paso .btn{flex:1 1 0}
+
+/* Subpestañas y botones de selección */
+.sc-sub{display:flex;flex-wrap:wrap;gap:.5rem}
+.sc-sub .btn[aria-pressed=true]{background:var(--rojo);border-color:var(--rojo);color:#fff}
+.sc-fila-botones{display:flex;flex-wrap:wrap;gap:.6rem;align-items:flex-end}
+.sc-fila-botones .etq{flex:1 1 220px}
+@media(max-width:520px){
+  .sc-fila{grid-template-columns:minmax(0,1fr)}
+  .sc-fila-d{align-items:flex-start;text-align:left}
+  .sc-tab{flex:1 1 calc(50% - .5rem)}
+  .sc-datos{grid-template-columns:minmax(0,1fr)}
+  .sc-datos dd{text-align:left;margin-bottom:.3rem}
+}
+.sc-clave{font-family:inherit;font-size:.8rem;letter-spacing:.01em;overflow-wrap:anywhere;color:var(--tinta2)}

@@ -65,6 +65,7 @@ function tituloEjeY(svg, texto, cy, alto) {
 export const columnasAngostas = (n, ancho) => (Math.max(300, Math.round(ancho || 640)) - 96) / Math.max(1, n) < 44;
 export function graficoColumnas(datos, o = {}) {
   const W = Math.max(300, Math.round(o.ancho || 640)), H = o.alto || 270;
+  const fmt = o.formato || corto; // por omisión, colones abreviados; con o.formato se pueden dibujar cantidades
   const M = { l: 84, r: 12, t: 16, b: 58 }; // 84 px a la izquierda: el título del eje (hasta 2 renglones) no pisa los valores en colones
   const pw = W - M.l - M.r, ph = H - M.t - M.b;
   const vals = datos.map((d) => d.valor);
@@ -76,7 +77,7 @@ export function graficoColumnas(datos, o = {}) {
   // cuadrícula y eje vertical con valores en colones
   sc.ticks.forEach((t) => {
     svg.append(s('line', { class: t === 0 ? 'base' : 'rej', x1: M.l, x2: W - M.r, y1: y(t), y2: y(t) }));
-    svg.append(s('text', { class: 'tick', x: M.l - 6, y: y(t) + 4, 'text-anchor': 'end' }, corto(t)));
+    svg.append(s('text', { class: 'tick', x: M.l - 6, y: y(t) + 4, 'text-anchor': 'end' }, fmt(t)));
   });
   // etiquetas del eje horizontal, salteando las que no caben
   const cada = Math.max(1, Math.ceil(datos.length / Math.max(1, Math.floor(pw / (o.anchoEtiqueta || 40)))));
@@ -86,7 +87,7 @@ export function graficoColumnas(datos, o = {}) {
     const y0 = y(0), y1 = y(d.valor), top = Math.min(y0, y1), alto = Math.max(1.5, Math.abs(y0 - y1));
     const r = s('rect', { class: 'barra ' + (o.color || 'rojo') + (d.valor < 0 ? ' neg' : ''), x: x(i) - bw / 2, y: top, width: bw, height: alto, rx: 3 });
     if (d.valor !== 0) svg.append(r);
-    if (conValor && d.valor !== 0) svg.append(s('text', { class: 'val', x: x(i), y: (d.valor >= 0 ? top - 4 : top + alto + 12), 'text-anchor': 'middle' }, corto(d.valor)));
+    if (conValor && d.valor !== 0) svg.append(s('text', { class: 'val', x: x(i), y: (d.valor >= 0 ? top - 4 : top + alto + 12), 'text-anchor': 'middle' }, fmt(d.valor)));
     return r;
   });
   // títulos de ejes en palabras

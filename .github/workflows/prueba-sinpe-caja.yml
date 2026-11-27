@@ -1,0 +1,42 @@
+name: Prueba Caja para mí (SINPE)
+on:
+  workflow_dispatch:
+  push:
+    branches: ['admin-sinpe']
+permissions:
+  contents: read
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Cuentas y textos de «Caja para mí» (node)
+        shell: pwsh
+        working-directory: pruebas windows
+        run: node --test "prueba sinpe caja calculos.mjs"
+      - name: Preparar Playwright
+        shell: pwsh
+        working-directory: pruebas windows
+        run: |
+          npm init -y | Out-Null
+          npm i playwright@1.49.1 | Out-Null
+          Copy-Item ../facturacion ./facturacion -Recurse
+      - name: «Caja para mí» en Chrome (computadora y celular, datos inventados)
+        shell: pwsh
+        working-directory: pruebas windows
+        run: node "prueba sinpe caja admin.mjs"
+      - name: La caja de siempre sigue cargando en Chrome (prueba que ya existía)
+        shell: pwsh
+        working-directory: pruebas windows
+        run: node prueba.mjs
+      - name: Ver factura y Consultar con Claude (prueba que ya existía)
+        shell: pwsh
+        working-directory: pruebas windows
+        run: node "prueba ayuda.mjs"
+      - name: Guardar capturas
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: capturas-sinpe-caja
+          path: pruebas windows/resultados
