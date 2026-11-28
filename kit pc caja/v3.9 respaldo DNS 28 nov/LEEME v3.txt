@@ -1,0 +1,153 @@
+﻿KIT v3.9 (28 nov 2026, RESPALDO ANTE FALLAS DEL DNS DE LA RED sobre la v3.8 del 27 nov; probado en Windows real por GitHub Actions; falta confirmar en la PC de Pollos; NO PUBLICADO por el OTA hasta que Emil lo decida)
+
+CAMBIOS DE LA v3.9 (28 nov, por la falla real del DNS de la red en la caja de Pollos). Conserva TODO lo de la v3.8, la v3.7 y la v3.6 (actualizador con dos origenes, contingencia, permisos, pantallas, publicidad, control remoto, sesion).
+Lo que paso: el DNS de la red de la tienda contesto NXDOMAIN para facturacion.dmalabomba.com (con el SOA de una zona vieja, dns.jomax.net) mientras los DNS publicos (1.1.1.1, 8.8.8.8) lo resolvian bien. Facebook y Supabase si resolvian. La v3.8 mostro su pantalla de contingencia y reintento por el mismo DNS que fallaba, sin otra ruta.
+1) DIAGNOSTICO DE DNS ("funciones dns.ps1", nuevo). Cuando el facturador falla por DNS el kit pregunta tambien a DNS publicos por HTTPS (1.1.1.1 y 8.8.8.8 por IP, y cloudflare-dns.com y dns.google de respaldo; si el 443 estuviera cerrado, consulta DNS normal directo a 1.1.1.1 y 8.8.8.8) y distingue:
+   - dns_local_falla: el DNS de la red no resuelve pero el publico si (el caso del 28 nov); se anota tambien el SOA con que contesta el DNS de la red.
+   - zona_falla: ni los DNS publicos resuelven (falla de la zona del dominio).
+   - sin_respuesta: no se pudo consultar a los DNS publicos.
+   El latido manda al panel, en el detalle, el bloque "fac": ok, modo, motivo, dns_local_falla, doh_ok, alterna_ok, soa, ip, edad_s. El aviso "Facturador no alcanzable" (uno por caida) ahora dice la causa probable y la ruta usada.
+2) RUTA POR IP (la solucion por defecto, no necesita administrador y NO cambia de origen). Si el DNS de la red falla, el kit busca la IP del facturador (la que da el DNS publico o la ultima que funciono, guardada en datos\facturador ips.json), COMPRUEBA con TLS real (certificado validado contra facturacion.dmalabomba.com y que la pagina sea la del facturador) y abre el navegador con --host-resolver-rules="MAP facturacion.dmalabomba.com <IP>". La ventana carga la MISMA direccion https://facturacion.dmalabomba.com: mismo origen, asi que la sesion de la cajera, el aparato, los ajustes de impresion y los datos locales siguen donde estaban, y las funciones de Supabase (CORS) siguen aceptando la caja. Solo ese nombre queda fijado; el resto sigue usando el DNS de la red. Funciona aunque la zona del dominio este caida, mientras Cloudflare siga sirviendo el facturador.
+   - Orden de rutas cuando el facturador no responde por su direccion normal: 1) ruta por IP, 2) copia guardada del navegador, 3) direccion alterna, 4) pantalla local de contingencia.
+   - Solo se aplica al abrir la caja o cuando falta su ventana (nunca a una ventana abierta). Si la caja esta mostrando la pantalla local de contingencia (sin datos de la cajera) y aparece una ruta (IP o alterna), la vigilancia reabre sola la caja.
+3) DIRECCION ALTERNA (ultimo recurso, www.dmalabomba.com/facturacion/, ajuste $AlternaFacturador). Es OTRO origen para el navegador: la cajera puede tener que ingresar de nuevo (empresa, usuario y PIN) y los ajustes de impresion de ese origen empiezan de cero. Antes de abrirla se muestra unos 6 segundos un aviso local claro con boton "Entrar ahora". La pantalla del cliente se abre en la misma alterna (la caja y la pantalla del cliente deben ser del mismo origen: se hablan por BroadcastChannel). El facturador no guarda cola de ventas sin conexion en el navegador: las cuentas y ventas viven en la base, asi que el cambio de origen no pierde ventas. No vuelve al subdominio por si sola mientras la ventana siga abierta (para no tocar una caja en uso): vuelve en la proxima apertura (icono Facturador o reinicio diario de las 04:30). Si el DNS de la red tambien falla para www (por ejemplo si cachea la misma zona vieja), la alterna no ayuda y la ruta por IP es la que sirve.
+4) REPARAR ahora ejecuta ipconfig /flushdns (si Windows no lo permite sin administrador, queda anotado en registro.txt y sigue).
+5) DNS PUBLICOS FIJOS EN EL ADAPTADOR (OPCIONAL, APAGADO POR DEFECTO, lo decide Emil). "22 dns publico.ps1" (FIJAR DNS PUBLICO.bat y RESTAURAR DNS.bat) guarda como estaba el DNS del adaptador activo (DHCP o servidores fijos) en datos\dns respaldo.json, fija 1.1.1.1 y 8.8.8.8, comprueba que el facturador resuelva y, si no resuelve, lo deja como estaba. REVERSA: RESTAURAR DNS.bat (o "22 dns publico.ps1 -Revertir") o a mano: Set-DnsClientServerAddress -InterfaceIndex <n> -ResetServerAddresses. Necesita administrador. Con $DnsPublicoRespaldo = $true en config.ps1, REPARAR corrido como administrador lo aplica solo cuando el DNS de la red falla y el publico resuelve. Cambia el DNS de TODA la PC (un nombre interno de la red local dejaria de resolver).
+6) 10 diagnostico.ps1 agrega la seccion "DNS y direccion del facturador".
+Ajustes nuevos en config.ps1: $RutaPorIp, $AlternaFacturador, $UrlCajaAlterna, $UrlClienteAlterna, $ServidoresDoh, $DnsPublicosUdp, $DnsPublicoRespaldo, $DnsPublicoLista. Con $ContingenciaFacturador = $false todo esto se apaga.
+LIMITES REALES (leer antes de confiar):
+- No se probo en la PC real de Pollos (solo en Windows de GitHub Actions con un DNS falso que imita el NXDOMAIN con zona vieja). Falta confirmar alli: que Chrome de la caja respete --host-resolver-rules dentro de la ventana --app, la pantalla del cliente en el segundo monitor y el comportamiento de la red real de la tienda.
+- La ruta por IP depende de que la IP siga sirviendo el facturador (Cloudflare Pages, direcciones anycast). Se vuelve a comprobar en cada apertura; si cambiara con la ventana ya abierta, la ventana sigue con la IP vieja hasta la proxima apertura.
+- Una caja que YA tiene el facturador abierto cuando el DNS falla no se toca: el facturador ya cargado sigue (los datos van a Supabase, que resuelve); lo que no estuviera en la cache del navegador podria no cargar hasta reabrir. Para reabrir con la ruta por IP: icono Facturador o REPARAR.
+- El DNS de la red de la tienda y su cache del proveedor no se arreglan desde el kit; la ruta por IP los rodea solo para el facturador.
+- La actualizacion DESDE la v3.8 hasta la v3.9 la hace el actualizador de la v3.8 (dos origenes, www y dma-sitio.pages.dev): si el DNS de esa red tambien falla para www, usa dma-sitio.pages.dev (no depende del dominio).
+
+VERSION ANTERIOR: KIT v3.8 (27 nov 2026, RESISTE LA CAIDA DEL DOMINIO sobre la v3.7 del 26 nov; probado en Windows real por GitHub Actions; falta confirmar en la PC de Pollos)
+
+CAMBIOS DE LA v3.8 (27 nov, por la caida de dominios y DNS del 27 nov). Conserva TODO lo de la v3.7 y la v3.6 (subdominio, permisos del navegador, actualizaciones en el aire).
+1) ACTUALIZADOR CON ORIGENES ALTERNOS ("20 actualizador.ps1", ahora version 2). Antes buscaba el manifiesto y el paquete SOLO en www.dmalabomba.com; si el dominio caia, no habia actualizacion. Ahora prueba en orden: https://www.dmalabomba.com y https://dma-sitio.pages.dev (el mismo sitio, en Cloudflare Pages, que no depende del dominio). Se puede agregar un tercer origen (espejo en GitLab Pages) cuando se confirme; esta comentado en el script.
+   - La verificacion es EXACTAMENTE la misma en cualquier origen: firma RSA-3072 del manifiesto con la llave de produccion que ya viaja en "ota llave publica.ps1" (la llave NO se puede cambiar por el aire), caducidad, serie mayor, anillo por estacion, huella SHA-256 y tamano del paquete, nombres y extensiones del zip, sintaxis de cada script. Un origen no tiene ninguna autoridad por si mismo: quien sirva el archivo, si no esta firmado con la llave de La Bomba y no coincide con la huella firmada, se descarta.
+   - Un origen que no responde, que devuelve una pagina web (dominio caido o estacionado), con firma invalida o vencido se descarta y se sigue con el otro. Se usa el manifiesto valido MAS RECIENTE (un origen atrasado no congela las actualizaciones). El paquete se pide primero al origen que dio el manifiesto y, si falla o no coincide con la huella firmada, al otro.
+   - Si ningun origen responde (sin internet o caida total) NO cuenta como fallo de la serie, no se bloquea nada y no se avisa: se vuelve a intentar a la media hora, dentro de la misma ventana 03:00 a 05:00 (hora de Costa Rica). Si un origen sirve algo manipulado (firma invalida o paquete que no coincide) SI queda un evento de alerta para Emil, aunque se instale desde el otro origen.
+   - La reversion automatica, el diario, el respaldo y la comprobacion de salud no cambian.
+2) CONTINGENCIA SI EL FACTURADOR NO RESPONDE ("funciones contingencia.ps1", nuevo). El kit comprueba (al abrir la caja, cuando falta su ventana y cada 5 minutos) que https://facturacion.dmalabomba.com responda y sea de verdad el facturador (no una pagina de dominio estacionado). Decide:
+   - responde: se abre como siempre.
+   - no responde pero el navegador de esta caja ya guarda la copia del facturador (la deja el service worker la primera vez que se abre con internet): se abre igual; el navegador sirve la copia guardada y los datos (Supabase, otro dominio) siguen funcionando. Se verifico con Chrome real.
+   - no responde y no hay copia: se abre una pantalla local "Sin conexion al facturador" (http://127.0.0.1:8766/contingencia/, la sirve el servidor local del kit) con letra grande, el procedimiento sugerido mientras tanto, reintento automatico cada 8 segundos y el boton "Intentar abrir con la copia guardada". Cuando el facturador vuelve, se abre solo.
+   - Nunca se toca una ventana de caja que ya esta abierta (la cajera puede estar cobrando) y no se abre la pantalla del cliente si no hay facturador.
+   - Un solo aviso al panel por cada caida (despues de 2 comprobaciones seguidas) y uno al restablecerse; el aviso dice si las otras direcciones (Supabase) si resuelven, para saber si fallo el dominio o el internet de la tienda.
+   - Se puede apagar con $ContingenciaFacturador = $false en config.ps1 (vuelve a comportarse como la v3.7).
+LIMITES REALES (leer antes de confiar):
+- NO se cambia de dominio para abrir el facturador (por ejemplo dma-facturador.pages.dev). Es otro origen para el navegador: la sesion de la cajera, el aparato (fx_ap) y los datos locales viven por origen (se perderian), y las funciones de Supabase del facturador (facturador-acceso) solo aceptan peticiones desde el origen exacto facturacion.dmalabomba.com (CORS), asi que ahi no funcionaria. Por eso la contingencia es la copia guardada del navegador o la pantalla local, nunca otro dominio.
+- Sin la copia guardada y sin el dominio, el facturador NO se puede usar: la pantalla local solo informa y reintenta. Las facturas electronicas no se pueden emitir mientras tanto; el procedimiento sugerido (anotar las ventas en papel) lo debe confirmar Emil.
+- La copia guardada existe solo en las cajas que ya abrieron el facturador con internet en este perfil. La deteccion de la copia mira la estructura de carpetas de Chrome (verificada con un Chrome real); si dudara, muestra la pantalla local, que tiene el boton para intentar con la copia.
+- La actualizacion DESDE la v3.7 hasta la v3.8 todavia la hace el actualizador de la v3.7 (version 1), que solo conoce www.dmalabomba.com: esa primera vez depende del dominio. Desde la v3.8 en adelante ya hay dos origenes. Las cajas que no tengan el actualizador (v3.6 o anterior) se instalan a mano.
+- El espejo en GitLab Pages no esta confirmado: no esta activado.
+- La caida de DNS de la tienda (no del dominio) tampoco se puede resolver desde el kit.
+- Cambiar de origen la pantalla de contingencia al facturador dentro de la ventana de la aplicacion (--app) se probo con Chrome real fuera de la ventana de aplicacion; en la caja real se vera, a lo sumo, una barra fina con la direccion.
+
+VERSION ANTERIOR: KIT v3.7 (26 nov 2026, ACTUALIZACIONES EN EL AIRE sobre la v3.6 del 21 nov; probado en Windows real por GitHub Actions; falta confirmar en la PC de Pollos)
+
+CAMBIOS DE LA v3.7 (26 nov, por orden de Emil: todo lo que se disene se actualiza en el aire). Conserva TODO lo de la v3.6 del 21 nov (caja en facturacion.dmalabomba.com y permisos para los dos origenes).
+- NUEVO "20 actualizador.ps1": desde esta version el kit se actualiza solo. Una tarea programada de Windows ("La Bomba Kit - Actualizador", cuenta SYSTEM) lo corre cada 30 minutos entre las 03:00 y las 05:00 (hora de Costa Rica, fuera del horario de atencion). Fuera de esa ventana termina enseguida y casi no gasta nada.
+- Seguridad: lo que baja va FIRMADO. El actualizador solo acepta un manifiesto firmado con la llave del sistema de La Bomba (RSA de 3072 bits; la llave publica viaja en "ota llave publica.ps1" y la privada NO esta en ninguna PC). Comprueba la huella SHA-256 del paquete, que no traiga rutas raras ni archivos que no sean .ps1/.bat/.txt, que cada script no tenga errores de sintaxis, que la serie sea MAYOR a la instalada (no se puede "retroceder" por el aire; esta es la serie 37) y que el manifiesto no este vencido. Solo baja de https://www.dmalabomba.com/kit-caja/ota/.
+- El paquete se prepara en C:\PantallaCliente\ota, una carpeta que la cuenta de la caja NO puede ni leer ni escribir (solo SYSTEM y administradores).
+- Se instala archivo por archivo con un diario y un respaldo de la version anterior. Si se corta la luz a la mitad, al volver el actualizador revierte solo. Despues vuelve a abrir latido y facturador (tarea "La Bomba Kit - Relanzar", sin privilegios) y comprueba que el latido nuevo arranco; si no, vuelve a la version anterior y avisa. Una serie que fallo no se reintenta enseguida (espera 1 h, luego 6 h, luego 24 h; a la tercera espera un lanzamiento nuevo).
+- Por etapas: cada lanzamiento dice para que estaciones es (caja-pollos, caja-soda o las dos) y desde cuando. Primero va solo a la caja de Pollos.
+- Avisos: el panel recibe el estado en el latido (campo "ota") y un evento cuando se actualiza ("reparacion") o cuando algo falla o se rechaza ("otro": abre un aviso).
+- Primera vez: esta version se instala A MANO una sola vez en cada PC (INSTALAR TODO.bat, como siempre; crea las dos tareas programadas). De ahi en adelante las versiones llegan solas.
+- Se respeta "Salir para mantenimiento" (no actualiza mientras ese modo este activo) y no actualiza si hay menos de 300 MB libres.
+- Limite: si en un lanzamiento cambian los accesos del escritorio o del inicio de Windows, hay que volver a correr INSTALAR TODO.bat (el actualizador solo cambia los scripts).
+- Limite: cambiar la llave de firma obliga a reinstalar a mano en cada PC.
+- Para ver que paso: C:\PantallaCliente\ota\actualizador.log (solo administradores) y, para todos, C:\PantallaCliente\datos\ota estado.json.
+
+VERSION ANTERIOR: KIT v3.6 (21 nov 2026, probado en Windows real por GitHub Actions; falta confirmar en la PC de Pollos)
+
+CAMBIOS DE LA v3.6 (21 nov, por orden de Emil): LA CAJA PASA A LA DIRECCION NUEVA
+- El facturador ahora vive en https://facturacion.dmalabomba.com y la pantalla del cliente en https://facturacion.dmalabomba.com/cliente/. El kit abre esas direcciones (antes abria dmalabomba.com/facturacion, que pasaba por www.dmalabomba.com).
+- Los permisos del navegador (manejo de ventanas para la pantalla del cliente, ventanas emergentes, pantalla completa y lectura de la publicidad del servidor local) se conceden a la direccion nueva y tambien a www.dmalabomba.com durante la transicion. Las listas de config.ps1 ($Sitios) se escriben completas cada vez que se instala.
+- El servidor local de la publicidad acepta las dos direcciones y sigue rechazando cualquier otra pagina de internet.
+- La ventana de la pantalla del cliente se reconoce tambien mientras carga con la direccion nueva (antes el kit podia confundirla con la caja durante esos segundos).
+- Los sitios que no cuentan como salir del sistema ya cubrian facturacion.dmalabomba.com (cubren cualquier subdominio de dmalabomba.com); se comprobo.
+
+AVISO IMPORTANTE PARA LA CAJERA: la primera vez que se abre la caja con la direccion nueva, la cajera tiene que volver a entrar con su usuario y su clave. El navegador guarda la sesion y los ajustes de cada direccion por separado; al cambiar de direccion la caja empieza "limpia". Ese primer ingreso puede tardar un poco mas de lo normal, porque el navegador todavia no reconoce la computadora. Tambien hay que revisar la impresora de la caja (elegirla de nuevo y hacer una impresion de prueba) y la forma de impresion que se haya dejado guardada. Los datos del negocio (ventas, clientes, inventario) no se pierden: estan en la base, no en la computadora.
+
+COMO ACTUALIZAR UNA CAJA QUE YA TIENE LA v3.5: extraiga el zip completo y haga doble clic en INSTALAR TODO.bat (encima de lo que ya hay). El instalador cierra la caja, copia los archivos nuevos, reescribe los permisos del navegador y vuelve a abrir la caja en la direccion nueva. No crea cuentas de Windows. Mientras una caja no se actualice, sigue abriendo la direccion anterior.
+
+CAMBIOS DE LA v3.5 (19 nov, por orden de Emil)
+- Control remoto: en Chrome queda permitida la extension Chrome Remote Desktop (ID inomeogfingihgjfjlpeplalcfajhgai), por la lista de permitidas de Chrome (ExtensionInstallAllowlist). Todas las demas extensiones de Chrome siguen bloqueadas y Edge sigue con bloqueo total. Se aplica con el paso 16 al instalar el kit encima (INSTALAR TODO.bat); REPARAR no lo repite.
+
+CAMBIOS DE LA v3.4 (19 nov, por orden de Emil)
+- Ficha ampliada del equipo (encendidos y fallos, impresora, servicios, arranque de Windows, tareas programadas, energia, integridad de los archivos del kit, seguridad, red) en un proceso aparte ("18 enviar ficha.ps1"), al arrancar y cada 6 horas.
+- El latido manda ademas metricas (CPU, memoria libre, tiempo encendida, disco, procesos del navegador, consolas visibles), la version del facturador y el estado del supervisor.
+- NUEVO "19 navegacion.ps1": cada 30 minutos lee el historial de Chrome y Edge de las ultimas 24 horas y manda al panel un resumen por sitio y, de cada visita, la direccion completa, el titulo de la pagina y lo que se busco en buscadores. Marca como "fuera del sistema" lo que no esta en la lista $SitiosPermitidos de config.ps1 y abre un aviso la primera vez que aparece cada sitio nuevo. Las visitas se conservan 90 dias. El kit NO lee archivos ni toma capturas de pantalla.
+- Aviso a las empleadas: se hace por escrito, aparte del kit (decision de Emil).
+
+CAMBIOS DE LA v3.3 (19 nov)
+- Latido y Facturador ya no abren una ventana de consola. En Windows 11 con Windows Terminal como terminal predeterminada, cada script lanzado desde un acceso abria su ventana aunque se pidiera oculta. Ahora los accesos y los programas de apoyo arrancan con "conhost.exe --headless" (sin ninguna ventana) y el instalador deja la consola clasica de Windows como terminal predeterminada de la cuenta.
+- Pantalla del cliente: el mouse ya puede pasar a esa pantalla (antes el kit lo llevaba a la esquina cada 15 segundos). Al mover el mouse aparece el cursor y un boton "Cerrar pantalla" arriba a la derecha; a los 3 segundos sin moverlo se oculta.
+- Si la pantalla del cliente se cierra a mano (boton, Alt+F4 o la X), ni el kit ni la caja la vuelven a abrir sola. Vuelve con el icono Facturador, con el reinicio diario, al cambiar las pantallas (conectar o desconectar el monitor) o si alguien la abre a mano.
+- Ficha completa de la computadora (archivo nuevo "17 ficha del equipo.ps1"): equipo, procesador, memoria, discos y su salud, monitores con modelo y serie, tacto, impresoras, dispositivos USB, red, seguridad de Windows, programas, errores recientes y uso actual. Solo lee, nunca cambia nada. El latido la manda al panel al arrancar y cada 6 horas (tabla equipos_ficha, con historial de cambios).
+- La caja necesita la pagina del cliente nueva (cliente/ y js/pantalla_ventana.js del sitio, ya publicadas el 19 nov).
+
+VERSION ANTERIOR: KIT v3.2c REPARADOR Y ENLACE (18 nov 2026, probado en Windows real por GitHub Actions; falta confirmar en la PC de Pollos)
+
+CAMBIOS DE LA v3.2c (18 nov 14:00) CAUSA RAIZ DEL LATIDO Y DEL FACTURADOR QUE NO ARRANCABAN
+- Los permisos: el paso "icacls /inheritance:r ... /T" dejaba cada archivo del kit con la lista de permisos vacia, y la cuenta de la caja no podia ni leer los scripts (PowerShell oculto no los abria y no dejaba rastro). Probado en Windows real. Ahora los archivos heredan los permisos de la carpeta (Usuarios solo leen, en datos modifican) y el instalador verifica cada script y repara el que quede sin permiso.
+- Cada programa (latido, abrir caja, servidor de publicidad) escribe arranque.txt en C:\PantallaCliente\datos apenas empieza: dice usuario, si es administrador, el resultado del candado y cualquier error con su linea. El resumen del instalador muestra sus ultimas lineas.
+- El candado de "una sola copia" ahora es Local y abierto a todos los usuarios.
+- El instalador cierra los programas de prueba que dejaba vivos con privilegios de administrador y vuelve a abrir latido y facturador sin privilegios.
+- Latido: corregida una variable que pisaba la carpeta de datos, envio de 5 eventos por vez y manejo de paquete demasiado grande.
+- takeown sin /D Y (en Windows en espanol falla).
+
+CAMBIOS DE LA v3.2 (18 nov 13:30, tras la segunda prueba en la PC de Pollos)
+- La copia del kit ya no se detiene si un archivo viejo tiene los permisos cerrados (fallo con "14 control remoto.ps1"): recupera permisos, reintenta, y si no puede aparta el viejo y copia el nuevo. Los demas archivos y los accesos se crean siempre.
+- El latido se reintenta directo si el acceso del inicio no lo arranca.
+- Si el facturador no abre con el acceso, se arranca directo y se espera un minuto mas.
+
+PC de caja estandar: Athlon 3000G + Skitphrati tactil (pantalla 1) + LG 24MK430H-B (pantalla 2). Sirve para Soda y para Pollos.
+
+CAMBIOS DE LA v3.1 (tras la primera prueba en la PC de Pollos, 18 nov 12:45)
+- Corregido: la clave publica del panel en config.ps1 estaba mal copiada (un error de transcripcion), por eso el enlace daba "401 No autorizado". Ahora es la clave anon del proyecto; se comprobo con una llamada de prueba (codigo falso) y el panel responde 200, ya no 401.
+- Corregido: "Add-Content: Acceso denegado". El instalador ahora, como administrador y antes de escribir nada, restablece los permisos de C:\PantallaCliente\datos (Administradores y SYSTEM control total, Usuarios modificar). Todo registro va con respaldo: si no se puede escribir en esa carpeta, queda en %TEMP%\kit-v3-registro.txt y el instalador sigue. Los errores de cada paso se anotan y se resumen al final, no salen en rojo.
+- El kit nunca escribe en la carpeta desde donde se ejecuta (D:\ u otra); todo va a C:\PantallaCliente\datos.
+- Por que no se vio antes: no hay Windows en el entorno de trabajo y la clave mala solo se nota al llamar de verdad al panel.
+
+QUE HACE
+Se instala ENCIMA de cualquier version anterior (v1 del 14 nov, "v2 propuesta" del 15 nov, "Kit v2" del 15 nov, "v2 identidad y latido" del 16 nov) o en una PC nueva. Detecta lo que hay, lo corrige y deja la PC en el estado final. Se puede repetir las veces que haga falta.
+1) Detecta: version instalada, carpeta C:\PantallaCliente, equipo.json, tareas programadas, iconos del Escritorio, arranques de Windows, procesos viejos y cuentas.
+2) Limpia sin duplicar: detiene lo viejo, quita tareas y arranques repetidos, deja una sola ventana 1 y una sola ventana 2, y APARTA (no borra) los archivos de versiones anteriores en C:\PantallaCliente\datos\kit anterior.
+3) Pregunta SIEMPRE la identidad, en pantalla: "Esta computadora es de SODA o de POLLOS?", pide confirmar y pide el codigo de enlace de 8 caracteres. La pregunta sale si falta equipo.json, esta danado, es de otra PC, el panel no reconoce la clave o no coincide con el nombre de la PC. Si ya esta bien enlazada, igual pide confirmar "Es correcto?" al instalar.
+4) Si no hay codigo a mano, se puede tocar "Enlazar despues": queda un recordatorio visible (cada 30 minutos) y el icono Reparar vuelve a preguntar. Hasta enlazar, el panel no ve esa caja.
+5) Fija pantalla 1 = tactil (principal) y pantalla 2 = LG del cliente. Una sola ventana 2. Si se cierra la ventana 1, se cierra la 2 y se vuelve con el icono Facturador.
+6) Plan B: si hay una sola pantalla (tactil desconectada), el facturador queda solo en la LG, sin ventana del cliente. Al reconectar la tactil vuelve solo al modo de dos pantallas (Reparar lo fuerza).
+7) Escritorio: solo los iconos Facturador, Reparar y Control remoto. No crea usuarios de Windows. La cajera no puede instalar nada (solo el administrador; ademas se cierran instalaciones por usuario, extensiones del navegador y Microsoft Store).
+8) Latido al panel cada minuto (public.equipo_latido). No escribe claves en archivos del kit: la clave propia de la PC la guarda equipo.json al enlazar.
+9) Al final muestra un resumen: FALTA O REVISAR / CORREGIDO O INSTALADO / YA ESTABA BIEN (tambien queda en C:\PantallaCliente\datos\resumen instalacion.txt).
+
+COMO INSTALAR ENCIMA DE LO ANTERIOR
+1. Extraiga TODO el zip "Kit v3 PC de caja" en una carpeta de la PC (no copie solo algunos archivos: el instalador se detiene si falta alguno).
+2. Doble clic en INSTALAR TODO.bat y diga que si al permiso de administrador.
+3. Conteste las preguntas de identidad (Soda o Pollos, confirmar, codigo).
+4. Lea el resumen final.
+
+OTROS ARCHIVOS
+ENLAZAR EQUIPO.bat      repite el enlace cuando haga falta (suelto y visible en esta carpeta y en C:\PantallaCliente)
+REPARAR.bat             lo mismo que el icono Reparar
+DIAGNOSTICO.bat         muestra identidad, pantallas, ventanas y ultimas lineas del latido (nunca la clave)
+FIJAR PANTALLAS.bat, SALIR PARA MANTENIMIENTO.bat, ASOCIAR TACTO.bat, INICIO DE SESION AUTOMATICO.bat, OLVIDAR SESION DEL NAVEGADOR.bat: igual que en la v2.
+
+QUE FALTABA EN LA v2 (por que no pregunto Soda o Pollos)
+- ENLAZAR EQUIPO.bat (109 bytes) y "13 identidad del equipo.ps1" SI estan en la carpeta "v2 identidad y latido 16 nov" (verificado en OneDrive el 18 nov). NO estan en "v2 propuesta 15 nov" ni en la carpeta "Kit v2 Athlon 3000G + Skitphrati + LG": las dos tienen la misma lista de archivos, sin 11 latido, 13 identidad, 14 control remoto ni ENLAZAR EQUIPO.bat, y su "instalar todo.ps1" (2262 bytes) no tiene paso de identidad. Quien instala desde la carpeta llamada "Kit v2" (la mas visible) nunca ve la pregunta, y esa es la explicacion mas probable de lo ocurrido en la PC de la oficina.
+- Aun con la v2 del 16 nov, la pregunta iba AL FINAL del instalador (despues de descargar el control remoto) y solo si NO habia un equipo.json valido; nunca verificaba una identidad existente, ni la comparaba con la PC, ni la reconfirmaba con el panel.
+- El instalador no comprobaba que el paquete estuviera completo y el resultado de cada paso quedaba solo en un archivo, sin resumen claro de lo que falto.
+- Para saber que paso en la PC de la oficina: abrir C:\PantallaCliente\datos\instalacion.txt y buscar la linea que empieza con "13" (enlazada) o "PENDIENTE 13".
+
+LIMITES (lo que NO se pudo comprobar)
+- Este kit se escribio y reviso sin ejecutarlo: no hay Windows en el entorno de trabajo. Se valido la sintaxis por analisis estatico y la logica de deteccion con casos simulados, no corriendo PowerShell. Despues de la v3.1 hay que repetir la prueba en la PC de Pollos de la oficina antes de usarlo en las cajas.
+- El codigo de enlace lo crea Emil (o Claude por orden suya); el kit nunca crea ni canjea codigos por su cuenta.
+- El control remoto sigue necesitando un paso manual por PC: abrir el icono Control remoto, Configurar acceso remoto y poner el PIN.
+- Pendiente del lado del facturador (web), no del kit: uso con mouse y teclado en el plan B, aviso antes de cerrar con una cuenta a medias y el alta de cliente en vivo en la pantalla del cliente.
+
+REVERSA
+Las carpetas anteriores (v1, v2 propuesta, Kit v2, v2 identidad y latido) quedan intactas en OneDrive. Para volver atras: instalar de nuevo una de ellas; los archivos que v3 aparto estan en C:\PantallaCliente\datos\kit anterior.
